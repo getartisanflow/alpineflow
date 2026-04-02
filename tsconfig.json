@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "declarationDir": "dist/types",
+    "outDir": "dist/types",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "alpinejs": ["node_modules/alpinejs"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "lib/**/*.ts"
+  ],
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/cli/**",
+    "node_modules"
+  ]
+}

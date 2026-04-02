@@ -1,0 +1,12 @@
+/src export-ignore
+/lib export-ignore
+/css export-ignore
+/tests export-ignore
+/.github export-ignore
+*.test.ts export-ignore
+tsconfig.json export-ignore
+vite.config.ts export-ignore
+vite.bundle.config.ts export-ignore
+vitest.config.ts export-ignore
+.gitignore export-ignore
+.gitattributes export-ignore

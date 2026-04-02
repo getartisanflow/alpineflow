@@ -1,0 +1,153 @@
+{
+    "$schema": "https://www.schemastore.org/package.json",
+    "name": "@getartisanflow/alpineflow",
+    "version": "0.1.0-alpha",
+    "description": "Interactive flowchart and node-graph engine for Alpine.js — drag-and-drop nodes, edges, animations, collaboration, and layout algorithms.",
+    "keywords": [
+        "alpinejs",
+        "flowchart",
+        "diagram",
+        "node-graph",
+        "dag",
+        "workflow",
+        "canvas",
+        "drag-and-drop",
+        "livewire",
+        "wireflow"
+    ],
+    "author": "Zac Hiler <https://github.com/zachiler>",
+    "license": "MIT",
+    "homepage": "https://artisanflow.dev",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/getartisanflow/alpineflow.git"
+    },
+    "bugs": {
+        "url": "https://github.com/getartisanflow/alpineflow/issues"
+    },
+    "private": false,
+    "type": "module",
+    "main": "dist/alpineflow.esm.js",
+    "module": "dist/alpineflow.esm.js",
+    "types": "dist/types/lib/core.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/types/lib/core.d.ts",
+            "import": "./dist/alpineflow.esm.js",
+            "default": "./dist/alpineflow.js"
+        },
+        "./whiteboard": {
+            "types": "./dist/types/lib/whiteboard.d.ts",
+            "import": "./dist/alpineflow-whiteboard.esm.js",
+            "default": "./dist/alpineflow-whiteboard.js"
+        },
+        "./collab": {
+            "types": "./dist/types/lib/collab.d.ts",
+            "import": "./dist/alpineflow-collab.esm.js",
+            "default": "./dist/alpineflow-collab.js"
+        },
+        "./dagre": {
+            "types": "./dist/types/lib/dagre.d.ts",
+            "import": "./dist/alpineflow-dagre.esm.js",
+            "default": "./dist/alpineflow-dagre.js"
+        },
+        "./force": {
+            "types": "./dist/types/lib/force.d.ts",
+            "import": "./dist/alpineflow-force.esm.js",
+            "default": "./dist/alpineflow-force.js"
+        },
+        "./hierarchy": {
+            "types": "./dist/types/lib/hierarchy.d.ts",
+            "import": "./dist/alpineflow-hierarchy.esm.js",
+            "default": "./dist/alpineflow-hierarchy.js"
+        },
+        "./elk": {
+            "types": "./dist/types/lib/elk.d.ts",
+            "import": "./dist/alpineflow-elk.esm.js",
+            "default": "./dist/alpineflow-elk.js"
+        },
+        "./css": "./dist/alpineflow.css",
+        "./theme": "./dist/alpineflow-theme.css"
+    },
+    "files": [
+        "dist/"
+    ],
+    "scripts": {
+        "build": "vite build && tsc && npm run build:css && npm run build:bundle && npm run build:addons",
+        "build:css": "cp css/structural.css dist/alpineflow.css && cp css/theme-default.css dist/alpineflow-theme.css",
+        "build:bundle": "vite build --config vite.bundle.config.ts",
+        "build:addons": "ADDON_NAME=alpineflow-whiteboard.esm ADDON_ENTRY=lib/whiteboard.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-dagre.esm ADDON_ENTRY=lib/dagre.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-force.esm ADDON_ENTRY=lib/force.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-hierarchy.esm ADDON_ENTRY=lib/hierarchy.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-elk.esm ADDON_ENTRY=lib/elk.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-collab.esm ADDON_ENTRY=lib/collab.ts vite build --config vite.addons.config.ts",
+        "test": "vitest run",
+        "test:watch": "vitest"
+    },
+    "dependencies": {
+        "d3-drag": "^3.0.0",
+        "d3-ease": "^3.0.1",
+        "d3-interpolate": "^3.0.1",
+        "d3-selection": "^3.0.0",
+        "d3-timer": "^3.0.1",
+        "d3-zoom": "^3.0.0",
+        "html-to-image": "^1.11.11",
+        "perfect-freehand": "^1.2.3"
+    },
+    "peerDependencies": {
+        "@dagrejs/dagre": "^3.0.0",
+        "alpinejs": "^3.15.0",
+        "d3-force": "^3.0.0",
+        "d3-hierarchy": "^3.1.2",
+        "elkjs": "^0.11.0",
+        "y-protocols": "^1.0.0",
+        "y-websocket": "^2.0.0",
+        "yjs": "^13.6.0"
+    },
+    "peerDependenciesMeta": {
+        "alpinejs": {
+            "optional": false
+        },
+        "@dagrejs/dagre": {
+            "optional": true
+        },
+        "d3-force": {
+            "optional": true
+        },
+        "d3-hierarchy": {
+            "optional": true
+        },
+        "elkjs": {
+            "optional": true
+        },
+        "y-protocols": {
+            "optional": true
+        },
+        "y-websocket": {
+            "optional": true
+        },
+        "yjs": {
+            "optional": true
+        }
+    },
+    "devDependencies": {
+        "@dagrejs/dagre": "^3.0.0",
+        "@types/d3-drag": "^3.0.7",
+        "@types/d3-ease": "^3.0.2",
+        "@types/d3-force": "^3.0.10",
+        "@types/d3-hierarchy": "^3.1.7",
+        "@types/d3-interpolate": "^3.0.4",
+        "@types/d3-selection": "^3.0.11",
+        "@types/d3-timer": "^3.0.2",
+        "@types/d3-transition": "^3.0.9",
+        "@types/d3-zoom": "^3.0.8",
+        "@types/dagre": "^0.7.53",
+        "alpinejs": "^3.15.8",
+        "d3-force": "^3.0.0",
+        "d3-hierarchy": "^3.1.2",
+        "elkjs": "^0.11.1",
+        "jsdom": "^28.1.0",
+        "typescript": "^5.9.3",
+        "vite": "^7.0.4",
+        "vitest": "^4.0.18",
+        "y-protocols": "^1.0.0",
+        "y-websocket": "^2.0.0",
+        "yjs": "^13.6.0"
+    }
+}
