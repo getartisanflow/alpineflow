@@ -22,11 +22,7 @@ export default defineConfig({
       fileName: () => 'alpineflow.bundle.esm.js',
     },
     rollupOptions: {
-      external: ['alpinejs'],
       output: {
-        globals: {
-          alpinejs: 'Alpine',
-        },
         // Force everything into a single chunk
         inlineDynamicImports: true,
       },

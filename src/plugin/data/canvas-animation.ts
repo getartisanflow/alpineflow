@@ -16,7 +16,7 @@
 //   _suspendHistory, _resumeHistory.
 // ============================================================================
 
-import Alpine from 'alpinejs';
+import { getAlpine } from '../alpine-ref';
 import type { CanvasContext } from './canvas-context';
 import type {
   FlowNode,
@@ -215,8 +215,8 @@ export function createAnimationMixin(ctx: CanvasContext) {
                   const n = ctx._nodeMap.get(nodeId);
                   if (!n) return;
                   const pos = capturedPathFn(t as number);
-                  Alpine.raw(n).position.x = pos.x;
-                  Alpine.raw(n).position.y = pos.y;
+                  getAlpine().raw(n).position.x = pos.x;
+                  getAlpine().raw(n).position.y = pos.y;
                   movedNodeIds.add(nodeId);
                   // Clean up guide path on completion
                   if ((t as number) >= 1 && capturedGuide && autoRemove) {
@@ -227,7 +227,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
             }
           } else if (target.position) {
             // Position animation (linear interpolation)
-            const rawNode = Alpine.raw(node);
+            const rawNode = getAlpine().raw(node);
             const fromPos = rawNode.position;
             if (target.position.x !== undefined) {
               const toX = target.position.x;
@@ -242,7 +242,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
                   apply: (v) => {
                     const n = ctx._nodeMap.get(nodeId);
                     if (!n) return;
-                    Alpine.raw(n).position.x = v as number;
+                    getAlpine().raw(n).position.x = v as number;
                     movedNodeIds.add(nodeId);
                   },
                 });
@@ -260,7 +260,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
                   to: toY,
                   apply: (v) => {
                     const n = ctx._nodeMap.get(nodeId);
-                    if (n) Alpine.raw(n).position.y = v as number;
+                    if (n) getAlpine().raw(n).position.y = v as number;
                     movedNodeIds.add(nodeId);
                   },
                 });
@@ -300,7 +300,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
                 apply: (t) => {
                   const n = ctx._nodeMap.get(nodeId);
                   if (!n) return;
-                  Alpine.raw(n).style = interpolateStyle(fromStyle, toStyle as Record<string, string>, t as number);
+                  getAlpine().raw(n).style = interpolateStyle(fromStyle, toStyle as Record<string, string>, t as number);
                   styledNodeIds.add(nodeId);
                 },
               });
@@ -365,7 +365,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
                 apply: (v) => {
                   const e = ctx._edgeMap.get(edgeId);
                   if (!e) return;
-                  Alpine.raw(e).color = v as string;
+                  getAlpine().raw(e).color = v as string;
                   styledEdgeIds.add(edgeId);
                 },
               });
@@ -388,7 +388,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
                 apply: (v) => {
                   const e = ctx._edgeMap.get(edgeId);
                   if (!e) return;
-                  Alpine.raw(e).strokeWidth = v as number;
+                  getAlpine().raw(e).strokeWidth = v as number;
                   styledEdgeIds.add(edgeId);
                 },
               });
@@ -477,7 +477,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
 
       // Unwrap the Alpine proxy so the Animator's internal Maps/Sets use
       // correct reference equality (Proxy(obj) !== obj breaks _cleanup).
-      const rawAnimator = Alpine.raw(ctx._animator!) as Animator;
+      const rawAnimator = getAlpine().raw(ctx._animator!) as Animator;
       const handle = rawAnimator.animate(entries, {
         duration,
         easing: options.easing,
@@ -513,7 +513,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
             for (const [nodeId, target] of Object.entries(targets.nodes)) {
               const node = ctx._nodeMap.get(nodeId);
               if (!node) continue;
-              const raw = Alpine.raw(node);
+              const raw = getAlpine().raw(node);
               if (target.followPath || target.position?.x !== undefined) node.position.x = raw.position.x;
               if (target.followPath || target.position?.y !== undefined) node.position.y = raw.position.y;
               if (target.style !== undefined) node.style = raw.style;
@@ -524,7 +524,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
             for (const [edgeId, target] of Object.entries(targets.edges)) {
               const edge = ctx._edgeMap.get(edgeId);
               if (!edge) continue;
-              const raw = Alpine.raw(edge);
+              const raw = getAlpine().raw(edge);
               if (target.color !== undefined && typeof target.color === 'string') edge.color = raw.color;
               if (target.strokeWidth !== undefined) edge.strokeWidth = raw.strokeWidth;
             }

@@ -6,9 +6,8 @@ import type { FlowNode, FlowEdge } from '../../core/types';
 
 // ── Mock Alpine ──────────────────────────────────────────────────────────────
 
-vi.mock('alpinejs', () => ({
-  default: { raw: (x: any) => x },
-}));
+import { setAlpine } from '../alpine-ref';
+setAlpine({ raw: (x: any) => x } as any);
 
 // ── Mock FlowTimeline ────────────────────────────────────────────────────────
 
