@@ -1,7 +1,7 @@
 {
     "$schema": "https://www.schemastore.org/package.json",
     "name": "@getartisanflow/alpineflow",
-    "version": "0.1.0-alpha",
+    "version": "0.1.1-alpha",
     "description": "Interactive flowchart and node-graph engine for Alpine.js — drag-and-drop nodes, edges, animations, collaboration, and layout algorithms.",
     "keywords": [
         "alpinejs",
@@ -97,7 +97,7 @@
         "d3-hierarchy": "^3.1.2",
         "elkjs": "^0.11.0",
         "y-protocols": "^1.0.0",
-        "y-websocket": "^2.0.0",
+        "y-websocket": "^2.0.0 || ^3.0.0",
         "yjs": "^13.6.0"
     },
     "peerDependenciesMeta": {
@@ -147,7 +147,7 @@
         "vite": "^7.0.4",
         "vitest": "^4.0.18",
         "y-protocols": "^1.0.0",
-        "y-websocket": "^2.0.0",
+        "y-websocket": "^2.0.0 || ^3.0.0",
         "yjs": "^13.6.0"
     }
 }
