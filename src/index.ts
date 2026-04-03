@@ -10,6 +10,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
+import { setAlpine } from './plugin/alpine-ref';
 
 // Plugin registrations
 import { registerFlowCanvas } from './plugin/data/flow-canvas';
@@ -60,6 +61,7 @@ const _registeredInstances = new WeakSet<object>();
 export default function AlpineFlow(Alpine: Alpine) {
   if (_registeredInstances.has(Alpine)) return;
   _registeredInstances.add(Alpine);
+  setAlpine(Alpine);
 
   // Store (global instance registry)
   registerFlowStore(Alpine);

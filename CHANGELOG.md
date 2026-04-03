@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.2-alpha — 2026-04-03
+
+### Fixed
+- Removed direct `alpinejs` import from bundle — Alpine is now received through the plugin parameter, making the bundle compatible with Livewire (which provides Alpine at runtime)
+- WireFlow bundle no longer requires `alpinejs` as an external dependency
+
 ## v0.1.1-alpha — 2026-04-03
 
 ### Fixed
