@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.1-alpha — 2026-04-03
+
+### Fixed
+- Widened `y-websocket` peer dependency to `^2.0.0 || ^3.0.0` to support both versions
+- Updated `picomatch` to fix high severity ReDoS vulnerability (dev dependency)
+
 ## v0.1.0-alpha — 2026-04-02
 
 Initial alpha release.
