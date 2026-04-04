@@ -1,0 +1,51 @@
+name: Example Request
+description: Request a new example or demo for the documentation site
+title: "[Example]: "
+labels: ["example", "docs"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Want to see a specific use case demonstrated? Let us know what you'd like to see in an example.
+
+  - type: input
+    id: title
+    attributes:
+      label: Example title
+      description: What should this example be called?
+      placeholder: "e.g. Drag-to-reorder kanban board"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What should it demonstrate?
+      description: Describe the use case and what AlpineFlow features it should showcase.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: features
+    attributes:
+      label: Features involved
+      description: Which AlpineFlow features should this example highlight?
+      options:
+        - label: Nodes & shapes
+        - label: Edges & routing
+        - label: Handles & connections
+        - label: Animation & particles
+        - label: Canvas controls (zoom, pan, minimap)
+        - label: Interaction (drag, context menus, toolbars)
+        - label: Compute flows (reactive data)
+        - label: Layout engines (dagre, force, tree, elk)
+        - label: Collaboration (Yjs)
+        - label: Whiteboard / annotations
+        - label: Custom node types
+        - label: Theming
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Real-world context
+      description: What are you trying to build that inspired this request?
