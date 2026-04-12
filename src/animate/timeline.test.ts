@@ -2420,3 +2420,52 @@ describe('FlowTimeline — restart', () => {
     await restartPromise;
   });
 });
+
+describe('FlowTimeline — tag inheritance', () => {
+  it('sub-timelines inherit parent tag', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    parent.setTag('my-run');
+
+    const sub = new FlowTimeline(canvas);
+    sub.step({ nodes: ['a'], position: { x: 100 }, duration: 0 });
+
+    parent.step({ timeline: sub });
+
+    // During execution, sub should have inherited the tag
+    let subTag: string | undefined;
+    sub.on('play', () => { subTag = sub.tag; });
+
+    await parent.play();
+    expect(subTag).toBe('my-run');
+  });
+
+  it('independent sub-timelines do not inherit tag', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    parent.setTag('my-run');
+
+    const sub = new FlowTimeline(canvas);
+    sub.step({ nodes: ['a'], position: { x: 100 }, duration: 0 });
+
+    parent.step({ timeline: sub, independent: true });
+
+    let subTag: string | undefined = 'should-be-undefined';
+    sub.on('play', () => { subTag = sub.tag; });
+
+    await parent.play();
+    expect(subTag).toBeUndefined();
+  });
+
+  it('nested builder inherits tag', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    parent.setTag('nested-run');
+
+    const sub = parent.timeline((s) => {
+      s.step({ nodes: ['a'], position: { x: 50 }, duration: 0 });
+    });
+
+    expect(sub.tag).toBe('nested-run');
+  });
+});

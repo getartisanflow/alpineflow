@@ -237,6 +237,7 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
   private _initialEdgeSnapshot: Map<string, EdgeSnapshot> = new Map();
   private _playResolve: (() => void) | null = null;
   private _pausePlaybackResolve: (() => void) | null = null;
+  private _tag?: string;
 
   constructor(canvas: TimelineCanvas, engine?: AnimationEngine) {
     this._canvas = canvas;
@@ -255,6 +256,15 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
 
   get subTimelines(): ReadonlyArray<FlowTimeline> {
     return this._subTimelines;
+  }
+
+  get tag(): string | undefined {
+    return this._tag;
+  }
+
+  setTag(tag: string): this {
+    this._tag = tag;
+    return this;
   }
 
   step(config: TimelineStep<TContext> | ((ctx: StepContext<TContext>) => TimelineStep<TContext>)): this {
@@ -276,6 +286,12 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
     options?: { independent?: boolean },
   ): FlowTimeline<TSub> {
     const sub = new FlowTimeline<TSub>(this._canvas, this._engine);
+
+    // Inherit tag from parent (unless independent)
+    if (this._tag && !options?.independent) {
+      sub.setTag(this._tag);
+    }
+
     builder(sub);
     this._entries.push({
       type: 'step',
@@ -648,6 +664,11 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
     // Sub-timeline composition — play the nested timeline as one step
     if (step.timeline) {
       const sub = step.timeline;
+
+      // Inherit tag from parent (unless independent)
+      if (this._tag && !step.independent) {
+        sub.setTag(this._tag);
+      }
 
       // Track non-independent subs for pause/stop propagation
       if (!step.independent) {

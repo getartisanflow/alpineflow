@@ -37,7 +37,11 @@ export class FlowGroup {
     }
 
     timeline(): any {
-        return this._host.timeline?.();
+        const tl = this._host.timeline?.();
+        if (tl && typeof tl.setTag === 'function') {
+            tl.setTag(this.name);
+        }
+        return tl;
     }
 
     cancelAll(options?: StopOptions): void {

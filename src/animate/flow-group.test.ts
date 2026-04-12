@@ -142,6 +142,16 @@ describe('FlowGroup', () => {
         expect(result).toBe(timelineResult);
     });
 
+    it('timeline() sets the group tag on the returned timeline', () => {
+        const mockTimeline = { setTag: vi.fn() };
+        const host = makeHost({ timeline: vi.fn().mockReturnValue(mockTimeline) });
+        const group = new FlowGroup('my-group', host);
+
+        const tl = group.timeline();
+        expect(mockTimeline.setTag).toHaveBeenCalledWith('my-group');
+        expect(tl).toBe(mockTimeline);
+    });
+
     it('sendParticle() returns undefined when host has no sendParticle', () => {
         const host = makeHost();
         delete (host as any).sendParticle;
