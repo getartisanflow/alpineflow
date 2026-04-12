@@ -18,6 +18,8 @@ import type {
   AnimateOptions,
   FlowAnimationHandle,
   FollowOptions,
+  BurstOptions,
+  ParticleBurstHandle,
   ParticleHandle,
   ParticleOptions,
   ParticleRenderer,
@@ -713,6 +715,9 @@ export interface CanvasContext {
 
   /** Fire a particle along a straight line between two node centers */
   sendParticleBetween(sourceNodeId: string, targetNodeId: string, options?: ParticleOptions): ParticleHandle | undefined;
+
+  /** Fire a burst of staggered particles along an edge */
+  sendParticleBurst(edgeId: string, options: BurstOptions): ParticleBurstHandle;
 
   /** Get the SVG element that hosts edge paths (for injecting temp paths) */
   getEdgeSvgElement(): SVGSVGElement | null;

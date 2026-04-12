@@ -15,6 +15,8 @@
 
 import type { CanvasContext } from './canvas-context';
 import type {
+  BurstOptions,
+  ParticleBurstHandle,
   ParticleHandle,
   ParticleOptions,
   ParticleRenderState,
@@ -385,6 +387,55 @@ export function createParticleMixin(ctx: CanvasContext) {
       debug('particle', `sendParticleBetween "${sourceNodeId}" -> "${targetNodeId}"`, { path: pathD });
 
       return _sendParticleAlongPath(pathD, options);
+    },
+
+    // ── Burst: sequenced multi-particle emission ─────────────────────────
+
+    /**
+     * Fire multiple particles along a single edge with staggered timing.
+     * An optional `variant` function customizes each particle individually.
+     */
+    sendParticleBurst(edgeId: string, options: BurstOptions): ParticleBurstHandle {
+      const { count, stagger = 100, variant, ...baseOptions } = options;
+      const handles: (ParticleHandle | undefined)[] = [];
+      const pendingTimers: ReturnType<typeof setTimeout>[] = [];
+
+      for (let i = 0; i < count; i++) {
+        const particleOptions: ParticleOptions = variant
+          ? { ...baseOptions, ...variant(i, count) }
+          : { ...baseOptions };
+
+        if (i === 0) {
+          handles.push(this.sendParticle(edgeId, particleOptions));
+        } else {
+          const timer = setTimeout(() => {
+            handles.push(this.sendParticle(edgeId, particleOptions));
+          }, i * stagger);
+          pendingTimers.push(timer);
+        }
+      }
+
+      const validHandles = () => handles.filter((h): h is ParticleHandle => h != null);
+
+      return {
+        get handles() { return validHandles(); },
+        get finished() {
+          return new Promise<void>((resolve) => {
+            // Wait for all staggered particles to be created, then await all
+            setTimeout(() => {
+              Promise.all(validHandles().map(h => h.finished)).then(() => resolve());
+            }, count * stagger + 50);
+          });
+        },
+        stopAll() {
+          for (const timer of pendingTimers) {
+            clearTimeout(timer);
+          }
+          for (const h of validHandles()) {
+            h.stop();
+          }
+        },
+      };
     },
 
     // ── Cleanup ───────────────────────────────────────────────────────────

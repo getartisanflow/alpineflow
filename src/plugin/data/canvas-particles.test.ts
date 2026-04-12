@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { mockCtx } from './__test-utils';
 import { createParticleMixin, resolveDurationMs } from './canvas-particles';
 import type { FlowEdge, FlowNode } from '../../core/types';
@@ -448,3 +448,133 @@ describe('sendParticleBetween', () => {
     expect(handle).toBeUndefined();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// sendParticleBurst
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('sendParticleBurst', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function setupBurstCtx() {
+    const ctx = mockCtx();
+    ctx.edges = [makeEdge('e1')];
+    const pathEl = makePathEl(200);
+    (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
+    (ctx.getEdgeElement as any).mockReturnValue(makeGEl());
+    return ctx;
+  }
+
+  it('fires multiple particles with staggered timing', () => {
+    const ctx = setupBurstCtx();
+    const mixin = createParticleMixin(ctx);
+
+    const result = mixin.sendParticleBurst('e1', { count: 3, stagger: 100 });
+
+    // First particle fires immediately
+    expect(result.handles).toHaveLength(1);
+    expect(ctx._activeParticles.size).toBe(1);
+
+    // After 100ms, second particle fires
+    vi.advanceTimersByTime(100);
+    expect(result.handles).toHaveLength(2);
+    expect(ctx._activeParticles.size).toBe(2);
+
+    // After 200ms total, third particle fires
+    vi.advanceTimersByTime(100);
+    expect(result.handles).toHaveLength(3);
+    expect(ctx._activeParticles.size).toBe(3);
+  });
+
+  it('variant function customizes each particle', () => {
+    const ctx = setupBurstCtx();
+    const mixin = createParticleMixin(ctx);
+
+    const variant = vi.fn((i: number, total: number) => ({
+      size: 4 + i * 2,
+    }));
+
+    mixin.sendParticleBurst('e1', { count: 3, stagger: 50, variant });
+
+    // First particle fires immediately — variant called with (0, 3)
+    expect(variant).toHaveBeenCalledWith(0, 3);
+
+    vi.advanceTimersByTime(50);
+    expect(variant).toHaveBeenCalledWith(1, 3);
+
+    vi.advanceTimersByTime(50);
+    expect(variant).toHaveBeenCalledWith(2, 3);
+
+    expect(variant).toHaveBeenCalledTimes(3);
+  });
+
+  it('stopAll cancels pending timers and stops active particles', () => {
+    const ctx = setupBurstCtx();
+    const mixin = createParticleMixin(ctx);
+
+    const result = mixin.sendParticleBurst('e1', { count: 3, stagger: 200 });
+
+    // First fires immediately
+    expect(result.handles).toHaveLength(1);
+
+    // Stop all before the rest fire
+    result.stopAll();
+
+    // Advance time — no more particles should fire
+    vi.advanceTimersByTime(500);
+    expect(result.handles).toHaveLength(1);
+
+    // Active particle should be cleaned up
+    expect(ctx._activeParticles.size).toBe(0);
+  });
+
+  it('finished resolves when all particles complete', async () => {
+    const ctx = setupBurstCtx();
+    const mixin = createParticleMixin(ctx);
+
+    const result = mixin.sendParticleBurst('e1', { count: 2, stagger: 50 });
+
+    // Capture the finished promise before advancing timers
+    const finishedPromise = result.finished;
+
+    // Fire all particles
+    vi.advanceTimersByTime(50);
+    expect(result.handles).toHaveLength(2);
+
+    // Stop all to trigger completion
+    result.stopAll();
+
+    // Advance past the wait buffer in `finished`
+    vi.advanceTimersByTime(200);
+
+    // Flush microtasks so the Promise.all resolves
+    await vi.advanceTimersByTimeAsync(0);
+
+    // finished should resolve
+    await expect(finishedPromise).resolves.toBeUndefined();
+  });
+
+  it('uses default stagger of 100ms when not specified', () => {
+    const ctx = setupBurstCtx();
+    const mixin = createParticleMixin(ctx);
+
+    const result = mixin.sendParticleBurst('e1', { count: 2 });
+
+    expect(result.handles).toHaveLength(1);
+
+    // Default stagger is 100ms
+    vi.advanceTimersByTime(99);
+    expect(result.handles).toHaveLength(1);
+
+    vi.advanceTimersByTime(1);
+    expect(result.handles).toHaveLength(2);
+  });
+});
+

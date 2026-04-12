@@ -1,4 +1,4 @@
-import type { AnimateTargets, AnimateOptions, FlowAnimationHandle, StopOptions, ParticleOptions, ParticleHandle } from '../core/types';
+import type { AnimateTargets, AnimateOptions, FlowAnimationHandle, StopOptions, ParticleOptions, ParticleHandle, BurstOptions, ParticleBurstHandle } from '../core/types';
 
 export interface FlowGroupHost {
     animate(targets: AnimateTargets, options?: AnimateOptions): FlowAnimationHandle;
@@ -6,6 +6,7 @@ export interface FlowGroupHost {
     sendParticle?(edgeId: string, options?: ParticleOptions): ParticleHandle | undefined;
     sendParticleAlongPath?(svgPath: string, options?: ParticleOptions): ParticleHandle | undefined;
     sendParticleBetween?(sourceNodeId: string, targetNodeId: string, options?: ParticleOptions): ParticleHandle | undefined;
+    sendParticleBurst?(edgeId: string, options: BurstOptions): ParticleBurstHandle;
     timeline?(): any;
     getHandles(filter?: { tag?: string; tags?: string[] }): FlowAnimationHandle[];
     cancelAll(filter: { tag?: string; tags?: string[] }, options?: StopOptions): void;
@@ -44,6 +45,10 @@ export class FlowGroup {
 
     sendParticleBetween(sourceNodeId: string, targetNodeId: string, options?: ParticleOptions): ParticleHandle | undefined {
         return this._host.sendParticleBetween?.(sourceNodeId, targetNodeId, { ...options, tag: this.name } as ParticleOptions);
+    }
+
+    sendParticleBurst(edgeId: string, options: BurstOptions): ParticleBurstHandle {
+        return this._host.sendParticleBurst!(edgeId, { ...options, tag: this.name } as BurstOptions);
     }
 
     timeline(): any {

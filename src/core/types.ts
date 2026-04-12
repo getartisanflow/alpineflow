@@ -717,6 +717,26 @@ export interface ParticleHandle {
   readonly finished: Promise<void>;
 }
 
+/** Options for sendParticleBurst — sequenced multi-particle emission. */
+export interface BurstOptions extends ParticleOptions {
+  /** Number of particles to fire. */
+  count: number;
+  /** Milliseconds between each particle start. Default: 100. */
+  stagger?: number;
+  /** Per-particle customization function. Receives index and total count. */
+  variant?: (i: number, total: number) => Partial<ParticleOptions>;
+}
+
+/** Handle returned by sendParticleBurst() for controlling the burst. */
+export interface ParticleBurstHandle {
+  /** Individual particle handles (grows as staggered particles fire). */
+  readonly handles: ParticleHandle[];
+  /** Resolves when all particles in the burst have completed. */
+  readonly finished: Promise<void>;
+  /** Cancel all pending timers and stop all active particles. */
+  stopAll(): void;
+}
+
 // ─── Flow Canvas Config ─────────────────────────────────────────────────────
 
 export interface FlowCanvasConfig {
@@ -1469,6 +1489,9 @@ export interface FlowInstance {
 
   /** Fire a particle along a straight line between two node centers. */
   sendParticleBetween(sourceNodeId: string, targetNodeId: string, options?: ParticleOptions): ParticleHandle | undefined;
+
+  /** Fire a burst of staggered particles along an edge. */
+  sendParticleBurst(edgeId: string, options: BurstOptions): ParticleBurstHandle;
 
   /** Get all tracked animation handles, optionally filtered by tag. */
   getHandles(filter?: { tag?: string; tags?: string[] }): FlowAnimationHandle[];
