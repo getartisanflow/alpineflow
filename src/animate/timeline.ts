@@ -499,7 +499,76 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
     this._emit('step', { index: entryIndex, id: step.id });
     step.onStart?.(ctx);
 
-    // ── Warn about missing targets and filter valid ones ─────────
+    const { validNodeIds, validEdgeIds } = this._validateStepTargets(step, entryIndex);
+
+    if (this._isEmptyStep(step, validNodeIds, validEdgeIds)) {
+      step.onProgress?.(1, ctx);
+      step.onComplete?.(ctx);
+      this._emit('step-complete');
+      return Promise.resolve();
+    }
+
+    const nodeFromDimensions = new Map<string, Dimensions>();
+    const nodeFromStyles = new Map<string, Record<string, string>>();
+    this._captureNodeFromValues(step, validNodeIds, nodeFromDimensions, nodeFromStyles);
+
+    const edgeFromStrokeWidth = new Map<string, number>();
+    const edgeFromColor = new Map<string, string | EdgeGradient>();
+    this._captureEdgeFromValues(step, validEdgeIds, edgeFromStrokeWidth, edgeFromColor);
+
+    const resolvedPathFn = this._resolveFollowPath(step);
+    const guidePathEl = this._createGuidePath(step);
+    const hasViewportStep = !!(step.viewport || step.fitView || step.panTo);
+
+    let viewportFrom: Viewport | null = null;
+    let viewportTarget: Viewport | null = null;
+    if (hasViewportStep && this._canvas.viewport) {
+      viewportFrom = { ...this._canvas.viewport };
+      viewportTarget = this._resolveTargetViewport(step);
+    }
+
+    const transition = step.edgeTransition ?? 'none';
+    const addEdgeIds = step.addEdges?.map((e) => e.id) ?? [];
+    const removeEdgeIds = step.removeEdges?.filter((id) => this._canvas.getEdge(id)).slice() ?? [];
+
+    // Instant step (duration: 0)
+    if (duration === 0) {
+      return this._executeInstantStep(step, ctx, delay, resolvedPathFn, validNodeIds, guidePathEl);
+    }
+
+    // For animated transitions, add edges up front so the DOM renders paths.
+    // Only await when the method actually performs async work (transition pre-hide),
+    // so that synchronous callers (e.g. followPath without addEdges) don't get
+    // deferred to a later microtask.
+    const edgePrepPromise = this._prepareAnimatedEdges(step, transition, addEdgeIds);
+    if (edgePrepPromise) {
+      await edgePrepPromise;
+    }
+
+    // followPath steps retain engine-based interpolation — animate() can't handle custom path functions
+    if (resolvedPathFn) {
+      return this._executeFollowPathStep(
+        step, ctx, duration, delay, easing, resolvedPathFn,
+        validNodeIds, validEdgeIds, nodeFromDimensions, nodeFromStyles,
+        edgeFromStrokeWidth, edgeFromColor, viewportFrom, viewportTarget,
+        transition, addEdgeIds, removeEdgeIds, guidePathEl,
+      );
+    }
+
+    // Animated step — delegate to canvas.animate()
+    return this._executeAnimatedStep(
+      step, ctx, duration, delay, validNodeIds, validEdgeIds,
+      viewportFrom, viewportTarget, transition, addEdgeIds, removeEdgeIds, guidePathEl,
+    );
+  }
+
+  // ── Step decomposition: target validation ──────────────────────────
+
+  /** Filter node/edge IDs to only those present on the canvas; warn in debug mode. */
+  private _validateStepTargets(
+    step: TimelineStep<TContext>,
+    entryIndex: number,
+  ): { validNodeIds: string[] | undefined; validEdgeIds: string[] | undefined } {
     let validNodeIds: string[] | undefined;
     let validEdgeIds: string[] | undefined;
 
@@ -525,152 +594,172 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
       }
     }
 
-    // If step targets nodes/edges but has zero valid targets, complete instantly
+    return { validNodeIds, validEdgeIds };
+  }
+
+  // ── Step decomposition: empty-step check ───────────────────────────
+
+  /** Return true when the step targets nodes/edges but has zero valid targets and nothing else to do. */
+  private _isEmptyStep(
+    step: TimelineStep<TContext>,
+    validNodeIds: string[] | undefined,
+    validEdgeIds: string[] | undefined,
+  ): boolean {
     const hasTargetedNodes = step.nodes && step.nodes.length > 0;
     const hasTargetedEdges = step.edges && step.edges.length > 0;
     const hasViewportStep = !!(step.viewport || step.fitView || step.panTo);
     const hasEdgeLifecycle = !!(step.addEdges?.length || step.removeEdges?.length);
     const hasZeroValidNodeTargets = hasTargetedNodes && (!validNodeIds || validNodeIds.length === 0);
     const hasZeroValidEdgeTargets = hasTargetedEdges && (!validEdgeIds || validEdgeIds.length === 0);
+
     if (hasZeroValidNodeTargets && hasZeroValidEdgeTargets && !hasViewportStep && !hasEdgeLifecycle) {
-      step.onProgress?.(1, ctx);
-      step.onComplete?.(ctx);
-      this._emit('step-complete');
-      return Promise.resolve();
+      return true;
     }
     if (hasZeroValidNodeTargets && !hasTargetedEdges && !hasViewportStep && !hasEdgeLifecycle) {
-      step.onProgress?.(1, ctx);
-      step.onComplete?.(ctx);
-      this._emit('step-complete');
-      return Promise.resolve();
+      return true;
     }
     if (hasZeroValidEdgeTargets && !hasTargetedNodes && !hasViewportStep && !hasEdgeLifecycle) {
-      step.onProgress?.(1, ctx);
-      step.onComplete?.(ctx);
-      this._emit('step-complete');
-      return Promise.resolve();
+      return true;
+    }
+    return false;
+  }
+
+  // ── Step decomposition: capture from-values ────────────────────────
+
+  /** Capture initial node dimensions and styles for interpolation. */
+  private _captureNodeFromValues(
+    step: TimelineStep<TContext>,
+    validNodeIds: string[] | undefined,
+    nodeFromDimensions: Map<string, Dimensions>,
+    nodeFromStyles: Map<string, Record<string, string>>,
+  ): void {
+    if (!validNodeIds) return;
+    for (const id of validNodeIds) {
+      const node = this._canvas.getNode(id);
+      if (!node) continue;
+      if (node.dimensions && step.dimensions) {
+        nodeFromDimensions.set(id, { ...node.dimensions });
+      }
+      if (step.style && node.style) {
+        nodeFromStyles.set(id, parseStyle(node.style) as Record<string, string>);
+      }
+    }
+  }
+
+  /** Capture initial edge strokeWidth and color for interpolation. */
+  private _captureEdgeFromValues(
+    step: TimelineStep<TContext>,
+    validEdgeIds: string[] | undefined,
+    edgeFromStrokeWidth: Map<string, number>,
+    edgeFromColor: Map<string, string | EdgeGradient>,
+  ): void {
+    if (!validEdgeIds) return;
+    for (const id of validEdgeIds) {
+      const edge = this._canvas.getEdge(id);
+      if (!edge) continue;
+      if (step.edgeStrokeWidth !== undefined && edge.strokeWidth !== undefined) {
+        edgeFromStrokeWidth.set(id, edge.strokeWidth);
+      }
+      if (step.edgeColor !== undefined && edge.color !== undefined) {
+        edgeFromColor.set(id, edge.color);
+      }
+    }
+  }
+
+  // ── Step decomposition: followPath & guide path ────────────────────
+
+  /** Resolve a followPath config to a callable PathFunction. */
+  private _resolveFollowPath(step: TimelineStep<TContext>): PathFunction | null {
+    if (!step.followPath) return null;
+    if (typeof step.followPath === 'function') {
+      return step.followPath;
+    }
+    const fn = svgPathToFunction(step.followPath);
+    if (!fn && this._canvas.debug) {
+      console.warn('[AlpineFlow] SVG path resolution unavailable (no DOM), followPath string ignored');
+    }
+    return fn;
+  }
+
+  /** Create a visible SVG guide path overlay for string-based followPath. */
+  private _createGuidePath(step: TimelineStep<TContext>): SVGPathElement | null {
+    if (
+      !step.guidePath?.visible ||
+      typeof step.followPath !== 'string' ||
+      typeof document === 'undefined'
+    ) {
+      return null;
     }
 
-    // Capture "from" values for nodes
-    const nodeFromPositions = new Map<string, XYPosition>();
-    const nodeFromDimensions = new Map<string, Dimensions>();
-    const nodeFromStyles = new Map<string, Record<string, string>>();
+    const svgContainer = this._canvas.getEdgeSvgElement?.();
+    if (!svgContainer) return null;
 
-    if (validNodeIds) {
+    const guidePathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    guidePathEl.setAttribute('d', step.followPath);
+    guidePathEl.classList.add('flow-guide-path');
+    if (step.guidePath.class) {
+      guidePathEl.classList.add(step.guidePath.class);
+    }
+    svgContainer.appendChild(guidePathEl);
+    return guidePathEl;
+  }
+
+  // ── Step decomposition: instant execution (duration: 0) ────────────
+
+  /** Handle an instant step (duration === 0), optionally with a delay. */
+  private _executeInstantStep(
+    step: TimelineStep<TContext>,
+    ctx: StepContext<TContext>,
+    delay: number,
+    resolvedPathFn: PathFunction | null,
+    validNodeIds: string[] | undefined,
+    guidePathEl: SVGPathElement | null,
+  ): Promise<void> {
+    if (delay > 0) {
+      return new Promise<void>((resolve) => {
+        const timerId = setTimeout(() => {
+          this._applyStepFinal(step);
+          step.onProgress?.(1, ctx);
+          step.onComplete?.(ctx);
+          this._emit('step-complete');
+          resolve();
+        }, delay);
+        // Track for cleanup
+        const handle: EngineHandle = {
+          stop() { clearTimeout(timerId); },
+        };
+        this._activeHandles.push(handle);
+      });
+    }
+    if (resolvedPathFn && validNodeIds) {
+      const pos = resolvedPathFn(1);
       for (const id of validNodeIds) {
         const node = this._canvas.getNode(id);
-        if (!node) continue;
-        nodeFromPositions.set(id, { ...node.position });
-        if (node.dimensions && step.dimensions) {
-          nodeFromDimensions.set(id, { ...node.dimensions });
-        }
-        if (step.style && node.style) {
-          nodeFromStyles.set(id, parseStyle(node.style) as Record<string, string>);
+        if (node) {
+          node.position.x = pos.x;
+          node.position.y = pos.y;
         }
       }
     }
-
-    // Capture "from" values for edges
-    const edgeFromStrokeWidth = new Map<string, number>();
-    const edgeFromColor = new Map<string, string | EdgeGradient>();
-
-    if (validEdgeIds) {
-      for (const id of validEdgeIds) {
-        const edge = this._canvas.getEdge(id);
-        if (!edge) continue;
-        if (step.edgeStrokeWidth !== undefined && edge.strokeWidth !== undefined) {
-          edgeFromStrokeWidth.set(id, edge.strokeWidth);
-        }
-        if (step.edgeColor !== undefined && edge.color !== undefined) {
-          edgeFromColor.set(id, edge.color);
-        }
-      }
+    this._applyStepFinal(step);
+    // Guide path cleanup (instant)
+    if (guidePathEl && step.guidePath?.autoRemove !== false) {
+      guidePathEl.remove();
     }
+    step.onProgress?.(1, ctx);
+    step.onComplete?.(ctx);
+    this._emit('step-complete');
+    return Promise.resolve();
+  }
 
-    // ── Resolve followPath ────────────────────────────────────────
-    let resolvedPathFn: PathFunction | null = null;
-    if (step.followPath) {
-      if (typeof step.followPath === 'function') {
-        resolvedPathFn = step.followPath;
-      } else {
-        resolvedPathFn = svgPathToFunction(step.followPath);
-        if (!resolvedPathFn && this._canvas.debug) {
-          console.warn('[AlpineFlow] SVG path resolution unavailable (no DOM), followPath string ignored');
-        }
-      }
-    }
+  // ── Step decomposition: pre-animation edge setup ───────────────────
 
-    // ── Guide path creation ────────────────────────────────────────
-    let guidePathEl: SVGPathElement | null = null;
-    if (
-      step.guidePath?.visible &&
-      typeof step.followPath === 'string' &&
-      typeof document !== 'undefined'
-    ) {
-      const svgContainer = this._canvas.getEdgeSvgElement?.();
-      if (svgContainer) {
-        guidePathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        guidePathEl.setAttribute('d', step.followPath);
-        guidePathEl.classList.add('flow-guide-path');
-        if (step.guidePath.class) {
-          guidePathEl.classList.add(step.guidePath.class);
-        }
-        svgContainer.appendChild(guidePathEl);
-      }
-    }
-
-    // ── Viewport "from" capture ─────────────────────────────────────
-    let viewportFrom: Viewport | null = null;
-    let viewportTarget: Viewport | null = null;
-    if (hasViewportStep && this._canvas.viewport) {
-      viewportFrom = { ...this._canvas.viewport };
-      viewportTarget = this._resolveTargetViewport(step);
-    }
-
-    // ── Edge lifecycle for animated steps ─────────────────────────────
-    const transition = step.edgeTransition ?? 'none';
-    const addEdgeIds = step.addEdges?.map((e) => e.id) ?? [];
-    const removeEdgeIds = step.removeEdges?.filter((id) => this._canvas.getEdge(id)).slice() ?? [];
-
-    // Instant step (duration: 0)
-    if (duration === 0) {
-      if (delay > 0) {
-        return new Promise<void>((resolve) => {
-          const timerId = setTimeout(() => {
-            this._applyStepFinal(step);
-            step.onProgress?.(1, ctx);
-            step.onComplete?.(ctx);
-            this._emit('step-complete');
-            resolve();
-          }, delay);
-          // Track for cleanup
-          const handle: EngineHandle = {
-            stop() { clearTimeout(timerId); },
-          };
-          this._activeHandles.push(handle);
-        });
-      }
-      if (resolvedPathFn && validNodeIds) {
-        const pos = resolvedPathFn(1);
-        for (const id of validNodeIds) {
-          const node = this._canvas.getNode(id);
-          if (node) {
-            node.position.x = pos.x;
-            node.position.y = pos.y;
-          }
-        }
-      }
-      this._applyStepFinal(step);
-      // Guide path cleanup (instant)
-      if (guidePathEl && step.guidePath?.autoRemove !== false) {
-        guidePathEl.remove();
-      }
-      step.onProgress?.(1, ctx);
-      step.onComplete?.(ctx);
-      this._emit('step-complete');
-      return Promise.resolve();
-    }
-
+  /** Add edges to the DOM and pre-hide them for transition animations. Returns a promise only when async work is needed. */
+  private _prepareAnimatedEdges(
+    step: TimelineStep<TContext>,
+    transition: string,
+    addEdgeIds: string[],
+  ): Promise<void> | void {
     // For animated transitions, add edges up front so the DOM renders paths
     if (step.addEdges) {
       this._addEdges(step.addEdges);
@@ -682,7 +771,7 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
     // This runs before the browser's next paint, unlike requestAnimationFrame
     // which fires in the next frame and causes a single-frame flash.
     if (transition !== 'none' && addEdgeIds.length && step.addEdges) {
-      await new Promise<void>((hideResolve) => {
+      return new Promise<void>((hideResolve) => {
         queueMicrotask(() => queueMicrotask(() => {
           if (transition === 'draw') {
             this._applyEdgeDrawTransition(addEdgeIds, 0, 'in');
@@ -693,184 +782,228 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
         }));
       });
     }
+  }
 
-    // followPath steps retain engine-based interpolation — animate() can't handle custom path functions
-    if (resolvedPathFn) {
-      return new Promise<void>((resolve) => {
-        const handle = this._engine.register((elapsed) => {
-          if (this._state === 'stopped') {
-            resolve();
-            return true; // stop
-          }
+  // ── Step decomposition: followPath animation ───────────────────────
 
-          const rawProgress = Math.min(elapsed / duration, 1);
-          const progress = easing(rawProgress);
+  /** Execute an animated step using engine-based interpolation for followPath. */
+  private _executeFollowPathStep(
+    step: TimelineStep<TContext>,
+    ctx: StepContext<TContext>,
+    duration: number,
+    delay: number,
+    easing: (t: number) => number,
+    resolvedPathFn: PathFunction,
+    validNodeIds: string[] | undefined,
+    validEdgeIds: string[] | undefined,
+    nodeFromDimensions: Map<string, Dimensions>,
+    nodeFromStyles: Map<string, Record<string, string>>,
+    edgeFromStrokeWidth: Map<string, number>,
+    edgeFromColor: Map<string, string | EdgeGradient>,
+    viewportFrom: Viewport | null,
+    viewportTarget: Viewport | null,
+    transition: string,
+    addEdgeIds: string[],
+    removeEdgeIds: string[],
+    guidePathEl: SVGPathElement | null,
+  ): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const handle = this._engine.register((elapsed) => {
+        if (this._state === 'stopped') {
+          resolve();
+          return true; // stop
+        }
 
-          // followPath position from path function
-          if (validNodeIds) {
-            const pos = resolvedPathFn(progress);
-            for (const id of validNodeIds) {
-              const node = this._canvas.getNode(id);
-              if (node) {
-                node.position.x = pos.x;
-                node.position.y = pos.y;
-              }
+        const rawProgress = Math.min(elapsed / duration, 1);
+        const progress = easing(rawProgress);
+
+        // followPath position from path function
+        if (validNodeIds) {
+          const pos = resolvedPathFn(progress);
+          for (const id of validNodeIds) {
+            const node = this._canvas.getNode(id);
+            if (node) {
+              node.position.x = pos.x;
+              node.position.y = pos.y;
             }
           }
+        }
 
-          // Interpolate node dimensions
-          if (validNodeIds && step.dimensions) {
-            for (const id of validNodeIds) {
-              const node = this._canvas.getNode(id);
-              const from = nodeFromDimensions.get(id);
-              if (!node || !from || !node.dimensions) continue;
+        this._interpolateFollowPathTick(
+          step, progress, validNodeIds, validEdgeIds,
+          nodeFromDimensions, nodeFromStyles, edgeFromStrokeWidth, edgeFromColor,
+          viewportFrom, viewportTarget,
+        );
 
-              if (step.dimensions.width !== undefined) {
-                node.dimensions.width = lerpNumber(from.width, step.dimensions.width, progress);
-              }
-              if (step.dimensions.height !== undefined) {
-                node.dimensions.height = lerpNumber(from.height, step.dimensions.height, progress);
-              }
-            }
+        this._tickEdgeTransitions(transition, addEdgeIds, removeEdgeIds, progress);
+
+        step.onProgress?.(rawProgress, ctx);
+
+        // Step complete
+        if (rawProgress >= 1) {
+          this._cleanupEdgeTransitions(transition, addEdgeIds, removeEdgeIds);
+
+          if (removeEdgeIds.length) {
+            this._removeEdges(removeEdgeIds);
           }
 
-          // Interpolate node styles
-          if (validNodeIds && step.style) {
-            const targetStyle = parseStyle(step.style);
-            for (const id of validNodeIds) {
-              const node = this._canvas.getNode(id);
-              const from = nodeFromStyles.get(id);
-              if (!node) continue;
-              if (from) {
-                node.style = interpolateStyle(from, targetStyle as Record<string, string>, progress);
-              }
-            }
+          this._applyStepInstant(step);
+
+          if (guidePathEl && step.guidePath?.autoRemove !== false) {
+            guidePathEl.remove();
           }
 
-          // Interpolate edge strokeWidth
-          if (validEdgeIds && step.edgeStrokeWidth !== undefined) {
-            for (const id of validEdgeIds) {
-              const edge = this._canvas.getEdge(id);
-              const from = edgeFromStrokeWidth.get(id);
-              if (!edge) continue;
-              if (from !== undefined) {
-                edge.strokeWidth = lerpNumber(from, step.edgeStrokeWidth, progress);
-              } else {
-                edge.strokeWidth = step.edgeStrokeWidth;
-              }
-            }
-          }
+          step.onProgress?.(1, ctx);
+          step.onComplete?.(ctx);
+          this._emit('step-complete');
+          resolve();
+          return true; // stop scheduling
+        }
 
-          // Interpolate edge color
-          if (validEdgeIds && step.edgeColor !== undefined) {
-            for (const id of validEdgeIds) {
-              const edge = this._canvas.getEdge(id);
-              const from = edgeFromColor.get(id);
-              if (!edge) continue;
-              if (from !== undefined && typeof from === 'string') {
-                edge.color = interpolateColor(from, step.edgeColor, progress);
-              } else if (from !== undefined) {
-                edge.color = step.edgeColor;
-              } else {
-                edge.color = step.edgeColor;
-              }
-            }
-          }
+        return false; // continue
+      }, delay);
+      this._activeHandles.push(handle);
+    });
+  }
 
-          // Interpolate viewport
-          if (viewportFrom && viewportTarget && this._canvas.viewport) {
-            const vp = lerpViewport(viewportFrom, viewportTarget, progress, {
-              minZoom: this._canvas.minZoom,
-              maxZoom: this._canvas.maxZoom,
-            });
-            this._canvas.viewport.x = vp.x;
-            this._canvas.viewport.y = vp.y;
-            this._canvas.viewport.zoom = vp.zoom;
-          }
+  /** Per-tick interpolation for properties during followPath animation. */
+  private _interpolateFollowPathTick(
+    step: TimelineStep<TContext>,
+    progress: number,
+    validNodeIds: string[] | undefined,
+    validEdgeIds: string[] | undefined,
+    nodeFromDimensions: Map<string, Dimensions>,
+    nodeFromStyles: Map<string, Record<string, string>>,
+    edgeFromStrokeWidth: Map<string, number>,
+    edgeFromColor: Map<string, string | EdgeGradient>,
+    viewportFrom: Viewport | null,
+    viewportTarget: Viewport | null,
+  ): void {
+    // Interpolate node dimensions
+    if (validNodeIds && step.dimensions) {
+      for (const id of validNodeIds) {
+        const node = this._canvas.getNode(id);
+        const from = nodeFromDimensions.get(id);
+        if (!node || !from || !node.dimensions) continue;
 
-          // Edge transitions per tick
-          if (transition === 'draw') {
-            if (addEdgeIds.length) this._applyEdgeDrawTransition(addEdgeIds, progress, 'in');
-            if (removeEdgeIds.length) this._applyEdgeDrawTransition(removeEdgeIds, progress, 'out');
-          } else if (transition === 'fade') {
-            if (addEdgeIds.length) this._applyEdgeFadeTransition(addEdgeIds, progress, 'in');
-            if (removeEdgeIds.length) this._applyEdgeFadeTransition(removeEdgeIds, progress, 'out');
-          }
-
-          step.onProgress?.(rawProgress, ctx);
-
-          // Step complete
-          if (rawProgress >= 1) {
-            if (transition === 'draw') {
-              this._cleanupEdgeDrawTransition(addEdgeIds);
-              this._cleanupEdgeDrawTransition(removeEdgeIds);
-            } else if (transition === 'fade') {
-              this._cleanupEdgeFadeTransition(addEdgeIds);
-              this._cleanupEdgeFadeTransition(removeEdgeIds);
-            }
-
-            if (removeEdgeIds.length) {
-              this._removeEdges(removeEdgeIds);
-            }
-
-            this._applyStepInstant(step);
-
-            if (guidePathEl && step.guidePath?.autoRemove !== false) {
-              guidePathEl.remove();
-            }
-
-            step.onProgress?.(1, ctx);
-            step.onComplete?.(ctx);
-            this._emit('step-complete');
-            resolve();
-            return true; // stop scheduling
-          }
-
-          return false; // continue
-        }, delay);
-        this._activeHandles.push(handle);
-      });
+        if (step.dimensions.width !== undefined) {
+          node.dimensions.width = lerpNumber(from.width, step.dimensions.width, progress);
+        }
+        if (step.dimensions.height !== undefined) {
+          node.dimensions.height = lerpNumber(from.height, step.dimensions.height, progress);
+        }
+      }
     }
 
-    // Animated step — delegate to canvas.animate()
+    // Interpolate node styles
+    if (validNodeIds && step.style) {
+      const targetStyle = parseStyle(step.style);
+      for (const id of validNodeIds) {
+        const node = this._canvas.getNode(id);
+        const from = nodeFromStyles.get(id);
+        if (!node) continue;
+        if (from) {
+          node.style = interpolateStyle(from, targetStyle as Record<string, string>, progress);
+        }
+      }
+    }
+
+    // Interpolate edge strokeWidth
+    if (validEdgeIds && step.edgeStrokeWidth !== undefined) {
+      for (const id of validEdgeIds) {
+        const edge = this._canvas.getEdge(id);
+        const from = edgeFromStrokeWidth.get(id);
+        if (!edge) continue;
+        if (from !== undefined) {
+          edge.strokeWidth = lerpNumber(from, step.edgeStrokeWidth, progress);
+        } else {
+          edge.strokeWidth = step.edgeStrokeWidth;
+        }
+      }
+    }
+
+    // Interpolate edge color
+    if (validEdgeIds && step.edgeColor !== undefined) {
+      for (const id of validEdgeIds) {
+        const edge = this._canvas.getEdge(id);
+        const from = edgeFromColor.get(id);
+        if (!edge) continue;
+        if (from !== undefined && typeof from === 'string') {
+          edge.color = interpolateColor(from, step.edgeColor, progress);
+        } else if (from !== undefined) {
+          edge.color = step.edgeColor;
+        } else {
+          edge.color = step.edgeColor;
+        }
+      }
+    }
+
+    // Interpolate viewport
+    if (viewportFrom && viewportTarget && this._canvas.viewport) {
+      const vp = lerpViewport(viewportFrom, viewportTarget, progress, {
+        minZoom: this._canvas.minZoom,
+        maxZoom: this._canvas.maxZoom,
+      });
+      this._canvas.viewport.x = vp.x;
+      this._canvas.viewport.y = vp.y;
+      this._canvas.viewport.zoom = vp.zoom;
+    }
+  }
+
+  // ── Step decomposition: edge transition helpers ────────────────────
+
+  /** Apply edge transitions (draw/fade) for a single animation tick. */
+  private _tickEdgeTransitions(
+    transition: string,
+    addEdgeIds: string[],
+    removeEdgeIds: string[],
+    progress: number,
+  ): void {
+    if (transition === 'draw') {
+      if (addEdgeIds.length) this._applyEdgeDrawTransition(addEdgeIds, progress, 'in');
+      if (removeEdgeIds.length) this._applyEdgeDrawTransition(removeEdgeIds, progress, 'out');
+    } else if (transition === 'fade') {
+      if (addEdgeIds.length) this._applyEdgeFadeTransition(addEdgeIds, progress, 'in');
+      if (removeEdgeIds.length) this._applyEdgeFadeTransition(removeEdgeIds, progress, 'out');
+    }
+  }
+
+  /** Clean up edge transition styles at the end of animation. */
+  private _cleanupEdgeTransitions(
+    transition: string,
+    addEdgeIds: string[],
+    removeEdgeIds: string[],
+  ): void {
+    if (transition === 'draw') {
+      this._cleanupEdgeDrawTransition(addEdgeIds);
+      this._cleanupEdgeDrawTransition(removeEdgeIds);
+    } else if (transition === 'fade') {
+      this._cleanupEdgeFadeTransition(addEdgeIds);
+      this._cleanupEdgeFadeTransition(removeEdgeIds);
+    }
+  }
+
+  // ── Step decomposition: canvas.animate() execution ─────────────────
+
+  /** Execute an animated step using canvas.animate() for standard interpolation. */
+  private _executeAnimatedStep(
+    step: TimelineStep<TContext>,
+    ctx: StepContext<TContext>,
+    duration: number,
+    delay: number,
+    validNodeIds: string[] | undefined,
+    validEdgeIds: string[] | undefined,
+    viewportFrom: Viewport | null,
+    viewportTarget: Viewport | null,
+    transition: string,
+    addEdgeIds: string[],
+    removeEdgeIds: string[],
+    guidePathEl: SVGPathElement | null,
+  ): Promise<void> {
     return new Promise<void>((resolve) => {
-      // Build targets
-      const animTargets: AnimateTargets = {};
-
-      if (validNodeIds) {
-        animTargets.nodes = {};
-        for (const id of validNodeIds) {
-          const target: Record<string, any> = {};
-          if (step.position) target.position = { ...step.position };
-          if (step.dimensions) target.dimensions = { ...step.dimensions };
-          if (step.style !== undefined) target.style = step.style;
-          if (step.class !== undefined) target.class = step.class;
-          if (step.data !== undefined) target.data = step.data;
-          if (step.selected !== undefined) target.selected = step.selected;
-          if (step.zIndex !== undefined) target.zIndex = step.zIndex;
-          animTargets.nodes[id] = target;
-        }
-      }
-
-      if (validEdgeIds) {
-        animTargets.edges = {};
-        for (const id of validEdgeIds) {
-          const target: Record<string, any> = {};
-          if (step.edgeColor !== undefined) target.color = step.edgeColor;
-          if (step.edgeStrokeWidth !== undefined) target.strokeWidth = step.edgeStrokeWidth;
-          if (step.edgeLabel !== undefined) target.label = step.edgeLabel;
-          if (step.edgeAnimated !== undefined) target.animated = step.edgeAnimated;
-          if (step.edgeClass !== undefined) target.class = step.edgeClass;
-          animTargets.edges[id] = target;
-        }
-      }
-
-      if (viewportTarget && viewportFrom) {
-        animTargets.viewport = {
-          pan: { x: viewportTarget.x, y: viewportTarget.y },
-          zoom: viewportTarget.zoom,
-        };
-      }
+      const animTargets = this._buildAnimateTargets(
+        step, validNodeIds, validEdgeIds, viewportFrom, viewportTarget,
+      );
 
       const hasAnimatableTargets = Object.keys(animTargets.nodes || {}).length > 0
         || Object.keys(animTargets.edges || {}).length > 0
@@ -898,26 +1031,11 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
               return;
             }
 
-            // Edge transitions per tick
-            if (transition === 'draw') {
-              if (addEdgeIds.length) this._applyEdgeDrawTransition(addEdgeIds, progress, 'in');
-              if (removeEdgeIds.length) this._applyEdgeDrawTransition(removeEdgeIds, progress, 'out');
-            } else if (transition === 'fade') {
-              if (addEdgeIds.length) this._applyEdgeFadeTransition(addEdgeIds, progress, 'in');
-              if (removeEdgeIds.length) this._applyEdgeFadeTransition(removeEdgeIds, progress, 'out');
-            }
-
+            this._tickEdgeTransitions(transition, addEdgeIds, removeEdgeIds, progress);
             step.onProgress?.(progress, ctx);
           },
           onComplete: () => {
-            // Cleanup edge transitions
-            if (transition === 'draw') {
-              this._cleanupEdgeDrawTransition(addEdgeIds);
-              this._cleanupEdgeDrawTransition(removeEdgeIds);
-            } else if (transition === 'fade') {
-              this._cleanupEdgeFadeTransition(addEdgeIds);
-              this._cleanupEdgeFadeTransition(removeEdgeIds);
-            }
+            this._cleanupEdgeTransitions(transition, addEdgeIds, removeEdgeIds);
 
             if (removeEdgeIds.length) {
               this._removeEdges(removeEdgeIds);
@@ -940,53 +1058,107 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
         this._activeHandles.push({ stop: () => animHandle.stop() });
       } else {
         // Only edge lifecycle, no interpolation needed — use engine for timing
-        const handle = this._engine.register((elapsed) => {
-          if (this._state === 'stopped') {
-            resolve();
-            return true;
-          }
-
-          const rawProgress = Math.min(elapsed / duration, 1);
-
-          if (transition === 'draw') {
-            if (addEdgeIds.length) this._applyEdgeDrawTransition(addEdgeIds, rawProgress, 'in');
-            if (removeEdgeIds.length) this._applyEdgeDrawTransition(removeEdgeIds, rawProgress, 'out');
-          } else if (transition === 'fade') {
-            if (addEdgeIds.length) this._applyEdgeFadeTransition(addEdgeIds, rawProgress, 'in');
-            if (removeEdgeIds.length) this._applyEdgeFadeTransition(removeEdgeIds, rawProgress, 'out');
-          }
-
-          step.onProgress?.(rawProgress, ctx);
-
-          if (rawProgress >= 1) {
-            if (transition === 'draw') {
-              this._cleanupEdgeDrawTransition(addEdgeIds);
-              this._cleanupEdgeDrawTransition(removeEdgeIds);
-            } else if (transition === 'fade') {
-              this._cleanupEdgeFadeTransition(addEdgeIds);
-              this._cleanupEdgeFadeTransition(removeEdgeIds);
-            }
-
-            if (removeEdgeIds.length) {
-              this._removeEdges(removeEdgeIds);
-            }
-
-            if (guidePathEl && step.guidePath?.autoRemove !== false) {
-              guidePathEl.remove();
-            }
-
-            step.onProgress?.(1, ctx);
-            step.onComplete?.(ctx);
-            this._emit('step-complete');
-            resolve();
-            return true;
-          }
-
-          return false;
-        }, delay);
-        this._activeHandles.push(handle);
+        this._executeEdgeLifecycleOnly(
+          step, ctx, duration, delay, transition,
+          addEdgeIds, removeEdgeIds, guidePathEl, resolve,
+        );
       }
     });
+  }
+
+  /** Build AnimateTargets from step config for canvas.animate(). */
+  private _buildAnimateTargets(
+    step: TimelineStep<TContext>,
+    validNodeIds: string[] | undefined,
+    validEdgeIds: string[] | undefined,
+    viewportFrom: Viewport | null,
+    viewportTarget: Viewport | null,
+  ): AnimateTargets {
+    const animTargets: AnimateTargets = {};
+
+    if (validNodeIds) {
+      animTargets.nodes = {};
+      for (const id of validNodeIds) {
+        const target: Record<string, any> = {};
+        if (step.position) target.position = { ...step.position };
+        if (step.dimensions) target.dimensions = { ...step.dimensions };
+        if (step.style !== undefined) target.style = step.style;
+        if (step.class !== undefined) target.class = step.class;
+        if (step.data !== undefined) target.data = step.data;
+        if (step.selected !== undefined) target.selected = step.selected;
+        if (step.zIndex !== undefined) target.zIndex = step.zIndex;
+        animTargets.nodes[id] = target;
+      }
+    }
+
+    if (validEdgeIds) {
+      animTargets.edges = {};
+      for (const id of validEdgeIds) {
+        const target: Record<string, any> = {};
+        if (step.edgeColor !== undefined) target.color = step.edgeColor;
+        if (step.edgeStrokeWidth !== undefined) target.strokeWidth = step.edgeStrokeWidth;
+        if (step.edgeLabel !== undefined) target.label = step.edgeLabel;
+        if (step.edgeAnimated !== undefined) target.animated = step.edgeAnimated;
+        if (step.edgeClass !== undefined) target.class = step.edgeClass;
+        animTargets.edges[id] = target;
+      }
+    }
+
+    if (viewportTarget && viewportFrom) {
+      animTargets.viewport = {
+        pan: { x: viewportTarget.x, y: viewportTarget.y },
+        zoom: viewportTarget.zoom,
+      };
+    }
+
+    return animTargets;
+  }
+
+  /** Run edge lifecycle transitions (draw/fade) via the engine when there are no other animatable targets. */
+  private _executeEdgeLifecycleOnly(
+    step: TimelineStep<TContext>,
+    ctx: StepContext<TContext>,
+    duration: number,
+    delay: number,
+    transition: string,
+    addEdgeIds: string[],
+    removeEdgeIds: string[],
+    guidePathEl: SVGPathElement | null,
+    resolve: () => void,
+  ): void {
+    const handle = this._engine.register((elapsed) => {
+      if (this._state === 'stopped') {
+        resolve();
+        return true;
+      }
+
+      const rawProgress = Math.min(elapsed / duration, 1);
+
+      this._tickEdgeTransitions(transition, addEdgeIds, removeEdgeIds, rawProgress);
+
+      step.onProgress?.(rawProgress, ctx);
+
+      if (rawProgress >= 1) {
+        this._cleanupEdgeTransitions(transition, addEdgeIds, removeEdgeIds);
+
+        if (removeEdgeIds.length) {
+          this._removeEdges(removeEdgeIds);
+        }
+
+        if (guidePathEl && step.guidePath?.autoRemove !== false) {
+          guidePathEl.remove();
+        }
+
+        step.onProgress?.(1, ctx);
+        step.onComplete?.(ctx);
+        this._emit('step-complete');
+        resolve();
+        return true;
+      }
+
+      return false;
+    }, delay);
+    this._activeHandles.push(handle);
   }
 
   // ── Internal: apply step properties ─────────────────────────────────
