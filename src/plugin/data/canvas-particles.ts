@@ -35,6 +35,34 @@ function parseDurationMs(dur: string): number {
   return match[2] === 'ms' ? val : val * 1000;
 }
 
+/**
+ * Resolve final particle duration in ms from options, path length, and fallback.
+ *
+ * Priority:
+ *  1. `speed` (SVG units/s) → `pathLength / speed * 1000`. Wins over `duration`.
+ *  2. `duration` as a number → treated directly as milliseconds.
+ *  3. `duration` as a CSS time string → parsed via `parseDurationMs`.
+ *  4. `fallback` CSS time string.
+ */
+export function resolveDurationMs(
+  options: ParticleOptions,
+  pathLength: number,
+  fallback: string,
+): number {
+  if (options.speed !== undefined && options.speed > 0) {
+    if (options.duration !== undefined) {
+      console.warn('[AlpineFlow] Both speed and duration provided for particle; speed takes precedence.');
+    }
+    return (pathLength / options.speed) * 1000;
+  }
+
+  const raw = options.duration ?? fallback;
+  if (typeof raw === 'number') {
+    return raw;
+  }
+  return parseDurationMs(raw);
+}
+
 // ── Mixin factory ───────────────────────────────────────────────────────────
 
 export function createParticleMixin(ctx: CanvasContext) {
@@ -152,12 +180,12 @@ export function createParticleMixin(ctx: CanvasContext) {
         ?? edge.particleColor
         ?? styles?.getPropertyValue('--flow-edge-dot-fill').trim()
         ?? CONNECTION_ACTIVE_COLOR;
-      const duration = options.duration
-        ?? edge.animationDuration
+      const durationFallback = edge.animationDuration
         ?? styles?.getPropertyValue('--flow-edge-dot-duration').trim()
         ?? '2s';
 
-      const ms = parseDurationMs(duration);
+      const pathLength = pathEl.getTotalLength();
+      const ms = resolveDurationMs(options, pathLength, durationFallback);
 
       // Delegate element creation to the renderer
       const resolvedOptions: ParticleOptions = { ...options, size, color };

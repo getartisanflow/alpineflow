@@ -940,6 +940,7 @@ describe('createAnimationMixin — sendParticle', () => {
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getTotalLength = vi.fn(() => 200);
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
     (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
 
@@ -963,6 +964,7 @@ describe('createAnimationMixin — sendParticle', () => {
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getTotalLength = vi.fn(() => 200);
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
     (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
 
@@ -987,6 +989,7 @@ describe('createAnimationMixin — sendParticle', () => {
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getTotalLength = vi.fn(() => 200);
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
     (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
 
@@ -1010,6 +1013,7 @@ describe('createAnimationMixin — sendParticle', () => {
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getTotalLength = vi.fn(() => 200);
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 50, y: 75 }));
     (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
 
@@ -1032,6 +1036,7 @@ describe('createAnimationMixin — sendParticle', () => {
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getTotalLength = vi.fn(() => 200);
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
     (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
 
@@ -1056,6 +1061,7 @@ describe('createAnimationMixin — sendParticle', () => {
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getTotalLength = vi.fn(() => 200);
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
     (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
 
@@ -1091,6 +1097,7 @@ describe('createAnimationMixin — sendParticle', () => {
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getTotalLength = vi.fn(() => 200);
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
     (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
 
@@ -1127,6 +1134,7 @@ describe('createAnimationMixin — sendParticle', () => {
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getTotalLength = vi.fn(() => 200);
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
     (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
 

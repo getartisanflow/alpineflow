@@ -670,8 +670,10 @@ export interface ParticleOptions {
   color?: string;
   /** Particle radius in SVG user units (scales with zoom). Falls back to edge.particleSize → --flow-edge-dot-size. */
   size?: number;
-  /** Travel duration (CSS time value). Falls back to edge.animationDuration → --flow-edge-dot-duration. */
-  duration?: string;
+  /** Travel duration — CSS time value (e.g. '2s', '300ms') or numeric milliseconds (e.g. 800).
+   *  Falls back to edge.animationDuration → --flow-edge-dot-duration.
+   *  If `speed` is also provided, `speed` takes precedence. */
+  duration?: string | number;
   /** CSS class(es) to add to the circle element. */
   class?: string;
   /** Called when the particle reaches the target and is removed. */
