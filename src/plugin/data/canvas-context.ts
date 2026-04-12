@@ -47,10 +47,11 @@ import type { KeyboardShortcuts } from '../../core/keyboard-shortcuts';
 export interface ActiveParticle {
   circle: SVGCircleElement;
   pathEl: SVGPathElement;
-  t0: number;
+  startElapsed: number;       // engine-relative start time; -1 until first tick
   ms: number;
-  safetyTimer: ReturnType<typeof setTimeout>;
   onComplete?: () => void;
+  currentPosition: { x: number; y: number };
+  done: boolean;
 }
 
 // ── Context menu state ──────────────────────────────────────────────────────

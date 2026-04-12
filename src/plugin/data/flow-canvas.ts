@@ -290,10 +290,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _activeParticles: new Set<{
       circle: SVGCircleElement;
       pathEl: SVGPathElement;
-      t0: number;
+      startElapsed: number;
       ms: number;
-      safetyTimer: ReturnType<typeof setTimeout>;
       onComplete?: () => void;
+      currentPosition: { x: number; y: number };
+      done: boolean;
     }>(),
     _particleEngineHandle: null as EngineHandle | null,
     /** Live CSSStyleDeclaration for the container — cached to avoid per-particle getComputedStyle calls. */
@@ -1545,7 +1546,6 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._particleEngineHandle?.stop();
       this._particleEngineHandle = null;
       for (const p of this._activeParticles) {
-        clearTimeout(p.safetyTimer);
         p.circle.remove();
       }
       this._activeParticles.clear();

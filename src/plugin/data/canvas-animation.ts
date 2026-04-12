@@ -673,16 +673,23 @@ export function createAnimationMixin(ctx: CanvasContext) {
 
     /**
      * Engine tick callback — processes all active particles in one pass.
+     * Receives `elapsed` (ms since engine registration) from the engine.
      * Returns true to unregister from engine when all particles are done.
      */
-    _tickParticles(): boolean {
-      const now = performance.now();
+    _tickParticles(elapsed: number): boolean {
       const lengthCache = new Map<SVGPathElement, number>();
 
       for (const particle of ctx._activeParticles) {
-        const progress = (now - particle.t0) / particle.ms;
-        if (progress >= 1 || !particle.circle.parentNode) {
-          clearTimeout(particle.safetyTimer);
+        // Set startElapsed on first tick (deferred from sendParticle)
+        if (particle.startElapsed < 0) {
+          particle.startElapsed = elapsed;
+        }
+
+        const progress = (elapsed - particle.startElapsed) / particle.ms;
+
+        // Engine-based safety: complete if progress >= 1 or if elapsed
+        // exceeds 2x duration (replaces wall-clock setTimeout).
+        if (progress >= 1 || (elapsed - particle.startElapsed) > particle.ms * 2 || !particle.circle.parentNode) {
           particle.circle.remove();
           if (typeof particle.onComplete === 'function') {
             particle.onComplete();
@@ -700,6 +707,9 @@ export function createAnimationMixin(ctx: CanvasContext) {
         const pt = particle.pathEl.getPointAtLength(progress * len);
         particle.circle.setAttribute('cx', String(pt.x));
         particle.circle.setAttribute('cy', String(pt.y));
+
+        // Track position internally so getCurrentPosition() doesn't need DOM reads
+        particle.currentPosition = { x: pt.x, y: pt.y };
       }
 
       // Return true to unregister from engine when all particles are done
@@ -776,8 +786,6 @@ export function createAnimationMixin(ctx: CanvasContext) {
       circle.setAttribute('cy', String(startPt.y));
       gEl.appendChild(circle);
 
-      const t0 = performance.now();
-
       // Promise for handle.finished
       let resolveHandleFinished: () => void;
       const handleFinished = new Promise<void>((r) => { resolveHandleFinished = r; });
@@ -789,32 +797,30 @@ export function createAnimationMixin(ctx: CanvasContext) {
         resolveHandleFinished!();
       };
 
-      // Safety timeout in case rAF loop stalls
-      const safetyTimer = setTimeout(() => {
-        ctx._activeParticles.delete(particle);
-        circle.remove();
-        wrappedOnComplete();
-      }, ms * 2);
-
-      const particle = { circle, pathEl, t0, ms, safetyTimer, onComplete: wrappedOnComplete };
+      const particle = {
+        circle,
+        pathEl,
+        startElapsed: -1,    // set on first engine tick
+        ms,
+        onComplete: wrappedOnComplete,
+        currentPosition: { x: startPt.x, y: startPt.y },
+        done: false,
+      };
       ctx._activeParticles.add(particle);
       debug('particle', `sendParticle on edge "${edgeId}"`, { size, color, duration: ms });
 
       // Register on shared AnimationEngine if not already running
       if (!ctx._particleEngineHandle) {
-        ctx._particleEngineHandle = engine.register(() => ctx._tickParticles());
+        ctx._particleEngineHandle = engine.register((elapsed) => ctx._tickParticles(elapsed));
       }
 
       const handle: ParticleHandle = {
         getCurrentPosition(): XYPosition | null {
           if (!ctx._activeParticles.has(particle)) return null;
-          const cx = parseFloat(circle.getAttribute('cx') || '0');
-          const cy = parseFloat(circle.getAttribute('cy') || '0');
-          return { x: cx, y: cy };
+          return { ...particle.currentPosition };
         },
         stop() {
           if (!ctx._activeParticles.has(particle)) return;
-          clearTimeout(safetyTimer);
           circle.remove();
           ctx._activeParticles.delete(particle);
           wrappedOnComplete();

@@ -714,7 +714,7 @@ describe('createAnimationMixin — _tickParticles', () => {
     ctx._particleEngineHandle = { stop: vi.fn() } as any;
     const mixin = createAnimationMixin(ctx);
 
-    const result = mixin._tickParticles();
+    const result = mixin._tickParticles(0);
 
     expect(result).toBe(true);
     expect(ctx._particleEngineHandle).toBeNull();
@@ -727,23 +727,24 @@ describe('createAnimationMixin — _tickParticles', () => {
     container.appendChild(circle);
 
     const onComplete = vi.fn();
-    const safetyTimer = setTimeout(() => {}, 10000);
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
 
     const particle = {
       circle,
       pathEl,
-      t0: performance.now() - 2000, // started 2s ago
-      ms: 1000, // 1s duration — way past completion
-      safetyTimer,
+      startElapsed: 0,     // started at elapsed=0
+      ms: 1000,            // 1s duration
       onComplete,
+      currentPosition: { x: 0, y: 0 },
+      done: false,
     };
 
     ctx._activeParticles.add(particle);
     const mixin = createAnimationMixin(ctx);
 
-    const result = mixin._tickParticles();
+    // Pass elapsed=2000, well past the 1000ms duration
+    const result = mixin._tickParticles(2000);
 
     expect(ctx._activeParticles.size).toBe(0);
     expect(onComplete).toHaveBeenCalledOnce();
@@ -766,20 +767,109 @@ describe('createAnimationMixin — _tickParticles', () => {
     const particle = {
       circle,
       pathEl,
-      t0: performance.now(), // just started — progress ~0
-      ms: 10000, // long duration
-      safetyTimer: setTimeout(() => {}, 10000),
+      startElapsed: 0,     // started at elapsed=0
+      ms: 10000,           // long duration
       onComplete: vi.fn(),
+      currentPosition: { x: 0, y: 0 },
+      done: false,
     };
 
     ctx._activeParticles.add(particle);
     const mixin = createAnimationMixin(ctx);
 
-    const result = mixin._tickParticles();
+    // Pass elapsed=100 (small progress)
+    const result = mixin._tickParticles(100);
 
     expect(result).toBe(false); // still running
     expect(circle.getAttribute('cx')).toBe('42');
     expect(circle.getAttribute('cy')).toBe('84');
+  });
+
+  it('sets startElapsed on first tick when particle has startElapsed=-1', () => {
+    const ctx = mockCtx();
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    container.appendChild(circle);
+
+    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    (pathEl as any).getTotalLength = vi.fn(() => 100);
+    (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 10, y: 20 }));
+
+    const particle = {
+      circle,
+      pathEl,
+      startElapsed: -1,    // not yet ticked
+      ms: 2000,
+      onComplete: vi.fn(),
+      currentPosition: { x: 0, y: 0 },
+      done: false,
+    };
+
+    ctx._activeParticles.add(particle);
+    const mixin = createAnimationMixin(ctx);
+
+    mixin._tickParticles(500);
+
+    // startElapsed should now be set to the elapsed value from first tick
+    expect(particle.startElapsed).toBe(500);
+  });
+
+  it('updates currentPosition on each tick', () => {
+    const ctx = mockCtx();
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    container.appendChild(circle);
+
+    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    (pathEl as any).getTotalLength = vi.fn(() => 100);
+    (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 55, y: 33 }));
+
+    const particle = {
+      circle,
+      pathEl,
+      startElapsed: 0,
+      ms: 10000,
+      onComplete: vi.fn(),
+      currentPosition: { x: 0, y: 0 },
+      done: false,
+    };
+
+    ctx._activeParticles.add(particle);
+    const mixin = createAnimationMixin(ctx);
+
+    mixin._tickParticles(500);
+
+    expect(particle.currentPosition).toEqual({ x: 55, y: 33 });
+  });
+
+  it('removes particle via safety check when elapsed > 2x duration', () => {
+    const ctx = mockCtx();
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    container.appendChild(circle);
+
+    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const onComplete = vi.fn();
+
+    const particle = {
+      circle,
+      pathEl,
+      startElapsed: 0,
+      ms: 1000,
+      onComplete,
+      currentPosition: { x: 0, y: 0 },
+      done: false,
+    };
+
+    ctx._activeParticles.add(particle);
+    const mixin = createAnimationMixin(ctx);
+
+    // Elapsed is 2001ms, which is > 1000 * 2 = 2000ms safety limit
+    const result = mixin._tickParticles(2001);
+
+    expect(ctx._activeParticles.size).toBe(0);
+    expect(onComplete).toHaveBeenCalledOnce();
+    expect(result).toBe(true);
   });
 });
 
