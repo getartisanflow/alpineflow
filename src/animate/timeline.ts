@@ -84,6 +84,12 @@ export interface TimelineStep<T extends Record<string, any> = Record<string, any
   /** If await doesn't resolve within this many ms, emit 'step-timeout' and advance. */
   timeout?: number;
 
+  // Conditional execution
+  /** Evaluated once at step activation. If false, the step is skipped (or the else branch runs). */
+  when?: (ctx: StepContext<T>) => boolean;
+  /** Alternative step to execute when `when` returns false. */
+  else?: TimelineStep<T>;
+
   // Hooks
   onStart?: (ctx: StepContext<T>) => void;
   onProgress?: (progress: number, ctx: StepContext<T>) => void;
@@ -521,6 +527,18 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
     const delay = reducedMotion ? 0 : (step.delay ?? 0);
     const easing = resolveEasing(step.easing);
     const ctx = this._makeContext(entryIndex, step.id);
+
+    // Conditional step evaluation
+    if (step.when) {
+      const shouldRun = step.when(ctx);
+      if (!shouldRun) {
+        if (step.else) {
+          return this._executeStep(step.else, entryIndex);
+        }
+        this._emit('step-skipped', { index: entryIndex, id: step.id });
+        return;
+      }
+    }
 
     this._emit('step', { index: entryIndex, id: step.id });
     step.onStart?.(ctx);

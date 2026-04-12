@@ -1884,3 +1884,110 @@ describe('FlowTimeline — awaitable steps', () => {
     expect(waited).toBe(true);
   });
 });
+
+// ── Conditional when/else steps ─────────────────────────────────────────────
+
+describe('FlowTimeline — conditional steps', () => {
+  it('when: true executes the step normally', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    tl.step({
+      when: () => true,
+      nodes: ['a'],
+      position: { x: 100 },
+      duration: 0,
+    });
+
+    await tl.play();
+    expect(canvas.getNode('a')!.position.x).toBe(100);
+  });
+
+  it('when: false skips the step entirely', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    tl.step({
+      when: () => false,
+      nodes: ['a'],
+      position: { x: 999 },
+      duration: 0,
+    });
+
+    await tl.play();
+    // Node should NOT have moved
+    expect(canvas.getNode('a')!.position.x).not.toBe(999);
+  });
+
+  it('when: false with else: executes the alternative', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    tl.step({
+      when: () => false,
+      nodes: ['a'],
+      position: { x: 999 },
+      duration: 0,
+      else: {
+        nodes: ['a'],
+        position: { x: 42 },
+        duration: 0,
+      },
+    });
+
+    await tl.play();
+    expect(canvas.getNode('a')!.position.x).toBe(42);
+  });
+
+  it('skipped step emits step-skipped event', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    const events: string[] = [];
+    tl.on('step-skipped', () => events.push('skipped'));
+
+    tl.step({ when: () => false, id: 'skip-me', duration: 0 });
+
+    await tl.play();
+    expect(events).toContain('skipped');
+  });
+
+  it('when receives the step context with stepIndex', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    let receivedIndex = -1;
+    tl.step({ nodes: ['a'], position: { x: 10 }, duration: 0 });
+    tl.step({
+      when: (ctx) => { receivedIndex = ctx.stepIndex; return true; },
+      nodes: ['a'],
+      position: { x: 20 },
+      duration: 0,
+    });
+
+    await tl.play();
+    expect(receivedIndex).toBe(1); // second step
+  });
+
+  it('chained when steps work for multi-way branching', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    const mode = 'b';
+    tl.step({
+      when: () => mode === 'a',
+      nodes: ['a'], position: { x: 100 }, duration: 0,
+    });
+    tl.step({
+      when: () => mode === 'b',
+      nodes: ['a'], position: { x: 200 }, duration: 0,
+    });
+    tl.step({
+      when: () => mode === 'c',
+      nodes: ['a'], position: { x: 300 }, duration: 0,
+    });
+
+    await tl.play();
+    expect(canvas.getNode('a')!.position.x).toBe(200); // only mode 'b' ran
+  });
+});
