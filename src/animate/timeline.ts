@@ -175,6 +175,30 @@ function restoreNode(node: FlowNode, snap: NodeSnapshot): void {
   node.zIndex = snap.zIndex;
 }
 
+// ── Step execution context ──────────────────────────────────────────────────
+
+/** Bundles the computed values for a single step execution, replacing long parameter lists. */
+interface StepExecutionContext<TContext extends Record<string, any>> {
+  step: TimelineStep<TContext>;
+  ctx: StepContext<TContext>;
+  duration: number;
+  delay: number;
+  easing: (t: number) => number;
+  validNodeIds: string[] | undefined;
+  validEdgeIds: string[] | undefined;
+  resolvedPathFn: PathFunction | null;
+  guidePathEl: SVGPathElement | null;
+  nodeFromDimensions: Map<string, Dimensions>;
+  nodeFromStyles: Map<string, Record<string, string>>;
+  edgeFromStrokeWidth: Map<string, number>;
+  edgeFromColor: Map<string, string | EdgeGradient>;
+  viewportFrom: Viewport | null;
+  viewportTarget: Viewport | null;
+  transition: string;
+  addEdgeIds: string[];
+  removeEdgeIds: string[];
+}
+
 // ── FlowTimeline ─────────────────────────────────────────────────────────────
 
 export class FlowTimeline<TContext extends Record<string, any> = Record<string, any>> {
@@ -531,9 +555,16 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
     const addEdgeIds = step.addEdges?.map((e) => e.id) ?? [];
     const removeEdgeIds = step.removeEdges?.filter((id) => this._canvas.getEdge(id)).slice() ?? [];
 
+    const execCtx: StepExecutionContext<TContext> = {
+      step, ctx, duration, delay, easing,
+      validNodeIds, validEdgeIds, resolvedPathFn, guidePathEl,
+      nodeFromDimensions, nodeFromStyles, edgeFromStrokeWidth, edgeFromColor,
+      viewportFrom, viewportTarget, transition, addEdgeIds, removeEdgeIds,
+    };
+
     // Instant step (duration: 0)
     if (duration === 0) {
-      return this._executeInstantStep(step, ctx, delay, resolvedPathFn, validNodeIds, guidePathEl);
+      return this._executeInstantStep(execCtx);
     }
 
     // For animated transitions, add edges up front so the DOM renders paths.
@@ -547,19 +578,11 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
 
     // followPath steps retain engine-based interpolation — animate() can't handle custom path functions
     if (resolvedPathFn) {
-      return this._executeFollowPathStep(
-        step, ctx, duration, delay, easing, resolvedPathFn,
-        validNodeIds, validEdgeIds, nodeFromDimensions, nodeFromStyles,
-        edgeFromStrokeWidth, edgeFromColor, viewportFrom, viewportTarget,
-        transition, addEdgeIds, removeEdgeIds, guidePathEl,
-      );
+      return this._executeFollowPathStep(execCtx);
     }
 
     // Animated step — delegate to canvas.animate()
-    return this._executeAnimatedStep(
-      step, ctx, duration, delay, validNodeIds, validEdgeIds,
-      viewportFrom, viewportTarget, transition, addEdgeIds, removeEdgeIds, guidePathEl,
-    );
+    return this._executeAnimatedStep(execCtx);
   }
 
   // ── Step decomposition: target validation ──────────────────────────
@@ -707,14 +730,8 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
   // ── Step decomposition: instant execution (duration: 0) ────────────
 
   /** Handle an instant step (duration === 0), optionally with a delay. */
-  private _executeInstantStep(
-    step: TimelineStep<TContext>,
-    ctx: StepContext<TContext>,
-    delay: number,
-    resolvedPathFn: PathFunction | null,
-    validNodeIds: string[] | undefined,
-    guidePathEl: SVGPathElement | null,
-  ): Promise<void> {
+  private _executeInstantStep(execCtx: StepExecutionContext<TContext>): Promise<void> {
+    const { step, ctx, delay, resolvedPathFn, validNodeIds, guidePathEl } = execCtx;
     if (delay > 0) {
       return new Promise<void>((resolve) => {
         const timerId = setTimeout(() => {
@@ -787,26 +804,15 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
   // ── Step decomposition: followPath animation ───────────────────────
 
   /** Execute an animated step using engine-based interpolation for followPath. */
-  private _executeFollowPathStep(
-    step: TimelineStep<TContext>,
-    ctx: StepContext<TContext>,
-    duration: number,
-    delay: number,
-    easing: (t: number) => number,
-    resolvedPathFn: PathFunction,
-    validNodeIds: string[] | undefined,
-    validEdgeIds: string[] | undefined,
-    nodeFromDimensions: Map<string, Dimensions>,
-    nodeFromStyles: Map<string, Record<string, string>>,
-    edgeFromStrokeWidth: Map<string, number>,
-    edgeFromColor: Map<string, string | EdgeGradient>,
-    viewportFrom: Viewport | null,
-    viewportTarget: Viewport | null,
-    transition: string,
-    addEdgeIds: string[],
-    removeEdgeIds: string[],
-    guidePathEl: SVGPathElement | null,
-  ): Promise<void> {
+  private _executeFollowPathStep(execCtx: StepExecutionContext<TContext>): Promise<void> {
+    const {
+      step, ctx, duration, delay, easing,
+      validNodeIds, validEdgeIds, nodeFromDimensions, nodeFromStyles,
+      edgeFromStrokeWidth, edgeFromColor, viewportFrom, viewportTarget,
+      transition, addEdgeIds, removeEdgeIds, guidePathEl,
+    } = execCtx;
+    // Guaranteed non-null: only called when resolvedPathFn is truthy
+    const resolvedPathFn = execCtx.resolvedPathFn!;
     return new Promise<void>((resolve) => {
       const handle = this._engine.register((elapsed) => {
         if (this._state === 'stopped') {
@@ -986,20 +992,11 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
   // ── Step decomposition: canvas.animate() execution ─────────────────
 
   /** Execute an animated step using canvas.animate() for standard interpolation. */
-  private _executeAnimatedStep(
-    step: TimelineStep<TContext>,
-    ctx: StepContext<TContext>,
-    duration: number,
-    delay: number,
-    validNodeIds: string[] | undefined,
-    validEdgeIds: string[] | undefined,
-    viewportFrom: Viewport | null,
-    viewportTarget: Viewport | null,
-    transition: string,
-    addEdgeIds: string[],
-    removeEdgeIds: string[],
-    guidePathEl: SVGPathElement | null,
-  ): Promise<void> {
+  private _executeAnimatedStep(execCtx: StepExecutionContext<TContext>): Promise<void> {
+    const {
+      step, ctx, duration, delay, validNodeIds, validEdgeIds,
+      viewportFrom, viewportTarget, transition, addEdgeIds, removeEdgeIds, guidePathEl,
+    } = execCtx;
     return new Promise<void>((resolve) => {
       const animTargets = this._buildAnimateTargets(
         step, validNodeIds, validEdgeIds, viewportFrom, viewportTarget,
@@ -1058,10 +1055,7 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
         this._activeHandles.push({ stop: () => animHandle.stop() });
       } else {
         // Only edge lifecycle, no interpolation needed — use engine for timing
-        this._executeEdgeLifecycleOnly(
-          step, ctx, duration, delay, transition,
-          addEdgeIds, removeEdgeIds, guidePathEl, resolve,
-        );
+        this._executeEdgeLifecycleOnly(execCtx, resolve);
       }
     });
   }
@@ -1116,16 +1110,10 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
 
   /** Run edge lifecycle transitions (draw/fade) via the engine when there are no other animatable targets. */
   private _executeEdgeLifecycleOnly(
-    step: TimelineStep<TContext>,
-    ctx: StepContext<TContext>,
-    duration: number,
-    delay: number,
-    transition: string,
-    addEdgeIds: string[],
-    removeEdgeIds: string[],
-    guidePathEl: SVGPathElement | null,
+    execCtx: StepExecutionContext<TContext>,
     resolve: () => void,
   ): void {
+    const { step, ctx, duration, delay, transition, addEdgeIds, removeEdgeIds, guidePathEl } = execCtx;
     const handle = this._engine.register((elapsed) => {
       if (this._state === 'stopped') {
         resolve();
