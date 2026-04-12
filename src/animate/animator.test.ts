@@ -1135,3 +1135,154 @@ describe('Animator — direction state machine', () => {
     expect(handle.isFinished).toBe(true);
   });
 });
+
+// ── Animator — tagged handles ─────────────────────────────────────────────────
+
+describe('Animator — tagged handles', () => {
+  it('animate with tag registers handle in registry', () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const entry: PropertyEntry = { key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } };
+
+    const handle = animator.animate([entry], { duration: 100, tag: 'slide' });
+
+    const handles = animator.registry.getHandles({ tag: 'slide' });
+    expect(handles).toContain(handle);
+    expect((handle as any)._tags).toEqual(['slide']);
+  });
+
+  it('animate with tags array registers handle with all tags', () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const entry: PropertyEntry = { key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } };
+
+    const handle = animator.animate([entry], { duration: 100, tags: ['entrance', 'node-1'] });
+
+    expect((handle as any)._tags).toEqual(['entrance', 'node-1']);
+    expect(animator.registry.getHandles({ tag: 'entrance' })).toContain(handle);
+    expect(animator.registry.getHandles({ tag: 'node-1' })).toContain(handle);
+  });
+
+  it('animate with tag and tags merges both', () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const entry: PropertyEntry = { key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } };
+
+    const handle = animator.animate([entry], { duration: 100, tag: 'primary', tags: ['secondary'] });
+
+    expect((handle as any)._tags).toEqual(['primary', 'secondary']);
+  });
+
+  it('handles auto-deregister after completion', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const entry: PropertyEntry = { key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } };
+
+    const handle = animator.animate([entry], { duration: 100, tag: 'slide' });
+
+    expect(animator.registry.getHandles({ tag: 'slide' })).toContain(handle);
+
+    // Run animation to completion
+    await advanceTimers(200);
+    await handle.finished;
+
+    // Microtask for deregister must flush
+    await Promise.resolve();
+
+    expect(animator.registry.getHandles({ tag: 'slide' })).not.toContain(handle);
+  });
+
+  it('registry.cancelAll stops tagged animations', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const values: number[] = [0, 0];
+    const entries: PropertyEntry[] = [
+      { key: 'x', from: 0, to: 100, apply: (v) => { values[0] = v as number; } },
+      { key: 'y', from: 0, to: 200, apply: (v) => { values[1] = v as number; } },
+    ];
+
+    animator.animate([entries[0]], { duration: 500, tag: 'move' });
+    animator.animate([entries[1]], { duration: 500, tag: 'move' });
+
+    // Advance partway
+    await advanceTimers(100);
+    const valueAtCancel0 = values[0];
+    const valueAtCancel1 = values[1];
+
+    // Cancel all 'move' animations (jump-end snaps to target)
+    animator.registry.cancelAll({ tag: 'move' });
+
+    // Values should have been snapped to final target (jump-end mode)
+    expect(values[0]).toBe(100);
+    expect(values[1]).toBe(200);
+
+    // No further changes after cancel
+    await advanceTimers(500);
+    expect(values[0]).toBe(100);
+    expect(values[1]).toBe(200);
+
+    // Values were mid-way before cancel
+    expect(valueAtCancel0).toBeGreaterThan(0);
+    expect(valueAtCancel0).toBeLessThan(100);
+  });
+
+  it('registry.pauseAll pauses tagged animations', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const entry: PropertyEntry = { key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } };
+
+    animator.animate([entry], { duration: 500, tag: 'slide' });
+
+    await advanceTimers(100);
+    animator.registry.pauseAll({ tag: 'slide' });
+
+    const valueAtPause = value;
+    await advanceTimers(200);
+
+    // Value should not have changed after pause
+    expect(value).toBeCloseTo(valueAtPause, 0);
+  });
+
+  it('handles without tags are not returned by tag filter', () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const entry: PropertyEntry = { key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } };
+
+    // Animate without any tag
+    const handle = animator.animate([entry], { duration: 100 });
+
+    expect((handle as any)._tags).toBeUndefined();
+    expect(animator.registry.getHandles({ tag: 'anything' })).not.toContain(handle);
+  });
+
+  it('instant (duration 0) animations auto-deregister after microtask', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const entry: PropertyEntry = { key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } };
+
+    const handle = animator.animate([entry], { duration: 0, tag: 'snap' });
+
+    // Registered synchronously
+    expect(animator.registry.getHandles({ tag: 'snap' })).toContain(handle);
+
+    // After microtask flush, deregistered
+    await Promise.resolve();
+
+    expect(animator.registry.getHandles({ tag: 'snap' })).not.toContain(handle);
+  });
+});

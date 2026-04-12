@@ -37,3 +37,6 @@ export { FlowTimeline } from './timeline';
 
 // ── Animator ─────────────────────────────────────────────────────────────────
 export { Animator, type PropertyEntry, type AnimateInternalOptions, type AnimationHandle } from './animator';
+
+// ── Handle Registry ───────────────────────────────────────────────────────────
+export { HandleRegistry, type Taggable } from './handle-registry';

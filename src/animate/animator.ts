@@ -12,6 +12,8 @@ import { resolveEasing } from './easing';
 import type { EasingName, EasingFn } from './easing';
 import { lerpNumber, interpolateColor } from './interpolators';
 import type { StopOptions } from '../core/types';
+import { HandleRegistry } from './handle-registry';
+import type { Taggable } from './handle-registry';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,6 +35,8 @@ export interface AnimateInternalOptions {
   onStart?: () => void;
   onProgress?: (progress: number) => void;
   onComplete?: () => void;
+  tag?: string;
+  tags?: string[];
 }
 
 /** Handle returned by `animate()` — controls the animation lifecycle. */
@@ -91,6 +95,8 @@ interface ActiveGroup {
   target: Map<string, number | string>;
   /** Current finished promise — renewed on reverse/restart after completion. */
   _currentFinished: Promise<void>;
+  /** Reference to the public handle for registry deregistration. */
+  _handle?: Taggable;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -126,6 +132,7 @@ export class Animator {
   /** All active groups. */
   private _groups = new Set<ActiveGroup>();
   private _nextGroupId = 0;
+  private _registry = new HandleRegistry();
 
   constructor(engine: AnimationEngine) {
     this._engine = engine;
@@ -134,6 +141,11 @@ export class Animator {
   /** Whether any animations are currently running. */
   get active(): boolean {
     return this._groups.size > 0;
+  }
+
+  /** The handle registry for tag-based animation control. */
+  get registry(): HandleRegistry {
+    return this._registry;
   }
 
   /**
@@ -153,6 +165,8 @@ export class Animator {
       onStart,
       onProgress,
       onComplete,
+      tag,
+      tags,
     } = options;
 
     // Resolve easing once
@@ -193,7 +207,9 @@ export class Animator {
         entry.apply(entry.to);
       }
 
-      const handle: AnimationHandle = {
+      const allTags = [...(tag ? [tag] : []), ...(tags ?? [])];
+      const handle: AnimationHandle & { _tags?: string[] } = {
+        _tags: allTags.length > 0 ? allTags : undefined,
         pause: () => {},
         resume: () => {},
         stop: () => {},
@@ -209,6 +225,9 @@ export class Animator {
         get _snapshot() { return snap; },
         get _target() { return tgt; },
       };
+
+      this._registry.register(handle as Taggable);
+      queueMicrotask(() => this._registry.unregister(handle as Taggable));
 
       onComplete?.();
       return handle;
@@ -286,8 +305,12 @@ export class Animator {
 
     group.engineHandle = engineHandle;
 
+    // Compute tags for this animation
+    const allTags = [...(tag ? [tag] : []), ...(tags ?? [])];
+
     // Build the animation handle
-    const handle: AnimationHandle = {
+    const handle: AnimationHandle & { _tags?: string[] } = {
+      _tags: allTags.length > 0 ? allTags : undefined,
       pause: () => this._pause(group),
       resume: () => this._resume(group),
       stop: (options?: StopOptions) => this._stop(group, options?.mode ?? 'jump-end'),
@@ -303,6 +326,11 @@ export class Animator {
       get _snapshot() { return group.snapshot; },
       get _target() { return group.target; },
     };
+
+    // Register handle for tag-based control
+    this._registry.register(handle as Taggable);
+    // Store handle reference on group for auto-deregister on completion
+    group._handle = handle as Taggable;
 
     return handle;
   }
@@ -403,6 +431,10 @@ export class Animator {
       this._cleanup(group);
       group.onComplete?.();
       group.resolve?.();
+      if (group._handle) {
+        const handle = group._handle;
+        queueMicrotask(() => this._registry.unregister(handle));
+      }
       return true;
     }
   }
@@ -464,6 +496,10 @@ export class Animator {
       group.onComplete?.();
     }
     group.resolve?.();
+    if (group._handle) {
+      const handle = group._handle;
+      queueMicrotask(() => this._registry.unregister(handle));
+    }
   }
 
   private _reverse(group: ActiveGroup): void {

@@ -1251,6 +1251,10 @@ export interface AnimateOptions {
   onProgress?: (progress: number) => void;
   /** Called when animation completes. */
   onComplete?: () => void;
+  /** Single tag for grouping animations by identity. */
+  tag?: string;
+  /** Multiple tags for grouping animations. Merged with `tag` when both are provided. */
+  tags?: string[];
 }
 
 /** Options for handle.stop() / stopAll(). */
