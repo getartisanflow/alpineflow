@@ -442,6 +442,66 @@ describe('Animator', () => {
     expect(value).toBe('#ffffff');
   });
 
+  it('onStart fires on the first tick', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let started = false;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 500, onStart: () => { started = true; } },
+    );
+
+    expect(started).toBe(false);
+    await advanceTimers(16);
+    expect(started).toBe(true);
+  });
+
+  it('onStart fires after delay elapses', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let started = false;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 500, delay: 200, onStart: () => { started = true; } },
+    );
+
+    await advanceTimers(100);
+    expect(started).toBe(false);
+    await advanceTimers(200);
+    expect(started).toBe(true);
+  });
+
+  it('onStart fires only once', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let count = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 500, onStart: () => { count++; } },
+    );
+
+    await advanceTimers(16);
+    await advanceTimers(16);
+    await advanceTimers(16);
+    expect(count).toBe(1);
+  });
+
+  it('onStart fires immediately for duration 0', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let started = false;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 0, onStart: () => { started = true; } },
+    );
+
+    expect(started).toBe(true);
+  });
+
   it('pause/resume uses engine-relative time, not wall-clock', async () => {
     // Use a custom scheduler that passes its own counter as `elapsed`,
     // independent of performance.now(). This lets us simulate the engine

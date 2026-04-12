@@ -1238,6 +1238,8 @@ export interface AnimateOptions {
   delay?: number;
   /** true = loop forever, 'reverse' = ping-pong. Default: false. */
   loop?: boolean | 'reverse';
+  /** Called once on the first tick after delay elapses. */
+  onStart?: () => void;
   /** Called each frame with progress 0–1. */
   onProgress?: (progress: number) => void;
   /** Called when animation completes. */

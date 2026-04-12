@@ -28,6 +28,7 @@ export interface AnimateInternalOptions {
   easing?: EasingName | EasingFn;
   delay?: number;
   loop?: boolean | 'reverse';
+  onStart?: () => void;
   onProgress?: (progress: number) => void;
   onComplete?: () => void;
 }
@@ -61,6 +62,8 @@ interface ActiveGroup {
   duration: number;
   easingFn: EasingFn;
   loop: boolean | 'reverse';
+  onStart?: () => void;
+  startFired: boolean;
   onProgress?: (progress: number) => void;
   onComplete?: () => void;
   resolve: () => void;
@@ -127,6 +130,7 @@ export class Animator {
       easing,
       delay = 0,
       loop = false,
+      onStart,
       onProgress,
       onComplete,
     } = options;
@@ -159,6 +163,8 @@ export class Animator {
 
     // Duration 0 = instant snap
     if (duration <= 0) {
+      onStart?.();
+
       for (const entry of entries) {
         entry.apply(entry.to);
       }
@@ -192,6 +198,8 @@ export class Animator {
       duration,
       easingFn,
       loop,
+      onStart,
+      startFired: false,
       onProgress,
       onComplete,
       resolve: resolveFinished,
@@ -276,6 +284,12 @@ export class Animator {
     // On first tick, record startTime
     if (group.startTime === 0) {
       group.startTime = elapsed;
+    }
+
+    // Fire onStart once on the first active tick
+    if (!group.startFired) {
+      group.startFired = true;
+      group.onStart?.();
     }
 
     group._lastElapsed = elapsed;
