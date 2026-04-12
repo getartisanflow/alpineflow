@@ -2469,3 +2469,173 @@ describe('FlowTimeline — tag inheritance', () => {
     expect(sub.tag).toBe('nested-run');
   });
 });
+
+describe('FlowTimeline — parallel pause safety (C-1)', () => {
+  it('resumePlayback resolves all parallel waiters, not just the last', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    // Two parallel steps that both take time — they'll both be running when we pause
+    tl.parallel([
+      { nodes: ['a'], position: { x: 500 }, duration: 5000 },
+      { nodes: ['b'], position: { x: 500 }, duration: 5000 },
+    ]);
+    // This step should execute after parallel completes
+    tl.step({ nodes: ['c'], position: { x: 999 }, duration: 0 });
+
+    const done = tl.play();
+    // Let parallel steps start
+    await vi.advanceTimersByTimeAsync(16);
+    expect(tl.state).toBe('playing');
+
+    // Pause the timeline while both parallel steps are in-flight
+    tl.pausePlayback();
+    expect(tl.state).toBe('paused');
+
+    // Resume — both parallel steps should unblock
+    tl.resumePlayback();
+    expect(tl.state).toBe('playing');
+
+    // Let the animation finish
+    await advanceTimers(6000);
+    await done;
+
+    // Both nodes should have reached their targets
+    expect(canvas.getNode('a')!.position.x).toBe(500);
+    expect(canvas.getNode('b')!.position.x).toBe(500);
+    // The sequential step after parallel should also have run
+    expect(canvas.getNode('c')!.position.x).toBe(999);
+  });
+});
+
+describe('FlowTimeline — stop during await (C-2)', () => {
+  it('stop() during await prevents subsequent steps from executing', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    let resolveGate!: () => void;
+    const gate = new Promise<void>((r) => { resolveGate = r; });
+
+    tl.step({ await: gate });
+    tl.step({ nodes: ['a'], position: { x: 777 }, duration: 0 });
+
+    const done = tl.play();
+
+    // The await step is blocking; stop the timeline now
+    tl.stop();
+    expect(tl.state).toBe('stopped');
+
+    // Resolve the gate after stop — the continuation should NOT run
+    resolveGate();
+    await vi.advanceTimersByTimeAsync(16);
+    await done;
+
+    // Node 'a' should NOT have been moved to 777
+    expect(canvas.getNode('a')!.position.x).toBe(0);
+  });
+
+  it('stop() during sub-timeline play prevents onComplete from firing', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    const sub = new FlowTimeline(canvas);
+
+    sub.step({ nodes: ['a'], position: { x: 100 }, duration: 5000 });
+    let completed = false;
+    parent.step({
+      timeline: sub,
+      onComplete: () => { completed = true; },
+    });
+
+    const done = parent.play();
+    await vi.advanceTimersByTimeAsync(16);
+
+    // Stop parent while sub is still playing
+    parent.stop();
+    expect(parent.state).toBe('stopped');
+
+    // Advance time — the sub's onComplete on the parent step should NOT fire
+    await advanceTimers(6000);
+    await done;
+
+    expect(completed).toBe(false);
+  });
+});
+
+describe('FlowTimeline — restart direction (I-3)', () => {
+  it('restart({ direction: "backward" }) plays steps in reverse', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    const order: string[] = [];
+    tl.step({
+      id: 'first',
+      nodes: ['a'], position: { x: 50 }, duration: 0,
+      onStart: () => order.push('first'),
+    });
+    tl.step({
+      id: 'second',
+      nodes: ['b'], position: { x: 50 }, duration: 0,
+      onStart: () => order.push('second'),
+    });
+
+    // Play forward first to capture the snapshot
+    await tl.play();
+    expect(order).toEqual(['first', 'second']);
+
+    order.length = 0;
+    await tl.restart({ direction: 'backward' });
+    expect(order).toEqual(['second', 'first']);
+  });
+
+  it('restart({ direction: "forward" }) plays steps forward even if previously reversed', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    const order: string[] = [];
+    tl.step({
+      id: 'first',
+      nodes: ['a'], position: { x: 50 }, duration: 0,
+      onStart: () => order.push('first'),
+    });
+    tl.step({
+      id: 'second',
+      nodes: ['b'], position: { x: 50 }, duration: 0,
+      onStart: () => order.push('second'),
+    });
+
+    // Play forward, then reverse direction
+    await tl.play();
+    tl.reverse();
+
+    order.length = 0;
+    // Restart with explicit forward direction
+    await tl.restart({ direction: 'forward' });
+    expect(order).toEqual(['first', 'second']);
+  });
+
+  it('restart() without direction preserves current reversed state', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    const order: string[] = [];
+    tl.step({
+      id: 'first',
+      nodes: ['a'], position: { x: 50 }, duration: 0,
+      onStart: () => order.push('first'),
+    });
+    tl.step({
+      id: 'second',
+      nodes: ['b'], position: { x: 50 }, duration: 0,
+      onStart: () => order.push('second'),
+    });
+
+    // Play forward, then reverse direction
+    await tl.play();
+    tl.reverse();
+
+    order.length = 0;
+    // Restart with no direction — should keep reversed
+    await tl.restart();
+    expect(order).toEqual(['second', 'first']);
+  });
+});

@@ -236,7 +236,7 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
   private _initialSnapshot: Map<string, NodeSnapshot> = new Map();
   private _initialEdgeSnapshot: Map<string, EdgeSnapshot> = new Map();
   private _playResolve: (() => void) | null = null;
-  private _pausePlaybackResolve: (() => void) | null = null;
+  private _pauseWaiters = new Set<() => void>();
   private _tag?: string;
 
   constructor(canvas: TimelineCanvas, engine?: AnimationEngine) {
@@ -366,6 +366,13 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
     this._state = 'idle';
     this._locked = false;
 
+    // Apply direction if specified
+    if (options?.direction === 'backward') {
+      this._reversed = true;
+    } else if (options?.direction === 'forward') {
+      this._reversed = false;
+    }
+
     // Emit restart event
     this._emit('restart');
 
@@ -424,9 +431,9 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
       if (sub.state === 'paused') sub.resumePlayback();
     }
     this._emit('resume');
-    // Resolve the pause promise if one exists
-    this._pausePlaybackResolve?.();
-    this._pausePlaybackResolve = null;
+    // Resolve all pause waiters
+    for (const resolve of this._pauseWaiters) resolve();
+    this._pauseWaiters.clear();
   }
 
   /** Check if reduced motion is active (OS preference + not opted out). */
@@ -597,7 +604,7 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
   /** Block until resumePlayback() is called. Used by _runEntries when externally paused. */
   private _waitForResume(): Promise<void> {
     return new Promise<void>((resolve) => {
-      this._pausePlaybackResolve = resolve;
+      this._pauseWaiters.add(resolve);
     });
   }
 
@@ -679,6 +686,7 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
       step.onStart?.(ctx);
 
       await sub.play();
+      if (this._state === 'stopped') return;
 
       step.onComplete?.(ctx);
       this._emit('step-complete', { timeline: sub });
@@ -697,6 +705,7 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
     // Resolve awaitable before proceeding with animation logic
     if (step.await) {
       await this._resolveAwait(step, entryIndex);
+      if (this._state === 'stopped') return;
     }
 
     // Pure wait step — has await but no animation targets
@@ -861,10 +870,12 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
 
     // Apply timeout if specified
     if (step.timeout && step.timeout > 0) {
+      let timerId: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise<'timeout'>((resolve) => {
-        setTimeout(() => resolve('timeout'), step.timeout);
+        timerId = setTimeout(() => resolve('timeout'), step.timeout);
       });
       const result = await Promise.race([target.then(() => 'resolved' as const), timeoutPromise]);
+      if (timerId !== undefined) clearTimeout(timerId);
       if (result === 'timeout') {
         this._emit('step-timeout', { index: entryIndex, id: step.id });
       }
