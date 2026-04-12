@@ -737,7 +737,6 @@ describe('createAnimationMixin — _tickParticles', () => {
       ms: 1000,            // 1s duration
       onComplete,
       currentPosition: { x: 0, y: 0 },
-      done: false,
     };
 
     ctx._activeParticles.add(particle);
@@ -771,7 +770,6 @@ describe('createAnimationMixin — _tickParticles', () => {
       ms: 10000,           // long duration
       onComplete: vi.fn(),
       currentPosition: { x: 0, y: 0 },
-      done: false,
     };
 
     ctx._activeParticles.add(particle);
@@ -802,7 +800,6 @@ describe('createAnimationMixin — _tickParticles', () => {
       ms: 2000,
       onComplete: vi.fn(),
       currentPosition: { x: 0, y: 0 },
-      done: false,
     };
 
     ctx._activeParticles.add(particle);
@@ -831,7 +828,6 @@ describe('createAnimationMixin — _tickParticles', () => {
       ms: 10000,
       onComplete: vi.fn(),
       currentPosition: { x: 0, y: 0 },
-      done: false,
     };
 
     ctx._activeParticles.add(particle);
@@ -842,7 +838,7 @@ describe('createAnimationMixin — _tickParticles', () => {
     expect(particle.currentPosition).toEqual({ x: 55, y: 33 });
   });
 
-  it('removes particle via safety check when elapsed > 2x duration', () => {
+  it('removes particle correctly with a very large elapsed value', () => {
     const ctx = mockCtx();
     const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -858,14 +854,13 @@ describe('createAnimationMixin — _tickParticles', () => {
       ms: 1000,
       onComplete,
       currentPosition: { x: 0, y: 0 },
-      done: false,
     };
 
     ctx._activeParticles.add(particle);
     const mixin = createAnimationMixin(ctx);
 
-    // Elapsed is 2001ms, which is > 1000 * 2 = 2000ms safety limit
-    const result = mixin._tickParticles(2001);
+    // Elapsed far beyond duration — progress >= 1 completes it normally
+    const result = mixin._tickParticles(999999);
 
     expect(ctx._activeParticles.size).toBe(0);
     expect(onComplete).toHaveBeenCalledOnce();

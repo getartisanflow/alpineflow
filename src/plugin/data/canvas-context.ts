@@ -51,7 +51,6 @@ export interface ActiveParticle {
   ms: number;
   onComplete?: () => void;
   currentPosition: { x: number; y: number };
-  done: boolean;
 }
 
 // ── Context menu state ──────────────────────────────────────────────────────

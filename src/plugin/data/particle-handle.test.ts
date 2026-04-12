@@ -73,8 +73,8 @@ function makeParticleCanvas() {
 
         const progress = (elapsed - particle.startElapsed) / particle.ms;
 
-        // Engine-based safety: complete if progress >= 1 or elapsed > 2x duration
-        if (progress >= 1 || (elapsed - particle.startElapsed) > particle.ms * 2 || !particle.circle._parent) {
+        // Complete particle if progress finished or if the DOM element was detached.
+        if (progress >= 1 || !particle.circle._parent) {
           // Simulate circle.remove()
           particle.circle._parent = null;
           if (typeof particle.onComplete === 'function') {
@@ -149,7 +149,6 @@ function makeParticleCanvas() {
         ms,
         onComplete: wrappedOnComplete,
         currentPosition: { x: startPt.x, y: startPt.y },
-        done: false,
       };
       this._activeParticles.add(particle);
 

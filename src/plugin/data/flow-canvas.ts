@@ -294,7 +294,6 @@ export function registerFlowCanvas(Alpine: Alpine) {
       ms: number;
       onComplete?: () => void;
       currentPosition: { x: number; y: number };
-      done: boolean;
     }>(),
     _particleEngineHandle: null as EngineHandle | null,
     /** Live CSSStyleDeclaration for the container — cached to avoid per-particle getComputedStyle calls. */

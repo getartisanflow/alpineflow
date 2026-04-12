@@ -687,9 +687,8 @@ export function createAnimationMixin(ctx: CanvasContext) {
 
         const progress = (elapsed - particle.startElapsed) / particle.ms;
 
-        // Engine-based safety: complete if progress >= 1 or if elapsed
-        // exceeds 2x duration (replaces wall-clock setTimeout).
-        if (progress >= 1 || (elapsed - particle.startElapsed) > particle.ms * 2 || !particle.circle.parentNode) {
+        // Complete particle if progress finished or if the DOM element was detached.
+        if (progress >= 1 || !particle.circle.parentNode) {
           particle.circle.remove();
           if (typeof particle.onComplete === 'function') {
             particle.onComplete();
@@ -804,7 +803,6 @@ export function createAnimationMixin(ctx: CanvasContext) {
         ms,
         onComplete: wrappedOnComplete,
         currentPosition: { x: startPt.x, y: startPt.y },
-        done: false,
       };
       ctx._activeParticles.add(particle);
       debug('particle', `sendParticle on edge "${edgeId}"`, { size, color, duration: ms });
