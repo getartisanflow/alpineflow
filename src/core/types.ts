@@ -1251,11 +1251,16 @@ export interface AnimateOptions {
   onComplete?: () => void;
 }
 
+/** Options for handle.stop() / stopAll(). */
+export interface StopOptions {
+  mode?: 'jump-end' | 'rollback' | 'freeze';
+}
+
 /** Handle returned by animate(). */
 export interface FlowAnimationHandle {
   pause(): void;
   resume(): void;
-  stop(): void;
+  stop(options?: StopOptions): void;
   reverse(): void;
   readonly finished: Promise<void>;
   /** @internal Node IDs targeted by this animation (used by follow()). */

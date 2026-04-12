@@ -659,3 +659,120 @@ describe('Animator — per-handle snapshot', () => {
     expect(handle._target.get('y')).toBe(75);
   });
 });
+
+describe('Animator — configurable stop modes', () => {
+  it('stop() defaults to jump-end (existing behavior)', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 500, easing: 'linear' },
+    );
+
+    // Advance to ~50%
+    await advanceTimers(250);
+    expect(value).toBeGreaterThan(0);
+    expect(value).toBeLessThan(100);
+
+    handle.stop();
+    expect(value).toBe(100);
+  });
+
+  it('stop({ mode: "rollback" }) reverts to snapshot values', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 500, easing: 'linear' },
+    );
+
+    // Advance to ~50%
+    await advanceTimers(250);
+    expect(value).toBeGreaterThan(0);
+    expect(value).toBeLessThan(100);
+
+    handle.stop({ mode: 'rollback' });
+    expect(value).toBe(0);
+  });
+
+  it('stop({ mode: "freeze" }) leaves at current value', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 500, easing: 'linear' },
+    );
+
+    // Advance to ~50%
+    await advanceTimers(250);
+    const frozenAt = value;
+    expect(frozenAt).toBeGreaterThan(0);
+    expect(frozenAt).toBeLessThan(100);
+
+    handle.stop({ mode: 'freeze' });
+    // Value should remain exactly where it was
+    expect(value).toBe(frozenAt);
+  });
+
+  it('stopAll({ mode: "rollback" }) reverts all animations', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let valueA = 50;
+    let valueB = 200;
+
+    animator.animate(
+      [{ key: 'a', from: 50, to: 150, apply: (v) => { valueA = v as number; } }],
+      { duration: 500, easing: 'linear' },
+    );
+    animator.animate(
+      [{ key: 'b', from: 200, to: 400, apply: (v) => { valueB = v as number; } }],
+      { duration: 500, easing: 'linear' },
+    );
+
+    // Advance partway
+    await advanceTimers(250);
+    expect(valueA).toBeGreaterThan(50);
+    expect(valueB).toBeGreaterThan(200);
+
+    animator.stopAll({ mode: 'rollback' });
+
+    expect(valueA).toBe(50);
+    expect(valueB).toBe(200);
+    expect(animator.active).toBe(false);
+  });
+
+  it('blend/compose uses superseded mode (no onComplete)', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const onComplete = vi.fn();
+
+    // Start first animation with onComplete spy
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 500, easing: 'linear', onComplete },
+    );
+
+    // Advance partway so the first group has a current value
+    await advanceTimers(250);
+
+    // Start second animation on the same key — steals ownership, supersedes first
+    animator.animate(
+      [{ key: 'x', from: 0, to: 200, apply: () => {} }],
+      { duration: 500, easing: 'linear' },
+    );
+
+    // onComplete should NOT have been called (superseded, not a consumer stop)
+    expect(onComplete).not.toHaveBeenCalled();
+
+    // Advance to completion of second animation
+    await advanceTimers(500);
+  });
+});

@@ -11,6 +11,7 @@ import type { EngineHandle } from './engine';
 import { resolveEasing } from './easing';
 import type { EasingName, EasingFn } from './easing';
 import { lerpNumber, interpolateColor } from './interpolators';
+import type { StopOptions } from '../core/types';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,7 +38,7 @@ export interface AnimateInternalOptions {
 export interface AnimationHandle {
   pause(): void;
   resume(): void;
-  stop(): void;
+  stop(options?: StopOptions): void;
   reverse(): void;
   readonly finished: Promise<void>;
   readonly _snapshot: Map<string, number | string>;
@@ -157,12 +158,9 @@ export class Animator {
         // Remove this property from the old group
         existing.entries = existing.entries.filter((e) => e.key !== entry.key);
 
-        // If the old group has no properties left, stop its engine handle
+        // If the old group has no properties left, stop it as superseded
         if (existing.entries.length === 0) {
-          existing.stopped = true;
-          existing.engineHandle.stop();
-          this._groups.delete(existing);
-          existing.resolve();
+          this._stop(existing, 'superseded');
         }
       }
     }
@@ -256,7 +254,7 @@ export class Animator {
     const handle: AnimationHandle = {
       pause: () => this._pause(group),
       resume: () => this._resume(group),
-      stop: () => this._stop(group),
+      stop: (options?: StopOptions) => this._stop(group, options?.mode ?? 'jump-end'),
       reverse: () => this._reverse(group),
       finished,
       get _snapshot() { return group.snapshot; },
@@ -267,18 +265,11 @@ export class Animator {
   }
 
   /** Stop all active animations. */
-  stopAll(): void {
+  stopAll(options?: StopOptions): void {
+    const mode = options?.mode ?? 'jump-end';
     for (const group of this._groups) {
       if (!group.stopped) {
-        group.stopped = true;
-        group.engineHandle.stop();
-        // Apply end values
-        for (const entry of group.entries) {
-          const target = group.reversed ? entry.from : entry.to;
-          entry.apply(target);
-        }
-        group.onComplete?.();
-        group.resolve();
+        this._stop(group, mode);
       }
     }
     this._groups.clear();
@@ -394,7 +385,7 @@ export class Animator {
     group.pausedElapsed = null;
   }
 
-  private _stop(group: ActiveGroup): void {
+  private _stop(group: ActiveGroup, mode: 'jump-end' | 'rollback' | 'freeze' | 'superseded' = 'jump-end'): void {
     if (group.stopped) {
       return;
     }
@@ -402,14 +393,32 @@ export class Animator {
     group.stopped = true;
     group.engineHandle.stop();
 
-    // Jump to end state
-    for (const entry of group.entries) {
-      const target = group.reversed ? entry.from : entry.to;
-      entry.apply(target);
+    if (mode === 'jump-end') {
+      // Apply final target values (current behavior)
+      for (const entry of group.entries) {
+        const target = group.reversed ? entry.from : entry.to;
+        entry.apply(target);
+      }
+    } else if (mode === 'rollback') {
+      // Revert to snapshot (start state)
+      for (const entry of group.entries) {
+        const snapValue = group.snapshot.get(entry.key);
+        if (snapValue !== undefined) {
+          entry.apply(snapValue);
+        }
+      }
+    } else if (mode === 'freeze') {
+      // No property writes — leave at current interpolated value
+    } else if (mode === 'superseded') {
+      // No property writes — new owner is about to overwrite
     }
 
     this._cleanup(group);
-    group.onComplete?.();
+
+    // onComplete fires for consumer-facing modes, not for superseded
+    if (mode !== 'superseded') {
+      group.onComplete?.();
+    }
     group.resolve();
   }
 
