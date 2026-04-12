@@ -1625,12 +1625,12 @@ describe('FlowTimeline engine injection', () => {
     const injectedEngine = new AnimationEngine();
     const registerSpy = vi.spyOn(injectedEngine, 'register');
 
-    // followPath steps go directly through this._engine.register (not canvas.animate)
     const tl = new FlowTimeline(canvas, injectedEngine);
     tl.step({ nodes: ['a'], followPath: (t) => ({ x: t * 100, y: 0 }), duration: 100 });
     tl.play();
 
     expect(registerSpy).toHaveBeenCalled();
+    tl.stop();
   });
 
   it('falls back to a private engine when no engine is injected', () => {
