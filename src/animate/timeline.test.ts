@@ -1991,3 +1991,309 @@ describe('FlowTimeline — conditional steps', () => {
     expect(canvas.getNode('a')!.position.x).toBe(200); // only mode 'b' ran
   });
 });
+
+// ── Sub-timeline composition (Form 1) ──────────────────────────────────────
+
+describe('FlowTimeline — sub-timeline composition (Form 1)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('step with timeline: plays the sub and waits for completion', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    const sub = new FlowTimeline(canvas);
+
+    sub.step({ nodes: ['a'], position: { x: 100 }, duration: 0 });
+    parent.step({ timeline: sub });
+    parent.step({ nodes: ['a'], position: { x: 200 }, duration: 0 });
+
+    await parent.play();
+
+    // Both steps executed — sub completed, then parent continued
+    expect(canvas.getNode('a')!.position.x).toBe(200);
+  });
+
+  it('parent.subTimelines includes non-independent subs while running', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    const sub = new FlowTimeline(canvas);
+
+    let subTimelinesCount = 0;
+    sub.step({
+      nodes: ['a'], position: { x: 50 }, duration: 0,
+      onStart: () => { subTimelinesCount = parent.subTimelines.length; },
+    });
+    parent.step({ timeline: sub });
+
+    await parent.play();
+    expect(subTimelinesCount).toBe(1);
+  });
+
+  it('parent.subTimelines is empty after sub completes', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    const sub = new FlowTimeline(canvas);
+
+    sub.step({ nodes: ['a'], position: { x: 50 }, duration: 0 });
+    parent.step({ timeline: sub });
+
+    await parent.play();
+    expect(parent.subTimelines.length).toBe(0);
+  });
+
+  it('parent stop stops non-independent subs', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    const sub = new FlowTimeline(canvas);
+
+    sub.step({ nodes: ['a'], position: { x: 100 }, duration: 5000 }); // long duration
+    parent.step({ timeline: sub });
+
+    const playPromise = parent.play(); // don't await — we'll stop it
+    // Give it a tick to start the sub
+    await vi.advanceTimersByTimeAsync(16);
+
+    parent.stop();
+    expect(sub.state).toBe('stopped');
+
+    // Resolve the play promise
+    await playPromise;
+  });
+
+  it('independent: true sub is not in parent.subTimelines', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    const sub = new FlowTimeline(canvas);
+
+    let subTimelinesCount = -1;
+    sub.step({
+      nodes: ['a'], position: { x: 100 }, duration: 0,
+      onStart: () => { subTimelinesCount = parent.subTimelines.length; },
+    });
+    parent.step({ timeline: sub, independent: true });
+
+    await parent.play();
+
+    // subTimelines shouldn't include independent subs — stays at 0 during execution
+    expect(subTimelinesCount).toBe(0);
+  });
+
+  it('independent: true sub is not affected by parent stop', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    const sub = new FlowTimeline(canvas);
+    const independentSub = new FlowTimeline(canvas);
+
+    // Non-independent sub with long duration
+    sub.step({ nodes: ['a'], position: { x: 100 }, duration: 5000 });
+    // Independent sub with long duration
+    independentSub.step({ nodes: ['b'], position: { x: 200 }, duration: 5000 });
+
+    parent.step({ timeline: sub });
+    // Note: independent sub runs as a separate step, but if we want to test stop
+    // propagation, the independent sub must be running when parent stops.
+    // Since steps are sequential, we use parallel for this test.
+
+    const canvas2 = makeMockCanvas();
+    const parent2 = new FlowTimeline(canvas2);
+    const nonIndependentSub = new FlowTimeline(canvas2);
+    const independentSub2 = new FlowTimeline(canvas2);
+
+    nonIndependentSub.step({ nodes: ['a'], position: { x: 100 }, duration: 5000 });
+    independentSub2.step({ nodes: ['b'], position: { x: 200 }, duration: 5000 });
+
+    parent2.parallel([
+      { timeline: nonIndependentSub },
+      { timeline: independentSub2, independent: true },
+    ]);
+
+    const playPromise = parent2.play();
+    await vi.advanceTimersByTimeAsync(16);
+
+    parent2.stop();
+
+    expect(nonIndependentSub.state).toBe('stopped');
+    // Independent sub is NOT stopped by the parent
+    expect(independentSub2.state).not.toBe('stopped');
+
+    await playPromise;
+  });
+
+  it('parent pausePlayback propagates to running subs', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    const sub = new FlowTimeline(canvas);
+
+    sub.step({ nodes: ['a'], position: { x: 100 }, duration: 5000 });
+    parent.step({ timeline: sub });
+
+    const playPromise = parent.play();
+    await vi.advanceTimersByTimeAsync(16);
+
+    parent.pausePlayback();
+    expect(parent.state).toBe('paused');
+    expect(sub.state).toBe('paused');
+
+    parent.resumePlayback();
+    expect(parent.state).toBe('playing');
+    expect(sub.state).toBe('playing');
+
+    // Stop to clean up
+    parent.stop();
+    await playPromise;
+  });
+
+  it('independent: true sub is not affected by parent pausePlayback', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    const sub = new FlowTimeline(canvas);
+
+    sub.step({ nodes: ['a'], position: { x: 100 }, duration: 5000 });
+    parent.step({ timeline: sub, independent: true });
+
+    const playPromise = parent.play();
+    await vi.advanceTimersByTimeAsync(16);
+
+    parent.pausePlayback();
+    expect(parent.state).toBe('paused');
+    // Independent sub should NOT be paused
+    expect(sub.state).toBe('playing');
+
+    // Clean up
+    parent.resumePlayback();
+    parent.stop();
+    // The independent sub is still playing since it wasn't stopped — stop it directly
+    sub.stop();
+    await playPromise;
+  });
+
+  it('sub-timeline in parallel works', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    const sub1 = new FlowTimeline(canvas);
+    const sub2 = new FlowTimeline(canvas);
+
+    sub1.step({ nodes: ['a'], position: { x: 100 }, duration: 0 });
+    sub2.step({ nodes: ['b'], position: { x: 200 }, duration: 0 });
+
+    parent.parallel([
+      { timeline: sub1 },
+      { timeline: sub2 },
+    ]);
+
+    await parent.play();
+    expect(canvas.getNode('a')!.position.x).toBe(100);
+    expect(canvas.getNode('b')!.position.x).toBe(200);
+  });
+
+  it('sub-timeline emits step and step-complete events on parent', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    const sub = new FlowTimeline(canvas);
+
+    sub.step({ nodes: ['a'], position: { x: 50 }, duration: 0 });
+
+    const events: string[] = [];
+    parent.on('step', (detail: any) => {
+      events.push('step');
+      if (detail?.timeline) events.push('has-timeline');
+    });
+    parent.on('step-complete', (detail: any) => {
+      events.push('step-complete');
+      if (detail?.timeline) events.push('has-timeline-complete');
+    });
+
+    parent.step({ timeline: sub });
+    await parent.play();
+
+    expect(events).toContain('step');
+    expect(events).toContain('has-timeline');
+    expect(events).toContain('step-complete');
+    expect(events).toContain('has-timeline-complete');
+  });
+
+  it('sub-timeline step calls onStart and onComplete hooks', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    const sub = new FlowTimeline(canvas);
+
+    sub.step({ nodes: ['a'], position: { x: 50 }, duration: 0 });
+
+    const hooksCalled: string[] = [];
+    parent.step({
+      timeline: sub,
+      onStart: () => hooksCalled.push('onStart'),
+      onComplete: () => hooksCalled.push('onComplete'),
+    });
+
+    await parent.play();
+    expect(hooksCalled).toEqual(['onStart', 'onComplete']);
+  });
+
+  it('sub-timeline with when: false is skipped', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    const sub = new FlowTimeline(canvas);
+
+    sub.step({ nodes: ['a'], position: { x: 100 }, duration: 0 });
+    parent.step({
+      timeline: sub,
+      when: () => false,
+    });
+
+    const skipped: boolean[] = [];
+    parent.on('step-skipped', () => skipped.push(true));
+    await parent.play();
+
+    expect(skipped.length).toBe(1);
+    // Sub didn't play, node stays at original position
+    expect(canvas.getNode('a')!.position.x).toBe(0);
+  });
+
+  it('reset stops tracked sub-timelines', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    const sub = new FlowTimeline(canvas);
+
+    sub.step({ nodes: ['a'], position: { x: 100 }, duration: 5000 });
+    parent.step({ timeline: sub });
+
+    const playPromise = parent.play();
+    await vi.advanceTimersByTimeAsync(16);
+
+    parent.reset();
+    expect(sub.state).toBe('stopped');
+    expect(parent.subTimelines.length).toBe(0);
+
+    await playPromise;
+  });
+
+  it('multiple sequential sub-timelines execute in order', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    const sub1 = new FlowTimeline(canvas);
+    const sub2 = new FlowTimeline(canvas);
+
+    const order: number[] = [];
+    sub1.step({
+      nodes: ['a'], position: { x: 50 }, duration: 0,
+      onStart: () => order.push(1),
+    });
+    sub2.step({
+      nodes: ['a'], position: { x: 100 }, duration: 0,
+      onStart: () => order.push(2),
+    });
+
+    parent.step({ timeline: sub1 });
+    parent.step({ timeline: sub2 });
+
+    await parent.play();
+    expect(order).toEqual([1, 2]);
+    expect(canvas.getNode('a')!.position.x).toBe(100);
+  });
+});

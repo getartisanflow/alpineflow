@@ -90,6 +90,12 @@ export interface TimelineStep<T extends Record<string, any> = Record<string, any
   /** Alternative step to execute when `when` returns false. */
   else?: TimelineStep<T>;
 
+  // Sub-timeline composition
+  /** Nested timeline to play as a single step from this parent's point of view. */
+  timeline?: FlowTimeline;
+  /** When true, the sub-timeline is NOT paused/stopped when the parent pauses/stops. */
+  independent?: boolean;
+
   // Hooks
   onStart?: (ctx: StepContext<T>) => void;
   onProgress?: (progress: number, ctx: StepContext<T>) => void;
@@ -226,9 +232,11 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
   private _listeners = new Map<TimelineEvent, Set<Function>>();
   private _context: Record<string, any> = {};
   private _activeHandles: EngineHandle[] = [];
+  private _subTimelines: FlowTimeline[] = [];
   private _initialSnapshot: Map<string, NodeSnapshot> = new Map();
   private _initialEdgeSnapshot: Map<string, EdgeSnapshot> = new Map();
   private _playResolve: (() => void) | null = null;
+  private _pausePlaybackResolve: (() => void) | null = null;
 
   constructor(canvas: TimelineCanvas, engine?: AnimationEngine) {
     this._canvas = canvas;
@@ -243,6 +251,10 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
 
   get locked(): boolean {
     return this._locked;
+  }
+
+  get subTimelines(): ReadonlyArray<FlowTimeline> {
+    return this._subTimelines;
   }
 
   step(config: TimelineStep<TContext> | ((ctx: StepContext<TContext>) => TimelineStep<TContext>)): this {
@@ -274,6 +286,11 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
 
   stop(): void {
     this._stopAll();
+    // Stop all tracked (non-independent) sub-timelines
+    for (const sub of this._subTimelines) {
+      sub.stop();
+    }
+    this._subTimelines.length = 0;
     this._state = 'stopped';
     this._locked = false;
     this._emit('stop');
@@ -283,6 +300,11 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
 
   reset(replay?: boolean): Promise<void> | void {
     this._stopAll();
+    // Stop all tracked sub-timelines on reset
+    for (const sub of this._subTimelines) {
+      sub.stop();
+    }
+    this._subTimelines.length = 0;
     this._restoreInitialSnapshot();
     this._state = 'idle';
     this._locked = false;
@@ -320,6 +342,33 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
     }
     this._listeners.get(event)!.add(handler);
     return this;
+  }
+
+  /** Externally pause a playing timeline. Non-independent sub-timelines are also paused. */
+  pausePlayback(): void {
+    if (this._state !== 'playing') return;
+    this._state = 'paused';
+    if (this._lockEnabled) this._locked = false;
+    // Propagate pause to running non-independent sub-timelines
+    for (const sub of this._subTimelines) {
+      if (sub.state === 'playing') sub.pausePlayback();
+    }
+    this._emit('pause');
+  }
+
+  /** Resume a paused timeline. Non-independent sub-timelines are also resumed. */
+  resumePlayback(): void {
+    if (this._state !== 'paused') return;
+    this._state = 'playing';
+    if (this._lockEnabled) this._locked = true;
+    // Propagate resume to paused non-independent sub-timelines
+    for (const sub of this._subTimelines) {
+      if (sub.state === 'paused') sub.resumePlayback();
+    }
+    this._emit('resume');
+    // Resolve the pause promise if one exists
+    this._pausePlaybackResolve?.();
+    this._pausePlaybackResolve = null;
   }
 
   /** Check if reduced motion is active (OS preference + not opted out). */
@@ -410,6 +459,11 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
     const runOnce = async (): Promise<void> => {
       for (let i = 0; i < entries.length; i++) {
         if (this._state === 'stopped') return;
+        // Wait if externally paused via pausePlayback()
+        if (this._state === 'paused') {
+          await this._waitForResume();
+          if (this._state === 'stopped') return;
+        }
 
         const entry = entries[i];
 
@@ -480,6 +534,15 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
     } as StepContext<TContext>;
   }
 
+  // ── Internal: pause-playback wait ────────────────────────────────────
+
+  /** Block until resumePlayback() is called. Used by _runEntries when externally paused. */
+  private _waitForResume(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      this._pausePlaybackResolve = resolve;
+    });
+  }
+
   // ── Internal: pause execution ───────────────────────────────────────
 
   private _executePause(entry: StepEntry<TContext> & { type: 'pause' }): Promise<void> {
@@ -538,6 +601,31 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
         this._emit('step-skipped', { index: entryIndex, id: step.id });
         return;
       }
+    }
+
+    // Sub-timeline composition — play the nested timeline as one step
+    if (step.timeline) {
+      const sub = step.timeline;
+
+      // Track non-independent subs for pause/stop propagation
+      if (!step.independent) {
+        this._subTimelines.push(sub);
+      }
+
+      this._emit('step', { index: entryIndex, id: step.id, timeline: sub });
+      step.onStart?.(ctx);
+
+      await sub.play();
+
+      step.onComplete?.(ctx);
+      this._emit('step-complete', { timeline: sub });
+
+      // Clean up tracking after sub completes
+      if (!step.independent) {
+        const idx = this._subTimelines.indexOf(sub);
+        if (idx >= 0) this._subTimelines.splice(idx, 1);
+      }
+      return;
     }
 
     this._emit('step', { index: entryIndex, id: step.id });
