@@ -20,6 +20,7 @@ import type {
   FollowOptions,
   ParticleHandle,
   ParticleOptions,
+  ParticleRenderer,
   PatchableConfig,
   ChildValidation,
   AutoLayoutConfig,
@@ -48,7 +49,8 @@ import type { KeyboardShortcuts } from '../../core/keyboard-shortcuts';
 // ── Active particle entry (shared loop) ─────────────────────────────────────
 
 export interface ActiveParticle {
-  circle: SVGCircleElement;
+  element: SVGElement;          // generic — could be circle, rect, g, etc.
+  renderer: ParticleRenderer;   // the renderer that created it
   pathEl: SVGPathElement;
   startElapsed: number;       // engine-relative start time; -1 until first tick
   ms: number;

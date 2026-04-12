@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { mockCtx } from './__test-utils';
 import { createAnimationMixin } from './canvas-animation';
 import type { FlowNode, FlowEdge } from '../../core/types';
+import { registerParticleRenderer } from '../../animate/particle-renderers';
 
 // ── Mock Alpine ──────────────────────────────────────────────────────────────
 
@@ -722,16 +723,18 @@ describe('createAnimationMixin — _tickParticles', () => {
 
   it('removes completed particles (progress >= 1)', () => {
     const ctx = mockCtx();
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const element = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    container.appendChild(circle);
+    container.appendChild(element);
 
     const onComplete = vi.fn();
+    const mockRenderer = { create: vi.fn(), update: vi.fn(), destroy: vi.fn((el: SVGElement) => el.remove()) };
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
 
     const particle = {
-      circle,
+      element,
+      renderer: mockRenderer,
       pathEl,
       startElapsed: 0,     // started at elapsed=0
       ms: 1000,            // 1s duration
@@ -747,15 +750,18 @@ describe('createAnimationMixin — _tickParticles', () => {
 
     expect(ctx._activeParticles.size).toBe(0);
     expect(onComplete).toHaveBeenCalledOnce();
+    expect(mockRenderer.destroy).toHaveBeenCalledWith(element);
     expect(result).toBe(true); // all particles done
   });
 
-  it('updates position of in-progress particles', () => {
+  it('updates position of in-progress particles via renderer', () => {
     const ctx = mockCtx();
 
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const element = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    container.appendChild(circle);
+    container.appendChild(element);
+
+    const mockRenderer = { create: vi.fn(), update: vi.fn(), destroy: vi.fn() };
 
     // Create an SVG path with mock methods
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -764,7 +770,8 @@ describe('createAnimationMixin — _tickParticles', () => {
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 42, y: 84 }));
 
     const particle = {
-      circle,
+      element,
+      renderer: mockRenderer,
       pathEl,
       startElapsed: 0,     // started at elapsed=0
       ms: 10000,           // long duration
@@ -779,22 +786,24 @@ describe('createAnimationMixin — _tickParticles', () => {
     const result = mixin._tickParticles(100);
 
     expect(result).toBe(false); // still running
-    expect(circle.getAttribute('cx')).toBe('42');
-    expect(circle.getAttribute('cy')).toBe('84');
+    expect(mockRenderer.update).toHaveBeenCalledWith(element, expect.objectContaining({ x: 42, y: 84 }));
   });
 
   it('sets startElapsed on first tick when particle has startElapsed=-1', () => {
     const ctx = mockCtx();
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const element = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    container.appendChild(circle);
+    container.appendChild(element);
+
+    const mockRenderer = { create: vi.fn(), update: vi.fn(), destroy: vi.fn() };
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     (pathEl as any).getTotalLength = vi.fn(() => 100);
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 10, y: 20 }));
 
     const particle = {
-      circle,
+      element,
+      renderer: mockRenderer,
       pathEl,
       startElapsed: -1,    // not yet ticked
       ms: 2000,
@@ -813,16 +822,19 @@ describe('createAnimationMixin — _tickParticles', () => {
 
   it('updates currentPosition on each tick', () => {
     const ctx = mockCtx();
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const element = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    container.appendChild(circle);
+    container.appendChild(element);
+
+    const mockRenderer = { create: vi.fn(), update: vi.fn(), destroy: vi.fn() };
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     (pathEl as any).getTotalLength = vi.fn(() => 100);
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 55, y: 33 }));
 
     const particle = {
-      circle,
+      element,
+      renderer: mockRenderer,
       pathEl,
       startElapsed: 0,
       ms: 10000,
@@ -840,15 +852,17 @@ describe('createAnimationMixin — _tickParticles', () => {
 
   it('removes particle correctly with a very large elapsed value', () => {
     const ctx = mockCtx();
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const element = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    container.appendChild(circle);
+    container.appendChild(element);
 
+    const mockRenderer = { create: vi.fn(), update: vi.fn(), destroy: vi.fn((el: SVGElement) => el.remove()) };
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     const onComplete = vi.fn();
 
     const particle = {
-      circle,
+      element,
+      renderer: mockRenderer,
       pathEl,
       startElapsed: 0,
       ms: 1000,
@@ -943,7 +957,7 @@ describe('createAnimationMixin — sendParticle', () => {
     expect(ctx._activeParticles.size).toBe(1);
   });
 
-  it('applies custom CSS class to particle circle', () => {
+  it('applies custom CSS class to particle element via renderer', () => {
     const ctx = mockCtx();
     ctx.edges = [makeEdge('e1')];
 
@@ -959,7 +973,9 @@ describe('createAnimationMixin — sendParticle', () => {
 
     mixin.sendParticle('e1', { class: 'custom-dot glow' });
 
+    // The circle renderer creates a <circle> element in the gEl
     const circle = gEl.querySelector('circle')!;
+    expect(circle).not.toBeNull();
     expect(circle.classList.contains('flow-edge-particle')).toBe(true);
     expect(circle.classList.contains('custom-dot')).toBe(true);
     expect(circle.classList.contains('glow')).toBe(true);
@@ -1003,11 +1019,8 @@ describe('createAnimationMixin — sendParticle', () => {
     const mixin = createAnimationMixin(ctx);
 
     const handle = mixin.sendParticle('e1')!;
-    // Update circle position to simulate animation
-    const circle = gEl.querySelector('circle')!;
-    circle.setAttribute('cx', '50');
-    circle.setAttribute('cy', '75');
 
+    // getCurrentPosition reads from internal state set by renderer.update at creation
     const pos = handle.getCurrentPosition();
 
     expect(pos).toEqual({ x: 50, y: 75 });
@@ -1068,6 +1081,83 @@ describe('createAnimationMixin — sendParticle', () => {
     const mixin = createAnimationMixin(ctx);
 
     const result = mixin.sendParticle('e1');
+
+    expect(result).toBeUndefined();
+  });
+
+  it('sendParticle uses the default circle renderer', () => {
+    const ctx = mockCtx();
+    ctx.edges = [makeEdge('e1')];
+
+    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
+    (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
+
+    const gEl = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    (ctx.getEdgeElement as any).mockReturnValue(gEl);
+
+    const mixin = createAnimationMixin(ctx);
+
+    const handle = mixin.sendParticle('e1');
+
+    expect(handle).toBeDefined();
+    // The default circle renderer creates a <circle> SVG element
+    const circle = gEl.querySelector('circle');
+    expect(circle).not.toBeNull();
+  });
+
+  it('sendParticle uses a custom renderer when specified', () => {
+    const mockCreate = vi.fn((svgLayer: SVGElement) => {
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      svgLayer.appendChild(rect);
+      return rect;
+    });
+    const mockUpdate = vi.fn();
+    const mockDestroy = vi.fn((el: SVGElement) => el.remove());
+
+    registerParticleRenderer('custom-test', {
+      create: mockCreate,
+      update: mockUpdate,
+      destroy: mockDestroy,
+    });
+
+    const ctx = mockCtx();
+    ctx.edges = [makeEdge('e1')];
+
+    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
+    (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
+
+    const gEl = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    (ctx.getEdgeElement as any).mockReturnValue(gEl);
+
+    const mixin = createAnimationMixin(ctx);
+
+    const handle = mixin.sendParticle('e1', { renderer: 'custom-test' });
+
+    expect(handle).toBeDefined();
+    expect(mockCreate).toHaveBeenCalled();
+    // The custom renderer's update is called for initial positioning
+    expect(mockUpdate).toHaveBeenCalled();
+  });
+
+  it('unknown renderer returns undefined', () => {
+    const ctx = mockCtx();
+    ctx.edges = [makeEdge('e1')];
+
+    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
+    (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
+
+    const gEl = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    (ctx.getEdgeElement as any).mockReturnValue(gEl);
+
+    const mixin = createAnimationMixin(ctx);
+
+    const result = mixin.sendParticle('e1', { renderer: 'nonexistent' });
 
     expect(result).toBeUndefined();
   });

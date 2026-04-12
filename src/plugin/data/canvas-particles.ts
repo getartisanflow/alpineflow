@@ -17,11 +17,13 @@ import type { CanvasContext } from './canvas-context';
 import type {
   ParticleHandle,
   ParticleOptions,
+  ParticleRenderState,
   XYPosition,
 } from '../../core/types';
 import { engine } from '../../animate/engine';
 import { debug } from '../../core/debug';
 import { CONNECTION_ACTIVE_COLOR } from '../../core/constants';
+import { getParticleRenderer } from '../../animate/particle-renderers';
 
 // ── Local utility ───────────────────────────────────────────────────────────
 
@@ -56,8 +58,8 @@ export function createParticleMixin(ctx: CanvasContext) {
         const progress = (elapsed - particle.startElapsed) / particle.ms;
 
         // Complete particle if progress finished or if the DOM element was detached.
-        if (progress >= 1 || !particle.circle.parentNode) {
-          particle.circle.remove();
+        if (progress >= 1 || !particle.element.parentNode) {
+          particle.renderer.destroy(particle.element);
           if (typeof particle.onComplete === 'function') {
             particle.onComplete();
           }
@@ -72,8 +74,21 @@ export function createParticleMixin(ctx: CanvasContext) {
         }
 
         const pt = particle.pathEl.getPointAtLength(progress * len);
-        particle.circle.setAttribute('cx', String(pt.x));
-        particle.circle.setAttribute('cy', String(pt.y));
+
+        // Compute render state for the pluggable renderer
+        const renderState: ParticleRenderState = {
+          x: pt.x,
+          y: pt.y,
+          progress,
+          velocity: {
+            x: pt.x - particle.currentPosition.x,
+            y: pt.y - particle.currentPosition.y,
+          },
+          pathLength: len,
+          elapsed: elapsed - particle.startElapsed,
+        };
+
+        particle.renderer.update(particle.element, renderState);
 
         // Track position internally so getCurrentPosition() doesn't need DOM reads
         particle.currentPosition = { x: pt.x, y: pt.y };
@@ -116,6 +131,17 @@ export function createParticleMixin(ctx: CanvasContext) {
         return undefined;
       }
 
+      // Resolve renderer
+      const rendererName = options.renderer ?? 'circle';
+      const renderer = getParticleRenderer(rendererName);
+      if (!renderer) {
+        debug('particle', `sendParticle: unknown renderer "${rendererName}"`);
+        return undefined;
+      }
+
+      const gEl = ctx.getEdgeElement(edgeId);
+      if (!gEl) return undefined;
+
       // Resolve cascade: options -> edge properties -> CSS variables
       const styles = ctx._containerStyles;
 
@@ -131,27 +157,23 @@ export function createParticleMixin(ctx: CanvasContext) {
         ?? styles?.getPropertyValue('--flow-edge-dot-duration').trim()
         ?? '2s';
 
-      // Create circle and animate via getPointAtLength + setAttribute.
-      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      circle.setAttribute('r', String(size));
-      circle.setAttribute('fill', color);
-      circle.classList.add('flow-edge-particle');
-      if (options.class) {
-        for (const cls of options.class.split(' ')) {
-          if (cls) circle.classList.add(cls);
-        }
-      }
-
-      const gEl = ctx.getEdgeElement(edgeId);
-      if (!gEl) return undefined;
-
       const ms = parseDurationMs(duration);
+
+      // Delegate element creation to the renderer
+      const resolvedOptions: ParticleOptions = { ...options, size, color };
+      const el = renderer.create(gEl as SVGElement, resolvedOptions);
 
       // Position at path start immediately — no origin flash.
       const startPt = pathEl.getPointAtLength(0);
-      circle.setAttribute('cx', String(startPt.x));
-      circle.setAttribute('cy', String(startPt.y));
-      gEl.appendChild(circle);
+      const initialState: ParticleRenderState = {
+        x: startPt.x,
+        y: startPt.y,
+        progress: 0,
+        velocity: { x: 0, y: 0 },
+        pathLength: 0,
+        elapsed: 0,
+      };
+      renderer.update(el, initialState);
 
       // Promise for handle.finished
       let resolveHandleFinished: () => void;
@@ -165,7 +187,8 @@ export function createParticleMixin(ctx: CanvasContext) {
       };
 
       const particle = {
-        circle,
+        element: el,
+        renderer,
         pathEl,
         startElapsed: -1,    // set on first engine tick
         ms,
@@ -187,7 +210,7 @@ export function createParticleMixin(ctx: CanvasContext) {
         },
         stop() {
           if (!ctx._activeParticles.has(particle)) return;
-          circle.remove();
+          particle.renderer.destroy(particle.element);
           ctx._activeParticles.delete(particle);
           wrappedOnComplete();
         },
@@ -207,7 +230,7 @@ export function createParticleMixin(ctx: CanvasContext) {
       ctx._particleEngineHandle?.stop();
       ctx._particleEngineHandle = null;
       for (const p of ctx._activeParticles) {
-        p.circle.remove();
+        p.renderer.destroy(p.element);
       }
       ctx._activeParticles.clear();
     },

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AnimationEngine } from '../../animate/engine';
-import type { ParticleHandle, XYPosition, FlowAnimationHandle } from '../../core/types';
+import type { ParticleHandle, ParticleRenderer, XYPosition, FlowAnimationHandle } from '../../core/types';
+import { getParticleRenderer, registerParticleRenderer } from '../../animate/particle-renderers';
 
 /**
  * Minimal SVG path mock — getPointAtLength returns linear interpolation
@@ -74,9 +75,8 @@ function makeParticleCanvas() {
         const progress = (elapsed - particle.startElapsed) / particle.ms;
 
         // Complete particle if progress finished or if the DOM element was detached.
-        if (progress >= 1 || !particle.circle._parent) {
-          // Simulate circle.remove()
-          particle.circle._parent = null;
+        if (progress >= 1 || !particle.element._parent) {
+          particle.renderer.destroy(particle.element);
           if (typeof particle.onComplete === 'function') {
             particle.onComplete();
           }
@@ -86,8 +86,15 @@ function makeParticleCanvas() {
 
         const len = particle.pathEl.getTotalLength();
         const pt = particle.pathEl.getPointAtLength(progress * len);
-        particle.circle.setAttribute('cx', String(pt.x));
-        particle.circle.setAttribute('cy', String(pt.y));
+
+        particle.renderer.update(particle.element, {
+          x: pt.x,
+          y: pt.y,
+          progress,
+          velocity: { x: pt.x - particle.currentPosition.x, y: pt.y - particle.currentPosition.y },
+          pathLength: len,
+          elapsed: elapsed - particle.startElapsed,
+        });
 
         // Track position internally
         particle.currentPosition = { x: pt.x, y: pt.y };
@@ -111,28 +118,40 @@ function makeParticleCanvas() {
       if (!pe) return undefined;
       if (!pe.getAttribute('d')) return undefined;
 
+      const rendererName = options.renderer ?? 'circle';
+      const renderer = getParticleRenderer(rendererName);
+      if (!renderer) return undefined;
+
       const ge = this.getEdgeElement(edgeId);
       if (!ge) return undefined;
 
       const duration = options.duration ?? '2s';
       const ms = parseDurationMs(duration);
 
-      // Create mock circle
+      // Create mock element via a mock renderer that mirrors real behavior
       const attrs: Record<string, string> = {};
-      const circle = {
+      const element = {
         setAttribute(k: string, v: string) { attrs[k] = v; },
         getAttribute(k: string) { return attrs[k] ?? null; },
         classList: { add() {} },
         remove() { this._parent = null; },
         _parent: null as any,
       };
-      circle.setAttribute('r', '4');
-      circle.setAttribute('fill', '#64748b');
 
       const startPt = pe.getPointAtLength(0);
-      circle.setAttribute('cx', String(startPt.x));
-      circle.setAttribute('cy', String(startPt.y));
-      ge.appendChild(circle);
+      element.setAttribute('cx', String(startPt.x));
+      element.setAttribute('cy', String(startPt.y));
+      ge.appendChild(element);
+
+      // Mock renderer that uses the mock element
+      const mockRenderer: ParticleRenderer = {
+        create: () => element as any,
+        update: (el: any, state: any) => {
+          el.setAttribute('cx', String(state.x));
+          el.setAttribute('cy', String(state.y));
+        },
+        destroy: (el: any) => { el._parent = null; },
+      };
 
       let resolveHandleFinished: () => void;
       const handleFinished = new Promise<void>((r) => { resolveHandleFinished = r; });
@@ -143,7 +162,8 @@ function makeParticleCanvas() {
       };
 
       const particle = {
-        circle,
+        element,
+        renderer: mockRenderer,
         pathEl: pe,
         startElapsed: -1,    // set on first engine tick
         ms,
@@ -164,7 +184,7 @@ function makeParticleCanvas() {
         },
         stop() {
           if (!self._activeParticles.has(particle)) return;
-          circle.remove();
+          particle.renderer.destroy(particle.element);
           self._activeParticles.delete(particle);
           wrappedOnComplete();
         },
