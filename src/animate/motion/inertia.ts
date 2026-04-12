@@ -1,5 +1,6 @@
 import type { InertiaMotion, PhysicsState } from './types';
 import { stepDecay } from './decay';
+import { extractAxis } from './axis';
 
 export function stepInertia(state: PhysicsState, config: InertiaMotion, dt: number, key?: string): void {
     if (dt <= 0) {
@@ -14,9 +15,13 @@ export function stepInertia(state: PhysicsState, config: InertiaMotion, dt: numb
         timeConstant: config.timeConstant,
     }, dt);
 
+    // Resolve axis-based config lookup. Bounds/snap authored as { x: [...], y: [...] }
+    // need to be matched against the entry's axis letter, not the full property key.
+    const axis = key ? extractAxis(key) : null;
+
     // Bounce off bounds
     if (config.bounds && key) {
-        const axisBounds = config.bounds[key];
+        const axisBounds = config.bounds[key] ?? (axis ? config.bounds[axis] : undefined);
         if (axisBounds) {
             const [min, max] = axisBounds;
             // bounceStiffness acts as a bounciness coefficient (higher = stronger
@@ -43,7 +48,7 @@ export function stepInertia(state: PhysicsState, config: InertiaMotion, dt: numb
         let nearest = state.value;
         let minDist = Infinity;
         for (const point of config.snapTo) {
-            const val = point[key];
+            const val = point[key] ?? (axis ? point[axis] : undefined);
             if (val !== undefined) {
                 const dist = Math.abs(state.value - val);
                 if (dist < minDist) {

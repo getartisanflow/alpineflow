@@ -1,4 +1,5 @@
 import type { KeyframesMotion, PhysicsState } from './types';
+import { extractAxis } from './axis';
 
 export function stepKeyframes(
     state: PhysicsState,
@@ -6,7 +7,13 @@ export function stepKeyframes(
     progress: number, // 0-1 overall
     key: string,
 ): void {
-    const values = config.values.map(v => v[key] ?? state.value);
+    // Waypoints authored as { x: 10, y: 20 } need to be matched against the
+    // entry's axis letter extracted from the key suffix (e.g., 'node:id:position.x'
+    // → 'x'). Fall through to full-key match for consumers using explicit keys.
+    const axis = extractAxis(key);
+    const values = config.values.map(v =>
+        v[key] ?? (axis ? v[axis] : undefined) ?? state.value,
+    );
     if (values.length < 2) {
         state.value = values[0] ?? state.value;
         state.settled = true;

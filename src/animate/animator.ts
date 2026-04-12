@@ -16,7 +16,7 @@ import { HandleRegistry } from './handle-registry';
 import type { Taggable } from './handle-registry';
 import { Transaction } from './transaction';
 import type { MotionConfig, PhysicsState, SpringMotion, DecayMotion, InertiaMotion, KeyframesMotion } from './motion';
-import { resolveMotion, stepSpring, stepDecay, stepInertia, stepKeyframes } from './motion';
+import { resolveMotion, stepSpring, stepDecay, stepInertia, stepKeyframes, extractAxis } from './motion';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -314,11 +314,16 @@ export class Animator {
         }
         let initialVelocity = 0;
         if (resolvedMotion.type === 'decay' || resolvedMotion.type === 'inertia') {
-          const vel = (resolvedMotion as { velocity?: number | { x: number; y: number } }).velocity;
+          const vel = (resolvedMotion as { velocity?: number | Record<string, number> }).velocity;
           if (typeof vel === 'number') {
             initialVelocity = vel;
-          } else if (vel && typeof vel === 'object' && entry.key in vel) {
-            initialVelocity = (vel as Record<string, number>)[entry.key];
+          } else if (vel && typeof vel === 'object') {
+            // Try full key first, then fall back to the axis letter extracted from
+            // the key suffix (e.g., 'node:id:position.x' → 'x') so natural
+            // { x, y } velocity configs work with canvas-level PropertyEntry keys.
+            const velRecord = vel as Record<string, number>;
+            const axis = extractAxis(entry.key);
+            initialVelocity = velRecord[entry.key] ?? (axis ? velRecord[axis] ?? 0 : 0);
           }
           // `power` is applied once at entry as an initial velocity multiplier,
           // matching Framer Motion semantics. The integrator itself performs
