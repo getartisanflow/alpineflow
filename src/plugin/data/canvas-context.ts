@@ -20,6 +20,8 @@ import type {
   FollowOptions,
   BurstOptions,
   ParticleBurstHandle,
+  ConvergingOptions,
+  ConvergingHandle,
   ParticleHandle,
   ParticleOptions,
   ParticleRenderer,
@@ -718,6 +720,9 @@ export interface CanvasContext {
 
   /** Fire a burst of staggered particles along an edge */
   sendParticleBurst(edgeId: string, options: BurstOptions): ParticleBurstHandle;
+
+  /** Fire particles from multiple edges converging on a target node */
+  sendConverging(sourceEdgeIds: string[], options: ConvergingOptions): ConvergingHandle;
 
   /** Get the SVG element that hosts edge paths (for injecting temp paths) */
   getEdgeSvgElement(): SVGSVGElement | null;

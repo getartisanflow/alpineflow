@@ -759,6 +759,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
         sendParticleAlongPath: (p, o) => self.sendParticleAlongPath(p, o),
         sendParticleBetween: (s, t, o) => self.sendParticleBetween(s, t, o),
         sendParticleBurst: (id, o) => self.sendParticleBurst(id, o),
+        sendConverging: (ids, o) => self.sendConverging(ids, o),
         timeline: () => self.timeline(),
         getHandles: (f) => self.getHandles(f),
         cancelAll: (f, o) => self.cancelAll(f, o),
@@ -834,6 +835,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
     sendParticleAlongPath: particles.sendParticleAlongPath,
     sendParticleBetween: particles.sendParticleBetween,
     sendParticleBurst: particles.sendParticleBurst,
+    sendConverging: particles.sendConverging,
     destroyParticles: particles.destroyParticles,
   };
 }

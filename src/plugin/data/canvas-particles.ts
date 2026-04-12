@@ -16,6 +16,8 @@
 import type { CanvasContext } from './canvas-context';
 import type {
   BurstOptions,
+  ConvergingHandle,
+  ConvergingOptions,
   ParticleBurstHandle,
   ParticleHandle,
   ParticleOptions,
@@ -432,6 +434,90 @@ export function createParticleMixin(ctx: CanvasContext) {
             clearTimeout(timer);
           }
           for (const h of validHandles()) {
+            h.stop();
+          }
+        },
+      };
+    },
+
+    // ── Converging: fan-in particle visualization ───────────────────────
+
+    /**
+     * Fire particles from multiple edges that all arrive at (or depart from)
+     * a target node simultaneously. For 'arrival' synchronization, shorter
+     * paths get shorter durations and delayed starts so all particles reach
+     * the target at the same time.
+     */
+    sendConverging(sourceEdgeIds: string[], options: ConvergingOptions): ConvergingHandle {
+      const { targetNodeId: _targetNodeId, synchronize = 'arrival', onAllArrived, ...particleOptions } = options;
+      const handles: ParticleHandle[] = [];
+      const pendingTimers: ReturnType<typeof setTimeout>[] = [];
+
+      if (synchronize === 'arrival') {
+        // Compute path lengths for proportional timing
+        const edgeData = sourceEdgeIds.map(id => {
+          const pathEl = ctx.getEdgePathElement(id);
+          const length = pathEl?.getTotalLength() ?? 0;
+          return { id, length };
+        }).filter(d => d.length > 0);
+
+        if (edgeData.length === 0) {
+          const emptyFinished = Promise.resolve();
+          return { get handles() { return []; }, finished: emptyFinished, stopAll() {} };
+        }
+
+        const maxLength = Math.max(...edgeData.map(d => d.length));
+        const baseDuration = resolveDurationMs(particleOptions, maxLength, '2s');
+
+        for (const { id, length } of edgeData) {
+          const ratio = length / maxLength;
+          const adjustedDuration = baseDuration * ratio;
+          const delay = baseDuration - adjustedDuration;
+
+          if (delay <= 0) {
+            const h = this.sendParticle(id, { ...particleOptions, duration: adjustedDuration });
+            if (h) {
+              handles.push(h);
+            }
+          } else {
+            const timer = setTimeout(() => {
+              const h = this.sendParticle(id, { ...particleOptions, duration: adjustedDuration });
+              if (h) {
+                handles.push(h);
+              }
+            }, delay);
+            pendingTimers.push(timer);
+          }
+        }
+      } else {
+        // departure: all start simultaneously with their default durations
+        for (const edgeId of sourceEdgeIds) {
+          const h = this.sendParticle(edgeId, particleOptions);
+          if (h) {
+            handles.push(h);
+          }
+        }
+      }
+
+      const finished = new Promise<void>((resolve) => {
+        // Small buffer for staggered particles to register
+        const waitTime = synchronize === 'arrival' ? 100 : 0;
+        setTimeout(() => {
+          Promise.all(handles.map(h => h.finished)).then(() => {
+            onAllArrived?.();
+            resolve();
+          });
+        }, waitTime);
+      });
+
+      return {
+        get handles() { return handles; },
+        finished,
+        stopAll() {
+          for (const timer of pendingTimers) {
+            clearTimeout(timer);
+          }
+          for (const h of handles) {
             h.stop();
           }
         },

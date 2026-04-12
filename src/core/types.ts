@@ -737,6 +737,26 @@ export interface ParticleBurstHandle {
   stopAll(): void;
 }
 
+/** Options for sendConverging — fan-in particle visualization. */
+export interface ConvergingOptions extends ParticleOptions {
+  /** ID of the target node where all particles converge. */
+  targetNodeId: string;
+  /** Whether to synchronize particle arrival or departure. Default: 'arrival'. */
+  synchronize?: 'arrival' | 'departure';
+  /** Called when all particles have arrived at the target. */
+  onAllArrived?: () => void;
+}
+
+/** Handle returned by sendConverging() for controlling the fan-in. */
+export interface ConvergingHandle {
+  /** Individual particle handles. */
+  readonly handles: ParticleHandle[];
+  /** Resolves when all converging particles have completed. */
+  readonly finished: Promise<void>;
+  /** Stop all particles and cancel pending timers. */
+  stopAll(): void;
+}
+
 // ─── Flow Canvas Config ─────────────────────────────────────────────────────
 
 export interface FlowCanvasConfig {
@@ -1492,6 +1512,9 @@ export interface FlowInstance {
 
   /** Fire a burst of staggered particles along an edge. */
   sendParticleBurst(edgeId: string, options: BurstOptions): ParticleBurstHandle;
+
+  /** Fire particles from multiple edges converging on a target node. */
+  sendConverging(sourceEdgeIds: string[], options: ConvergingOptions): ConvergingHandle;
 
   /** Get all tracked animation handles, optionally filtered by tag. */
   getHandles(filter?: { tag?: string; tags?: string[] }): FlowAnimationHandle[];

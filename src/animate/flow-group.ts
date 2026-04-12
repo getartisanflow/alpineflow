@@ -1,4 +1,4 @@
-import type { AnimateTargets, AnimateOptions, FlowAnimationHandle, StopOptions, ParticleOptions, ParticleHandle, BurstOptions, ParticleBurstHandle } from '../core/types';
+import type { AnimateTargets, AnimateOptions, FlowAnimationHandle, StopOptions, ParticleOptions, ParticleHandle, BurstOptions, ParticleBurstHandle, ConvergingOptions, ConvergingHandle } from '../core/types';
 
 export interface FlowGroupHost {
     animate(targets: AnimateTargets, options?: AnimateOptions): FlowAnimationHandle;
@@ -7,6 +7,7 @@ export interface FlowGroupHost {
     sendParticleAlongPath?(svgPath: string, options?: ParticleOptions): ParticleHandle | undefined;
     sendParticleBetween?(sourceNodeId: string, targetNodeId: string, options?: ParticleOptions): ParticleHandle | undefined;
     sendParticleBurst?(edgeId: string, options: BurstOptions): ParticleBurstHandle;
+    sendConverging?(sourceEdgeIds: string[], options: ConvergingOptions): ConvergingHandle;
     timeline?(): any;
     getHandles(filter?: { tag?: string; tags?: string[] }): FlowAnimationHandle[];
     cancelAll(filter: { tag?: string; tags?: string[] }, options?: StopOptions): void;
@@ -49,6 +50,10 @@ export class FlowGroup {
 
     sendParticleBurst(edgeId: string, options: BurstOptions): ParticleBurstHandle {
         return this._host.sendParticleBurst!(edgeId, { ...options, tag: this.name } as BurstOptions);
+    }
+
+    sendConverging(sourceEdgeIds: string[], options: ConvergingOptions): ConvergingHandle {
+        return this._host.sendConverging!(sourceEdgeIds, { ...options, tag: this.name } as ConvergingOptions);
     }
 
     timeline(): any {

@@ -578,3 +578,155 @@ describe('sendParticleBurst', () => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// sendConverging
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('sendConverging', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function setupConvergingCtx(pathLengths: Record<string, number> = {}) {
+    const ctx = mockCtx();
+    const edges = Object.keys(pathLengths).map(id => makeEdge(id));
+    ctx.edges = edges;
+
+    // Set up edge map so getEdge works
+    for (const edge of edges) {
+      ctx._edgeMap.set(edge.id, edge);
+    }
+
+    (ctx.getEdgePathElement as any).mockImplementation((id: string) => {
+      const len = pathLengths[id];
+      if (len === undefined) return null;
+      return makePathEl(len);
+    });
+    (ctx.getEdgeElement as any).mockReturnValue(makeGEl());
+
+    return ctx;
+  }
+
+  it('fires particles from multiple edges', () => {
+    const ctx = setupConvergingCtx({ e1: 200, e2: 200, e3: 200 });
+    const mixin = createParticleMixin(ctx);
+
+    const result = mixin.sendConverging(['e1', 'e2', 'e3'], {
+      targetNodeId: 'target',
+      synchronize: 'departure',
+    });
+
+    // All fire simultaneously in departure mode
+    expect(result.handles).toHaveLength(3);
+    expect(ctx._activeParticles.size).toBe(3);
+  });
+
+  it('synchronize arrival adjusts durations and delays', () => {
+    // Edge e1 has length 200 (longest), e2 has length 100 (shorter)
+    const ctx = setupConvergingCtx({ e1: 200, e2: 100 });
+    const mixin = createParticleMixin(ctx);
+
+    const result = mixin.sendConverging(['e1', 'e2'], {
+      targetNodeId: 'target',
+      synchronize: 'arrival',
+      duration: 2000,
+    });
+
+    // e1 is the longest — fires immediately with full 2000ms duration
+    // e2 is half as long — gets 1000ms duration, delayed by 1000ms
+    expect(result.handles).toHaveLength(1); // only e1 fires immediately
+
+    // Advance to 1000ms — e2 should now fire
+    vi.advanceTimersByTime(1000);
+    expect(result.handles).toHaveLength(2);
+  });
+
+  it('synchronize departure fires all simultaneously', () => {
+    const ctx = setupConvergingCtx({ e1: 200, e2: 100, e3: 300 });
+    const mixin = createParticleMixin(ctx);
+
+    const result = mixin.sendConverging(['e1', 'e2', 'e3'], {
+      targetNodeId: 'target',
+      synchronize: 'departure',
+    });
+
+    expect(result.handles).toHaveLength(3);
+  });
+
+  it('onAllArrived callback fires when all finish', async () => {
+    const ctx = setupConvergingCtx({ e1: 200, e2: 200 });
+    const mixin = createParticleMixin(ctx);
+
+    const onAllArrived = vi.fn();
+    const result = mixin.sendConverging(['e1', 'e2'], {
+      targetNodeId: 'target',
+      synchronize: 'departure',
+      onAllArrived,
+    });
+
+    // Stop all particles to trigger completion
+    result.stopAll();
+
+    // Advance past the wait buffer
+    vi.advanceTimersByTime(200);
+
+    await result.finished;
+    expect(onAllArrived).toHaveBeenCalledOnce();
+  });
+
+  it('stopAll stops all particles and pending timers', () => {
+    const ctx = setupConvergingCtx({ e1: 200, e2: 100 });
+    const mixin = createParticleMixin(ctx);
+
+    const result = mixin.sendConverging(['e1', 'e2'], {
+      targetNodeId: 'target',
+      synchronize: 'arrival',
+      duration: 2000,
+    });
+
+    // e1 fires immediately, e2 is delayed
+    expect(result.handles).toHaveLength(1);
+
+    result.stopAll();
+
+    // Advance time — e2 should NOT fire
+    vi.advanceTimersByTime(2000);
+    expect(result.handles).toHaveLength(1);
+
+    // Active particle should be cleaned up
+    expect(ctx._activeParticles.size).toBe(0);
+  });
+
+  it('returns empty handle for no valid edges', () => {
+    const ctx = setupConvergingCtx({});
+    const mixin = createParticleMixin(ctx);
+
+    const result = mixin.sendConverging(['nonexistent'], {
+      targetNodeId: 'target',
+      synchronize: 'arrival',
+    });
+
+    expect(result.handles).toHaveLength(0);
+    // finished should resolve immediately
+    return expect(result.finished).resolves.toBeUndefined();
+  });
+
+  it('defaults to arrival synchronization', () => {
+    const ctx = setupConvergingCtx({ e1: 200, e2: 100 });
+    const mixin = createParticleMixin(ctx);
+
+    const result = mixin.sendConverging(['e1', 'e2'], {
+      targetNodeId: 'target',
+      // synchronize not specified — should default to 'arrival'
+    });
+
+    // In arrival mode with different lengths, only the longest fires immediately
+    expect(result.handles).toHaveLength(1);
+  });
+});
+
