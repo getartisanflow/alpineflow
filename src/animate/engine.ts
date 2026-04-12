@@ -55,11 +55,19 @@ function createDefaultScheduler(): FrameScheduler {
   };
 }
 
+// ── Post-tick entry type ─────────────────────────────────────────────────────
+
+interface PostTickEntry {
+  callback: (frameTime: number) => void;
+  removed: boolean;
+}
+
 // ── AnimationEngine ──────────────────────────────────────────────────────────
 
 export class AnimationEngine {
   private _scheduler: FrameScheduler = createDefaultScheduler();
   private _entries: CallbackEntry[] = [];
+  private _postTickCallbacks: PostTickEntry[] = [];
   private _frameId: number | null = null;
   private _running = false;
 
@@ -106,6 +114,22 @@ export class AnimationEngine {
     };
 
     return handle;
+  }
+
+  /**
+   * Register a post-tick callback, fired after all regular tick callbacks each frame.
+   * @param callback - Called with the frame timestamp (same `now` value passed to `_tick`).
+   * @returns Handle with a `stop()` method to unregister.
+   */
+  onPostTick(callback: (frameTime: number) => void): EngineHandle {
+    const entry: PostTickEntry = { callback, removed: false };
+    this._postTickCallbacks.push(entry);
+
+    return {
+      stop: () => {
+        entry.removed = true;
+      },
+    };
   }
 
   // ── Internal: loop management ──────────────────────────────────────
@@ -156,6 +180,16 @@ export class AnimationEngine {
 
     // Prune removed entries
     this._entries = this._entries.filter((e) => !e.removed);
+
+    // Fire post-tick callbacks (only when the engine is actively running frames)
+    for (const postEntry of this._postTickCallbacks) {
+      if (!postEntry.removed) {
+        postEntry.callback(now);
+      }
+    }
+
+    // Prune removed post-tick callbacks
+    this._postTickCallbacks = this._postTickCallbacks.filter((e) => !e.removed);
 
     // Auto-stop if no callbacks remain
     if (this._entries.length === 0) {

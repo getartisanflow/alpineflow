@@ -213,3 +213,84 @@ describe('AnimationEngine', () => {
     }
   });
 });
+
+// ── onPostTick ───────────────────────────────────────────────────────────────
+
+describe('AnimationEngine.onPostTick', () => {
+  it('fires postTick callbacks after all regular callbacks complete', async () => {
+    const engine = new AnimationEngine();
+    engine.setScheduler(makeTimeoutScheduler());
+
+    const order: string[] = [];
+
+    engine.register(() => { order.push('tick-A'); });
+    engine.register(() => { order.push('tick-B'); });
+    engine.onPostTick(() => { order.push('postTick'); });
+
+    await vi.advanceTimersByTimeAsync(16);
+
+    // Both regular ticks fire before postTick
+    expect(order.indexOf('tick-A')).toBeLessThan(order.indexOf('postTick'));
+    expect(order.indexOf('tick-B')).toBeLessThan(order.indexOf('postTick'));
+  });
+
+  it('does not fire postTick when engine is not running (no regular callbacks)', async () => {
+    const engine = new AnimationEngine();
+    engine.setScheduler(makeTimeoutScheduler());
+
+    let postTickCount = 0;
+    engine.onPostTick(() => { postTickCount++; });
+
+    // No regular callbacks registered — engine should never start
+    await vi.advanceTimersByTimeAsync(16);
+    await vi.advanceTimersByTimeAsync(16);
+
+    expect(postTickCount).toBe(0);
+    expect(engine.active).toBe(false);
+  });
+
+  it('returns a handle with stop() that unregisters the postTick callback', async () => {
+    const engine = new AnimationEngine();
+    engine.setScheduler(makeTimeoutScheduler());
+
+    let postTickCount = 0;
+    const handle = engine.onPostTick(() => { postTickCount++; });
+
+    // Register a regular callback so the engine runs
+    engine.register(() => {});
+
+    await vi.advanceTimersByTimeAsync(16);
+    expect(postTickCount).toBe(1);
+
+    handle.stop();
+
+    await vi.advanceTimersByTimeAsync(16);
+    await vi.advanceTimersByTimeAsync(16);
+
+    // Should not have been called after stop
+    expect(postTickCount).toBe(1);
+  });
+
+  it('passes the frame timestamp to postTick callbacks', async () => {
+    const engine = new AnimationEngine();
+    engine.setScheduler(makeTimeoutScheduler());
+
+    const timestamps: number[] = [];
+    engine.onPostTick((frameTime) => { timestamps.push(frameTime); });
+
+    engine.register(() => {});
+
+    await vi.advanceTimersByTimeAsync(16);
+    await vi.advanceTimersByTimeAsync(16);
+
+    expect(timestamps.length).toBeGreaterThanOrEqual(2);
+    // Timestamps should be positive numbers (frame time from the scheduler)
+    for (const t of timestamps) {
+      expect(t).toBeGreaterThan(0);
+    }
+    // Timestamps should be non-decreasing
+    for (let i = 1; i < timestamps.length; i++) {
+      expect(timestamps[i]).toBeGreaterThanOrEqual(timestamps[i - 1]);
+    }
+  });
+});
