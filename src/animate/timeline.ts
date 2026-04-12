@@ -109,7 +109,7 @@ type StepEntry<T extends Record<string, any> = Record<string, any>> =
 
 export type TimelineEvent =
   | 'play' | 'step' | 'step-complete' | 'step-skipped' | 'step-timeout'
-  | 'pause' | 'resume' | 'interrupt' | 'complete' | 'reverse' | 'loop' | 'stop' | 'reset';
+  | 'pause' | 'resume' | 'interrupt' | 'complete' | 'reverse' | 'loop' | 'stop' | 'reset' | 'restart';
 
 export type TimelineState = 'idle' | 'playing' | 'paused' | 'stopped';
 
@@ -316,6 +316,11 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
   }
 
   reset(replay?: boolean): Promise<void> | void {
+    if (replay) {
+      console.warn('[AlpineFlow] timeline.reset(true) is deprecated. Use timeline.restart() instead.');
+      return this.restart();
+    }
+
     this._stopAll();
     // Stop all tracked sub-timelines on reset
     for (const sub of this._subTimelines) {
@@ -326,10 +331,30 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
     this._state = 'idle';
     this._locked = false;
     this._emit('reset');
+  }
 
-    if (replay) {
-      return this.play();
+  async restart(options?: { direction?: 'forward' | 'backward' }): Promise<void> {
+    // Stop everything currently running
+    this._stopAll();
+
+    // Stop all sub-timelines
+    for (const sub of this._subTimelines) {
+      sub.stop();
     }
+    this._subTimelines.length = 0;
+
+    // Revert to initial snapshot
+    this._restoreInitialSnapshot();
+
+    // Reset state
+    this._state = 'idle';
+    this._locked = false;
+
+    // Emit restart event
+    this._emit('restart');
+
+    // Play from the beginning
+    return this.play();
   }
 
   reverse(): this {

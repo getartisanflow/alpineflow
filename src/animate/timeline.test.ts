@@ -2344,3 +2344,79 @@ describe('FlowTimeline — nested builder (Form 2)', () => {
     expect(subCount).toBe(0); // independent sub was not tracked
   });
 });
+
+// ── Restart ──────────────────────────────────────────────────────────────────
+
+describe('FlowTimeline — restart', () => {
+  it('restart() stops, reverts snapshot, and replays from step 0', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    tl.step({ nodes: ['a'], position: { x: 100 }, duration: 0 });
+    tl.step({ nodes: ['a'], position: { x: 200 }, duration: 0 });
+
+    await tl.play();
+    expect(canvas.getNode('a')!.position.x).toBe(200);
+
+    // Restart — should revert and replay
+    await tl.restart();
+    expect(canvas.getNode('a')!.position.x).toBe(200); // played through both steps again
+  });
+
+  it('restart emits restart event', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    const events: string[] = [];
+    tl.on('restart', () => events.push('restart'));
+
+    tl.step({ nodes: ['a'], position: { x: 100 }, duration: 0 });
+
+    await tl.play();
+    await tl.restart();
+
+    expect(events).toContain('restart');
+  });
+
+  it('reset(true) still works as deprecated alias', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    tl.step({ nodes: ['a'], position: { x: 100 }, duration: 0 });
+
+    await tl.play();
+
+    // Should work (with deprecation warning)
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await tl.reset(true);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('deprecated'));
+    warnSpy.mockRestore();
+  });
+
+  it('restart stops active sub-timelines', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+    const sub = new FlowTimeline(canvas);
+
+    sub.step({ nodes: ['a'], position: { x: 100 }, duration: 5000 });
+    parent.step({ timeline: sub });
+
+    parent.play();
+    // Give it enough time to start the sub-timeline step
+    await vi.advanceTimersByTimeAsync(16);
+
+    // Sub should be running
+    expect(sub.state).toBe('playing');
+
+    // Stop the parent — should stop the sub too
+    parent.stop();
+    expect(sub.state).toBe('stopped');
+
+    // Now restart the parent (using restart() method)
+    const restartPromise = parent.restart();
+
+    // Clean up the new play loop
+    parent.stop();
+    await restartPromise;
+  });
+});
