@@ -1,6 +1,7 @@
 import type { RecordingData, RecordingEvent, Checkpoint, CanvasSnapshot } from './types';
 import { RECORDING_VERSION } from './types';
 import { VirtualEngine, REPLAY_DT } from './virtual-engine';
+import { getThumbnailRenderer } from './thumbnail';
 
 function getNestedProperty(obj: any, path: string): any {
     return path.split('.').reduce((acc: any, key: string) => acc?.[key], obj);
@@ -260,5 +261,20 @@ export class Recording {
         }
 
         return engine.getState();
+    }
+
+    /**
+     * Renders a thumbnail SVG snapshot of the canvas state at virtual time `t`.
+     */
+    renderThumbnailAt(t: number, options: { width: number; height: number; renderer?: string }): string {
+        const state = this.getStateAt(t);
+        const rendererName = options.renderer ?? 'faithful';
+        const renderer = getThumbnailRenderer(rendererName);
+
+        if (!renderer) {
+            throw new Error(`[AlpineFlow] Unknown thumbnail renderer "${rendererName}"`);
+        }
+
+        return renderer.render(state, { width: options.width, height: options.height });
     }
 }

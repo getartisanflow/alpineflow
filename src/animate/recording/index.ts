@@ -9,3 +9,12 @@ export {
     type ReplayState,
     type ReplayDirection,
 } from './replay';
+export {
+    registerThumbnailRenderer,
+    getThumbnailRenderer,
+    hasThumbnailRenderer,
+    faithfulRenderer,
+    outlineRenderer,
+    activityRenderer,
+} from './thumbnail';
+export type { ThumbnailRenderer, ThumbnailRenderOptions } from './thumbnail';
