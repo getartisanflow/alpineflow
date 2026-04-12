@@ -78,6 +78,12 @@ export interface TimelineStep<T extends Record<string, any> = Record<string, any
   delay?: number;
   lock?: boolean;
 
+  // Awaitable
+  /** Block this step until a promise resolves. */
+  await?: Promise<any> | { finished: Promise<any> } | (() => Promise<any> | { finished: Promise<any> });
+  /** If await doesn't resolve within this many ms, emit 'step-timeout' and advance. */
+  timeout?: number;
+
   // Hooks
   onStart?: (ctx: StepContext<T>) => void;
   onProgress?: (progress: number, ctx: StepContext<T>) => void;
@@ -90,8 +96,8 @@ type StepEntry<T extends Record<string, any> = Record<string, any>> =
   | { type: 'pause'; callback?: (resume: (context?: Record<string, any>) => void) => void };
 
 export type TimelineEvent =
-  | 'play' | 'step' | 'step-complete' | 'pause' | 'resume'
-  | 'interrupt' | 'complete' | 'reverse' | 'loop' | 'stop' | 'reset';
+  | 'play' | 'step' | 'step-complete' | 'step-skipped' | 'step-timeout'
+  | 'pause' | 'resume' | 'interrupt' | 'complete' | 'reverse' | 'loop' | 'stop' | 'reset';
 
 export type TimelineState = 'idle' | 'playing' | 'paused' | 'stopped';
 
@@ -519,6 +525,19 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
     this._emit('step', { index: entryIndex, id: step.id });
     step.onStart?.(ctx);
 
+    // Resolve awaitable before proceeding with animation logic
+    if (step.await) {
+      await this._resolveAwait(step, entryIndex);
+    }
+
+    // Pure wait step — has await but no animation targets
+    if (step.await && this._isAwaitOnlyStep(step)) {
+      step.onProgress?.(1, ctx);
+      step.onComplete?.(ctx);
+      this._emit('step-complete');
+      return Promise.resolve();
+    }
+
     const { validNodeIds, validEdgeIds } = this._validateStepTargets(step, entryIndex);
 
     if (this._isEmptyStep(step, validNodeIds, validEdgeIds)) {
@@ -641,6 +660,48 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
       return true;
     }
     return false;
+  }
+
+  /** Check whether a step has only an await and no animation targets. */
+  private _isAwaitOnlyStep(step: TimelineStep<TContext>): boolean {
+    const hasNodes = step.nodes && step.nodes.length > 0;
+    const hasEdges = step.edges && step.edges.length > 0;
+    const hasViewport = !!(step.viewport || step.fitView || step.panTo);
+    const hasEdgeLifecycle = !!(step.addEdges?.length || step.removeEdges?.length);
+    return !hasNodes && !hasEdges && !hasViewport && !hasEdgeLifecycle;
+  }
+
+  // ── Step decomposition: resolve awaitable ─────────────────────────
+
+  /** Normalize and await the step's `await` field (Promise, handle, or thunk). */
+  private async _resolveAwait(step: TimelineStep<TContext>, entryIndex: number): Promise<void> {
+    let target = step.await;
+    if (!target) return;
+
+    // Thunk form — evaluate lazily at step activation time
+    if (typeof target === 'function') {
+      target = (target as Function)();
+    }
+
+    // Handle-like form — unwrap .finished
+    if (target && typeof target === 'object' && 'finished' in target && !(target instanceof Promise)) {
+      target = (target as { finished: Promise<any> }).finished;
+    }
+
+    if (!(target instanceof Promise)) return;
+
+    // Apply timeout if specified
+    if (step.timeout && step.timeout > 0) {
+      const timeoutPromise = new Promise<'timeout'>((resolve) => {
+        setTimeout(() => resolve('timeout'), step.timeout);
+      });
+      const result = await Promise.race([target.then(() => 'resolved' as const), timeoutPromise]);
+      if (result === 'timeout') {
+        this._emit('step-timeout', { index: entryIndex, id: step.id });
+      }
+    } else {
+      await target;
+    }
   }
 
   // ── Step decomposition: capture from-values ────────────────────────

@@ -1781,3 +1781,106 @@ describe('FlowTimeline — typed context', () => {
     expect(receivedCtx).toMatchObject({ tier: 'pro' });
   });
 });
+
+// ── Awaitable steps ─────────────────────────────────────────────────────────
+
+describe('FlowTimeline — awaitable steps', () => {
+  it('step with await: Promise blocks until promise resolves', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    let resolved = false;
+    const gate = new Promise<void>((resolve) => {
+      setTimeout(() => { resolved = true; resolve(); }, 100);
+    });
+
+    tl.step({ await: gate });
+    tl.step({ nodes: ['a'], position: { x: 100 }, duration: 0 });
+
+    const done = tl.play();
+
+    // Step 1 should be blocking
+    expect(resolved).toBe(false);
+    expect(canvas.getNode('a')!.position.x).not.toBe(100);
+
+    // Resolve the gate
+    await vi.advanceTimersByTimeAsync(100);
+    await done;
+
+    expect(resolved).toBe(true);
+    expect(canvas.getNode('a')!.position.x).toBe(100);
+  });
+
+  it('step with await: { finished } unwraps the handle', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    let resolveHandle!: () => void;
+    const fakeHandle = {
+      finished: new Promise<void>((r) => { resolveHandle = r; }),
+    };
+
+    tl.step({ await: fakeHandle });
+    tl.step({ nodes: ['a'], position: { x: 200 }, duration: 0 });
+
+    const done = tl.play();
+    resolveHandle();
+    await done;
+
+    expect(canvas.getNode('a')!.position.x).toBe(200);
+  });
+
+  it('step with await: thunk evaluates at step activation', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    let thunkCalled = false;
+    tl.step({
+      await: () => {
+        thunkCalled = true;
+        return Promise.resolve();
+      },
+    });
+
+    expect(thunkCalled).toBe(false); // not called at build time
+    await tl.play();
+    expect(thunkCalled).toBe(true); // called at step activation
+  });
+
+  it('step with timeout emits step-timeout and advances', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    const events: string[] = [];
+    tl.on('step-timeout', () => events.push('timeout'));
+
+    // Promise that never resolves
+    const neverResolves = new Promise(() => {});
+
+    tl.step({ await: neverResolves, timeout: 50 });
+    tl.step({ nodes: ['a'], position: { x: 100 }, duration: 0 });
+
+    const done = tl.play();
+    await vi.advanceTimersByTimeAsync(50);
+    await done;
+
+    expect(events).toContain('timeout');
+    expect(canvas.getNode('a')!.position.x).toBe(100); // second step ran
+  });
+
+  it('await-only step (no targets) acts as a pure wait', async () => {
+    const canvas = makeMockCanvas();
+    const tl = new FlowTimeline(canvas);
+
+    let waited = false;
+    tl.step({
+      await: () => {
+        waited = true;
+        return Promise.resolve();
+      },
+    });
+
+    await tl.play();
+    expect(waited).toBe(true);
+  });
+});
