@@ -40,6 +40,8 @@ export interface AnimationHandle {
   stop(): void;
   reverse(): void;
   readonly finished: Promise<void>;
+  readonly _snapshot: Map<string, number | string>;
+  readonly _target: Map<string, number | string>;
 }
 
 // ── Internal types ───────────────────────────────────────────────────────────
@@ -72,6 +74,10 @@ interface ActiveGroup {
   currentValues: Map<string, number | string>;
   /** Last elapsed time from engine tick, used for seamless reverse. */
   _lastElapsed: number;
+  /** Starting values captured at animate() call time. Persists after completion. */
+  snapshot: Map<string, number | string>;
+  /** Target values captured at animate() call time. Persists after completion. */
+  target: Map<string, number | string>;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -163,6 +169,13 @@ export class Animator {
 
     // Duration 0 = instant snap
     if (duration <= 0) {
+      const snap = new Map<string, number | string>();
+      const tgt = new Map<string, number | string>();
+      for (const entry of entries) {
+        snap.set(entry.key, entry.from);
+        tgt.set(entry.key, entry.to);
+      }
+
       onStart?.();
 
       for (const entry of entries) {
@@ -175,10 +188,20 @@ export class Animator {
         stop: () => {},
         reverse: () => {},
         finished: Promise.resolve(),
+        get _snapshot() { return snap; },
+        get _target() { return tgt; },
       };
 
       onComplete?.();
       return handle;
+    }
+
+    // Build snapshot and target maps before group construction
+    const snapshot = new Map<string, number | string>();
+    const target = new Map<string, number | string>();
+    for (const entry of entries) {
+      snapshot.set(entry.key, entry.from);
+      target.set(entry.key, entry.to);
     }
 
     // Set up the active group
@@ -206,6 +229,8 @@ export class Animator {
       stopped: false,
       currentValues: new Map(),
       _lastElapsed: 0,
+      snapshot,
+      target,
     };
 
     // Initialize current values to "from"
@@ -234,6 +259,8 @@ export class Animator {
       stop: () => this._stop(group),
       reverse: () => this._reverse(group),
       finished,
+      get _snapshot() { return group.snapshot; },
+      get _target() { return group.target; },
     };
 
     return handle;

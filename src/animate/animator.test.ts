@@ -569,3 +569,93 @@ describe('Animator', () => {
     expect(value).toBe(100);
   });
 });
+
+describe('Animator — per-handle snapshot', () => {
+  it('captures from-values at animate() time as _snapshot', () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const handle = animator.animate(
+      [{ key: 'x', from: 50, to: 200, apply: () => {} }],
+      { duration: 500 },
+    );
+
+    expect(handle._snapshot.get('x')).toBe(50);
+  });
+
+  it('captures target values as _target', () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 500 },
+    );
+
+    expect(handle._target.get('x')).toBe(100);
+  });
+
+  it('preserves snapshot after animation completes', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const handle = animator.animate(
+      [{ key: 'x', from: 10, to: 90, apply: () => {} }],
+      { duration: 80 },
+    );
+
+    // Advance past duration to complete the animation
+    await advanceTimers(160);
+    await handle.finished;
+
+    // Maps must survive after completion
+    expect(handle._snapshot.get('x')).toBe(10);
+    expect(handle._target.get('x')).toBe(90);
+  });
+
+  it('captures in-flight value in new handle snapshot during blend/compose', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const apply = (v: number | string): void => { value = v as number; };
+
+    // Animate x from 0 → 100 over 160ms with linear easing
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply }],
+      { duration: 160, easing: 'linear' },
+    );
+
+    // Advance ~80ms to reach ~50%
+    await advanceTimers(80);
+    const midValue = value;
+    expect(midValue).toBeGreaterThan(20);
+    expect(midValue).toBeLessThan(80);
+
+    // Start a new animation on the same key; blend/compose will capture mid-value as new from
+    const handle2 = animator.animate(
+      [{ key: 'x', from: 0, to: 200, apply }],
+      { duration: 160, easing: 'linear' },
+    );
+
+    // The new handle's snapshot should reflect the captured mid-flight value
+    expect(handle2._snapshot.get('x')).toBeGreaterThan(20);
+    expect(handle2._snapshot.get('x')).toBeLessThan(80);
+    expect(handle2._target.get('x')).toBe(200);
+
+    handle2.stop();
+  });
+
+  it('provides snapshot and target for duration-0 instant animations', () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const handle = animator.animate(
+      [{ key: 'y', from: 5, to: 75, apply: () => {} }],
+      { duration: 0 },
+    );
+
+    expect(handle._snapshot.get('y')).toBe(5);
+    expect(handle._target.get('y')).toBe(75);
+  });
+});
