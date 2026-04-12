@@ -2,6 +2,7 @@ import type { RecordingData, RecordingEvent, Checkpoint, CanvasSnapshot } from '
 import { RECORDING_VERSION } from './types';
 import { VirtualEngine, REPLAY_DT } from './virtual-engine';
 import { getThumbnailRenderer } from './thumbnail';
+import { safeClone } from '../clone';
 
 function getNestedProperty(obj: any, path: string): any {
     return path.split('.').reduce((acc: any, key: string) => acc?.[key], obj);
@@ -28,9 +29,9 @@ export class Recording {
     constructor(data: RecordingData) {
         this.version = data.version;
         this.duration = data.duration;
-        this.initialState = deepFreeze(structuredClone(data.initialState));
-        this.events = Object.freeze(structuredClone(data.events));
-        this.checkpoints = Object.freeze(structuredClone(data.checkpoints));
+        this.initialState = deepFreeze(safeClone(data.initialState));
+        this.events = Object.freeze(safeClone(data.events));
+        this.checkpoints = Object.freeze(safeClone(data.checkpoints));
         this.metadata = Object.freeze({ ...(data.metadata ?? {}) });
         Object.freeze(this);
     }
@@ -39,9 +40,9 @@ export class Recording {
         return {
             version: this.version,
             duration: this.duration,
-            initialState: structuredClone(this.initialState as CanvasSnapshot),
-            events: structuredClone(this.events as RecordingEvent[]),
-            checkpoints: structuredClone(this.checkpoints as Checkpoint[]),
+            initialState: safeClone(this.initialState as CanvasSnapshot),
+            events: safeClone(this.events as RecordingEvent[]),
+            checkpoints: safeClone(this.checkpoints as Checkpoint[]),
             metadata: { ...this.metadata },
         };
     }

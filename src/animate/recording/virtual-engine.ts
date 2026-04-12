@@ -22,6 +22,7 @@ import {
 } from '../motion';
 import { resolveEasing, type EasingFn } from '../easing';
 import { lerpNumber } from '../interpolators';
+import { safeClone } from '../clone';
 
 /** Fixed virtual time step for deterministic replay (60 fps). */
 export const REPLAY_DT = 1 / 60;
@@ -48,7 +49,7 @@ export class VirtualEngine {
     private _inFlight = new Map<string, ActiveVirtualAnim>();
 
     constructor(initialState: CanvasSnapshot) {
-        this._state = structuredClone(initialState);
+        this._state = safeClone(initialState);
     }
 
     /** Current virtual time in milliseconds. */
@@ -63,7 +64,7 @@ export class VirtualEngine {
 
     /** Return a deep-cloned copy of the current virtual canvas state. */
     getState(): CanvasSnapshot {
-        return structuredClone(this._state);
+        return safeClone(this._state);
     }
 
     /** Advance virtual clock by `dt` seconds and step all in-flight animations. */
@@ -93,14 +94,14 @@ export class VirtualEngine {
                 if (Array.isArray(nodes)) {
                     for (const n of nodes) {
                         if (n?.id) {
-                            this._state.nodes[n.id] = structuredClone(n);
+                            this._state.nodes[n.id] = safeClone(n);
                         }
                     }
                 } else if (nodes?.id) {
-                    this._state.nodes[nodes.id] = structuredClone(nodes);
+                    this._state.nodes[nodes.id] = safeClone(nodes);
                 } else if (event.args.id && event.args.node) {
                     // Legacy shape support
-                    this._state.nodes[event.args.id] = structuredClone(event.args.node);
+                    this._state.nodes[event.args.id] = safeClone(event.args.node);
                 }
                 break;
             }
@@ -123,14 +124,14 @@ export class VirtualEngine {
                 if (Array.isArray(edges)) {
                     for (const e of edges) {
                         if (e?.id) {
-                            this._state.edges[e.id] = structuredClone(e);
+                            this._state.edges[e.id] = safeClone(e);
                         }
                     }
                 } else if (edges?.id) {
-                    this._state.edges[edges.id] = structuredClone(edges);
+                    this._state.edges[edges.id] = safeClone(edges);
                 } else if (event.args.id && event.args.edge) {
                     // Legacy shape support
-                    this._state.edges[event.args.id] = structuredClone(event.args.edge);
+                    this._state.edges[event.args.id] = safeClone(event.args.edge);
                 }
                 break;
             }
@@ -168,11 +169,11 @@ export class VirtualEngine {
 
     /** Restore the engine from a Checkpoint. */
     restoreCheckpoint(cp: Checkpoint): void {
-        this._state = structuredClone(cp.canvas);
+        this._state = safeClone(cp.canvas);
         this._virtualTime = cp.t;
         this._inFlight.clear();
         for (const anim of cp.inFlight) {
-            const active: ActiveVirtualAnim = structuredClone(anim) as ActiveVirtualAnim;
+            const active: ActiveVirtualAnim = safeClone(anim) as ActiveVirtualAnim;
             this._rehydrateAnim(active);
             this._inFlight.set(active.handleId, active);
         }
@@ -181,7 +182,7 @@ export class VirtualEngine {
     /** Capture the current engine state as a serializable Checkpoint payload. */
     captureCheckpointData(): Omit<Checkpoint, 't'> {
         return {
-            canvas: structuredClone(this._state),
+            canvas: safeClone(this._state),
             inFlight: [...this._inFlight.values()].map((anim) => this._serializeAnim(anim)),
             tagRegistry: {},
         };
@@ -204,7 +205,7 @@ export class VirtualEngine {
         const anim: ActiveVirtualAnim = {
             handleId,
             type: resolvedMotion ? resolvedMotion.type : 'eased',
-            targets: structuredClone(targets),
+            targets: safeClone(targets),
             startTime: this._virtualTime,
             duration: options.duration,
             easing: options.easing,
@@ -314,7 +315,7 @@ export class VirtualEngine {
             }
         }
 
-        return structuredClone({
+        return safeClone({
             handleId: anim.handleId,
             type: anim.type,
             targets: anim.targets,

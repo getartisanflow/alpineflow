@@ -15,6 +15,7 @@ import { lerpNumber, lerpViewport, interpolateColor, parseStyle, interpolateStyl
 import { applyDrawTransition, cleanupDrawTransition, applyFadeTransition, cleanupFadeTransition } from './edge-transitions';
 import { AnimationEngine, type EngineHandle } from './engine';
 import { svgPathToFunction, type PathFunction } from './paths';
+import { safeClone } from './clone';
 import type { FlowNode, FlowEdge, XYPosition, Dimensions, Viewport, AnimateTargets, AnimateOptions, FlowAnimationHandle, EdgeGradient } from '../core/types';
 import type { EdgeAnimationMode } from '../core/types';
 import { getNodesBounds, getViewportForBounds } from '../core/geometry';
@@ -158,32 +159,6 @@ interface EdgeSnapshot {
   class?: string;
   label?: string;
   strokeWidth?: number;
-}
-
-/**
- * Clone a value using structuredClone when possible (preserves Dates, Maps,
- * Sets, etc.), falling back to a JSON roundtrip when structuredClone throws
- * (Alpine reactive proxies, objects with functions, etc.).
- *
- * The fallback silently drops non-JSON values (functions, Symbols, undefined)
- * which matches the pre-Tier 0 behaviour for framework-integrated use cases.
- * A dev-mode warning is emitted on first fallback.
- */
-let warnedOnCloneFallback = false;
-function safeClone<T>(value: T): T {
-  try {
-    return structuredClone(value);
-  } catch {
-    if (!warnedOnCloneFallback) {
-      warnedOnCloneFallback = true;
-      if (typeof console !== 'undefined') {
-        console.warn(
-          '[AlpineFlow] timeline snapshot fell back to JSON clone because structuredClone could not clone node/edge data (likely a reactive proxy). Non-JSON values (functions, Symbols, Dates) in node.data will be lost in snapshots. This warning fires once per session.',
-        );
-      }
-    }
-    return JSON.parse(JSON.stringify(value));
-  }
 }
 
 function snapshotNode(node: FlowNode): NodeSnapshot {

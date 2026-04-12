@@ -1,6 +1,7 @@
 import type { RecordingEvent, RecordingEventType, Checkpoint, CanvasSnapshot, RecordingData } from './types';
 import { Recording } from './recording';
 import { RECORDING_VERSION } from './types';
+import { safeClone } from '../clone';
 
 export interface RecordOptions {
     /** How often (in ms) to snapshot canvas state during recording. Default: 500ms. */
@@ -148,13 +149,13 @@ export class Recorder {
         const nodes: Record<string, any> = {};
         for (const n of this._canvas.nodes ?? []) {
             if (n && typeof n === 'object' && 'id' in n) {
-                nodes[n.id] = structuredClone(n);
+                nodes[n.id] = safeClone(n);
             }
         }
         const edges: Record<string, any> = {};
         for (const e of this._canvas.edges ?? []) {
             if (e && typeof e === 'object' && 'id' in e) {
-                edges[e.id] = structuredClone(e);
+                edges[e.id] = safeClone(e);
             }
         }
         return {
