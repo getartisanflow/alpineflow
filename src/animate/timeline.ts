@@ -180,7 +180,7 @@ function restoreNode(node: FlowNode, snap: NodeSnapshot): void {
 
 export class FlowTimeline {
   private _canvas: TimelineCanvas;
-  private _engine = new AnimationEngine();
+  private _engine: AnimationEngine;
   private _entries: StepEntry[] = [];
   private _state: TimelineState = 'idle';
   private _reversed = false;
@@ -195,8 +195,9 @@ export class FlowTimeline {
   private _initialEdgeSnapshot: Map<string, EdgeSnapshot> = new Map();
   private _playResolve: (() => void) | null = null;
 
-  constructor(canvas: TimelineCanvas) {
+  constructor(canvas: TimelineCanvas, engine?: AnimationEngine) {
     this._canvas = canvas;
+    this._engine = engine ?? new AnimationEngine();
   }
 
   // ── Public API ───────────────────────────────────────────────────────

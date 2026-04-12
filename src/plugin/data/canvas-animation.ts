@@ -73,7 +73,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
      * history suspension are automatically managed via timeline events.
      */
     timeline(): FlowTimeline {
-      const tl = new FlowTimeline(ctx);
+      const tl = new FlowTimeline(ctx, engine);
 
       tl.on('play', () => {
         ctx._activeTimelines.add(tl);

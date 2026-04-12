@@ -1617,6 +1617,32 @@ describe('FlowTimeline followPath', () => {
   });
 });
 
+// ── Constructor DI: injected engine ──────────────────────────────────────────
+
+describe('FlowTimeline engine injection', () => {
+  it('uses injected engine instance instead of creating a private one', () => {
+    const canvas = makeMockCanvas();
+    const injectedEngine = new AnimationEngine();
+    const registerSpy = vi.spyOn(injectedEngine, 'register');
+
+    // followPath steps go directly through this._engine.register (not canvas.animate)
+    const tl = new FlowTimeline(canvas, injectedEngine);
+    tl.step({ nodes: ['a'], followPath: (t) => ({ x: t * 100, y: 0 }), duration: 100 });
+    tl.play();
+
+    expect(registerSpy).toHaveBeenCalled();
+  });
+
+  it('falls back to a private engine when no engine is injected', () => {
+    const canvas = makeMockCanvas();
+    // Should not throw — the fallback new AnimationEngine() is used
+    expect(() => {
+      const tl = new FlowTimeline(canvas);
+      tl.step({ nodes: ['a'], position: { x: 50 }, duration: 0 });
+    }).not.toThrow();
+  });
+});
+
 // ── guidePath ────────────────────────────────────────────────────────────────
 
 describe('FlowTimeline guidePath', () => {
