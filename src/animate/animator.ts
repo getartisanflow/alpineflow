@@ -50,7 +50,13 @@ interface ActiveGroup {
   entries: PropertyEntry[];
   engineHandle: EngineHandle;
   startTime: number;
-  pausedAt: number | null;
+  /**
+   * Engine-relative elapsed value at the moment of pause, or null when not paused.
+   * Uses engine tick elapsed (not wall-clock) so fake schedulers stay in sync.
+   */
+  pausedElapsed: number | null;
+  /** When true, the next tick adjusts startTime to account for the pause gap. */
+  _resumeNeeded: boolean;
   reversed: boolean;
   duration: number;
   easingFn: EasingFn;
@@ -180,7 +186,8 @@ export class Animator {
       entries: [...entries],
       engineHandle: null as unknown as EngineHandle,
       startTime: 0,
-      pausedAt: null,
+      pausedElapsed: null,
+      _resumeNeeded: false,
       reversed: false,
       duration,
       easingFn,
@@ -255,8 +262,15 @@ export class Animator {
     }
 
     // Paused: don't advance
-    if (group.pausedAt !== null) {
+    if (group.pausedElapsed !== null) {
       return;
+    }
+
+    // Just resumed: adjust startTime so the animation continues from the paused position.
+    // The gap between pausedElapsed and now is dead time that should not count toward progress.
+    if (group._resumeNeeded) {
+      group.startTime += elapsed - group._lastElapsed;
+      group._resumeNeeded = false;
     }
 
     // On first tick, record startTime
@@ -320,20 +334,23 @@ export class Animator {
   // ── Internal: handle actions ─────────────────────────────────────────
 
   private _pause(group: ActiveGroup): void {
-    if (group.stopped || group.pausedAt !== null || group.startTime === 0) {
+    if (group.stopped || group.pausedElapsed !== null || group.startTime === 0) {
       return;
     }
-    group.pausedAt = performance.now();
+    // Store the engine-relative elapsed value at pause time so resume can compute
+    // the exact gap without relying on wall-clock (performance.now()).
+    group.pausedElapsed = group._lastElapsed;
   }
 
   private _resume(group: ActiveGroup): void {
-    if (group.stopped || group.pausedAt === null) {
+    if (group.stopped || group.pausedElapsed === null) {
       return;
     }
-    // Adjust startTime by the time spent paused
-    const pauseDuration = performance.now() - group.pausedAt;
-    group.startTime += pauseDuration;
-    group.pausedAt = null;
+    // Signal the next tick to adjust startTime by the pause gap.
+    // _lastElapsed still holds the elapsed value from just before the pause,
+    // and _tick will receive the new elapsed on the next frame.
+    group._resumeNeeded = true;
+    group.pausedElapsed = null;
   }
 
   private _stop(group: ActiveGroup): void {

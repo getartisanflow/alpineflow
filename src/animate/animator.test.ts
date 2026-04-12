@@ -441,4 +441,71 @@ describe('Animator', () => {
     // Final value is the exact "to" string since we apply entry.to on completion
     expect(value).toBe('#ffffff');
   });
+
+  it('pause/resume uses engine-relative time, not wall-clock', async () => {
+    // Use a custom scheduler that passes its own counter as `elapsed`,
+    // independent of performance.now(). This lets us simulate the engine
+    // elapsed diverging from wall-clock time.
+    let engineElapsed = 0;
+    let scheduledCb: FrameRequestCallback | null = null;
+
+    const detachedScheduler: FrameScheduler = {
+      request: (cb) => {
+        scheduledCb = cb;
+        return 1;
+      },
+      cancel: () => {
+        scheduledCb = null;
+      },
+    };
+
+    /** Advance engine by `ms`, firing as many 16ms frames as needed. */
+    function driveEngine(ms: number): void {
+      const target = engineElapsed + ms;
+      while (engineElapsed < target && scheduledCb) {
+        engineElapsed = Math.min(engineElapsed + 16, target);
+        const cb = scheduledCb;
+        scheduledCb = null;
+        cb(engineElapsed);
+      }
+    }
+
+    const engine = new AnimationEngine();
+    engine.setScheduler(detachedScheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 1000, easing: 'linear' },
+    );
+
+    // Advance ~500ms of engine time (roughly 50% through)
+    driveEngine(500);
+    const valueAtPause = value;
+    expect(valueAtPause).toBeGreaterThan(40);
+    expect(valueAtPause).toBeLessThan(60);
+
+    // Pause the animation
+    handle.pause();
+
+    // Simulate wall-clock advancing 2000ms — but we do NOT drive the engine.
+    // This diverges wall-clock from engine time. If pause used performance.now()
+    // those 2000ms would corrupt startTime on resume.
+    engineElapsed += 2000;
+
+    // Resume
+    handle.resume();
+
+    // Drive one frame so the resume adjustment is applied
+    driveEngine(16);
+
+    // The animation should still be at ~50%, not jumped to completion
+    expect(value).toBeGreaterThan(40);
+    expect(value).toBeLessThan(60);
+
+    // Advance another ~600ms of engine time so the animation reaches completion
+    driveEngine(600);
+    expect(value).toBe(100);
+  });
 });
