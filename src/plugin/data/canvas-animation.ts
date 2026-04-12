@@ -518,6 +518,8 @@ export function createAnimationMixin(ctx: CanvasContext) {
         whileStopMode: options.whileStopMode,
         tag: options.tag,
         tags: options.tags,
+        motion: options.motion,
+        maxDuration: options.maxDuration,
         onProgress(progress) {
           // Flush moved nodes to DOM each frame
           if (movedNodeIds.size > 0) {

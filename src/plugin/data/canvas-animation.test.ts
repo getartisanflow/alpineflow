@@ -1653,3 +1653,103 @@ describe('registerParticleRenderer', () => {
     expect(getParticleRenderer('test-custom-renderer')).toBe(mockRenderer);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// canvas animation — motion option
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('canvas animation — motion option', () => {
+  function makeAnimatorSpy() {
+    return {
+      animate: vi.fn(() => ({
+        pause: vi.fn(),
+        resume: vi.fn(),
+        stop: vi.fn(),
+        reverse: vi.fn(),
+        play: vi.fn(),
+        playForward: vi.fn(),
+        playBackward: vi.fn(),
+        restart: vi.fn(),
+        direction: 'forward' as const,
+        isFinished: false,
+        currentValue: new Map(),
+        finished: Promise.resolve(),
+      })),
+      stopAll: vi.fn(),
+    };
+  }
+
+  it('passes motion through to animator', () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx();
+    ctx._nodeMap.set('n1', n1);
+    const animator = makeAnimatorSpy();
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { nodes: { n1: { position: { x: 100, y: 100 } } } },
+      { duration: 500, motion: 'spring.wobbly' },
+    );
+
+    expect(animator.animate).toHaveBeenCalled();
+    const callArgs = animator.animate.mock.calls[0][1];
+    expect(callArgs.motion).toBe('spring.wobbly');
+  });
+
+  it('passes maxDuration through to animator', () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx();
+    ctx._nodeMap.set('n1', n1);
+    const animator = makeAnimatorSpy();
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { nodes: { n1: { position: { x: 50, y: 50 } } } },
+      { duration: 500, motion: 'spring.stiff', maxDuration: 2000 },
+    );
+
+    expect(animator.animate).toHaveBeenCalled();
+    const callArgs = animator.animate.mock.calls[0][1];
+    expect(callArgs.maxDuration).toBe(2000);
+  });
+
+  it('passes motion object config through to animator', () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx();
+    ctx._nodeMap.set('n1', n1);
+    const animator = makeAnimatorSpy();
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    const motionConfig = { type: 'spring' as const, stiffness: 200, damping: 20 };
+    mixin.animate(
+      { nodes: { n1: { position: { x: 75 } } } },
+      { duration: 500, motion: motionConfig },
+    );
+
+    expect(animator.animate).toHaveBeenCalled();
+    const callArgs = animator.animate.mock.calls[0][1];
+    expect(callArgs.motion).toBe(motionConfig);
+  });
+
+  it('motion is undefined in animator call when not provided', () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx();
+    ctx._nodeMap.set('n1', n1);
+    const animator = makeAnimatorSpy();
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { nodes: { n1: { position: { x: 100 } } } },
+      { duration: 300 },
+    );
+
+    expect(animator.animate).toHaveBeenCalled();
+    const callArgs = animator.animate.mock.calls[0][1];
+    expect(callArgs.motion).toBeUndefined();
+    expect(callArgs.maxDuration).toBeUndefined();
+  });
+});
