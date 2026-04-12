@@ -1542,12 +1542,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
       }
 
       // Clean up particle engine registration
-      this._particleEngineHandle?.stop();
-      this._particleEngineHandle = null;
-      for (const p of this._activeParticles) {
-        p.circle.remove();
-      }
-      this._activeParticles.clear();
+      this.destroyParticles();
 
       // Clean up auto-layout timer
       if (this._autoLayoutTimer) {

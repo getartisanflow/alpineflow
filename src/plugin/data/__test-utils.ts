@@ -197,6 +197,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _adjustHandlePositions: vi.fn(),
     _deleteSelected: vi.fn(async () => {}),
     _tickParticles: vi.fn(() => true),
+    destroyParticles: vi.fn(),
     _applyConfigPatch: vi.fn(),
 
     // === Public methods (vi.fn() stubs) ===

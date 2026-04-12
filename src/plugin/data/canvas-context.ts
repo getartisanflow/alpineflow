@@ -443,7 +443,10 @@ export interface CanvasContext {
   _deleteSelected(): Promise<void>;
 
   /** Engine tick callback for processing active particles */
-  _tickParticles(): boolean;
+  _tickParticles(elapsed: number): boolean;
+
+  /** Stop particle engine and remove all active particles from the DOM */
+  destroyParticles(): void;
 
   /** Internal implementation for config patching */
   _applyConfigPatch(changes: Record<string, any>): void;
