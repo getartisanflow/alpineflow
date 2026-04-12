@@ -65,7 +65,7 @@ describe('stepKeyframes', () => {
         expect(state.settled).toBe(true);
     });
 
-    it('handles single value — settles immediately', () => {
+    it('handles single value — settles immediately and sets value to that waypoint', () => {
         const state = makeState(42);
         const config: KeyframesMotion = {
             type: 'keyframes',
@@ -74,6 +74,19 @@ describe('stepKeyframes', () => {
 
         stepKeyframes(state, config, 0.5, 'x');
         expect(state.settled).toBe(true);
+        expect(state.value).toBe(100);
+    });
+
+    it('single waypoint with missing key falls back to existing state.value', () => {
+        const state = makeState(42);
+        const config: KeyframesMotion = {
+            type: 'keyframes',
+            values: [{ y: 7 }], // missing key 'x'
+        };
+
+        stepKeyframes(state, config, 0.5, 'x');
+        expect(state.settled).toBe(true);
+        expect(state.value).toBe(42);
     });
 
     it('progress clamping — below 0', () => {

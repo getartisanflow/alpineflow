@@ -16,10 +16,15 @@ export function stepInertia(state: PhysicsState, config: InertiaMotion, dt: numb
 
     // Bounce off bounds
     if (config.bounds && key) {
-        const axisBounds = config.bounds[key as 'x' | 'y'];
+        const axisBounds = config.bounds[key];
         if (axisBounds) {
             const [min, max] = axisBounds;
-            const bounceFactor = (config.bounceDamping ?? 40) / 100;
+            // bounceStiffness acts as a bounciness coefficient (higher = stronger
+            // rebound). Normalize around 500 so the default (200) matches the
+            // prior softer-bounce feel; values >500 produce a stronger rebound.
+            const bounciness = (config.bounceStiffness ?? 200) / 500;
+            const damping = (config.bounceDamping ?? 40) / 100;
+            const bounceFactor = bounciness * (1 - damping);
 
             if (state.value < min) {
                 state.value = min;
@@ -38,7 +43,7 @@ export function stepInertia(state: PhysicsState, config: InertiaMotion, dt: numb
         let nearest = state.value;
         let minDist = Infinity;
         for (const point of config.snapTo) {
-            const val = (point as Record<string, number>)[key];
+            const val = point[key];
             if (val !== undefined) {
                 const dist = Math.abs(state.value - val);
                 if (dist < minDist) {

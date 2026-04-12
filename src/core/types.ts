@@ -1319,7 +1319,7 @@ export interface AnimateOptions {
   easing?: EasingName | ((t: number) => number);
   /** Physics-based motion config or preset string (e.g. 'spring.wobbly'). */
   motion?: MotionConfig | string;
-  /** Maximum duration in ms when using physics-based motion. Default: 10000. */
+  /** Maximum duration in ms when using physics-based motion. Default: 5000. */
   maxDuration?: number;
   /** Delay before starting in ms. Default: 0. */
   delay?: number;

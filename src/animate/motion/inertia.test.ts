@@ -110,29 +110,30 @@ describe('stepInertia', () => {
     });
 
     it('bounceDamping affects bounce strength', () => {
-        // Same scenario, different damping
-        const stateHigh = makeState(-5, -500);
-        const stateLow = makeState(-5, -500);
+        // Higher bounceDamping (%) removes more energy on bounce, so less
+        // velocity is preserved after the rebound.
+        const stateHighDamping = makeState(-5, -500);
+        const stateLowDamping = makeState(-5, -500);
 
-        const configHigh: InertiaMotion = {
+        const configHighDamping: InertiaMotion = {
             type: 'inertia',
             velocity: -500,
             bounds: { x: [0, 100] },
-            bounceDamping: 80, // 80% of velocity preserved
+            bounceDamping: 80, // heavy damping — small rebound
         };
-        const configLow: InertiaMotion = {
+        const configLowDamping: InertiaMotion = {
             type: 'inertia',
             velocity: -500,
             bounds: { x: [0, 100] },
-            bounceDamping: 20, // 20% of velocity preserved
+            bounceDamping: 20, // light damping — large rebound
         };
         const dt = 1 / 60;
 
-        stepInertia(stateHigh, configHigh, dt, 'x');
-        stepInertia(stateLow, configLow, dt, 'x');
+        stepInertia(stateHighDamping, configHighDamping, dt, 'x');
+        stepInertia(stateLowDamping, configLowDamping, dt, 'x');
 
-        // Higher damping preserves more velocity on bounce
-        expect(Math.abs(stateHigh.velocity)).toBeGreaterThan(Math.abs(stateLow.velocity));
+        // More damping => less preserved velocity after bounce.
+        expect(Math.abs(stateLowDamping.velocity)).toBeGreaterThan(Math.abs(stateHighDamping.velocity));
     });
 
     it('dt=0 does not modify state', () => {
@@ -164,6 +165,70 @@ describe('stepInertia', () => {
 
         // Value should have moved (decay applied) but not bounced
         expect(state.value).toBeGreaterThan(150);
+    });
+
+    it('bounceStiffness affects bounce magnitude', () => {
+        // Same incoming velocity, same damping — differ only in bounceStiffness.
+        // Higher stiffness => larger rebound magnitude.
+        const stateStiff = makeState(-5, -500);
+        const stateSoft = makeState(-5, -500);
+
+        const configStiff: InertiaMotion = {
+            type: 'inertia',
+            velocity: -500,
+            bounds: { x: [0, 100] },
+            bounceStiffness: 800,
+            bounceDamping: 40,
+        };
+        const configSoft: InertiaMotion = {
+            type: 'inertia',
+            velocity: -500,
+            bounds: { x: [0, 100] },
+            bounceStiffness: 100,
+            bounceDamping: 40,
+        };
+        const dt = 1 / 60;
+
+        stepInertia(stateStiff, configStiff, dt, 'x');
+        stepInertia(stateSoft, configSoft, dt, 'x');
+
+        expect(Math.abs(stateStiff.velocity)).toBeGreaterThan(Math.abs(stateSoft.velocity));
+    });
+
+    it('bounds work with arbitrary (non-x/y) property keys', () => {
+        const state = makeState(-5, -500);
+        const config: InertiaMotion = {
+            type: 'inertia',
+            velocity: -500,
+            bounds: { scrollTop: [0, 800] },
+            bounceDamping: 50,
+        };
+        const dt = 1 / 60;
+
+        stepInertia(state, config, dt, 'scrollTop');
+
+        expect(state.value).toBe(0);
+        expect(state.velocity).toBeGreaterThan(0); // reversed
+    });
+
+    it('snap points work with arbitrary (non-x/y) property keys', () => {
+        const state = makeState(47, 0.1);
+        const config: InertiaMotion = {
+            type: 'inertia',
+            velocity: 0.1,
+            snapTo: [{ scrollTop: 0 }, { scrollTop: 50 }, { scrollTop: 100 }],
+        };
+        const dt = 1 / 60;
+
+        for (let i = 0; i < 600; i++) {
+            stepInertia(state, config, dt, 'scrollTop');
+            if (state.settled) {
+                break;
+            }
+        }
+
+        expect(state.settled).toBe(true);
+        expect(state.value).toBe(50);
     });
 
     it('snap points work with multiple axes', () => {

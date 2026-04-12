@@ -11,12 +11,14 @@ export function stepDecay(state: PhysicsState, config: DecayMotion, dt: number):
         return;
     }
 
-    const power = config.power ?? DECAY_DEFAULTS.power;
     const timeConstant = config.timeConstant ?? DECAY_DEFAULTS.timeConstant;
 
-    // Exponential decay: v *= e^(-dt * 1000 / timeConstant)
+    // Pure exponential decay: v *= e^(-dt * 1000 / timeConstant)
+    // Note: `power` is NOT applied here — it is a one-shot initial velocity
+    // multiplier applied at Animator setup time (matches Framer Motion convention).
+    // Using `power` per-frame with values > 1 causes velocity to diverge.
     const decayFactor = Math.exp((-dt * 1000) / timeConstant);
-    state.velocity *= decayFactor * power;
+    state.velocity *= decayFactor;
     state.value += state.velocity * dt;
 
     if (Math.abs(state.velocity) < DECAY_DEFAULTS.restVelocity) {

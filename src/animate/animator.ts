@@ -320,6 +320,11 @@ export class Animator {
           } else if (vel && typeof vel === 'object' && entry.key in vel) {
             initialVelocity = (vel as Record<string, number>)[entry.key];
           }
+          // `power` is applied once at entry as an initial velocity multiplier,
+          // matching Framer Motion semantics. The integrator itself performs
+          // pure exponential decay, keeping values > 1 stable.
+          const power = (resolvedMotion as DecayMotion | InertiaMotion).power ?? 0.8;
+          initialVelocity *= power;
         }
         physicsStates.set(entry.key, {
           value: entry.from as number,

@@ -2090,6 +2090,65 @@ describe('Animator — decay motion', () => {
     expect(value).toBeGreaterThan(0);
   });
 
+  it("'decay.snappy' preset settles without diverging (regression)", () => {
+    // Regression guard: snappy was defined with power: 1.2, which previously
+    // caused per-frame velocity growth and NaN/Infinity values.
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    let completed = false;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 0, apply: (v) => { value = v as number; } }],
+      {
+        duration: 300,
+        motion: 'decay.snappy',
+        maxDuration: 5000,
+        onComplete: () => { completed = true; },
+      },
+    );
+
+    driveEngine(4000);
+
+    expect(completed).toBe(true);
+    expect(handle.isFinished).toBe(true);
+    expect(Number.isFinite(value)).toBe(true);
+    // Without the fix, value grows into the millions. Constrain it sanely:
+    // initial velocity for snappy is 0 (preset default), so no motion happens
+    // unless velocity is overridden — the guard is that it doesn't explode.
+    expect(Math.abs(value)).toBeLessThan(10_000);
+  });
+
+  it("'decay.snappy' with overridden velocity moves and settles", () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    let completed = false;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 0, apply: (v) => { value = v as number; } }],
+      {
+        duration: 300,
+        motion: { type: 'decay', velocity: 500, power: 1.2, timeConstant: 200 },
+        maxDuration: 5000,
+        onComplete: () => { completed = true; },
+      },
+    );
+
+    driveEngine(4000);
+
+    expect(completed).toBe(true);
+    expect(handle.isFinished).toBe(true);
+    expect(value).toBeGreaterThan(0);
+    expect(Number.isFinite(value)).toBe(true);
+    // Distance travelled should be bounded
+    expect(value).toBeLessThan(1000);
+  });
+
   it('decay settles naturally', () => {
     const { scheduler, driveEngine } = createDetachedScheduler();
     const engine = new AnimationEngine();

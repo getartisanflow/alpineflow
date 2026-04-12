@@ -56,7 +56,11 @@ describe('stepDecay', () => {
         expect(state.target).toBe(state.value);
     });
 
-    it('power affects deceleration rate', () => {
+    it('power does not affect per-frame decay (one-shot at animate() entry)', () => {
+        // `power` is deliberately ignored by the integrator — it is applied
+        // once as an initial velocity multiplier in Animator.animate(). Passing
+        // different `power` values to stepDecay with identical initial state
+        // must therefore produce identical trajectories.
         const stateHigh = makeState(0, 500);
         const stateLow = makeState(0, 500);
 
@@ -64,14 +68,39 @@ describe('stepDecay', () => {
         const configLow: DecayMotion = { type: 'decay', velocity: 500, power: 0.5 };
         const dt = 1 / 60;
 
-        // Step both a few times
         for (let i = 0; i < 10; i++) {
             stepDecay(stateHigh, configHigh, dt);
             stepDecay(stateLow, configLow, dt);
         }
 
-        // Higher power retains more velocity
-        expect(Math.abs(stateHigh.velocity)).toBeGreaterThan(Math.abs(stateLow.velocity));
+        expect(stateHigh.velocity).toBe(stateLow.velocity);
+        expect(stateHigh.value).toBe(stateLow.value);
+    });
+
+    it('does not diverge when power > 1 (regression: decay.snappy stability)', () => {
+        // The snappy preset ships with power: 1.2, timeConstant: 200. Before the
+        // fix, the per-frame `* power` term pushed the multiplier above 1.0 and
+        // velocity grew without bound. Now power is ignored here, and velocity
+        // must monotonically decay and settle.
+        const state = makeState(0, 500);
+        const config: DecayMotion = { type: 'decay', velocity: 500, power: 1.2, timeConstant: 200 };
+        const dt = 1 / 60;
+
+        let maxVelocitySeen = Math.abs(state.velocity);
+        for (let i = 0; i < 300; i++) {
+            stepDecay(state, config, dt);
+            maxVelocitySeen = Math.max(maxVelocitySeen, Math.abs(state.velocity));
+            if (state.settled) {
+                break;
+            }
+        }
+
+        // Velocity must never exceed its initial magnitude (pure decay).
+        expect(maxVelocitySeen).toBeLessThanOrEqual(500);
+        expect(state.settled).toBe(true);
+        expect(Number.isFinite(state.value)).toBe(true);
+        // The travelled distance is bounded — certainly not millions of units.
+        expect(Math.abs(state.value)).toBeLessThan(1000);
     });
 
     it('dt=0 does not modify state', () => {

@@ -9,7 +9,7 @@ export const SPRING_DEFAULTS = {
 };
 
 export function stepSpring(state: PhysicsState, config: SpringMotion, dt: number): void {
-    if (dt === 0) {
+    if (dt <= 0) {
         return;
     }
 

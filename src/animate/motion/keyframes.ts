@@ -8,6 +8,7 @@ export function stepKeyframes(
 ): void {
     const values = config.values.map(v => v[key] ?? state.value);
     if (values.length < 2) {
+        state.value = values[0] ?? state.value;
         state.settled = true;
         return;
     }
