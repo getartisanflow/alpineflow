@@ -54,3 +54,10 @@ export type { ParticleRenderer, ParticleRenderState } from '../core/types';
 // ── Motion ───────────────────────────────────────────────────────────────────
 export { resolveMotion, stepSpring, SPRING_DEFAULTS } from './motion';
 export type { MotionConfig, SpringMotion, DecayMotion, InertiaMotion, KeyframesMotion, PhysicsState } from './motion';
+
+// ── Recording ─────────────────────────────────────────────────────────────────
+export { Recording, RECORDING_VERSION } from './recording';
+export type {
+    CanvasSnapshot, RecordingEvent, RecordingEventType,
+    InFlightAnimation, Checkpoint, RecordingData,
+} from './recording';
