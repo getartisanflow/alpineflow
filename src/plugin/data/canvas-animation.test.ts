@@ -1188,3 +1188,345 @@ describe('createAnimationMixin — destroy()', () => {
     expect(ctx._activeTimelines.size).toBe(0);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Tier A integration — getHandles, cancelAll, group, transaction, snapshot, boundTo
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('canvas animation — Tier A integration', () => {
+  function makeAnimator() {
+    const registry = {
+      getHandles: vi.fn(() => []),
+      cancelAll: vi.fn(),
+      pauseAll: vi.fn(),
+      resumeAll: vi.fn(),
+      register: vi.fn(),
+      unregister: vi.fn(),
+    };
+    const animator = {
+      animate: vi.fn(() => ({
+        pause: vi.fn(),
+        resume: vi.fn(),
+        stop: vi.fn(),
+        reverse: vi.fn(),
+        play: vi.fn(),
+        playForward: vi.fn(),
+        playBackward: vi.fn(),
+        restart: vi.fn(),
+        direction: 'forward' as const,
+        isFinished: false,
+        currentValue: new Map(),
+        finished: Promise.resolve(),
+      })),
+      stopAll: vi.fn(),
+      registry,
+      beginTransaction: vi.fn(() => ({
+        state: 'active',
+        handles: [],
+        commit: vi.fn(),
+        rollback: vi.fn(),
+        trackHandle: vi.fn(),
+        captureProperty: vi.fn(),
+        finished: Promise.resolve(),
+      })),
+      endTransaction: vi.fn(),
+    };
+    return animator;
+  }
+
+  it('getHandles() returns handles from the registry', () => {
+    const ctx = mockCtx();
+    const animator = makeAnimator();
+    const mockHandles = [
+      { _tags: ['test'], pause: vi.fn(), resume: vi.fn(), stop: vi.fn(), isFinished: false },
+    ];
+    animator.registry.getHandles.mockReturnValue(mockHandles);
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    const handles = mixin.getHandles({ tag: 'test' });
+
+    expect(animator.registry.getHandles).toHaveBeenCalledWith({ tag: 'test' });
+    expect(handles).toBe(mockHandles);
+  });
+
+  it('cancelAll() stops tagged handles', () => {
+    const ctx = mockCtx();
+    const animator = makeAnimator();
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.cancelAll({ tag: 'highlight' }, { mode: 'freeze' });
+
+    expect(animator.registry.cancelAll).toHaveBeenCalledWith(
+      { tag: 'highlight' },
+      { mode: 'freeze' },
+    );
+  });
+
+  it('pauseAll() pauses tagged handles', () => {
+    const ctx = mockCtx();
+    const animator = makeAnimator();
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.pauseAll({ tag: 'bg' });
+
+    expect(animator.registry.pauseAll).toHaveBeenCalledWith({ tag: 'bg' });
+  });
+
+  it('resumeAll() resumes tagged handles', () => {
+    const ctx = mockCtx();
+    const animator = makeAnimator();
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.resumeAll({ tags: ['a', 'b'] });
+
+    expect(animator.registry.resumeAll).toHaveBeenCalledWith({ tags: ['a', 'b'] });
+  });
+
+  it('group() returns a FlowGroup that auto-tags', () => {
+    const ctx = mockCtx();
+    const animator = makeAnimator();
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    const grp = mixin.group('my-group');
+
+    expect(grp).toBeDefined();
+    expect(grp.name).toBe('my-group');
+
+    // Calling animate on the group should delegate to the mixin with the group tag
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    ctx._nodeMap.set('n1', n1);
+
+    grp.animate(
+      { nodes: { n1: { position: { x: 100 } } } },
+      { duration: 300 },
+    );
+
+    expect(animator.animate).toHaveBeenCalled();
+    const callArgs = animator.animate.mock.calls[0][1];
+    expect(callArgs.tag).toBe('my-group');
+  });
+
+  it('transaction() tracks handles and supports rollback', () => {
+    const ctx = mockCtx();
+    const animator = makeAnimator();
+    const mockTx = {
+      state: 'active' as const,
+      handles: [],
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      trackHandle: vi.fn(),
+      captureProperty: vi.fn(),
+      finished: Promise.resolve(),
+    };
+    animator.beginTransaction.mockReturnValue(mockTx);
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    const tx = mixin.transaction(() => {
+      // Synchronous work inside transaction
+    });
+
+    expect(animator.beginTransaction).toHaveBeenCalledOnce();
+    expect(animator.endTransaction).toHaveBeenCalledOnce();
+    expect(tx).toBe(mockTx);
+  });
+
+  it('transaction() calls rollback on sync error', () => {
+    const ctx = mockCtx();
+    const animator = makeAnimator();
+    const mockTx = {
+      state: 'active' as const,
+      handles: [],
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      trackHandle: vi.fn(),
+      captureProperty: vi.fn(),
+      finished: Promise.resolve(),
+    };
+    animator.beginTransaction.mockReturnValue(mockTx);
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    expect(() => {
+      mixin.transaction(() => {
+        throw new Error('boom');
+      });
+    }).toThrow();
+
+    expect(mockTx.rollback).toHaveBeenCalledOnce();
+    expect(animator.endTransaction).toHaveBeenCalledOnce();
+  });
+
+  it('transaction() ends transaction after async resolution', async () => {
+    const ctx = mockCtx();
+    const animator = makeAnimator();
+    const mockTx = {
+      state: 'active' as const,
+      handles: [],
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      trackHandle: vi.fn(),
+      captureProperty: vi.fn(),
+      finished: Promise.resolve(),
+    };
+    animator.beginTransaction.mockReturnValue(mockTx);
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.transaction(async () => {
+      // async work
+    });
+
+    // Wait for the microtask to resolve
+    await new Promise((r) => setTimeout(r, 0));
+
+    // beginTransaction called once, endTransaction called twice:
+    // once in the sync path (since result is a promise, it doesn't call
+    // endTransaction there), actually the logic calls endTransaction in .then()
+    expect(animator.beginTransaction).toHaveBeenCalledOnce();
+    // endTransaction is called in the .then() callback
+    expect(animator.endTransaction).toHaveBeenCalled();
+  });
+
+  it('snapshot() captures and restores canvas state', () => {
+    const ctx = mockCtx();
+    const n1 = makeNode('n1', { position: { x: 10, y: 20 } });
+    const n2 = makeNode('n2', { position: { x: 30, y: 40 } });
+    const e1 = makeEdge('e1');
+    ctx.nodes = [n1, n2];
+    ctx.edges = [e1];
+    ctx.viewport = { x: 100, y: 200, zoom: 1.5 };
+    const mixin = createAnimationMixin(ctx);
+
+    const snap = mixin.snapshot();
+
+    // Mutate the state
+    ctx.nodes[0].position.x = 999;
+    ctx.nodes.splice(1, 1); // Remove n2
+    ctx.edges.splice(0, 1); // Remove e1
+    ctx.viewport.x = 0;
+    ctx.viewport.y = 0;
+    ctx.viewport.zoom = 1;
+
+    // Restore
+    snap.restore();
+
+    expect(ctx.nodes).toHaveLength(2);
+    expect(ctx.nodes[0].position.x).toBe(10);
+    expect(ctx.nodes[1].position.x).toBe(30);
+    expect(ctx.edges).toHaveLength(1);
+    expect(ctx.edges[0].id).toBe('e1');
+    expect(ctx.viewport.x).toBe(100);
+    expect(ctx.viewport.y).toBe(200);
+    expect(ctx.viewport.zoom).toBe(1.5);
+  });
+
+  it('boundTo compiles to a while predicate for nodes', () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 }, data: { runState: 'running' } });
+    const ctx = mockCtx();
+    ctx._nodeMap.set('n1', n1);
+    ctx.nodes = [n1];
+
+    const animator = makeAnimator();
+    ctx._animator = animator as any;
+
+    // Wire up getNode to actually return from nodeMap
+    (ctx.getNode as any).mockImplementation((id: string) => ctx._nodeMap.get(id));
+
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { nodes: { n1: { position: { x: 100 } } } },
+      {
+        duration: 300,
+        boundTo: { node: 'n1', property: 'runState', equals: 'running' },
+      },
+    );
+
+    // The animate call should pass a `while` predicate to the animator
+    expect(animator.animate).toHaveBeenCalled();
+    const callArgs = animator.animate.mock.calls[0][1];
+    expect(callArgs.while).toBeTypeOf('function');
+
+    // While data.runState is 'running', predicate returns true
+    // Actually, the binding is on the node object itself, not data
+    // Since 'runState' doesn't exist on node directly, let's set it
+    (n1 as any).runState = 'running';
+    expect(callArgs.while()).toBe(true);
+
+    // Change the state — predicate should return false
+    (n1 as any).runState = 'stopped';
+    expect(callArgs.while()).toBe(false);
+  });
+
+  it('boundTo compiles to a while predicate for edges', () => {
+    const e1 = makeEdge('e1', { animated: true, color: '#000' });
+    const ctx = mockCtx();
+    ctx._edgeMap.set('e1', e1);
+    ctx.edges = [e1];
+
+    const animator = makeAnimator();
+    ctx._animator = animator as any;
+
+    // Wire up getEdge to return from edgeMap
+    (ctx.getEdge as any).mockImplementation((id: string) => ctx._edgeMap.get(id));
+
+    // We need at least one animatable entry, so let's animate edge color
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { edges: { e1: { color: '#fff' } } },
+      {
+        duration: 300,
+        boundTo: { edge: 'e1', property: 'animated', equals: true },
+      },
+    );
+
+    expect(animator.animate).toHaveBeenCalled();
+    const callArgs = animator.animate.mock.calls[0][1];
+    expect(callArgs.while).toBeTypeOf('function');
+
+    // animated is true — predicate should return true
+    expect(callArgs.while()).toBe(true);
+
+    // Change animated to false — predicate should return false
+    e1.animated = false;
+    expect(callArgs.while()).toBe(false);
+  });
+
+  it('boundTo passes through to update() via animate()', () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx();
+    ctx._nodeMap.set('n1', n1);
+
+    const animator = makeAnimator();
+    ctx._animator = animator as any;
+
+    (ctx.getNode as any).mockImplementation((id: string) => ctx._nodeMap.get(id));
+
+    const mixin = createAnimationMixin(ctx);
+
+    // Use update() directly
+    mixin.update(
+      { nodes: { n1: { position: { x: 50 } } } },
+      {
+        duration: 500,
+        boundTo: { node: 'n1', property: 'selected', equals: true },
+      },
+    );
+
+    const callArgs = animator.animate.mock.calls[0][1];
+    expect(callArgs.while).toBeTypeOf('function');
+
+    n1.selected = true;
+    expect(callArgs.while()).toBe(true);
+
+    n1.selected = false;
+    expect(callArgs.while()).toBe(false);
+  });
+});

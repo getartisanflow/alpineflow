@@ -26,7 +26,10 @@ import type {
   RowFilter,
   ShapeDefinition,
   ToImageOptions,
+  StopOptions,
 } from '../../core/types';
+import type { FlowGroup } from '../../animate/flow-group';
+import type { Transaction } from '../../animate/transaction';
 import type { FlowHistory } from '../../core/history';
 import type { FlowTimeline } from '../../animate/timeline';
 import type { Animator } from '../../animate/animator';
@@ -702,6 +705,27 @@ export interface CanvasContext {
 
   /** Fire a particle along an edge path */
   sendParticle(edgeId: string, options?: Record<string, any>): ParticleHandle | undefined;
+
+  /** Get all tracked animation handles, optionally filtered by tag */
+  getHandles(filter?: { tag?: string; tags?: string[] }): FlowAnimationHandle[];
+
+  /** Cancel all animations matching a tag filter */
+  cancelAll(filter: { tag?: string; tags?: string[] }, options?: StopOptions): void;
+
+  /** Pause all animations matching a tag filter */
+  pauseAll(filter: { tag?: string; tags?: string[] }): void;
+
+  /** Resume all animations matching a tag filter */
+  resumeAll(filter: { tag?: string; tags?: string[] }): void;
+
+  /** Create a named group that auto-tags all animations made through it */
+  group(name: string): FlowGroup;
+
+  /** Create a transaction for grouped rollback of multiple animations */
+  transaction(fn: () => Promise<void> | void): Transaction;
+
+  /** Capture current canvas state. Call restore() to revert */
+  snapshot(): { restore: () => void };
 
   /** Dagre layout */
   layout(options?: { direction?: 'TB' | 'LR' | 'BT' | 'RL'; nodesep?: number; ranksep?: number; adjustHandles?: boolean; fitView?: boolean; duration?: number }): Promise<void>;

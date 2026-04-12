@@ -1,8 +1,9 @@
 // ============================================================================
 // canvas-animation — Animation, timeline, and follow mixin for flow-canvas
 //
-// Public API: animate, timeline, registerAnimation, unregisterAnimation,
-//             playAnimation, follow, sendParticle.
+// Public API: animate, update, timeline, registerAnimation, unregisterAnimation,
+//             playAnimation, follow, sendParticle, getHandles, cancelAll,
+//             pauseAll, resumeAll, group, transaction, snapshot.
 // Internal:   _syncAnimationState, _tickParticles.
 //
 // Covers the core animation engine wiring, the timeline factory, named
@@ -26,6 +27,7 @@ import type {
   FlowAnimationHandle,
   FollowOptions,
   ParticleHandle,
+  StopOptions,
 } from '../../core/types';
 import type { Animator, PropertyEntry } from '../../animate/animator';
 import { parseStyle, interpolateStyle } from '../../animate/interpolators';
@@ -36,6 +38,8 @@ import { engine } from '../../animate/engine';
 import { debug } from '../../core/debug';
 import { DEFAULT_STROKE_COLOR } from '../../core/constants';
 import { createParticleMixin } from './canvas-particles';
+import { FlowGroup } from '../../animate/flow-group';
+import type { Transaction } from '../../animate/transaction';
 
 // ── Mixin factory ───────────────────────────────────────────────────────────
 
@@ -142,6 +146,28 @@ export function createAnimationMixin(ctx: CanvasContext) {
       targets: AnimateTargets,
       options: AnimateOptions = {},
     ): FlowAnimationHandle {
+      // Compile boundTo into a while predicate
+      if (options?.boundTo) {
+        const binding = options.boundTo;
+        if ('node' in binding) {
+          options = {
+            ...options,
+            while: () => {
+              const node = ctx.getNode(binding.node);
+              return node?.[binding.property as keyof typeof node] === binding.equals;
+            },
+          };
+        } else if ('edge' in binding) {
+          options = {
+            ...options,
+            while: () => {
+              const edge = ctx.getEdge(binding.edge);
+              return edge?.[binding.property as keyof typeof edge] === binding.equals;
+            },
+          };
+        }
+      }
+
       const duration = options.duration ?? 0;
       const entries: PropertyEntry[] = [];
       const movedNodeIds = new Set<string>();
@@ -485,6 +511,10 @@ export function createAnimationMixin(ctx: CanvasContext) {
         delay: options.delay,
         loop: options.loop,
         startAt: options.startAt,
+        while: options.while,
+        whileStopMode: options.whileStopMode,
+        tag: options.tag,
+        tags: options.tags,
         onProgress(progress) {
           // Flush moved nodes to DOM each frame
           if (movedNodeIds.size > 0) {
@@ -680,6 +710,99 @@ export function createAnimationMixin(ctx: CanvasContext) {
       };
 
       return handle;
+    },
+
+    // ── Registry & group helpers ─────────────────────────────────────────
+
+    /**
+     * Get all tracked animation handles, optionally filtered by tag.
+     */
+    getHandles(filter?: { tag?: string; tags?: string[] }): FlowAnimationHandle[] {
+      const rawAnimator = getAlpine().raw(ctx._animator!) as Animator;
+      return rawAnimator.registry.getHandles(filter) as FlowAnimationHandle[];
+    },
+
+    /**
+     * Cancel all animations matching a tag filter.
+     */
+    cancelAll(filter: { tag?: string; tags?: string[] }, options?: StopOptions): void {
+      const rawAnimator = getAlpine().raw(ctx._animator!) as Animator;
+      rawAnimator.registry.cancelAll(filter, options);
+    },
+
+    /**
+     * Pause all animations matching a tag filter.
+     */
+    pauseAll(filter: { tag?: string; tags?: string[] }): void {
+      const rawAnimator = getAlpine().raw(ctx._animator!) as Animator;
+      rawAnimator.registry.pauseAll(filter);
+    },
+
+    /**
+     * Resume all animations matching a tag filter.
+     */
+    resumeAll(filter: { tag?: string; tags?: string[] }): void {
+      const rawAnimator = getAlpine().raw(ctx._animator!) as Animator;
+      rawAnimator.registry.resumeAll(filter);
+    },
+
+    /**
+     * Create a named group that auto-tags all animations made through it.
+     */
+    group(name: string): FlowGroup {
+      const self = this;
+      return new FlowGroup(name, {
+        animate: (t, o) => self.animate(t, o),
+        update: (t, o) => self.update(t, o),
+        sendParticle: (id, o) => self.sendParticle(id, o),
+        timeline: () => self.timeline(),
+        getHandles: (f) => self.getHandles(f),
+        cancelAll: (f, o) => self.cancelAll(f, o),
+        pauseAll: (f) => self.pauseAll(f),
+        resumeAll: (f) => self.resumeAll(f),
+      });
+    },
+
+    /**
+     * Create a transaction for grouped rollback of multiple animations.
+     */
+    transaction(fn: () => Promise<void> | void): Transaction {
+      const rawAnimator = getAlpine().raw(ctx._animator!) as Animator;
+      const tx = rawAnimator.beginTransaction();
+      try {
+        const result = fn();
+        if (result && typeof (result as any).then === 'function') {
+          (result as Promise<void>)
+            .then(() => rawAnimator.endTransaction())
+            .catch(() => {
+              tx.rollback();
+              rawAnimator.endTransaction();
+            });
+        } else {
+          rawAnimator.endTransaction();
+        }
+      } catch (err) {
+        tx.rollback();
+        rawAnimator.endTransaction();
+        throw err;
+      }
+      return tx;
+    },
+
+    /**
+     * Capture current canvas state. Call restore() to revert.
+     */
+    snapshot(): { restore: () => void } {
+      const savedNodes = structuredClone(getAlpine().raw(ctx.nodes));
+      const savedEdges = structuredClone(getAlpine().raw(ctx.edges));
+      const savedViewport = { ...ctx.viewport };
+      return {
+        restore: () => {
+          ctx.nodes.splice(0, ctx.nodes.length, ...structuredClone(savedNodes));
+          ctx.edges.splice(0, ctx.edges.length, ...structuredClone(savedEdges));
+          Object.assign(ctx.viewport, savedViewport);
+        },
+      };
     },
 
     // ── Cleanup lifecycle ─────────────────────────────────────────────────

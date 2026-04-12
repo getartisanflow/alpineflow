@@ -9,6 +9,8 @@
 import type { EasingName } from '../animate/easing';
 import type { PathFunction } from '../animate/paths';
 import type { CollabConfig, CollabInstance } from '../collab/types';
+import type { FlowGroup } from '../animate/flow-group';
+import type { Transaction } from '../animate/transaction';
 
 /** 2D coordinate */
 export interface XYPosition {
@@ -1432,6 +1434,27 @@ export interface FlowInstance {
 
   /** Fire a particle along an edge path. Returns a handle for tracking, or undefined if the particle couldn't be created. */
   sendParticle(edgeId: string, options?: ParticleOptions): ParticleHandle | undefined;
+
+  /** Get all tracked animation handles, optionally filtered by tag. */
+  getHandles(filter?: { tag?: string; tags?: string[] }): FlowAnimationHandle[];
+
+  /** Cancel all animations matching a tag filter. */
+  cancelAll(filter: { tag?: string; tags?: string[] }, options?: StopOptions): void;
+
+  /** Pause all animations matching a tag filter. */
+  pauseAll(filter: { tag?: string; tags?: string[] }): void;
+
+  /** Resume all animations matching a tag filter. */
+  resumeAll(filter: { tag?: string; tags?: string[] }): void;
+
+  /** Create a named group that auto-tags all animations made through it. */
+  group(name: string): FlowGroup;
+
+  /** Create a transaction for grouped rollback of multiple animations. */
+  transaction(fn: () => Promise<void> | void): Transaction;
+
+  /** Capture current canvas state. Call restore() to revert. */
+  snapshot(): { restore: () => void };
 
   /** Condense a node — switch to summary view hiding internal rows */
   condenseNode(id: string): void;
