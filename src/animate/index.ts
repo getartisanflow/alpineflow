@@ -40,3 +40,6 @@ export { Animator, type PropertyEntry, type AnimateInternalOptions, type Animati
 
 // ── Handle Registry ───────────────────────────────────────────────────────────
 export { HandleRegistry, type Taggable } from './handle-registry';
+
+// ── Flow Group ────────────────────────────────────────────────────────────────
+export { FlowGroup, type FlowGroupHost } from './flow-group';
