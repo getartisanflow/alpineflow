@@ -10,7 +10,7 @@
 // integration layer is added in Phase 2.
 // ============================================================================
 
-import { resolveEasing, type EasingName } from './easing';
+import { resolveEasing, checkReducedMotion, type EasingName } from './easing';
 import { lerpNumber, lerpViewport, interpolateColor, parseStyle, interpolateStyle } from './interpolators';
 import { applyDrawTransition, cleanupDrawTransition, applyFadeTransition, cleanupFadeTransition } from './edge-transitions';
 import { AnimationEngine, type EngineHandle } from './engine';
@@ -312,11 +312,7 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
 
   /** Check if reduced motion is active (OS preference + not opted out). */
   private _isReducedMotion(): boolean {
-    if (this._respectReducedMotion === false) return false;
-    const mq = typeof globalThis.matchMedia === 'function'
-      ? globalThis.matchMedia('(prefers-reduced-motion: reduce)')
-      : null;
-    return mq?.matches ?? false;
+    return checkReducedMotion(this._respectReducedMotion);
   }
 
   // ── Internal: event emission ────────────────────────────────────────

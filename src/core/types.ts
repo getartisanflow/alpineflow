@@ -995,6 +995,11 @@ export interface FlowCanvasConfig {
   /** Max snapshots to retain. Default: 50 */
   historyMaxSize?: number;
 
+  // ── Animation ──────────────────────────────────────────────────
+  /** Respect prefers-reduced-motion media query for $flow.animate().
+   *  'auto' (default): check media query. true: always reduce. false: never reduce. */
+  respectReducedMotion?: boolean | 'auto';
+
   // ── Event callbacks ────────────────────────────────────────────────
 
   /** Called when a node is clicked */

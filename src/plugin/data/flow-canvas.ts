@@ -1541,20 +1541,6 @@ export function registerFlowCanvas(Alpine: Alpine) {
         this._layoutAnimFrame = 0;
       }
 
-      // Clean up animation engine: in-flight animations and timelines
-      if (this._animator) {
-        this._animator.stopAll();
-      }
-      if (this._activeTimelines) {
-        for (const tl of this._activeTimelines) {
-          tl.stop();
-        }
-        this._activeTimelines.clear();
-      }
-
-      // Clean up particle engine registration
-      this.destroyParticles();
-
       // Clean up auto-layout timer
       if (this._autoLayoutTimer) {
         clearTimeout(this._autoLayoutTimer);

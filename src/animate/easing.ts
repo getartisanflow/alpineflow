@@ -46,6 +46,8 @@ export type EasingName =
 
 export type EasingFn = (t: number) => number;
 
+// Abbreviated names (easeCirc*, easeExpo*) map to d3-ease's easeCircle*, easeExp*
+// for conciseness. Kept short since these appear in user-facing config.
 const EASING_MAP: Record<EasingName, EasingFn> = {
   linear: easeLinear,
   easeIn: easeQuadIn,
@@ -73,6 +75,24 @@ const EASING_MAP: Record<EasingName, EasingFn> = {
   easeBackIn: easeBackIn,
   easeBackOut: easeBackOut,
 };
+
+/**
+ * Check whether reduced motion should be applied given a user preference.
+ *
+ * - `false`     — always animate (ignore OS setting)
+ * - `true`      — always skip animation
+ * - `'auto'` / `undefined` — honour the OS `prefers-reduced-motion` media query
+ *
+ * Shared by FlowTimeline and the canvas-animation mixin so both follow
+ * the same logic without diverging.
+ */
+export function checkReducedMotion(preference: boolean | 'auto' | undefined): boolean {
+  const pref = preference ?? 'auto';
+  if (pref === false) return false;
+  if (pref === true) return true;
+  return typeof globalThis !== 'undefined'
+    && globalThis.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
+}
 
 /** Resolve an easing name or custom function to a callable (t: number) => number. */
 export function resolveEasing(easing?: EasingName | EasingFn): EasingFn {

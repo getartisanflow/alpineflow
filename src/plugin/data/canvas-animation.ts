@@ -29,23 +29,13 @@ import type {
 } from '../../core/types';
 import type { Animator, PropertyEntry } from '../../animate/animator';
 import { parseStyle, interpolateStyle } from '../../animate/interpolators';
+import { checkReducedMotion } from '../../animate/easing';
 import { FlowTimeline, type TimelineStep } from '../../animate/timeline';
 import { type PathFunction, svgPathToFunction } from '../../animate/paths';
 import { engine } from '../../animate/engine';
 import { debug } from '../../core/debug';
 import { DEFAULT_STROKE_COLOR } from '../../core/constants';
 import { createParticleMixin } from './canvas-particles';
-
-// ── Local utility ───────────────────────────────────────────────────────────
-
-/** Return true when the effective reduced-motion preference is active. */
-function isReducedMotion(config: any): boolean {
-  const pref = config?.respectReducedMotion ?? 'auto';
-  if (pref === false) return false;
-  if (pref === true) return true;
-  return typeof window !== 'undefined'
-    && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches === true;
-}
 
 // ── Mixin factory ───────────────────────────────────────────────────────────
 
@@ -558,7 +548,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
       targets: AnimateTargets,
       options: AnimateOptions = {},
     ): FlowAnimationHandle {
-      const effectiveDuration = isReducedMotion(ctx._config) ? 0 : (options.duration ?? 300);
+      const effectiveDuration = checkReducedMotion(ctx._config?.respectReducedMotion) ? 0 : (options.duration ?? 300);
       return this.update(targets, { ...options, duration: effectiveDuration });
     },
 
