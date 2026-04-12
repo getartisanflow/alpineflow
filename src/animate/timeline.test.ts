@@ -708,6 +708,31 @@ describe('FlowTimeline reset', () => {
     expect(nodeA.data.created.getTime()).toBe(dateValue.getTime());
     expect(nodeA.data.label).toBe('test');
   });
+
+  it('falls back to JSON clone when node.data is not structuredClone-able', async () => {
+    // Simulate Alpine's reactive proxy by giving node.data a Proxy with
+    // a non-cloneable getter (functions can't be structured-cloned).
+    const canvas = makeMockCanvas();
+    const nodeA = canvas.getNode('a')!;
+    // Plain object with a function property — structuredClone will throw
+    nodeA.data = { label: 'pre', _handler: () => 'not cloneable' };
+
+    const tl = new FlowTimeline(canvas);
+    tl.step({ nodes: ['a'], position: { x: 100 }, duration: 0 });
+
+    // play() triggers snapshot — must not throw despite the function in data
+    const done = tl.play();
+    await advanceTimers(50);
+    await done;
+
+    // Mutate, then reset — restore must also succeed via JSON fallback
+    nodeA.data.label = 'mutated';
+    tl.reset();
+
+    expect(nodeA.data.label).toBe('pre');
+    // Function was stripped by JSON clone — acceptable fallback behavior
+    expect(nodeA.data._handler).toBeUndefined();
+  });
 });
 
 // ── Events ───────────────────────────────────────────────────────────────────
