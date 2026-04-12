@@ -148,7 +148,7 @@ function snapshotNode(node: FlowNode): NodeSnapshot {
     position: { ...node.position },
     class: node.class,
     style: typeof node.style === 'string' ? node.style : node.style ? { ...node.style } : undefined,
-    data: JSON.parse(JSON.stringify(node.data)),
+    data: structuredClone(node.data),
     dimensions: node.dimensions ? { ...node.dimensions } : undefined,
     selected: node.selected,
     zIndex: node.zIndex,
@@ -170,7 +170,7 @@ function restoreNode(node: FlowNode, snap: NodeSnapshot): void {
   node.position.y = snap.position.y;
   node.class = snap.class;
   node.style = snap.style;
-  node.data = JSON.parse(JSON.stringify(snap.data));
+  node.data = structuredClone(snap.data);
   node.dimensions = snap.dimensions ? { ...snap.dimensions } : node.dimensions;
   node.selected = snap.selected;
   node.zIndex = snap.zIndex;

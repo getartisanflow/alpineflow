@@ -669,6 +669,31 @@ describe('FlowTimeline reset', () => {
 
     expect(canvas.getNode('a')!.position.x).toBe(100);
   });
+
+  it('preserves Date objects in node.data through snapshot/restore', async () => {
+    const dateValue = new Date('2026-01-01');
+    const canvas = makeMockCanvas();
+    const nodeA = canvas.getNode('a')!;
+    nodeA.data = { created: dateValue, label: 'test' };
+
+    const tl = new FlowTimeline(canvas);
+    tl.step({ nodes: ['a'], position: { x: 100 }, duration: 0 });
+
+    // play() captures snapshot, then runs the instant step
+    const done = tl.play();
+    await advanceTimers(50);
+    await done;
+
+    // Mutate the data to verify reset actually restores from snapshot
+    nodeA.data.created = new Date('2099-12-31');
+    nodeA.data.label = 'mutated';
+
+    tl.reset();
+
+    expect(nodeA.data.created).toBeInstanceOf(Date);
+    expect(nodeA.data.created.getTime()).toBe(dateValue.getTime());
+    expect(nodeA.data.label).toBe('test');
+  });
 });
 
 // ── Events ───────────────────────────────────────────────────────────────────
