@@ -27,6 +27,7 @@ import type {
   FlowAnimationHandle,
   FollowOptions,
   ParticleHandle,
+  ParticleOptions,
 } from '../../core/types';
 import type { Animator, PropertyEntry } from '../../animate/animator';
 import { parseStyle, interpolateStyle } from '../../animate/interpolators';
@@ -725,12 +726,12 @@ export function createAnimationMixin(ctx: CanvasContext) {
      * Fire a particle along an edge path. The particle is an SVG circle
      * that follows the edge's `<path>` element using `getPointAtLength`.
      */
-    sendParticle(edgeId: string, options: Record<string, any> = {}): ParticleHandle | undefined {
+    sendParticle(edgeId: string, options: ParticleOptions = {}): ParticleHandle | undefined {
       // Skip particles on culled (hidden) edges — zero wasted work off-screen
       const svg = ctx._edgeSvgElements.get(edgeId);
       if (svg && svg.style.display === 'none') return undefined;
 
-      const edge = ctx.edges.find((e: FlowEdge) => e.id === edgeId);
+      const edge = ctx.getEdge(edgeId);
       if (!edge) {
         debug('particle', `sendParticle: edge "${edgeId}" not found`);
         return undefined;

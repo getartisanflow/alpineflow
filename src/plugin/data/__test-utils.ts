@@ -201,7 +201,10 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
 
     // === Public methods (vi.fn() stubs) ===
     getNode: vi.fn((id: string) => undefined),
-    getEdge: vi.fn((id: string) => undefined),
+    getEdge: vi.fn((id: string) => {
+      // Look up edge in _edgeMap, fallback to edges array for backwards compatibility
+      return (ctx as any)._edgeMap?.get(id) ?? ctx.edges.find((e: FlowEdge) => e.id === id);
+    }),
     getEdgePathElement: vi.fn(() => null),
     getEdgeElement: vi.fn(() => null),
     addNodes: vi.fn(),
