@@ -27,7 +27,7 @@ export {
 
 // ── Path Helpers ────────────────────────────────────────────────────────────
 export type { PathFunction, OrbitConfig, WaveConfig, AlongConfig, PendulumConfig, DriftConfig } from './paths';
-export { svgPathToFunction, orbit, wave, along, pendulum, drift, stagger } from './paths';
+export { svgPathToFunction, orbit, wave, along, pendulum, drift, stagger, _clearPathCache } from './paths';
 
 // ── Engine ──────────────────────────────────────────────────────────────────
 export { engine, AnimationEngine, type TickCallback, type EngineHandle } from './engine';
