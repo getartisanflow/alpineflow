@@ -312,6 +312,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     sendParticleBetween: vi.fn(() => undefined),
     sendParticleBurst: vi.fn(() => ({ handles: [], finished: Promise.resolve(), stopAll: vi.fn() })),
     sendConverging: vi.fn(() => ({ handles: [], finished: Promise.resolve(), stopAll: vi.fn() })),
+    registerParticleRenderer: vi.fn(),
     getEdgeSvgElement: vi.fn(() => null),
     getHandles: vi.fn(() => []),
     cancelAll: vi.fn(),

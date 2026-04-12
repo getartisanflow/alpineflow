@@ -39,8 +39,10 @@ import { engine } from '../../animate/engine';
 import { debug } from '../../core/debug';
 import { DEFAULT_STROKE_COLOR } from '../../core/constants';
 import { createParticleMixin } from './canvas-particles';
+import { registerParticleRenderer as _registerParticleRenderer } from '../../animate/particle-renderers';
 import { FlowGroup } from '../../animate/flow-group';
 import type { Transaction } from '../../animate/transaction';
+import type { ParticleRenderer } from '../../core/types';
 
 // ── Mixin factory ───────────────────────────────────────────────────────────
 
@@ -826,6 +828,16 @@ export function createAnimationMixin(ctx: CanvasContext) {
         tl.stop();
       }
       ctx._activeTimelines.clear();
+    },
+
+    // ── Particle renderer registry ────────────────────────────────────────
+
+    /**
+     * Register a custom particle renderer by name. Once registered, pass
+     * `renderer: 'your-name'` in any `sendParticle*` options to use it.
+     */
+    registerParticleRenderer(name: string, renderer: ParticleRenderer): void {
+      _registerParticleRenderer(name, renderer);
     },
 
     // ── Particle system (delegated to canvas-particles sub-mixin) ────────

@@ -1516,6 +1516,9 @@ export interface FlowInstance {
   /** Fire particles from multiple edges converging on a target node. */
   sendConverging(sourceEdgeIds: string[], options: ConvergingOptions): ConvergingHandle;
 
+  /** Register a custom particle renderer by name so it can be used via `renderer: 'name'` in sendParticle* options. */
+  registerParticleRenderer(name: string, renderer: ParticleRenderer): void;
+
   /** Get all tracked animation handles, optionally filtered by tag. */
   getHandles(filter?: { tag?: string; tags?: string[] }): FlowAnimationHandle[];
 

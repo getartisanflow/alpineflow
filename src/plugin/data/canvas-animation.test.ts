@@ -2,8 +2,8 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { mockCtx } from './__test-utils';
 import { createAnimationMixin } from './canvas-animation';
-import type { FlowNode, FlowEdge } from '../../core/types';
-import { registerParticleRenderer } from '../../animate/particle-renderers';
+import type { FlowNode, FlowEdge, ParticleRenderer } from '../../core/types';
+import { registerParticleRenderer, getParticleRenderer } from '../../animate/particle-renderers';
 
 // ── Mock Alpine ──────────────────────────────────────────────────────────────
 
@@ -1626,5 +1626,30 @@ describe('canvas animation — Tier A integration', () => {
 
     n1.selected = false;
     expect(callArgs.while()).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// registerParticleRenderer
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('registerParticleRenderer', () => {
+  it('$flow.registerParticleRenderer delegates to the registry', () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+
+    const mockRenderer: ParticleRenderer = {
+      create: vi.fn((svgLayer: SVGElement) => {
+        const el = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        svgLayer.appendChild(el);
+        return el;
+      }),
+      update: vi.fn(),
+      destroy: vi.fn((el: SVGElement) => el.remove()),
+    };
+
+    mixin.registerParticleRenderer('test-custom-renderer', mockRenderer);
+
+    expect(getParticleRenderer('test-custom-renderer')).toBe(mockRenderer);
   });
 });

@@ -724,6 +724,9 @@ export interface CanvasContext {
   /** Fire particles from multiple edges converging on a target node */
   sendConverging(sourceEdgeIds: string[], options: ConvergingOptions): ConvergingHandle;
 
+  /** Register a custom particle renderer by name */
+  registerParticleRenderer(name: string, renderer: ParticleRenderer): void;
+
   /** Get the SVG element that hosts edge paths (for injecting temp paths) */
   getEdgeSvgElement(): SVGSVGElement | null;
 
