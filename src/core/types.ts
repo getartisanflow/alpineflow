@@ -680,6 +680,12 @@ export interface ParticleOptions {
   renderer?: string;
   /** Travel speed in SVG units per second (alternative to duration). */
   speed?: number;
+  /** Length of the beam renderer rectangle in SVG user units. */
+  length?: number;
+  /** Width (thickness) of the beam renderer rectangle in SVG user units. */
+  width?: number;
+  /** URL or SVG symbol href (e.g. '#my-symbol') for the image renderer. */
+  href?: string;
 }
 
 /** State passed to particle renderers each frame. */
