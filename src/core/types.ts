@@ -11,6 +11,7 @@ import type { PathFunction } from '../animate/paths';
 import type { CollabConfig, CollabInstance } from '../collab/types';
 import type { FlowGroup } from '../animate/flow-group';
 import type { Transaction } from '../animate/transaction';
+import type { MotionConfig } from '../animate/motion/types';
 
 /** 2D coordinate */
 export interface XYPosition {
@@ -1270,6 +1271,7 @@ export interface FlowCanvasConfig {
 export interface ElementTimingOverrides {
   _duration?: number;
   _easing?: EasingName | ((t: number) => number);
+  _motion?: MotionConfig | string;
 }
 
 /** Node animation targets. */
@@ -1315,6 +1317,10 @@ export interface AnimateOptions {
   duration?: number;
   /** Easing preset or custom function. Default: 'easeInOut'. */
   easing?: EasingName | ((t: number) => number);
+  /** Physics-based motion config or preset string (e.g. 'spring.wobbly'). */
+  motion?: MotionConfig | string;
+  /** Maximum duration in ms when using physics-based motion. Default: 10000. */
+  maxDuration?: number;
   /** Delay before starting in ms. Default: 0. */
   delay?: number;
   /** true = loop forever, 'reverse' | 'ping-pong' = ping-pong. Default: false. */
