@@ -294,3 +294,122 @@ describe('AnimationEngine.onPostTick', () => {
     }
   });
 });
+
+// ── onPostTick keepAlive ────────────────────────────────────────────────────
+
+describe('AnimationEngine.onPostTick keepAlive', () => {
+  it('keeps the engine running after regular callbacks complete when keepAlive is true', async () => {
+    const engine = new AnimationEngine();
+    engine.setScheduler(makeTimeoutScheduler());
+
+    let postTickCount = 0;
+    engine.onPostTick(() => { postTickCount++; }, { keepAlive: true });
+
+    // Register a regular callback that completes immediately
+    engine.register(() => true);
+
+    // Allow the regular callback to fire and complete
+    await vi.advanceTimersByTimeAsync(16);
+    expect(postTickCount).toBe(1);
+
+    // Engine should still be running because keepAlive postTick is active
+    expect(engine.active).toBe(true);
+
+    // PostTick should keep firing on subsequent frames
+    await vi.advanceTimersByTimeAsync(16);
+    await vi.advanceTimersByTimeAsync(16);
+
+    expect(postTickCount).toBeGreaterThanOrEqual(3);
+    expect(engine.active).toBe(true);
+  });
+
+  it('engine stops after regular callbacks complete when keepAlive is false (default)', async () => {
+    const engine = new AnimationEngine();
+    engine.setScheduler(makeTimeoutScheduler());
+
+    let postTickCount = 0;
+    engine.onPostTick(() => { postTickCount++; });
+
+    // Register a regular callback that completes immediately
+    engine.register(() => true);
+
+    // Allow the regular callback to fire and complete
+    await vi.advanceTimersByTimeAsync(16);
+    const countAfterFirst = postTickCount;
+
+    // Engine should have stopped
+    await vi.advanceTimersByTimeAsync(16);
+    await vi.advanceTimersByTimeAsync(16);
+
+    // PostTick should have fired once (the frame where the regular callback completed)
+    // then engine stopped — no more postTick calls
+    expect(postTickCount).toBe(countAfterFirst);
+    expect(engine.active).toBe(false);
+  });
+
+  it('keepAlive postTick starts the engine even without regular callbacks', async () => {
+    const engine = new AnimationEngine();
+    engine.setScheduler(makeTimeoutScheduler());
+
+    expect(engine.active).toBe(false);
+
+    let postTickCount = 0;
+    engine.onPostTick(() => { postTickCount++; }, { keepAlive: true });
+
+    // Engine should start immediately due to keepAlive
+    expect(engine.active).toBe(true);
+
+    await vi.advanceTimersByTimeAsync(16);
+    await vi.advanceTimersByTimeAsync(16);
+
+    expect(postTickCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it('stopping keepAlive handle allows engine to auto-stop', async () => {
+    const engine = new AnimationEngine();
+    engine.setScheduler(makeTimeoutScheduler());
+
+    let postTickCount = 0;
+    const handle = engine.onPostTick(() => { postTickCount++; }, { keepAlive: true });
+
+    // Engine is running due to keepAlive
+    await vi.advanceTimersByTimeAsync(16);
+    expect(engine.active).toBe(true);
+    expect(postTickCount).toBe(1);
+
+    // Stop the keepAlive observer
+    handle.stop();
+
+    // Engine should stop on the next frame (no regular callbacks, no keepAlive)
+    await vi.advanceTimersByTimeAsync(16);
+    expect(engine.active).toBe(false);
+  });
+
+  it('keepAlive postTick survives engine stop/restart cycles', async () => {
+    const engine = new AnimationEngine();
+    engine.setScheduler(makeTimeoutScheduler());
+
+    const postTickTimestamps: number[] = [];
+    engine.onPostTick((frameTime) => { postTickTimestamps.push(frameTime); }, { keepAlive: true });
+
+    // First burst: register a callback that completes in one frame
+    engine.register(() => true);
+    await vi.advanceTimersByTimeAsync(16);
+
+    const countAfterFirstBurst = postTickTimestamps.length;
+    expect(countAfterFirstBurst).toBeGreaterThanOrEqual(1);
+    // Engine stays alive because of keepAlive
+    expect(engine.active).toBe(true);
+
+    // PostTick keeps receiving frames
+    await vi.advanceTimersByTimeAsync(16);
+    expect(postTickTimestamps.length).toBeGreaterThan(countAfterFirstBurst);
+
+    // Second burst: register another callback
+    engine.register(() => true);
+    await vi.advanceTimersByTimeAsync(16);
+
+    // PostTick should have continued receiving frames throughout
+    expect(postTickTimestamps.length).toBeGreaterThan(countAfterFirstBurst + 1);
+  });
+});

@@ -60,6 +60,7 @@ function createDefaultScheduler(): FrameScheduler {
 interface PostTickEntry {
   callback: (frameTime: number) => void;
   removed: boolean;
+  keepAlive: boolean;
 }
 
 // ── AnimationEngine ──────────────────────────────────────────────────────────
@@ -119,11 +120,18 @@ export class AnimationEngine {
   /**
    * Register a post-tick callback, fired after all regular tick callbacks each frame.
    * @param callback - Called with the frame timestamp (same `now` value passed to `_tick`).
+   * @param options - Optional settings. `keepAlive: true` keeps the engine loop running
+   *   even when no regular callbacks are registered (useful for recorders that need every frame).
    * @returns Handle with a `stop()` method to unregister.
    */
-  onPostTick(callback: (frameTime: number) => void): EngineHandle {
-    const entry: PostTickEntry = { callback, removed: false };
+  onPostTick(callback: (frameTime: number) => void, options?: { keepAlive?: boolean }): EngineHandle {
+    const entry: PostTickEntry = { callback, removed: false, keepAlive: options?.keepAlive ?? false };
     this._postTickCallbacks.push(entry);
+
+    // If keepAlive is set and the engine isn't running, start it now
+    if (entry.keepAlive && !this._running) {
+      this._start();
+    }
 
     return {
       stop: () => {
@@ -191,8 +199,9 @@ export class AnimationEngine {
     // Prune removed post-tick callbacks
     this._postTickCallbacks = this._postTickCallbacks.filter((e) => !e.removed);
 
-    // Auto-stop if no callbacks remain
-    if (this._entries.length === 0) {
+    // Auto-stop if no callbacks remain and no keepAlive postTick observers
+    const hasKeepAlive = this._postTickCallbacks.some((e) => !e.removed && e.keepAlive);
+    if (this._entries.length === 0 && !hasKeepAlive) {
       this._stop();
       return;
     }
