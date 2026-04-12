@@ -267,6 +267,23 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
     return this;
   }
 
+  /**
+   * Create and insert a sub-timeline via a builder callback.
+   * Returns the sub-timeline for individual targeting.
+   */
+  timeline<TSub extends Record<string, any> = TContext>(
+    builder: (sub: FlowTimeline<TSub>) => void,
+    options?: { independent?: boolean },
+  ): FlowTimeline<TSub> {
+    const sub = new FlowTimeline<TSub>(this._canvas, this._engine);
+    builder(sub);
+    this._entries.push({
+      type: 'step',
+      config: { timeline: sub, independent: options?.independent } as TimelineStep<TContext>,
+    });
+    return sub;
+  }
+
   pause(callback?: (resume: (context?: Record<string, any>) => void) => void): this {
     this._entries.push({ type: 'pause', callback });
     return this;

@@ -2297,3 +2297,50 @@ describe('FlowTimeline — sub-timeline composition (Form 1)', () => {
     expect(canvas.getNode('a')!.position.x).toBe(100);
   });
 });
+
+// ── Nested builder (Form 2) ───────────────────────────────────────────────────
+
+describe('FlowTimeline — nested builder (Form 2)', () => {
+  it('parent.timeline(builder) creates and inserts a sub-timeline step', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+
+    parent.timeline((sub) => {
+      sub.step({ nodes: ['a'], position: { x: 100 }, duration: 0 });
+    });
+    parent.step({ nodes: ['a'], position: { x: 200 }, duration: 0 });
+
+    await parent.play();
+    expect(canvas.getNode('a')!.position.x).toBe(200); // both ran in sequence
+  });
+
+  it('returns the sub-timeline for individual targeting', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+
+    const sub = parent.timeline((s) => {
+      s.step({ nodes: ['a'], position: { x: 50 }, duration: 0 });
+    });
+
+    expect(sub).toBeInstanceOf(FlowTimeline);
+  });
+
+  it('independent option works with nested builder', async () => {
+    const canvas = makeMockCanvas();
+    const parent = new FlowTimeline(canvas);
+
+    parent.timeline((sub) => {
+      sub.step({ nodes: ['a'], position: { x: 100 }, duration: 0 });
+    }, { independent: true });
+
+    // Independent subs should not be in subTimelines during execution
+    let subCount = -1;
+    parent.step({
+      nodes: ['a'], position: { x: 200 }, duration: 0,
+      onStart: () => { subCount = parent.subTimelines.length; },
+    });
+
+    await parent.play();
+    expect(subCount).toBe(0); // independent sub was not tracked
+  });
+});
