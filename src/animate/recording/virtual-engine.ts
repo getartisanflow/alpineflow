@@ -88,26 +88,66 @@ export class VirtualEngine {
             case 'update':
                 this._applyAnimate(event);
                 break;
-            case 'node-add':
-                if (event.args.id && event.args.node) {
+            case 'node-add': {
+                const nodes = event.args.nodes;
+                if (Array.isArray(nodes)) {
+                    for (const n of nodes) {
+                        if (n?.id) {
+                            this._state.nodes[n.id] = structuredClone(n);
+                        }
+                    }
+                } else if (nodes?.id) {
+                    this._state.nodes[nodes.id] = structuredClone(nodes);
+                } else if (event.args.id && event.args.node) {
+                    // Legacy shape support
                     this._state.nodes[event.args.id] = structuredClone(event.args.node);
                 }
                 break;
-            case 'node-remove':
-                if (event.args.id) {
+            }
+            case 'node-remove': {
+                const ids = event.args.ids;
+                if (Array.isArray(ids)) {
+                    for (const id of ids) {
+                        delete this._state.nodes[id];
+                    }
+                } else if (typeof ids === 'string') {
+                    delete this._state.nodes[ids];
+                } else if (event.args.id) {
+                    // Legacy shape support
                     delete this._state.nodes[event.args.id];
                 }
                 break;
-            case 'edge-add':
-                if (event.args.id && event.args.edge) {
+            }
+            case 'edge-add': {
+                const edges = event.args.edges;
+                if (Array.isArray(edges)) {
+                    for (const e of edges) {
+                        if (e?.id) {
+                            this._state.edges[e.id] = structuredClone(e);
+                        }
+                    }
+                } else if (edges?.id) {
+                    this._state.edges[edges.id] = structuredClone(edges);
+                } else if (event.args.id && event.args.edge) {
+                    // Legacy shape support
                     this._state.edges[event.args.id] = structuredClone(event.args.edge);
                 }
                 break;
-            case 'edge-remove':
-                if (event.args.id) {
+            }
+            case 'edge-remove': {
+                const ids = event.args.ids;
+                if (Array.isArray(ids)) {
+                    for (const id of ids) {
+                        delete this._state.edges[id];
+                    }
+                } else if (typeof ids === 'string') {
+                    delete this._state.edges[ids];
+                } else if (event.args.id) {
+                    // Legacy shape support
                     delete this._state.edges[event.args.id];
                 }
                 break;
+            }
             case 'viewport-change':
                 Object.assign(this._state.viewport, event.args);
                 break;
@@ -151,7 +191,10 @@ export class VirtualEngine {
 
     private _applyAnimate(event: RecordingEvent): void {
         const handleId: string = event.args.handleId
-            ?? `virt-${this._virtualTime}-${Math.random().toString(36).slice(2, 8)}`;
+            ?? `virt-${this._virtualTime.toFixed(3)}-${this._inFlight.size}`;
+        if (!event.args.handleId) {
+            console.warn('[AlpineFlow VirtualEngine] animate event missing handleId — determinism not guaranteed for this event');
+        }
         const targets: AnimateTargets = event.args.targets ?? {};
         const options = event.args.options ?? {};
 

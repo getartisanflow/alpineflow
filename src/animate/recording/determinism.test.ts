@@ -168,6 +168,68 @@ describe('Recording determinism', () => {
         expect(state.nodes.a.position!.x).toBeGreaterThan(0);
     });
 
+    it('recorder injects stable handleIds on animate/update events', async () => {
+        const canvas = {
+            nodes: [{ id: 'a', position: { x: 0, y: 0 } }],
+            edges: [],
+            viewport: { x: 0, y: 0, zoom: 1 },
+            animate: vi.fn(),
+            update: vi.fn(),
+        };
+        const recorder = new Recorder(canvas as any, { checkpointInterval: 10000 });
+        const recording = await recorder.record(async () => {
+            canvas.animate({ nodes: { a: { position: { x: 100 } } } }, { duration: 200 });
+            canvas.update({ nodes: { a: { position: { x: 200 } } } }, {});
+            canvas.animate({ nodes: { a: { position: { x: 300 } } } }, { duration: 200 });
+        });
+
+        const animateEvents = recording.events.filter((e) => e.type === 'animate' || e.type === 'update');
+        expect(animateEvents.length).toBe(3);
+        const ids = animateEvents.map((e) => e.args.handleId);
+        expect(ids.every((id) => typeof id === 'string' && id.startsWith('rec-'))).toBe(true);
+        // Must all be unique
+        expect(new Set(ids).size).toBe(ids.length);
+    });
+
+    it('real record→replay produces identical final state across two replays', async () => {
+        const canvas = {
+            nodes: [{ id: 'a', position: { x: 0, y: 0 }, dimensions: { width: 50, height: 50 } }],
+            edges: [],
+            viewport: { x: 0, y: 0, zoom: 1 },
+            animate: vi.fn(),
+            update: vi.fn(),
+        };
+
+        const recorder = new Recorder(canvas as any, { checkpointInterval: 10000 });
+        const recording = await recorder.record(async () => {
+            canvas.animate({ nodes: { a: { position: { x: 400 } } } }, { duration: 300 });
+        });
+
+        // Rebuild a recording without checkpoints so the VirtualEngine interprets
+        // the raw events (mock animate doesn't mutate real canvas, so the
+        // auto-captured final checkpoint would reflect unanimated state).
+        const rebuild = new Recording({
+            version: recording.version,
+            duration: recording.duration,
+            initialState: recording.initialState as CanvasSnapshot,
+            events: [...recording.events],
+            checkpoints: [],
+            metadata: {},
+        });
+
+        const stateA = rebuild.getStateAt(2000);
+        const stateB = rebuild.getStateAt(2000);
+        expect(stateA).toEqual(stateB);
+        expect(stateA.nodes.a.position!.x).toBe(400);
+
+        // All animate/update events carry a handleId
+        for (const e of recording.events) {
+            if (e.type === 'animate' || e.type === 'update') {
+                expect(typeof e.args.handleId).toBe('string');
+            }
+        }
+    });
+
     it('identical recordings produce identical stateAt results', () => {
         const data: RecordingData = {
             version: 1,

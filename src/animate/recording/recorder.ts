@@ -49,6 +49,7 @@ export class Recorder {
     private _checkpointInterval: number;
     private _maxDuration: number;
     private _checkpointTimer: ReturnType<typeof setInterval> | null = null;
+    private _eventCounter = 0;
 
     constructor(canvas: RecorderCanvas, options: RecordOptions = {}) {
         this._canvas = canvas;
@@ -198,8 +199,16 @@ export class Recorder {
             };
         };
 
-        hook('animate', 'animate', (targets, options) => ({ targets, options }));
-        hook('update', 'update', (targets, options) => ({ targets, options }));
+        hook('animate', 'animate', (targets, options) => ({
+            targets,
+            options,
+            handleId: `rec-${++this._eventCounter}`,
+        }));
+        hook('update', 'update', (targets, options) => ({
+            targets,
+            options,
+            handleId: `rec-${++this._eventCounter}`,
+        }));
         hook('sendParticle', 'particle', (edgeId, options) => ({ edgeId, options }));
         hook('sendParticleAlongPath', 'particle-along-path', (path, options) => ({ path, options }));
         hook('sendParticleBetween', 'particle-between', (source, target, options) => ({ source, target, options }));

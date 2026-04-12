@@ -367,4 +367,68 @@ describe('VirtualEngine', () => {
             expect(e2.inFlightCount).toBe(1);
         });
     });
+
+    describe('structural events (recorder output shape)', () => {
+        it('applies node-add with nodes:[array]', () => {
+            const event: RecordingEvent = {
+                t: 10,
+                type: 'node-add',
+                args: { nodes: [{ id: 'n3', position: { x: 50, y: 50 } }] },
+            };
+            engine.applyEvent(event);
+            expect(engine.getState().nodes.n3).toBeDefined();
+            expect(engine.getState().nodes.n3!.position!.x).toBe(50);
+        });
+
+        it('applies node-add with a single node object', () => {
+            const event: RecordingEvent = {
+                t: 10,
+                type: 'node-add',
+                args: { nodes: { id: 'n4', position: { x: 9, y: 9 } } },
+            };
+            engine.applyEvent(event);
+            expect(engine.getState().nodes.n4).toBeDefined();
+        });
+
+        it('applies node-remove with ids:[array]', () => {
+            const event: RecordingEvent = {
+                t: 10,
+                type: 'node-remove',
+                args: { ids: ['n1'] },
+            };
+            engine.applyEvent(event);
+            expect(engine.getState().nodes.n1).toBeUndefined();
+            expect(engine.getState().nodes.n2).toBeDefined();
+        });
+
+        it('applies node-remove with a single id string', () => {
+            const event: RecordingEvent = {
+                t: 10,
+                type: 'node-remove',
+                args: { ids: 'n2' },
+            };
+            engine.applyEvent(event);
+            expect(engine.getState().nodes.n2).toBeUndefined();
+        });
+
+        it('applies edge-add with edges:[array]', () => {
+            const event: RecordingEvent = {
+                t: 10,
+                type: 'edge-add',
+                args: { edges: [{ id: 'e2', source: 'n1', target: 'n2' }] },
+            };
+            engine.applyEvent(event);
+            expect(engine.getState().edges.e2).toBeDefined();
+        });
+
+        it('applies edge-remove with ids:[array]', () => {
+            const event: RecordingEvent = {
+                t: 10,
+                type: 'edge-remove',
+                args: { ids: ['e1'] },
+            };
+            engine.applyEvent(event);
+            expect(engine.getState().edges.e1).toBeUndefined();
+        });
+    });
 });

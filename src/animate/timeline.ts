@@ -527,7 +527,7 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
         // Wait if externally paused via pausePlayback()
         if (this._state === 'paused') {
           await this._waitForResume();
-          if (this._state === 'stopped') return;
+          if ((this._state as TimelineState) === 'stopped') return;
         }
 
         const entry = entries[i];

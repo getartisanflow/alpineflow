@@ -175,10 +175,20 @@ export class ReplayHandle {
         let vt = startT;
         const dtMs = REPLAY_DT * 1000;
 
+        // Apply any events sitting exactly at startT (boundary: inclusive at start
+        // so events emitted at t=0 are not skipped when there's no prior checkpoint).
+        if (!cp) {
+            for (const event of this.recording.events) {
+                if (event.t === startT) {
+                    engine.applyEvent(event);
+                }
+            }
+        }
+
         while (vt < t) {
             const nextVt = Math.min(vt + dtMs, t);
             for (const event of this.recording.events) {
-                if (event.t >= vt && event.t < nextVt) {
+                if (event.t > vt && event.t <= nextVt) {
                     engine.applyEvent(event);
                 }
             }
@@ -274,11 +284,21 @@ export class ReplayHandle {
         let vt = startT;
         const dtMs = REPLAY_DT * 1000;
 
+        // If walking from the very beginning, apply any events at t=0 first.
+        // The default window is (vt, nextVt] so events at t=startT are otherwise skipped.
+        if (startT === 0) {
+            for (const event of this.recording.events) {
+                if (event.t === 0) {
+                    this._virtualEngine.applyEvent(event);
+                }
+            }
+        }
+
         while (vt < endT) {
             const nextVt = Math.min(vt + dtMs, endT);
 
             for (const event of this.recording.events) {
-                if (event.t >= vt && event.t < nextVt) {
+                if (event.t > vt && event.t <= nextVt) {
                     this._virtualEngine.applyEvent(event);
                 }
             }

@@ -294,4 +294,48 @@ describe('ReplayHandle', () => {
         expect(handle.state).toBe('playing');
         expect(handle.currentTime).toBeLessThan(handle.duration);
     });
+
+    describe('getStateAt window-boundary parity', () => {
+        it('recording.getStateAt(t) matches handle.getStateAt(t) for representative t', () => {
+            const recordingData = makeRecording({
+                duration: 1000,
+                events: [
+                    {
+                        t: 0,
+                        type: 'animate',
+                        args: {
+                            handleId: 'h-start',
+                            targets: { nodes: { n1: { position: { x: 500 } } } },
+                            options: { duration: 400, easing: 'linear' },
+                        },
+                    },
+                    {
+                        t: 500,
+                        type: 'animate',
+                        args: {
+                            handleId: 'h-mid',
+                            targets: { nodes: { n2: { position: { x: 900 } } } },
+                            options: { duration: 300, easing: 'linear' },
+                        },
+                    },
+                ],
+            });
+
+            const canvas2 = makeCanvas();
+            const handle = new ReplayHandle(canvas2, recordingData, { paused: true });
+
+            for (const t of [0, 100, 250, 500, 750, 1000]) {
+                const fromRecording = recordingData.getStateAt(t);
+                const fromHandle = handle.getStateAt(t);
+                expect(fromHandle.nodes.n1!.position!.x).toBeCloseTo(
+                    fromRecording.nodes.n1!.position!.x ?? 0,
+                    3,
+                );
+                expect(fromHandle.nodes.n2!.position!.x).toBeCloseTo(
+                    fromRecording.nodes.n2!.position!.x ?? 0,
+                    3,
+                );
+            }
+        });
+    });
 });

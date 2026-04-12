@@ -1,4 +1,5 @@
-import type { FlowNode, FlowEdge, Viewport, AnimateTargets, EasingName } from '../../core/types';
+import type { FlowNode, FlowEdge, Viewport, AnimateTargets } from '../../core/types';
+import type { EasingName } from '../easing';
 import type { MotionConfig } from '../motion';
 
 export interface CanvasSnapshot {
