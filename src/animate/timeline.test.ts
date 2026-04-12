@@ -89,6 +89,13 @@ function makeMockCanvas(): MockCanvas {
           resume() {},
           stop() {},
           reverse() {},
+          play() {},
+          playForward() {},
+          playBackward() {},
+          restart() {},
+          get direction(): 'forward' | 'backward' { return 'forward'; },
+          get isFinished() { return true; },
+          get currentValue() { return new Map(); },
           finished: Promise.resolve(),
         };
       }
@@ -242,6 +249,13 @@ function makeMockCanvas(): MockCanvas {
           resolveFinished!();
         },
         reverse() {},
+        play() {},
+        playForward() {},
+        playBackward() {},
+        restart() {},
+        get direction(): 'forward' | 'backward' { return 'forward'; },
+        get isFinished() { return stopped; },
+        get currentValue() { return new Map(); },
         get finished() { return finished; },
       };
     },

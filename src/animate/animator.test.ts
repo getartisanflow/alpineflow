@@ -776,3 +776,362 @@ describe('Animator — configurable stop modes', () => {
     await advanceTimers(500);
   });
 });
+
+describe('Animator — direction state machine', () => {
+  it('handle.direction starts as "forward"', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 160 },
+    );
+
+    expect(handle.direction).toBe('forward');
+    handle.stop();
+  });
+
+  it('handle.isFinished is true when animation reaches endpoint', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 80 },
+    );
+
+    expect(handle.isFinished).toBe(false);
+
+    // Advance past duration
+    await advanceTimers(160);
+    await handle.finished;
+
+    expect(handle.isFinished).toBe(true);
+  });
+
+  it('reverse() on a finished handle plays backward to snapshot', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear' },
+    );
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(handle.isFinished).toBe(true);
+    expect(value).toBe(100);
+
+    // Reverse the finished handle
+    handle.reverse();
+    expect(handle.direction).toBe('backward');
+    expect(handle.isFinished).toBe(false);
+
+    // Advance to completion of backward animation
+    await advanceTimers(160);
+    await handle.finished;
+
+    // Should be back at snapshot value
+    expect(value).toBe(0);
+    expect(handle.isFinished).toBe(true);
+  });
+
+  it('restart() resets to snapshot and plays forward again', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear' },
+    );
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(100);
+
+    // Restart
+    handle.restart();
+    expect(handle.direction).toBe('forward');
+    expect(handle.isFinished).toBe(false);
+
+    // Value should be reset to snapshot
+    expect(value).toBe(0);
+
+    // Advance to completion again
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(100);
+  });
+
+  it('restart({ direction: "backward" }) resets to target and plays backward', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear' },
+    );
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(100);
+
+    // Restart backward
+    handle.restart({ direction: 'backward' });
+    expect(handle.direction).toBe('backward');
+
+    // Value should be at target (reset for backward play)
+    expect(value).toBe(100);
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(0);
+  });
+
+  it('playBackward() sets direction and plays from current position', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear' },
+    );
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(100);
+
+    // playBackward from finished state
+    handle.playBackward();
+    expect(handle.direction).toBe('backward');
+    expect(handle.isFinished).toBe(false);
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(0);
+  });
+
+  it('playForward() sets direction and plays from current position', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear' },
+    );
+
+    // Advance to completion, then reverse to finish backward
+    await advanceTimers(160);
+    await handle.finished;
+    handle.reverse();
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(0);
+    expect(handle.direction).toBe('backward');
+
+    // Now playForward from the backward-finished state
+    handle.playForward();
+    expect(handle.direction).toBe('forward');
+    expect(handle.isFinished).toBe(false);
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(100);
+  });
+
+  it('play() on a finished handle restarts in current direction', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear' },
+    );
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(100);
+    expect(handle.isFinished).toBe(true);
+
+    // play() on finished restarts in current (forward) direction
+    handle.play();
+    expect(handle.isFinished).toBe(false);
+
+    // Advance to completion again
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(100);
+  });
+
+  it('play() on a paused handle resumes', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 160, easing: 'linear' },
+    );
+
+    // Advance partway and pause
+    await advanceTimers(48);
+    const midValue = value;
+    expect(midValue).toBeGreaterThan(0);
+    handle.pause();
+
+    // Advance while paused — value should not change
+    await advanceTimers(80);
+    expect(value).toBe(midValue);
+
+    // play() should resume
+    handle.play();
+
+    // Advance to completion
+    await advanceTimers(160);
+    expect(value).toBe(100);
+  });
+
+  it('loop "ping-pong" works as an alias for "reverse"', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const values: number[] = [];
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { values.push(v as number); } }],
+      { duration: 80, easing: 'linear', loop: 'ping-pong' },
+    );
+
+    // Advance through ~2 cycles (160ms)
+    await advanceTimers(176);
+
+    // Should ping-pong just like loop: 'reverse'
+    const peak = Math.max(...values);
+    const peakIndex = values.indexOf(peak);
+    expect(peak).toBeGreaterThan(80);
+
+    // Values after the peak should include some that are decreasing
+    const afterPeak = values.slice(peakIndex + 1);
+    const decreasingValues = afterPeak.filter((v) => v < peak - 10);
+    expect(decreasingValues.length).toBeGreaterThan(0);
+
+    handle.stop();
+  });
+
+  it('startAt "end" starts at target with backward direction', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear', startAt: 'end' },
+    );
+
+    // Should immediately be at target
+    expect(value).toBe(100);
+    expect(handle.direction).toBe('backward');
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+
+    // Should be at snapshot value
+    expect(value).toBe(0);
+  });
+
+  it('currentValue reflects latest interpolated state', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 160, easing: 'linear' },
+    );
+
+    // Initially at start
+    expect(handle.currentValue.get('x')).toBe(0);
+
+    // Advance partway
+    await advanceTimers(80);
+    const cv = handle.currentValue.get('x') as number;
+    expect(cv).toBeGreaterThan(0);
+    expect(cv).toBeLessThan(100);
+    // currentValue should match what was applied
+    expect(cv).toBe(value);
+
+    handle.stop();
+  });
+
+  it('reverse() mid-animation flips direction smoothly', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 160, easing: 'linear' },
+    );
+
+    // Advance to ~50%
+    await advanceTimers(80);
+    const midValue = value;
+    expect(midValue).toBeGreaterThan(20);
+    expect(midValue).toBeLessThan(80);
+    expect(handle.direction).toBe('forward');
+
+    // Reverse mid-flight
+    handle.reverse();
+    expect(handle.direction).toBe('backward');
+
+    // Advance — value should head back toward 0
+    await advanceTimers(80);
+    expect(value).toBeLessThan(midValue);
+
+    handle.stop();
+  });
+
+  it('finished promise renews after reverse() on finished handle', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear' },
+    );
+
+    // Complete forward
+    await advanceTimers(160);
+    const firstFinished = handle.finished;
+    await firstFinished;
+
+    // Reverse
+    handle.reverse();
+
+    // New finished promise should be different from the old one
+    const secondFinished = handle.finished;
+    expect(secondFinished).not.toBe(firstFinished);
+
+    // Complete backward
+    await advanceTimers(160);
+    await secondFinished;
+    expect(value).toBe(0);
+    expect(handle.isFinished).toBe(true);
+  });
+});

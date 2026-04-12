@@ -248,6 +248,13 @@ function makeParticleCanvas() {
           resolveFinished!();
         },
         reverse: () => {},
+        play: () => {},
+        playForward: () => {},
+        playBackward: () => {},
+        restart: () => {},
+        get direction(): 'forward' | 'backward' { return 'forward'; },
+        get isFinished() { return stopped; },
+        get currentValue() { return new Map(); },
         get finished() { return finished; },
       };
 

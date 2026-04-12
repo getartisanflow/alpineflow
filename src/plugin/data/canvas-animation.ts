@@ -460,6 +460,13 @@ export function createAnimationMixin(ctx: CanvasContext) {
           resume: () => {},
           stop: () => {},
           reverse: () => {},
+          play: () => {},
+          playForward: () => {},
+          playBackward: () => {},
+          restart: () => {},
+          get direction(): 'forward' | 'backward' { return 'forward'; },
+          get isFinished() { return true; },
+          get currentValue() { return new Map(); },
           finished: Promise.resolve(),
           _targetNodeIds: targets.nodes ? Object.keys(targets.nodes) : undefined,
         };
@@ -477,6 +484,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
         easing: options.easing,
         delay: options.delay,
         loop: options.loop,
+        startAt: options.startAt,
         onProgress(progress) {
           // Flush moved nodes to DOM each frame
           if (movedNodeIds.size > 0) {
@@ -661,6 +669,13 @@ export function createAnimationMixin(ctx: CanvasContext) {
           resolveFinished!();
         },
         reverse: () => {},
+        play: () => {},
+        playForward: () => {},
+        playBackward: () => {},
+        restart: () => {},
+        get direction(): 'forward' | 'backward' { return 'forward'; },
+        get isFinished() { return stopped; },
+        get currentValue() { return new Map(); },
         get finished() { return finished; },
       };
 

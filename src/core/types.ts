@@ -1241,8 +1241,10 @@ export interface AnimateOptions {
   easing?: EasingName | ((t: number) => number);
   /** Delay before starting in ms. Default: 0. */
   delay?: number;
-  /** true = loop forever, 'reverse' = ping-pong. Default: false. */
-  loop?: boolean | 'reverse';
+  /** true = loop forever, 'reverse' | 'ping-pong' = ping-pong. Default: false. */
+  loop?: boolean | 'reverse' | 'ping-pong';
+  /** Start position. 'end' snaps to target and plays backward. Default: 'start'. */
+  startAt?: 'start' | 'end';
   /** Called once on the first tick after delay elapses. */
   onStart?: () => void;
   /** Called each frame with progress 0–1. */
@@ -1262,6 +1264,13 @@ export interface FlowAnimationHandle {
   resume(): void;
   stop(options?: StopOptions): void;
   reverse(): void;
+  play(): void;
+  playForward(): void;
+  playBackward(): void;
+  restart(options?: { direction?: 'forward' | 'backward' }): void;
+  readonly direction: 'forward' | 'backward';
+  readonly isFinished: boolean;
+  readonly currentValue: Map<string, number | string>;
   readonly finished: Promise<void>;
   /** @internal Node IDs targeted by this animation (used by follow()). */
   _targetNodeIds?: string[];

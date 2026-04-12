@@ -28,7 +28,8 @@ export interface AnimateInternalOptions {
   duration: number;
   easing?: EasingName | EasingFn;
   delay?: number;
-  loop?: boolean | 'reverse';
+  loop?: boolean | 'reverse' | 'ping-pong';
+  startAt?: 'start' | 'end';
   onStart?: () => void;
   onProgress?: (progress: number) => void;
   onComplete?: () => void;
@@ -40,6 +41,13 @@ export interface AnimationHandle {
   resume(): void;
   stop(options?: StopOptions): void;
   reverse(): void;
+  play(): void;
+  playForward(): void;
+  playBackward(): void;
+  restart(options?: { direction?: 'forward' | 'backward' }): void;
+  readonly direction: 'forward' | 'backward';
+  readonly isFinished: boolean;
+  readonly currentValue: Map<string, number | string>;
   readonly finished: Promise<void>;
   readonly _snapshot: Map<string, number | string>;
   readonly _target: Map<string, number | string>;
@@ -61,16 +69,18 @@ interface ActiveGroup {
   pausedElapsed: number | null;
   /** When true, the next tick adjusts startTime to account for the pause gap. */
   _resumeNeeded: boolean;
-  reversed: boolean;
+  direction: 'forward' | 'backward';
   duration: number;
   easingFn: EasingFn;
-  loop: boolean | 'reverse';
+  loop: boolean | 'reverse' | 'ping-pong';
   onStart?: () => void;
   startFired: boolean;
   onProgress?: (progress: number) => void;
   onComplete?: () => void;
-  resolve: () => void;
+  resolve: (() => void) | null;
   stopped: boolean;
+  /** True when the animation reaches its current-direction endpoint. */
+  isFinished: boolean;
   /** Current interpolated values per key, updated every frame. */
   currentValues: Map<string, number | string>;
   /** Last elapsed time from engine tick, used for seamless reverse. */
@@ -79,6 +89,8 @@ interface ActiveGroup {
   snapshot: Map<string, number | string>;
   /** Target values captured at animate() call time. Persists after completion. */
   target: Map<string, number | string>;
+  /** Current finished promise — renewed on reverse/restart after completion. */
+  _currentFinished: Promise<void>;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -137,6 +149,7 @@ export class Animator {
       easing,
       delay = 0,
       loop = false,
+      startAt,
       onStart,
       onProgress,
       onComplete,
@@ -185,6 +198,13 @@ export class Animator {
         resume: () => {},
         stop: () => {},
         reverse: () => {},
+        play: () => {},
+        playForward: () => {},
+        playBackward: () => {},
+        restart: () => {},
+        get direction(): 'forward' | 'backward' { return 'forward'; },
+        get isFinished() { return true; },
+        get currentValue() { return tgt; },
         finished: Promise.resolve(),
         get _snapshot() { return snap; },
         get _target() { return tgt; },
@@ -202,6 +222,12 @@ export class Animator {
       target.set(entry.key, entry.to);
     }
 
+    // Normalize loop: 'ping-pong' is an alias for 'reverse'
+    const normalizedLoop = loop === 'ping-pong' ? 'reverse' : loop;
+
+    // Determine initial direction
+    const initialDirection: 'forward' | 'backward' = startAt === 'end' ? 'backward' : 'forward';
+
     // Set up the active group
     let resolveFinished!: () => void;
     const finished = new Promise<void>((resolve) => {
@@ -215,25 +241,35 @@ export class Animator {
       startTime: 0,
       pausedElapsed: null,
       _resumeNeeded: false,
-      reversed: false,
+      direction: initialDirection,
       duration,
       easingFn,
-      loop,
+      loop: normalizedLoop,
       onStart,
       startFired: false,
       onProgress,
       onComplete,
       resolve: resolveFinished,
       stopped: false,
+      isFinished: false,
       currentValues: new Map(),
       _lastElapsed: 0,
       snapshot,
       target,
+      _currentFinished: finished,
     };
 
-    // Initialize current values to "from"
-    for (const entry of entries) {
-      group.currentValues.set(entry.key, entry.from);
+    // Initialize current values
+    if (startAt === 'end') {
+      // Snap to target values immediately; animation will play backward to snapshot
+      for (const entry of group.entries) {
+        entry.apply(entry.to);
+        group.currentValues.set(entry.key, entry.to);
+      }
+    } else {
+      for (const entry of group.entries) {
+        group.currentValues.set(entry.key, entry.from);
+      }
     }
 
     // Register ownership
@@ -256,7 +292,14 @@ export class Animator {
       resume: () => this._resume(group),
       stop: (options?: StopOptions) => this._stop(group, options?.mode ?? 'jump-end'),
       reverse: () => this._reverse(group),
-      finished,
+      play: () => this._play(group),
+      playForward: () => this._playDirection(group, 'forward'),
+      playBackward: () => this._playDirection(group, 'backward'),
+      restart: (opts?: { direction?: 'forward' | 'backward' }) => this._restart(group, opts),
+      get direction() { return group.direction; },
+      get isFinished() { return group.isFinished; },
+      get currentValue() { return group.currentValues; },
+      get finished() { return group._currentFinished; },
       get _snapshot() { return group.snapshot; },
       get _target() { return group.target; },
     };
@@ -331,7 +374,7 @@ export class Animator {
     }
 
     // Apply reverse
-    const directedProgress = group.reversed ? 1 - rawProgress : rawProgress;
+    const directedProgress = group.direction === 'backward' ? 1 - rawProgress : rawProgress;
 
     // Apply easing
     const easedProgress = group.easingFn(directedProgress);
@@ -350,15 +393,16 @@ export class Animator {
     if (!group.loop && rawProgress >= 1) {
       // Ensure final values are exact
       for (const entry of group.entries) {
-        const target = group.reversed ? entry.from : entry.to;
+        const target = group.direction === 'backward' ? entry.from : entry.to;
         entry.apply(target);
         group.currentValues.set(entry.key, target);
       }
 
       group.stopped = true;
+      group.isFinished = true;
       this._cleanup(group);
       group.onComplete?.();
-      group.resolve();
+      group.resolve?.();
       return true;
     }
   }
@@ -396,7 +440,7 @@ export class Animator {
     if (mode === 'jump-end') {
       // Apply final target values (current behavior)
       for (const entry of group.entries) {
-        const target = group.reversed ? entry.from : entry.to;
+        const target = group.direction === 'backward' ? entry.from : entry.to;
         entry.apply(target);
       }
     } else if (mode === 'rollback') {
@@ -419,24 +463,132 @@ export class Animator {
     if (mode !== 'superseded') {
       group.onComplete?.();
     }
-    group.resolve();
+    group.resolve?.();
   }
 
   private _reverse(group: ActiveGroup): void {
+    // Reverse on a finished handle: revive and play in opposite direction
+    if (group.isFinished) {
+      group.direction = group.direction === 'forward' ? 'backward' : 'forward';
+      this._revive(group);
+      return;
+    }
+
     if (group.stopped) {
       return;
     }
-    group.reversed = !group.reversed;
+
+    group.direction = group.direction === 'forward' ? 'backward' : 'forward';
 
     // Adjust startTime so that directedProgress is continuous.
     // Before reverse at rawProgress p: directedProgress = p (or 1-p if already reversed).
-    // After flipping reversed, we need 1 - newRawProgress = oldRawProgress, so
+    // After flipping, we need 1 - newRawProgress = oldRawProgress, so
     // newRawProgress = 1 - oldRawProgress, meaning newStartTime = elapsed - (1-p)*duration.
     if (group._lastElapsed > 0 && group.startTime > 0) {
       const elapsed = group._lastElapsed;
       const rawProgress = Math.min((elapsed - group.startTime) / group.duration, 1);
       group.startTime = elapsed - (1 - rawProgress) * group.duration;
     }
+  }
+
+  private _play(group: ActiveGroup): void {
+    if (group.isFinished) {
+      // Restart in current direction from the beginning
+      this._revive(group);
+      return;
+    }
+
+    if (group.stopped) {
+      return;
+    }
+
+    // If paused, resume
+    if (group.pausedElapsed !== null) {
+      this._resume(group);
+    }
+  }
+
+  private _playDirection(group: ActiveGroup, direction: 'forward' | 'backward'): void {
+    group.direction = direction;
+
+    if (group.isFinished) {
+      this._revive(group);
+      return;
+    }
+
+    if (group.stopped) {
+      return;
+    }
+
+    // If paused, resume
+    if (group.pausedElapsed !== null) {
+      this._resume(group);
+    }
+  }
+
+  private _restart(group: ActiveGroup, options?: { direction?: 'forward' | 'backward' }): void {
+    const direction = options?.direction ?? 'forward';
+    group.direction = direction;
+
+    // Apply snapshot or target values based on direction
+    if (direction === 'forward') {
+      // Reset to snapshot values
+      for (const entry of group.entries) {
+        const snapValue = group.snapshot.get(entry.key);
+        if (snapValue !== undefined) {
+          entry.apply(snapValue);
+          group.currentValues.set(entry.key, snapValue);
+        }
+      }
+    } else {
+      // Reset to target values
+      for (const entry of group.entries) {
+        const targetValue = group.target.get(entry.key);
+        if (targetValue !== undefined) {
+          entry.apply(targetValue);
+          group.currentValues.set(entry.key, targetValue);
+        }
+      }
+    }
+
+    this._revive(group);
+  }
+
+  /** Revive a finished/stopped group: reset timing, re-register on engine, renew promise. */
+  private _revive(group: ActiveGroup): void {
+    group.isFinished = false;
+    group.stopped = false;
+    group.startTime = 0;
+    group.startFired = false;
+    group.pausedElapsed = null;
+    group._resumeNeeded = false;
+    group._lastElapsed = 0;
+
+    // Renew the finished promise
+    this._renewFinished(group);
+
+    // Re-register ownership
+    for (const entry of group.entries) {
+      this._ownership.set(entry.key, group);
+    }
+
+    // Re-add to active groups
+    this._groups.add(group);
+
+    // Re-register on engine
+    const engineHandle = this._engine.register((elapsed) => {
+      return this._tick(group, elapsed);
+    });
+    group.engineHandle = engineHandle;
+  }
+
+  /** Create a new finished promise for the group (old one stays resolved). */
+  private _renewFinished(group: ActiveGroup): void {
+    group.resolve = null;
+    const promise = new Promise<void>((resolve) => {
+      group.resolve = resolve;
+    });
+    group._currentFinished = promise;
   }
 
   // ── Internal: cleanup ────────────────────────────────────────────────
