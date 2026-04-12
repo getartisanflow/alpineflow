@@ -695,6 +695,11 @@ export interface ParticleRenderState {
   x: number;
   y: number;
   progress: number;      // 0-1
+  /**
+   * Position delta (SVG user units) since the previous frame — not a per-second velocity.
+   * Direction is correct for angle computation (e.g. `Math.atan2(velocity.y, velocity.x)`);
+   * magnitude varies with frame rate and is not suitable for speed calculations.
+   */
   velocity: { x: number; y: number };
   pathLength: number;
   elapsed: number;       // ms since particle start

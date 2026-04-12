@@ -4,7 +4,7 @@
 // Public API: sendParticle, sendParticleAlongPath, sendParticleBetween.
 // Internal:   _tickParticles, _fireParticleOnPath, destroyParticles.
 //
-// Manages SVG circle particles that travel along edge paths via
+// Manages SVG particles that travel along edge paths via
 // getPointAtLength. Particles share a single AnimationEngine registration
 // so multiple concurrent particles use one tick callback.
 //
@@ -129,7 +129,7 @@ export function createParticleMixin(ctx: CanvasContext) {
       y: startPt.y,
       progress: 0,
       velocity: { x: 0, y: 0 },
-      pathLength: 0,
+      pathLength,
       elapsed: 0,
     };
     renderer.update(el, initialState);
@@ -212,13 +212,6 @@ export function createParticleMixin(ctx: CanvasContext) {
       tempPath.remove();
       return undefined;
     }
-
-    // Wrap stop() to also clean up the temp path
-    const originalStop = handle.stop;
-    handle.stop = () => {
-      originalStop();
-      tempPath.remove();
-    };
 
     debug('particle', 'sendParticleAlongPath', { path: svgPath.slice(0, 40) });
 

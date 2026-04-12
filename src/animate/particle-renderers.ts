@@ -58,6 +58,11 @@ export const orbRenderer: ParticleRenderer = {
         inner.setAttribute('fill', color);
         g.appendChild(inner);
 
+        if (options.class) {
+            for (const cls of options.class.split(' ')) {
+                if (cls) { g.classList.add(cls); }
+            }
+        }
         svgLayer.appendChild(g);
         return g;
     },
@@ -82,6 +87,11 @@ export const beamRenderer: ParticleRenderer = {
         el.setAttribute('rx', String(width / 2));
         el.setAttribute('fill', options.color ?? '#8B5CF6');
         el.setAttribute('opacity', '0.8');
+        if (options.class) {
+            for (const cls of options.class.split(' ')) {
+                if (cls) { el.classList.add(cls); }
+            }
+        }
         svgLayer.appendChild(el);
         return el;
     },
@@ -105,6 +115,11 @@ export const pulseRenderer: ParticleRenderer = {
         el.setAttribute('fill', 'none');
         el.setAttribute('stroke', options.color ?? '#8B5CF6');
         el.setAttribute('stroke-width', '2');
+        if (options.class) {
+            for (const cls of options.class.split(' ')) {
+                if (cls) { el.classList.add(cls); }
+            }
+        }
         svgLayer.appendChild(el);
         return el;
     },
@@ -141,6 +156,11 @@ export const imageRenderer: ParticleRenderer = {
             el.setAttribute('height', String(size));
         }
 
+        if (options.class) {
+            for (const cls of options.class.split(' ')) {
+                if (cls) { el.classList.add(cls); }
+            }
+        }
         svgLayer.appendChild(el);
         return el;
     },

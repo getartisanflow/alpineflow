@@ -48,5 +48,5 @@ export { Transaction, type TransactionState } from './transaction';
 export { FlowGroup, type FlowGroupHost } from './flow-group';
 
 // ── Particle Renderers ───────────────────────────────────────────────────────
-export { registerParticleRenderer, getParticleRenderer, hasParticleRenderer, circleRenderer } from './particle-renderers';
+export { registerParticleRenderer, getParticleRenderer, hasParticleRenderer, circleRenderer, orbRenderer, beamRenderer, pulseRenderer, imageRenderer } from './particle-renderers';
 export type { ParticleRenderer, ParticleRenderState } from '../core/types';
