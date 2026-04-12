@@ -22,13 +22,12 @@ import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../core/geometry';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-export interface StepContext {
-  [key: string]: any;
+export type StepContext<T extends Record<string, any> = Record<string, any>> = T & {
   stepIndex: number;
   stepId?: string;
-}
+};
 
-export interface TimelineStep {
+export interface TimelineStep<T extends Record<string, any> = Record<string, any>> {
   id?: string;
 
   // Node targeting
@@ -71,7 +70,7 @@ export interface TimelineStep {
   fitViewPadding?: number;
 
   // Parallel container
-  parallel?: TimelineStep[];
+  parallel?: TimelineStep<T>[];
 
   // Timing
   duration?: number;
@@ -80,14 +79,14 @@ export interface TimelineStep {
   lock?: boolean;
 
   // Hooks
-  onStart?: (ctx: StepContext) => void;
-  onProgress?: (progress: number, ctx: StepContext) => void;
-  onComplete?: (ctx: StepContext) => void;
+  onStart?: (ctx: StepContext<T>) => void;
+  onProgress?: (progress: number, ctx: StepContext<T>) => void;
+  onComplete?: (ctx: StepContext<T>) => void;
 }
 
-type StepEntry =
-  | { type: 'step'; config: TimelineStep | ((ctx: StepContext) => TimelineStep) }
-  | { type: 'parallel'; configs: Array<TimelineStep | ((ctx: StepContext) => TimelineStep)> }
+type StepEntry<T extends Record<string, any> = Record<string, any>> =
+  | { type: 'step'; config: TimelineStep<T> | ((ctx: StepContext<T>) => TimelineStep<T>) }
+  | { type: 'parallel'; configs: Array<TimelineStep<T> | ((ctx: StepContext<T>) => TimelineStep<T>)> }
   | { type: 'pause'; callback?: (resume: (context?: Record<string, any>) => void) => void };
 
 export type TimelineEvent =
@@ -178,10 +177,10 @@ function restoreNode(node: FlowNode, snap: NodeSnapshot): void {
 
 // ── FlowTimeline ─────────────────────────────────────────────────────────────
 
-export class FlowTimeline {
+export class FlowTimeline<TContext extends Record<string, any> = Record<string, any>> {
   private _canvas: TimelineCanvas;
   private _engine: AnimationEngine;
-  private _entries: StepEntry[] = [];
+  private _entries: StepEntry<TContext>[] = [];
   private _state: TimelineState = 'idle';
   private _reversed = false;
   private _loopCount = -1; // -1 = no loop
@@ -210,12 +209,12 @@ export class FlowTimeline {
     return this._locked;
   }
 
-  step(config: TimelineStep | ((ctx: StepContext) => TimelineStep)): this {
+  step(config: TimelineStep<TContext> | ((ctx: StepContext<TContext>) => TimelineStep<TContext>)): this {
     this._entries.push({ type: 'step', config });
     return this;
   }
 
-  parallel(steps: Array<TimelineStep | ((ctx: StepContext) => TimelineStep)>): this {
+  parallel(steps: Array<TimelineStep<TContext> | ((ctx: StepContext<TContext>) => TimelineStep<TContext>)>): this {
     this._entries.push({ type: 'parallel', configs: steps });
     return this;
   }
@@ -315,7 +314,7 @@ export class FlowTimeline {
     }
   }
 
-  private _captureEntryTargets(entry: StepEntry): void {
+  private _captureEntryTargets(entry: StepEntry<TContext>): void {
     if (entry.type === 'pause') return;
 
     const configs = entry.type === 'parallel' ? entry.configs : [entry.config];
@@ -335,7 +334,7 @@ export class FlowTimeline {
     }
   }
 
-  private _captureStepTargets(step: TimelineStep): void {
+  private _captureStepTargets(step: TimelineStep<TContext>): void {
     if (step.nodes) {
       for (const id of step.nodes) {
         if (!this._initialSnapshot.has(id)) {
@@ -441,17 +440,17 @@ export class FlowTimeline {
     resolve();
   }
 
-  private _makeContext(stepIndex: number, stepId?: string): StepContext {
+  private _makeContext(stepIndex: number, stepId?: string): StepContext<TContext> {
     return {
       ...this._context,
       stepIndex,
       stepId,
-    };
+    } as StepContext<TContext>;
   }
 
   // ── Internal: pause execution ───────────────────────────────────────
 
-  private _executePause(entry: StepEntry & { type: 'pause' }): Promise<void> {
+  private _executePause(entry: StepEntry<TContext> & { type: 'pause' }): Promise<void> {
     return new Promise<void>((resolve) => {
       this._state = 'paused';
       if (this._lockEnabled) this._locked = false;
@@ -474,7 +473,7 @@ export class FlowTimeline {
   // ── Internal: parallel execution ────────────────────────────────────
 
   private async _executeParallel(
-    configs: Array<TimelineStep | ((ctx: StepContext) => TimelineStep)>,
+    configs: Array<TimelineStep<TContext> | ((ctx: StepContext<TContext>) => TimelineStep<TContext>)>,
     entryIndex: number,
   ): Promise<void> {
     const resolved = configs.map((c) =>
@@ -483,14 +482,14 @@ export class FlowTimeline {
     await this._executeParallelSteps(resolved, entryIndex);
   }
 
-  private async _executeParallelSteps(steps: TimelineStep[], entryIndex: number): Promise<void> {
+  private async _executeParallelSteps(steps: TimelineStep<TContext>[], entryIndex: number): Promise<void> {
     const promises = steps.map((step) => this._executeStep(step, entryIndex));
     await Promise.all(promises);
   }
 
   // ── Internal: single step execution ─────────────────────────────────
 
-  private async _executeStep(step: TimelineStep, entryIndex: number): Promise<void> {
+  private async _executeStep(step: TimelineStep<TContext>, entryIndex: number): Promise<void> {
     const reducedMotion = this._isReducedMotion();
     const duration = reducedMotion ? 0 : (step.duration ?? 300);
     const delay = reducedMotion ? 0 : (step.delay ?? 0);
@@ -993,7 +992,7 @@ export class FlowTimeline {
   // ── Internal: apply step properties ─────────────────────────────────
 
   /** Apply all properties of a step at their final values (for instant steps). */
-  private _applyStepFinal(step: TimelineStep): void {
+  private _applyStepFinal(step: TimelineStep<TContext>): void {
     // Edge lifecycle (instant — no transition animation)
     if (step.addEdges) {
       this._addEdges(step.addEdges);
@@ -1030,7 +1029,7 @@ export class FlowTimeline {
   }
 
   /** Apply instant-swap edge properties (not interpolated). */
-  private _applyStepInstant(step: TimelineStep): void {
+  private _applyStepInstant(step: TimelineStep<TContext>): void {
     if (step.edges) {
       for (const id of step.edges) {
         const edge = this._canvas.getEdge(id);
@@ -1111,7 +1110,7 @@ export class FlowTimeline {
   // ── Internal: viewport helpers ──────────────────────────────────
 
   /** Compute the target viewport for a step (viewport, fitView, or panTo). */
-  private _resolveTargetViewport(step: TimelineStep): Viewport | null {
+  private _resolveTargetViewport(step: TimelineStep<TContext>): Viewport | null {
     const vp = this._canvas.viewport;
     if (!vp) return null;
 
@@ -1135,7 +1134,7 @@ export class FlowTimeline {
   }
 
   /** Compute the viewport that fits all (or specified) nodes with padding. */
-  private _computeFitViewViewport(step: TimelineStep): Viewport | null {
+  private _computeFitViewViewport(step: TimelineStep<TContext>): Viewport | null {
     const dims = this._canvas.getContainerDimensions?.();
     if (!dims) return null;
 
@@ -1181,7 +1180,7 @@ export class FlowTimeline {
   }
 
   /** Apply viewport at final values (for instant steps). */
-  private _applyViewportFinal(step: TimelineStep): void {
+  private _applyViewportFinal(step: TimelineStep<TContext>): void {
     const target = this._resolveTargetViewport(step);
     if (!target || !this._canvas.viewport) return;
 

@@ -1698,3 +1698,72 @@ describe('FlowTimeline guidePath', () => {
     expect(step.guidePath?.autoRemove).toBe(false);
   });
 });
+
+// ── Typed context generic ─────────────────────────────────────────────────────
+
+describe('FlowTimeline — typed context', () => {
+  it('accepts typed context generic parameter', async () => {
+    interface MyContext { userId: string; isPremium: boolean }
+    const canvas = makeMockCanvas();
+
+    // This should compile without errors — the generic is accepted
+    const tl = new FlowTimeline<MyContext>(canvas);
+
+    let receivedCtx: import('./timeline').StepContext<MyContext> | null = null;
+    tl.step({
+      nodes: ['a'],
+      position: { x: 100 },
+      duration: 0,
+      onStart: (ctx) => { receivedCtx = ctx; },
+    });
+
+    const done = tl.play();
+    await advanceTimers(50);
+    await done;
+
+    expect(receivedCtx).toBeDefined();
+    expect(receivedCtx!.stepIndex).toBe(0);
+  });
+
+  it('untyped FlowTimeline still works (default Record<string, any>)', async () => {
+    const canvas = makeMockCanvas();
+    let receivedCtx: any = null;
+
+    const tl = new FlowTimeline(canvas);
+    tl.step({
+      nodes: ['a'],
+      position: { x: 50 },
+      duration: 0,
+      onStart: (ctx) => { receivedCtx = ctx; },
+    });
+
+    const done = tl.play();
+    await advanceTimers(50);
+    await done;
+
+    expect(receivedCtx).toBeDefined();
+    expect(receivedCtx.stepIndex).toBe(0);
+  });
+
+  it('forwards typed context through pause/resume', async () => {
+    interface FlowCtx { tier: string }
+    const canvas = makeMockCanvas();
+    let resumeFn: ((ctx?: Record<string, any>) => void) | null = null;
+    let receivedCtx: import('./timeline').StepContext<FlowCtx> | null = null;
+
+    const tl = new FlowTimeline<FlowCtx>(canvas);
+    tl.pause((resume) => { resumeFn = resume; });
+    tl.step((ctx) => {
+      receivedCtx = ctx;
+      return { nodes: ['a'], position: { x: 100 }, duration: 0 };
+    });
+
+    tl.play();
+    await advanceTimers(50);
+
+    resumeFn!({ tier: 'pro' });
+    await advanceTimers(100);
+
+    expect(receivedCtx).toMatchObject({ tier: 'pro' });
+  });
+});
