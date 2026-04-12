@@ -1594,3 +1594,739 @@ describe('Animator — playDirection mid-flight timing', () => {
     handle.stop();
   });
 });
+
+// ── Animator — spring motion ────────────────────────────────────────────────
+
+describe('Animator — spring motion', () => {
+  /**
+   * Create a detached scheduler for precise frame-by-frame physics control.
+   * Returns the scheduler, a drive function, and current elapsed getter.
+   */
+  function createDetachedScheduler() {
+    let engineElapsed = 0;
+    let scheduledCb: FrameRequestCallback | null = null;
+
+    const scheduler: FrameScheduler = {
+      request: (cb) => {
+        scheduledCb = cb;
+        return 1;
+      },
+      cancel: () => {
+        scheduledCb = null;
+      },
+    };
+
+    /** Advance engine by `ms`, firing as many 16ms frames as needed. */
+    function driveEngine(ms: number): void {
+      const target = engineElapsed + ms;
+      while (engineElapsed < target && scheduledCb) {
+        engineElapsed = Math.min(engineElapsed + 16, target);
+        const cb = scheduledCb;
+        scheduledCb = null;
+        cb(engineElapsed);
+      }
+    }
+
+    return { scheduler, driveEngine, getElapsed: () => engineElapsed };
+  }
+
+  it('spring animation settles at target', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    // Stiff spring (300/30) should settle well within 2 seconds
+    driveEngine(2000);
+
+    expect(value).toBeCloseTo(100, 0);
+  });
+
+  it('spring preset string resolves and works', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: 'spring.wobbly' },
+    );
+
+    // Wobbly spring should start moving toward target
+    driveEngine(200);
+    expect(value).toBeGreaterThan(0);
+
+    // Eventually settle
+    driveEngine(3000);
+    expect(value).toBeCloseTo(100, 0);
+  });
+
+  it('spring motion object works', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: { type: 'spring', stiffness: 200, damping: 20 } },
+    );
+
+    // Drive to settle
+    driveEngine(2000);
+    expect(value).toBeCloseTo(100, 0);
+  });
+
+  it('maxDuration caps runaway spring', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    let completed = false;
+    // Very underdamped spring: stiffness=300, damping=1 — will oscillate for a long time
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      {
+        duration: 300,
+        motion: { type: 'spring', stiffness: 300, damping: 1, mass: 1 },
+        maxDuration: 500,
+        onComplete: () => { completed = true; },
+      },
+    );
+
+    // Drive past maxDuration
+    driveEngine(600);
+
+    // Should have force-settled at target
+    expect(value).toBe(100);
+    expect(completed).toBe(true);
+    expect(handle.isFinished).toBe(true);
+  });
+
+  it('non-numeric property falls back with warning', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    let colorValue = '';
+    let numValue = 0;
+    animator.animate(
+      [
+        { key: 'color', from: '#000000', to: '#ffffff', apply: (v) => { colorValue = v as string; } },
+        { key: 'x', from: 0, to: 100, apply: (v) => { numValue = v as number; } },
+      ],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    // Non-numeric property should be snapped to target immediately
+    expect(colorValue).toBe('#ffffff');
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('"color" is non-numeric'),
+    );
+
+    // Numeric property should be driven by physics
+    driveEngine(2000);
+    expect(numValue).toBeCloseTo(100, 0);
+
+    warnSpy.mockRestore();
+  });
+
+  it('all non-numeric properties fall back to eased animation entirely', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    let colorValue = '';
+    animator.animate(
+      [{ key: 'color', from: '#000000', to: '#ffffff', apply: (v) => { colorValue = v as string; } }],
+      { duration: 160, easing: 'linear', motion: 'spring.stiff' },
+    );
+
+    expect(warnSpy).toHaveBeenCalled();
+
+    // Since all entries are non-numeric, physics falls back to eased.
+    // The color entry was already snapped by the physics init code.
+    // With no physics entries, isPhysics is false, so eased path runs.
+    await advanceTimers(80);
+    // Color should be mid-interpolation (eased path handles it)
+    // Actually the entry was already snapped to target, so the eased path
+    // interpolates from #ffffff to #ffffff (from was updated to to).
+    // Let's just verify it completes.
+    await advanceTimers(160);
+    expect(colorValue).toBe('#ffffff');
+
+    warnSpy.mockRestore();
+  });
+
+  it('handle.finished resolves when spring settles', async () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let resolved = false;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    handle.finished.then(() => { resolved = true; });
+
+    driveEngine(200);
+    // Flush microtask queue
+    await Promise.resolve();
+    // Stiff spring may not have settled yet in 200ms
+    // Drive more to ensure settlement
+    driveEngine(2000);
+    await Promise.resolve();
+
+    expect(resolved).toBe(true);
+    expect(handle.isFinished).toBe(true);
+  });
+
+  it('handle.reverse() on spring reverses toward snapshot', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    // Let spring settle at 100
+    driveEngine(2000);
+    expect(value).toBeCloseTo(100, 0);
+
+    // Reverse — should spring back to 0
+    handle.reverse();
+    expect(handle.direction).toBe('backward');
+
+    driveEngine(2000);
+    expect(value).toBeCloseTo(0, 0);
+  });
+
+  it('handle.restart() resets spring state', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    // Let spring settle at 100
+    driveEngine(2000);
+    expect(value).toBeCloseTo(100, 0);
+
+    // Restart — should reset to snapshot and play forward again
+    handle.restart();
+    expect(value).toBe(0);
+    expect(handle.direction).toBe('forward');
+
+    // Let it settle again
+    driveEngine(2000);
+    expect(value).toBeCloseTo(100, 0);
+  });
+
+  it('while: predicate works with spring motion', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let condition = true;
+    let value = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: 'spring.stiff', while: () => condition },
+    );
+
+    // Run a few frames
+    driveEngine(200);
+    expect(value).toBeGreaterThan(0);
+
+    // Flip the predicate
+    condition = false;
+    driveEngine(16); // one more frame triggers the check
+
+    // Default whileStopMode is 'jump-end', which should snap to target
+    expect(value).toBe(100);
+  });
+
+  it('stop({ mode: "rollback" }) works with spring', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    // Run a few frames
+    driveEngine(200);
+    expect(value).toBeGreaterThan(0);
+
+    handle.stop({ mode: 'rollback' });
+    expect(value).toBe(0);
+  });
+
+  it('stop({ mode: "freeze" }) works with spring', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    // Run a few frames
+    driveEngine(200);
+    const frozenAt = value;
+    expect(frozenAt).toBeGreaterThan(0);
+
+    handle.stop({ mode: 'freeze' });
+    expect(value).toBe(frozenAt);
+
+    // Ensure no further changes
+    driveEngine(500);
+    expect(value).toBe(frozenAt);
+  });
+
+  it('onStart fires on first physics tick', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let started = false;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 300, motion: 'spring.stiff', onStart: () => { started = true; } },
+    );
+
+    expect(started).toBe(false);
+    driveEngine(16);
+    expect(started).toBe(true);
+  });
+
+  it('onProgress is called during spring animation', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    const progressValues: number[] = [];
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      {
+        duration: 300,
+        motion: 'spring.stiff',
+        maxDuration: 1000,
+        onProgress: (p) => { progressValues.push(p); },
+      },
+    );
+
+    driveEngine(500);
+
+    // Should have received progress values
+    expect(progressValues.length).toBeGreaterThan(0);
+    // Progress values should be increasing (time-based approximation)
+    for (let i = 1; i < progressValues.length; i++) {
+      expect(progressValues[i]).toBeGreaterThanOrEqual(progressValues[i - 1]);
+    }
+  });
+
+  it('multiple numeric properties animate independently via spring', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let x = 0;
+    let y = 0;
+    animator.animate(
+      [
+        { key: 'x', from: 0, to: 100, apply: (v) => { x = v as number; } },
+        { key: 'y', from: 0, to: 200, apply: (v) => { y = v as number; } },
+      ],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    // Drive a few frames — both should be moving
+    driveEngine(200);
+    expect(x).toBeGreaterThan(0);
+    expect(y).toBeGreaterThan(0);
+
+    // Let settle
+    driveEngine(2000);
+    expect(x).toBeCloseTo(100, 0);
+    expect(y).toBeCloseTo(200, 0);
+  });
+
+  it('invalid motion string falls back to eased animation', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 160, easing: 'linear', motion: 'spring.nonexistent' },
+    );
+
+    // resolveMotion returns null for invalid preset, so resolvedMotion is null/undefined
+    // and isPhysics is false — falls back to eased
+    await advanceTimers(80);
+    expect(value).toBeGreaterThan(0);
+    expect(value).toBeLessThan(100);
+
+    await advanceTimers(160);
+    expect(value).toBe(100);
+  });
+
+  it('pause/resume works with spring motion', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    // Drive a few frames
+    driveEngine(200);
+    const valueAtPause = value;
+    expect(valueAtPause).toBeGreaterThan(0);
+
+    // Pause
+    handle.pause();
+
+    // Advance — value should not change
+    driveEngine(500);
+    expect(value).toBe(valueAtPause);
+
+    // Resume
+    handle.resume();
+
+    // Drive to completion
+    driveEngine(2000);
+    expect(value).toBeCloseTo(100, 0);
+  });
+});
+
+// ── Animator — decay motion ────────────────────────────────────────────────
+
+describe('Animator — decay motion', () => {
+  function createDetachedScheduler() {
+    let engineElapsed = 0;
+    let scheduledCb: FrameRequestCallback | null = null;
+
+    const scheduler: FrameScheduler = {
+      request: (cb) => {
+        scheduledCb = cb;
+        return 1;
+      },
+      cancel: () => {
+        scheduledCb = null;
+      },
+    };
+
+    function driveEngine(ms: number): void {
+      const target = engineElapsed + ms;
+      while (engineElapsed < target && scheduledCb) {
+        engineElapsed = Math.min(engineElapsed + 16, target);
+        const cb = scheduledCb;
+        scheduledCb = null;
+        cb(engineElapsed);
+      }
+    }
+
+    return { scheduler, driveEngine };
+  }
+
+  it('decay animation decelerates from initial velocity', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 0, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: { type: 'decay', velocity: 500 } },
+    );
+
+    // After a few frames, the value should have moved in the velocity direction
+    driveEngine(200);
+    expect(value).toBeGreaterThan(0);
+  });
+
+  it('decay settles naturally', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    let completed = false;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 0, apply: (v) => { value = v as number; } }],
+      {
+        duration: 300,
+        motion: { type: 'decay', velocity: 500 },
+        maxDuration: 5000,
+        onComplete: () => { completed = true; },
+      },
+    );
+
+    // Drive enough for decay to settle
+    driveEngine(3000);
+
+    expect(completed).toBe(true);
+    expect(handle.isFinished).toBe(true);
+    // Value should have moved from initial position
+    expect(value).toBeGreaterThan(0);
+  });
+});
+
+// ── Animator — inertia motion ──────────────────────────────────────────────
+
+describe('Animator — inertia motion', () => {
+  function createDetachedScheduler() {
+    let engineElapsed = 0;
+    let scheduledCb: FrameRequestCallback | null = null;
+
+    const scheduler: FrameScheduler = {
+      request: (cb) => {
+        scheduledCb = cb;
+        return 1;
+      },
+      cancel: () => {
+        scheduledCb = null;
+      },
+    };
+
+    function driveEngine(ms: number): void {
+      const target = engineElapsed + ms;
+      while (engineElapsed < target && scheduledCb) {
+        engineElapsed = Math.min(engineElapsed + 16, target);
+        const cb = scheduledCb;
+        scheduledCb = null;
+        cb(engineElapsed);
+      }
+    }
+
+    return { scheduler, driveEngine };
+  }
+
+  it('inertia bounces off bounds', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 50;
+    let completed = false;
+    animator.animate(
+      [{ key: 'x', from: 50, to: 50, apply: (v) => { value = v as number; } }],
+      {
+        duration: 300,
+        motion: {
+          type: 'inertia',
+          velocity: 2000,
+          bounds: { x: [0, 100] },
+          bounceDamping: 50,
+        },
+        maxDuration: 5000,
+        onComplete: () => { completed = true; },
+      },
+    );
+
+    // Drive to settle
+    driveEngine(3000);
+
+    expect(completed).toBe(true);
+    // Should have settled within bounds
+    expect(value).toBeGreaterThanOrEqual(0);
+    expect(value).toBeLessThanOrEqual(100);
+  });
+
+  it('inertia snaps to nearest point on settle', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    let completed = false;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 0, apply: (v) => { value = v as number; } }],
+      {
+        duration: 300,
+        motion: {
+          type: 'inertia',
+          velocity: 100,
+          snapTo: [{ x: 0 }, { x: 50 }, { x: 100 }],
+        },
+        maxDuration: 5000,
+        onComplete: () => { completed = true; },
+      },
+    );
+
+    // Drive to settle
+    driveEngine(3000);
+
+    expect(completed).toBe(true);
+    // Should snap to one of the snap points
+    const snapPoints = [0, 50, 100];
+    const isSnapped = snapPoints.some(p => Math.abs(value - p) < 1);
+    expect(isSnapped).toBe(true);
+  });
+});
+
+// ── Animator — keyframes motion ────────────────────────────────────────────
+
+describe('Animator — keyframes motion', () => {
+  function createDetachedScheduler() {
+    let engineElapsed = 0;
+    let scheduledCb: FrameRequestCallback | null = null;
+
+    const scheduler: FrameScheduler = {
+      request: (cb) => {
+        scheduledCb = cb;
+        return 1;
+      },
+      cancel: () => {
+        scheduledCb = null;
+      },
+    };
+
+    function driveEngine(ms: number): void {
+      const target = engineElapsed + ms;
+      while (engineElapsed < target && scheduledCb) {
+        engineElapsed = Math.min(engineElapsed + 16, target);
+        const cb = scheduledCb;
+        scheduledCb = null;
+        cb(engineElapsed);
+      }
+    }
+
+    return { scheduler, driveEngine };
+  }
+
+  it('keyframes interpolates through waypoints', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    const values: number[] = [];
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { values.push(v as number); } }],
+      {
+        duration: 300,
+        motion: {
+          type: 'keyframes',
+          values: [{ x: 0 }, { x: 50 }, { x: 100 }],
+          duration: 1000,
+        },
+        maxDuration: 2000,
+      },
+    );
+
+    // Drive partway — should be interpolating through waypoints
+    driveEngine(500);
+    expect(values.length).toBeGreaterThan(0);
+    // Mid-animation values should be between 0 and 100
+    const midValues = values.filter(v => v > 0 && v < 100);
+    expect(midValues.length).toBeGreaterThan(0);
+  });
+
+  it('keyframes uses custom offsets', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    const values: number[] = [];
+    animator.animate(
+      [{ key: 'x', from: 0, to: 50, apply: (v) => { values.push(v as number); } }],
+      {
+        duration: 300,
+        motion: {
+          type: 'keyframes',
+          values: [{ x: 0 }, { x: 100 }, { x: 50 }],
+          offsets: [0, 0.2, 1],
+          duration: 1000,
+        },
+        maxDuration: 2000,
+      },
+    );
+
+    // Drive to completion
+    driveEngine(1200);
+
+    // Should have values above 50 (the 100 waypoint is at offset 0.2)
+    const aboveFifty = values.filter(v => v > 50);
+    expect(aboveFifty.length).toBeGreaterThan(0);
+  });
+
+  it('keyframes completes at final waypoint', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    let completed = false;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 200, apply: (v) => { value = v as number; } }],
+      {
+        duration: 300,
+        motion: {
+          type: 'keyframes',
+          values: [{ x: 0 }, { x: 100 }, { x: 200 }],
+          duration: 500,
+        },
+        maxDuration: 2000,
+        onComplete: () => { completed = true; },
+      },
+    );
+
+    // Drive past the keyframes duration
+    driveEngine(600);
+
+    expect(value).toBe(200);
+    expect(completed).toBe(true);
+    expect(handle.isFinished).toBe(true);
+  });
+});

@@ -15,6 +15,8 @@ import type { StopOptions } from '../core/types';
 import { HandleRegistry } from './handle-registry';
 import type { Taggable } from './handle-registry';
 import { Transaction } from './transaction';
+import type { MotionConfig, PhysicsState, SpringMotion, DecayMotion, InertiaMotion, KeyframesMotion } from './motion';
+import { resolveMotion, stepSpring, stepDecay, stepInertia, stepKeyframes } from './motion';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,6 +44,10 @@ export interface AnimateInternalOptions {
   while?: () => boolean;
   /** Controls how the animation stops when `while` returns false. Default: 'jump-end'. */
   whileStopMode?: 'jump-end' | 'rollback' | 'freeze';
+  /** Physics-based motion configuration. When provided, bypasses eased interpolation. */
+  motion?: MotionConfig | string;
+  /** Maximum duration (ms) for physics animations. Prevents runaway springs. Default: 5000. */
+  maxDuration?: number;
 }
 
 /** Handle returned by `animate()` — controls the animation lifecycle. */
@@ -106,6 +112,16 @@ interface ActiveGroup {
   whilePredicate?: () => boolean;
   /** How to stop the animation when whilePredicate returns false. */
   whileStopMode: 'jump-end' | 'rollback' | 'freeze';
+  /** Resolved motion config for physics-based animation. */
+  motionConfig?: MotionConfig;
+  /** Per-property physics state. Only set when motionConfig is present. */
+  physicsStates?: Map<string, PhysicsState>;
+  /** Maximum duration (ms) for physics animations. Default: 5000. */
+  maxDuration: number;
+  /** True when this group uses physics-based motion instead of eased interpolation. */
+  isPhysics: boolean;
+  /** Previous elapsed time for computing dt in physics tick. */
+  _prevElapsed: number;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -191,10 +207,15 @@ export class Animator {
       tags,
       while: whilePredicate,
       whileStopMode = 'jump-end',
+      motion,
+      maxDuration = 5000,
     } = options;
 
     // Resolve easing once
     const easingFn = resolveEasing(easing);
+
+    // Resolve motion config (physics-based animation)
+    const resolvedMotion = motion ? resolveMotion(motion) : undefined;
 
     // Blend/compose: capture in-flight values and steal ownership
     for (const entry of entries) {
@@ -277,6 +298,43 @@ export class Animator {
       target.set(entry.key, entry.to);
     }
 
+    // Build physics states for motion-based animation
+    let physicsStates: Map<string, PhysicsState> | undefined;
+    const isPhysics = !!resolvedMotion;
+    if (resolvedMotion) {
+      physicsStates = new Map();
+      for (const entry of entries) {
+        if (typeof entry.from !== 'number' || typeof entry.to !== 'number') {
+          // Non-numeric property — can't use physics, snap immediately
+          console.warn(
+            `[AlpineFlow] motion: requires numeric properties. "${entry.key}" is non-numeric; snapping to target.`,
+          );
+          entry.apply(entry.to);
+          continue;
+        }
+        let initialVelocity = 0;
+        if (resolvedMotion.type === 'decay' || resolvedMotion.type === 'inertia') {
+          const vel = (resolvedMotion as { velocity?: number | { x: number; y: number } }).velocity;
+          if (typeof vel === 'number') {
+            initialVelocity = vel;
+          } else if (vel && typeof vel === 'object' && entry.key in vel) {
+            initialVelocity = (vel as Record<string, number>)[entry.key];
+          }
+        }
+        physicsStates.set(entry.key, {
+          value: entry.from as number,
+          velocity: initialVelocity,
+          target: entry.to as number,
+          settled: false,
+        });
+      }
+
+      // If no entries could be used for physics, fall back to eased animation
+      if (physicsStates.size === 0) {
+        physicsStates = undefined;
+      }
+    }
+
     // Normalize loop: 'ping-pong' is an alias for 'reverse'
     const normalizedLoop = loop === 'ping-pong' ? 'reverse' : loop;
 
@@ -314,6 +372,11 @@ export class Animator {
       _currentFinished: finished,
       whilePredicate,
       whileStopMode,
+      motionConfig: physicsStates ? resolvedMotion! : undefined,
+      physicsStates,
+      maxDuration,
+      isPhysics: !!physicsStates,
+      _prevElapsed: 0,
     };
 
     // Initialize current values
@@ -406,6 +469,11 @@ export class Animator {
       return;
     }
 
+    // Physics-based animation: delegate to _tickPhysics
+    if (group.isPhysics) {
+      return this._tickPhysics(group, elapsed);
+    }
+
     // State-aware cancellation: evaluate the while predicate and stop if false
     if (group.whilePredicate && !group.whilePredicate()) {
       this._stop(group, group.whileStopMode);
@@ -475,19 +543,144 @@ export class Animator {
         group.currentValues.set(entry.key, target);
       }
 
-      group.stopped = true;
-      group.isFinished = true;
-      this._cleanup(group);
-      group.onComplete?.();
-      group.resolve?.();
-      if (group._handle) {
-        const handle = group._handle;
-        queueMicrotask(() => {
-          if (group.isFinished) {
-            this._registry.unregister(handle);
-          }
-        });
+      this._completeGroup(group);
+      return true;
+    }
+  }
+
+  /**
+   * Mark a group as complete: set flags, clean up, fire callbacks, resolve promise,
+   * and schedule auto-deregistration. Shared by both the eased and physics paths.
+   */
+  private _completeGroup(group: ActiveGroup): void {
+    group.stopped = true;
+    group.isFinished = true;
+    this._cleanup(group);
+    group.onComplete?.();
+    group.resolve?.();
+    if (group._handle) {
+      const handle = group._handle;
+      queueMicrotask(() => {
+        if (group.isFinished) {
+          this._registry.unregister(handle);
+        }
+      });
+    }
+  }
+
+  /**
+   * Per-frame tick for a physics-based animation group.
+   * Runs the physics integrator (spring, etc.) each frame instead of eased interpolation.
+   * @returns `true` when the animation is complete (to unregister from engine).
+   */
+  private _tickPhysics(group: ActiveGroup, elapsed: number): boolean | void {
+    // State-aware cancellation
+    if (group.whilePredicate && !group.whilePredicate()) {
+      this._stop(group, group.whileStopMode);
+      return true;
+    }
+
+    // Just resumed: reset timing for physics continuity
+    if (group._resumeNeeded) {
+      group._resumeNeeded = false;
+      // Reset _prevElapsed to current so first post-resume dt is small
+      group._prevElapsed = elapsed;
+      group.startTime = elapsed - (group._lastElapsed - group.startTime);
+    }
+
+    // On first tick, record startTime
+    if (group.startTime === 0) {
+      group.startTime = elapsed;
+    }
+
+    // Fire onStart once on the first active tick
+    if (!group.startFired) {
+      group.startFired = true;
+      group.onStart?.();
+    }
+
+    // Compute dt in seconds, capped to prevent explosion on background tabs
+    const prevElapsed = group._prevElapsed || elapsed;
+    const dt = Math.min((elapsed - prevElapsed) / 1000, 0.064); // cap at 64ms
+    group._prevElapsed = elapsed;
+    group._lastElapsed = elapsed;
+
+    if (dt <= 0) {
+      return; // skip zero-delta ticks (first frame)
+    }
+
+    const physicsStates = group.physicsStates!;
+    let allSettled = true;
+
+    // Step each physics state
+    for (const entry of group.entries) {
+      const state = physicsStates.get(entry.key);
+      if (!state) {
+        continue; // non-physics entry, already snapped
       }
+
+      if (!state.settled) {
+        // Direction handling: update target based on direction
+        if (group.direction === 'backward') {
+          state.target = group.snapshot.get(entry.key) as number;
+        } else {
+          state.target = group.target.get(entry.key) as number;
+        }
+
+        // Call the appropriate integrator based on motion type
+        switch (group.motionConfig!.type) {
+          case 'spring':
+            stepSpring(state, group.motionConfig as SpringMotion, dt);
+            break;
+          case 'decay':
+            stepDecay(state, group.motionConfig as DecayMotion, dt);
+            break;
+          case 'inertia':
+            stepInertia(state, group.motionConfig as InertiaMotion, dt, entry.key);
+            break;
+          case 'keyframes': {
+            const totalElapsed = elapsed - group.startTime;
+            const kfDuration = (group.motionConfig as KeyframesMotion).duration ?? group.maxDuration;
+            const kfProgress = Math.min(totalElapsed / kfDuration, 1);
+            stepKeyframes(state, group.motionConfig as KeyframesMotion, kfProgress, entry.key);
+            break;
+          }
+        }
+
+        group.currentValues.set(entry.key, state.value);
+        entry.apply(state.value);
+      }
+
+      if (!state.settled) {
+        allSettled = false;
+      }
+    }
+
+    // Progress approximation for physics (useful for onProgress)
+    const totalElapsed = elapsed - group.startTime;
+    const approxProgress = Math.min(totalElapsed / group.maxDuration, 1);
+    group.onProgress?.(approxProgress);
+
+    // Check maxDuration cap
+    if (totalElapsed >= group.maxDuration) {
+      // Force settle all states
+      for (const [key, state] of physicsStates) {
+        if (!state.settled) {
+          state.value = state.target;
+          state.velocity = 0;
+          state.settled = true;
+          const entry = group.entries.find((e) => e.key === key);
+          if (entry) {
+            entry.apply(state.value);
+            group.currentValues.set(entry.key, state.value);
+          }
+        }
+      }
+      allSettled = true;
+    }
+
+    if (allSettled) {
+      this._completeGroup(group);
       return true;
     }
   }
@@ -528,6 +721,14 @@ export class Animator {
         const target = group.direction === 'backward' ? entry.from : entry.to;
         entry.apply(target);
       }
+      // Force-settle physics states
+      if (group.isPhysics && group.physicsStates) {
+        for (const [, state] of group.physicsStates) {
+          state.value = state.target;
+          state.velocity = 0;
+          state.settled = true;
+        }
+      }
     } else if (mode === 'rollback') {
       // Revert to snapshot (start state)
       for (const entry of group.entries) {
@@ -563,6 +764,22 @@ export class Animator {
     // Reverse on a finished handle: revive and play in opposite direction
     if (group.isFinished) {
       group.direction = group.direction === 'forward' ? 'backward' : 'forward';
+
+      // Reset physics states for the new direction
+      if (group.isPhysics && group.physicsStates) {
+        for (const [key, state] of group.physicsStates) {
+          // value stays at current (where the spring settled)
+          // target switches to the other end
+          if (group.direction === 'backward') {
+            state.target = group.snapshot.get(key) as number;
+          } else {
+            state.target = group.target.get(key) as number;
+          }
+          state.velocity = 0;
+          state.settled = false;
+        }
+      }
+
       this._revive(group);
       return;
     }
@@ -572,6 +789,20 @@ export class Animator {
     }
 
     group.direction = group.direction === 'forward' ? 'backward' : 'forward';
+
+    if (group.isPhysics && group.physicsStates) {
+      // For physics groups: update targets and reset velocity so the spring pulls toward new target
+      for (const [key, state] of group.physicsStates) {
+        if (group.direction === 'backward') {
+          state.target = group.snapshot.get(key) as number;
+        } else {
+          state.target = group.target.get(key) as number;
+        }
+        state.velocity = 0;
+        state.settled = false;
+      }
+      return;
+    }
 
     // Adjust startTime so that directedProgress is continuous.
     // Before reverse at rawProgress p: directedProgress = p (or 1-p if already reversed).
@@ -614,8 +845,19 @@ export class Animator {
       return;
     }
 
-    // Same adjustment as _reverse() for seamless mid-flight direction change
-    if (directionChanged && group._lastElapsed > 0 && group.startTime > 0) {
+    // For physics groups: update targets when direction changes
+    if (directionChanged && group.isPhysics && group.physicsStates) {
+      for (const [key, state] of group.physicsStates) {
+        if (direction === 'backward') {
+          state.target = group.snapshot.get(key) as number;
+        } else {
+          state.target = group.target.get(key) as number;
+        }
+        state.velocity = 0;
+        state.settled = false;
+      }
+    } else if (directionChanged && group._lastElapsed > 0 && group.startTime > 0) {
+      // Same adjustment as _reverse() for seamless mid-flight direction change
       const elapsed = group._lastElapsed;
       const rawProgress = Math.min((elapsed - group.startTime) / group.duration, 1);
       group.startTime = elapsed - (1 - rawProgress) * group.duration;
@@ -652,6 +894,21 @@ export class Animator {
       }
     }
 
+    // Reset physics states for physics-based animations
+    if (group.isPhysics && group.physicsStates) {
+      for (const [key, state] of group.physicsStates) {
+        if (direction === 'forward') {
+          state.value = group.snapshot.get(key) as number;
+          state.target = group.target.get(key) as number;
+        } else {
+          state.value = group.target.get(key) as number;
+          state.target = group.snapshot.get(key) as number;
+        }
+        state.velocity = 0;
+        state.settled = false;
+      }
+    }
+
     this._revive(group);
   }
 
@@ -664,6 +921,28 @@ export class Animator {
     group.pausedElapsed = null;
     group._resumeNeeded = false;
     group._lastElapsed = 0;
+    group._prevElapsed = 0;
+
+    // Reset physics states that haven't already been prepared by the caller.
+    // For physics groups: ensure unsettled states are ready for integration.
+    // Callers like _reverse() and _restart() may have already set up the states;
+    // this only resets states that are still marked as settled.
+    if (group.isPhysics && group.physicsStates) {
+      for (const [key, state] of group.physicsStates) {
+        if (state.settled) {
+          // Reset to starting position for current direction
+          if (group.direction === 'forward') {
+            state.value = group.snapshot.get(key) as number;
+            state.target = group.target.get(key) as number;
+          } else {
+            state.value = group.target.get(key) as number;
+            state.target = group.snapshot.get(key) as number;
+          }
+          state.velocity = 0;
+          state.settled = false;
+        }
+      }
+    }
 
     // Renew the finished promise
     this._renewFinished(group);
