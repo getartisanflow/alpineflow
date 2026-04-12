@@ -21,11 +21,15 @@ export class FlowGroup {
     }
 
     animate(targets: AnimateTargets, options?: AnimateOptions): FlowAnimationHandle {
-        return this._host.animate(targets, { ...options, tag: this.name });
+        const mergedTags = [...(options?.tags ?? [])];
+        if (options?.tag) mergedTags.push(options.tag);
+        return this._host.animate(targets, { ...options, tag: this.name, tags: mergedTags });
     }
 
     update(targets: AnimateTargets, options?: AnimateOptions): FlowAnimationHandle {
-        return this._host.update(targets, { ...options, tag: this.name });
+        const mergedTags = [...(options?.tags ?? [])];
+        if (options?.tag) mergedTags.push(options.tag);
+        return this._host.update(targets, { ...options, tag: this.name, tags: mergedTags });
     }
 
     sendParticle(edgeId: string, options?: ParticleOptions): ParticleHandle | undefined {

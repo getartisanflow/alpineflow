@@ -1386,3 +1386,211 @@ describe('Animator — state-aware cancellation', () => {
     expect(handle.isFinished).toBe(false);
   });
 });
+
+// ── I-1: _revive() re-registers handle in registry ────────────────────────────
+
+describe('Animator — revive re-registers handle in registry', () => {
+  it('reverse() on a finished handle re-registers it in getHandles()', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear', tag: 'revive-test' },
+    );
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(handle.isFinished).toBe(true);
+
+    // Flush microtask that deregisters the handle
+    await Promise.resolve();
+    expect(animator.registry.getHandles({ tag: 'revive-test' })).not.toContain(handle);
+
+    // Reverse the finished handle — should re-register
+    handle.reverse();
+    expect(handle.isFinished).toBe(false);
+
+    // Handle should be back in the registry
+    expect(animator.registry.getHandles({ tag: 'revive-test' })).toContain(handle);
+
+    // Complete the reversed animation
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(0);
+  });
+
+  it('play() on a finished handle re-registers it in getHandles()', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear', tag: 'play-revive' },
+    );
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+
+    // Flush microtask
+    await Promise.resolve();
+    expect(animator.registry.getHandles({ tag: 'play-revive' })).not.toContain(handle);
+
+    // play() on finished — should re-register
+    handle.play();
+
+    expect(animator.registry.getHandles({ tag: 'play-revive' })).toContain(handle);
+
+    // Complete again
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(100);
+  });
+
+  it('guarded microtask does not unregister a revived handle', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear', tag: 'guard-test' },
+    );
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(handle.isFinished).toBe(true);
+
+    // Reverse BEFORE the microtask flushes — the guard should prevent deregister
+    handle.reverse();
+    expect(handle.isFinished).toBe(false);
+
+    // Flush microtask — should NOT unregister because group is no longer finished
+    await Promise.resolve();
+    expect(animator.registry.getHandles({ tag: 'guard-test' })).toContain(handle);
+
+    handle.stop();
+  });
+});
+
+// ── I-2: _playDirection() startTime adjustment ────────────────────────────────
+
+describe('Animator — playDirection mid-flight timing', () => {
+  it('playBackward() mid-animation does not cause a visual jump', async () => {
+    // Use a detached scheduler for precise control
+    let engineElapsed = 0;
+    let scheduledCb: FrameRequestCallback | null = null;
+
+    const detachedScheduler: FrameScheduler = {
+      request: (cb) => {
+        scheduledCb = cb;
+        return 1;
+      },
+      cancel: () => {
+        scheduledCb = null;
+      },
+    };
+
+    function driveEngine(ms: number): void {
+      const target = engineElapsed + ms;
+      while (engineElapsed < target && scheduledCb) {
+        engineElapsed = Math.min(engineElapsed + 16, target);
+        const cb = scheduledCb;
+        scheduledCb = null;
+        cb(engineElapsed);
+      }
+    }
+
+    const engine = new AnimationEngine();
+    engine.setScheduler(detachedScheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 1000, easing: 'linear' },
+    );
+
+    // Advance to ~50%
+    driveEngine(500);
+    const valueBeforeFlip = value;
+    expect(valueBeforeFlip).toBeGreaterThan(40);
+    expect(valueBeforeFlip).toBeLessThan(60);
+
+    // Switch to backward mid-flight
+    handle.playBackward();
+
+    // Drive one frame and check continuity — should not jump to 100 or 0
+    driveEngine(16);
+    const valueAfterFlip = value;
+
+    // Value should be close to where it was (within ~2% movement per frame)
+    expect(Math.abs(valueAfterFlip - valueBeforeFlip)).toBeLessThan(10);
+
+    // Value should now be heading toward 0 (backward direction)
+    driveEngine(200);
+    expect(value).toBeLessThan(valueBeforeFlip);
+
+    handle.stop();
+  });
+
+  it('playForward() mid-backward-animation adjusts startTime seamlessly', async () => {
+    let engineElapsed = 0;
+    let scheduledCb: FrameRequestCallback | null = null;
+
+    const detachedScheduler: FrameScheduler = {
+      request: (cb) => {
+        scheduledCb = cb;
+        return 1;
+      },
+      cancel: () => {
+        scheduledCb = null;
+      },
+    };
+
+    function driveEngine(ms: number): void {
+      const target = engineElapsed + ms;
+      while (engineElapsed < target && scheduledCb) {
+        engineElapsed = Math.min(engineElapsed + 16, target);
+        const cb = scheduledCb;
+        scheduledCb = null;
+        cb(engineElapsed);
+      }
+    }
+
+    const engine = new AnimationEngine();
+    engine.setScheduler(detachedScheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 1000, easing: 'linear', startAt: 'end' },
+    );
+
+    // Starting backward from 100, advance ~500ms to ~50%
+    driveEngine(500);
+    const valueBeforeFlip = value;
+    expect(valueBeforeFlip).toBeGreaterThan(40);
+    expect(valueBeforeFlip).toBeLessThan(60);
+
+    // Switch to forward mid-flight
+    handle.playForward();
+
+    // Drive one frame — should not jump
+    driveEngine(16);
+    const valueAfterFlip = value;
+    expect(Math.abs(valueAfterFlip - valueBeforeFlip)).toBeLessThan(10);
+
+    // Value should now head toward 100 (forward direction)
+    driveEngine(200);
+    expect(value).toBeGreaterThan(valueBeforeFlip);
+
+    handle.stop();
+  });
+});

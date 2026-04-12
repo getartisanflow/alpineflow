@@ -81,7 +81,7 @@ interface ActiveGroup {
   direction: 'forward' | 'backward';
   duration: number;
   easingFn: EasingFn;
-  loop: boolean | 'reverse' | 'ping-pong';
+  loop: boolean | 'reverse';
   onStart?: () => void;
   startFired: boolean;
   onProgress?: (progress: number) => void;
@@ -482,7 +482,11 @@ export class Animator {
       group.resolve?.();
       if (group._handle) {
         const handle = group._handle;
-        queueMicrotask(() => this._registry.unregister(handle));
+        queueMicrotask(() => {
+          if (group.isFinished) {
+            this._registry.unregister(handle);
+          }
+        });
       }
       return true;
     }
@@ -547,7 +551,11 @@ export class Animator {
     group.resolve?.();
     if (group._handle) {
       const handle = group._handle;
-      queueMicrotask(() => this._registry.unregister(handle));
+      queueMicrotask(() => {
+        if (group.isFinished || group.stopped) {
+          this._registry.unregister(handle);
+        }
+      });
     }
   }
 
@@ -594,6 +602,7 @@ export class Animator {
   }
 
   private _playDirection(group: ActiveGroup, direction: 'forward' | 'backward'): void {
+    const directionChanged = group.direction !== direction;
     group.direction = direction;
 
     if (group.isFinished) {
@@ -603,6 +612,13 @@ export class Animator {
 
     if (group.stopped) {
       return;
+    }
+
+    // Same adjustment as _reverse() for seamless mid-flight direction change
+    if (directionChanged && group._lastElapsed > 0 && group.startTime > 0) {
+      const elapsed = group._lastElapsed;
+      const rawProgress = Math.min((elapsed - group.startTime) / group.duration, 1);
+      group.startTime = elapsed - (1 - rawProgress) * group.duration;
     }
 
     // If paused, resume
@@ -659,6 +675,11 @@ export class Animator {
 
     // Re-add to active groups
     this._groups.add(group);
+
+    // Re-register handle in the registry (may have been deregistered on completion)
+    if (group._handle) {
+      this._registry.register(group._handle);
+    }
 
     // Re-register on engine
     const engineHandle = this._engine.register((elapsed) => {

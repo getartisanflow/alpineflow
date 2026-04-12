@@ -167,4 +167,69 @@ describe('FlowGroup', () => {
 
         expect(group.name).toBe('entrance');
     });
+
+    it('preserves user-provided tag in tags array for animate()', () => {
+        const host = makeHost();
+        const group = new FlowGroup('my-group', host);
+
+        group.animate(
+            { nodes: { a: { position: { x: 100 } } } },
+            { tag: 'custom', duration: 500 },
+        );
+
+        expect(host.animate).toHaveBeenCalledWith(
+            { nodes: { a: { position: { x: 100 } } } },
+            expect.objectContaining({
+                tag: 'my-group',
+                tags: expect.arrayContaining(['custom']),
+            }),
+        );
+    });
+
+    it('merges user tags array with group tag for animate()', () => {
+        const host = makeHost();
+        const group = new FlowGroup('my-group', host);
+
+        group.animate(
+            { nodes: { a: { position: { x: 100 } } } },
+            { tag: 'custom', tags: ['extra'], duration: 500 },
+        );
+
+        const calledOptions = (host.animate as any).mock.calls[0][1];
+        expect(calledOptions.tag).toBe('my-group');
+        expect(calledOptions.tags).toContain('custom');
+        expect(calledOptions.tags).toContain('extra');
+    });
+
+    it('preserves user-provided tag in tags array for update()', () => {
+        const host = makeHost();
+        const group = new FlowGroup('my-group', host);
+
+        group.update(
+            { nodes: { b: { position: { x: 200 } } } },
+            { tag: 'user-tag', duration: 300 },
+        );
+
+        expect(host.update).toHaveBeenCalledWith(
+            { nodes: { b: { position: { x: 200 } } } },
+            expect.objectContaining({
+                tag: 'my-group',
+                tags: expect.arrayContaining(['user-tag']),
+            }),
+        );
+    });
+
+    it('passes empty tags array when user provides no tag or tags for animate()', () => {
+        const host = makeHost();
+        const group = new FlowGroup('my-group', host);
+
+        group.animate(
+            { nodes: { a: { position: { x: 100 } } } },
+            { duration: 500 },
+        );
+
+        const calledOptions = (host.animate as any).mock.calls[0][1];
+        expect(calledOptions.tag).toBe('my-group');
+        expect(calledOptions.tags).toEqual([]);
+    });
 });
