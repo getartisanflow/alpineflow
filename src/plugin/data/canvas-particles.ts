@@ -1,16 +1,16 @@
 // ============================================================================
 // canvas-particles — Particle system mixin for flow-canvas
 //
-// Public API: sendParticle.
-// Internal:   _tickParticles, destroyParticles.
+// Public API: sendParticle, sendParticleAlongPath, sendParticleBetween.
+// Internal:   _tickParticles, _fireParticleOnPath, destroyParticles.
 //
 // Manages SVG circle particles that travel along edge paths via
 // getPointAtLength. Particles share a single AnimationEngine registration
 // so multiple concurrent particles use one tick callback.
 //
-// Cross-mixin deps (via ctx): getEdge, getEdgePathElement, getEdgeElement,
-//   _edgeSvgElements, _containerStyles, _activeParticles,
-//   _particleEngineHandle.
+// Cross-mixin deps (via ctx): getEdge, getNode, getEdgePathElement,
+//   getEdgeElement, getEdgeSvgElement, _edgeSvgElements, _containerStyles,
+//   _activeParticles, _particleEngineHandle.
 // ============================================================================
 
 import type { CanvasContext } from './canvas-context';
@@ -66,6 +66,161 @@ export function resolveDurationMs(
 // ── Mixin factory ───────────────────────────────────────────────────────────
 
 export function createParticleMixin(ctx: CanvasContext) {
+
+  // ── Shared core: fire particle on a path element (closure-scoped) ────
+
+  /**
+   * Core particle-firing logic shared by sendParticle, sendParticleAlongPath,
+   * and sendParticleBetween. Creates a particle element, registers it with
+   * the engine, and returns a handle.
+   *
+   * @param pathEl   - SVG path element to travel along
+   * @param svgLayer - SVG element to host the particle element
+   * @param options  - Particle visual/behavioral options
+   * @param extra    - Optional hooks: onComplete wrapper, size/color/duration overrides
+   */
+  function _fireParticleOnPath(
+    pathEl: SVGPathElement,
+    svgLayer: SVGElement,
+    options: ParticleOptions = {},
+    extra: {
+      size?: number;
+      color?: string;
+      durationFallback?: string;
+      wrapOnComplete?: (original: () => void) => () => void;
+    } = {},
+  ): ParticleHandle | undefined {
+    // Resolve renderer
+    const rendererName = options.renderer ?? 'circle';
+    const renderer = getParticleRenderer(rendererName);
+    if (!renderer) {
+      debug('particle', `_fireParticleOnPath: unknown renderer "${rendererName}"`);
+      return undefined;
+    }
+
+    const styles = ctx._containerStyles;
+
+    const size = options.size
+      ?? extra.size
+      ?? (parseFloat(styles?.getPropertyValue('--flow-edge-dot-size').trim() ?? '4') || 4);
+    const color = options.color
+      ?? extra.color
+      ?? styles?.getPropertyValue('--flow-edge-dot-fill').trim()
+      ?? CONNECTION_ACTIVE_COLOR;
+    const durationFallback = extra.durationFallback
+      ?? styles?.getPropertyValue('--flow-edge-dot-duration').trim()
+      ?? '2s';
+
+    const pathLength = pathEl.getTotalLength();
+    const ms = resolveDurationMs(options, pathLength, durationFallback);
+
+    // Delegate element creation to the renderer
+    const resolvedOptions: ParticleOptions = { ...options, size, color };
+    const el = renderer.create(svgLayer, resolvedOptions);
+
+    // Position at path start immediately — no origin flash.
+    const startPt = pathEl.getPointAtLength(0);
+    const initialState: ParticleRenderState = {
+      x: startPt.x,
+      y: startPt.y,
+      progress: 0,
+      velocity: { x: 0, y: 0 },
+      pathLength: 0,
+      elapsed: 0,
+    };
+    renderer.update(el, initialState);
+
+    // Promise for handle.finished
+    let resolveHandleFinished: () => void;
+    const handleFinished = new Promise<void>((r) => { resolveHandleFinished = r; });
+
+    const baseOnComplete = () => {
+      if (typeof options.onComplete === 'function') {
+        options.onComplete();
+      }
+      resolveHandleFinished!();
+    };
+
+    const wrappedOnComplete = extra.wrapOnComplete
+      ? extra.wrapOnComplete(baseOnComplete)
+      : baseOnComplete;
+
+    const particle = {
+      element: el,
+      renderer,
+      pathEl,
+      startElapsed: -1,    // set on first engine tick
+      ms,
+      onComplete: wrappedOnComplete,
+      currentPosition: { x: startPt.x, y: startPt.y },
+    };
+    ctx._activeParticles.add(particle);
+
+    // Register on shared AnimationEngine if not already running
+    if (!ctx._particleEngineHandle) {
+      ctx._particleEngineHandle = engine.register((elapsed) => ctx._tickParticles(elapsed));
+    }
+
+    const handle: ParticleHandle = {
+      getCurrentPosition(): XYPosition | null {
+        if (!ctx._activeParticles.has(particle)) return null;
+        return { ...particle.currentPosition };
+      },
+      stop() {
+        if (!ctx._activeParticles.has(particle)) return;
+        particle.renderer.destroy(particle.element);
+        ctx._activeParticles.delete(particle);
+        wrappedOnComplete();
+      },
+      get finished() { return handleFinished; },
+    };
+
+    return handle;
+  }
+
+  /**
+   * Fire a particle along an arbitrary SVG path string.
+   * Closure-scoped so both sendParticleAlongPath and sendParticleBetween
+   * can call it without `this` binding issues.
+   */
+  function _sendParticleAlongPath(svgPath: string, options: ParticleOptions = {}): ParticleHandle | undefined {
+    const svgLayer = ctx.getEdgeSvgElement?.();
+    if (!svgLayer) {
+      debug('particle', 'sendParticleAlongPath: SVG layer unavailable');
+      return undefined;
+    }
+
+    // Create a temporary hidden <path> element for getPointAtLength
+    const tempPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    tempPath.setAttribute('d', svgPath);
+    tempPath.style.display = 'none';
+    svgLayer.appendChild(tempPath);
+
+    const handle = _fireParticleOnPath(tempPath, svgLayer, options, {
+      wrapOnComplete: (original) => () => {
+        original();
+        tempPath.remove();
+      },
+    });
+
+    if (!handle) {
+      // Cleanup temp path if _fireParticleOnPath failed
+      tempPath.remove();
+      return undefined;
+    }
+
+    // Wrap stop() to also clean up the temp path
+    const originalStop = handle.stop;
+    handle.stop = () => {
+      originalStop();
+      tempPath.remove();
+    };
+
+    debug('particle', 'sendParticleAlongPath', { path: svgPath.slice(0, 40) });
+
+    return handle;
+  }
+
   return {
     // ── Particle tick loop ────────────────────────────────────────────────
 
@@ -133,7 +288,7 @@ export function createParticleMixin(ctx: CanvasContext) {
     // ── Send particle along edge ──────────────────────────────────────────
 
     /**
-     * Fire a particle along an edge path. The particle is an SVG circle
+     * Fire a particle along an edge path. The particle is an SVG element
      * that follows the edge's `<path>` element using `getPointAtLength`.
      */
     sendParticle(edgeId: string, options: ParticleOptions = {}): ParticleHandle | undefined {
@@ -159,14 +314,6 @@ export function createParticleMixin(ctx: CanvasContext) {
         return undefined;
       }
 
-      // Resolve renderer
-      const rendererName = options.renderer ?? 'circle';
-      const renderer = getParticleRenderer(rendererName);
-      if (!renderer) {
-        debug('particle', `sendParticle: unknown renderer "${rendererName}"`);
-        return undefined;
-      }
-
       const gEl = ctx.getEdgeElement(edgeId);
       if (!gEl) return undefined;
 
@@ -184,68 +331,60 @@ export function createParticleMixin(ctx: CanvasContext) {
         ?? styles?.getPropertyValue('--flow-edge-dot-duration').trim()
         ?? '2s';
 
-      const pathLength = pathEl.getTotalLength();
-      const ms = resolveDurationMs(options, pathLength, durationFallback);
+      const handle = _fireParticleOnPath(pathEl, gEl as SVGElement, options, {
+        size,
+        color,
+        durationFallback,
+      });
 
-      // Delegate element creation to the renderer
-      const resolvedOptions: ParticleOptions = { ...options, size, color };
-      const el = renderer.create(gEl as SVGElement, resolvedOptions);
-
-      // Position at path start immediately — no origin flash.
-      const startPt = pathEl.getPointAtLength(0);
-      const initialState: ParticleRenderState = {
-        x: startPt.x,
-        y: startPt.y,
-        progress: 0,
-        velocity: { x: 0, y: 0 },
-        pathLength: 0,
-        elapsed: 0,
-      };
-      renderer.update(el, initialState);
-
-      // Promise for handle.finished
-      let resolveHandleFinished: () => void;
-      const handleFinished = new Promise<void>((r) => { resolveHandleFinished = r; });
-
-      const wrappedOnComplete = () => {
-        if (typeof options.onComplete === 'function') {
-          options.onComplete();
-        }
-        resolveHandleFinished!();
-      };
-
-      const particle = {
-        element: el,
-        renderer,
-        pathEl,
-        startElapsed: -1,    // set on first engine tick
-        ms,
-        onComplete: wrappedOnComplete,
-        currentPosition: { x: startPt.x, y: startPt.y },
-      };
-      ctx._activeParticles.add(particle);
-      debug('particle', `sendParticle on edge "${edgeId}"`, { size, color, duration: ms });
-
-      // Register on shared AnimationEngine if not already running
-      if (!ctx._particleEngineHandle) {
-        ctx._particleEngineHandle = engine.register((elapsed) => ctx._tickParticles(elapsed));
+      if (handle) {
+        debug('particle', `sendParticle on edge "${edgeId}"`, { size, color, duration: options.duration });
       }
 
-      const handle: ParticleHandle = {
-        getCurrentPosition(): XYPosition | null {
-          if (!ctx._activeParticles.has(particle)) return null;
-          return { ...particle.currentPosition };
-        },
-        stop() {
-          if (!ctx._activeParticles.has(particle)) return;
-          particle.renderer.destroy(particle.element);
-          ctx._activeParticles.delete(particle);
-          wrappedOnComplete();
-        },
-        get finished() { return handleFinished; },
-      };
-
       return handle;
+    },
+
+    // ── Send particle along arbitrary SVG path ───────────────────────────
+
+    /**
+     * Fire a particle along an arbitrary SVG path string, not tied to an
+     * existing edge. A temporary invisible `<path>` element is injected
+     * into the edge SVG layer and removed when the particle finishes.
+     */
+    sendParticleAlongPath(svgPath: string, options: ParticleOptions = {}): ParticleHandle | undefined {
+      return _sendParticleAlongPath(svgPath, options);
+    },
+
+    // ── Send particle between two nodes ──────────────────────────────────
+
+    /**
+     * Fire a particle along a straight line between two node centers.
+     * Delegates to sendParticleAlongPath after computing the SVG path.
+     */
+    sendParticleBetween(sourceNodeId: string, targetNodeId: string, options: ParticleOptions = {}): ParticleHandle | undefined {
+      const sourceNode = ctx.getNode(sourceNodeId);
+      if (!sourceNode) {
+        debug('particle', `sendParticleBetween: source node "${sourceNodeId}" not found`);
+        return undefined;
+      }
+
+      const targetNode = ctx.getNode(targetNodeId);
+      if (!targetNode) {
+        debug('particle', `sendParticleBetween: target node "${targetNodeId}" not found`);
+        return undefined;
+      }
+
+      // Compute center positions
+      const sx = sourceNode.position.x + (sourceNode.dimensions?.width ?? 150) / 2;
+      const sy = sourceNode.position.y + (sourceNode.dimensions?.height ?? 40) / 2;
+      const tx = targetNode.position.x + (targetNode.dimensions?.width ?? 150) / 2;
+      const ty = targetNode.position.y + (targetNode.dimensions?.height ?? 40) / 2;
+
+      const pathD = `M ${sx} ${sy} L ${tx} ${ty}`;
+
+      debug('particle', `sendParticleBetween "${sourceNodeId}" -> "${targetNodeId}"`, { path: pathD });
+
+      return _sendParticleAlongPath(pathD, options);
     },
 
     // ── Cleanup ───────────────────────────────────────────────────────────

@@ -1464,6 +1464,12 @@ export interface FlowInstance {
   /** Fire a particle along an edge path. Returns a handle for tracking, or undefined if the particle couldn't be created. */
   sendParticle(edgeId: string, options?: ParticleOptions): ParticleHandle | undefined;
 
+  /** Fire a particle along an arbitrary SVG path string. A temporary invisible path element is injected and cleaned up on completion. */
+  sendParticleAlongPath(svgPath: string, options?: ParticleOptions): ParticleHandle | undefined;
+
+  /** Fire a particle along a straight line between two node centers. */
+  sendParticleBetween(sourceNodeId: string, targetNodeId: string, options?: ParticleOptions): ParticleHandle | undefined;
+
   /** Get all tracked animation handles, optionally filtered by tag. */
   getHandles(filter?: { tag?: string; tags?: string[] }): FlowAnimationHandle[];
 

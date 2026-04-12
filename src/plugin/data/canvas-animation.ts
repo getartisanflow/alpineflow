@@ -2,7 +2,8 @@
 // canvas-animation — Animation, timeline, and follow mixin for flow-canvas
 //
 // Public API: animate, update, timeline, registerAnimation, unregisterAnimation,
-//             playAnimation, follow, sendParticle, getHandles, cancelAll,
+//             playAnimation, follow, sendParticle, sendParticleAlongPath,
+//             sendParticleBetween, getHandles, cancelAll,
 //             pauseAll, resumeAll, group, transaction, snapshot.
 // Internal:   _syncAnimationState, _tickParticles.
 //
@@ -211,7 +212,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
               typeof target.followPath === 'string' &&
               typeof document !== 'undefined'
             ) {
-              const svgContainer = (ctx as any).getEdgeSvgElement?.();
+              const svgContainer = ctx.getEdgeSvgElement?.();
               if (svgContainer) {
                 guidePathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 guidePathEl.setAttribute('d', target.followPath);
@@ -755,6 +756,8 @@ export function createAnimationMixin(ctx: CanvasContext) {
         animate: (t, o) => self.animate(t, o),
         update: (t, o) => self.update(t, o),
         sendParticle: (id, o) => self.sendParticle(id, o),
+        sendParticleAlongPath: (p, o) => self.sendParticleAlongPath(p, o),
+        sendParticleBetween: (s, t, o) => self.sendParticleBetween(s, t, o),
         timeline: () => self.timeline(),
         getHandles: (f) => self.getHandles(f),
         cancelAll: (f, o) => self.cancelAll(f, o),
@@ -827,6 +830,8 @@ export function createAnimationMixin(ctx: CanvasContext) {
 
     _tickParticles: particles._tickParticles,
     sendParticle: particles.sendParticle,
+    sendParticleAlongPath: particles.sendParticleAlongPath,
+    sendParticleBetween: particles.sendParticleBetween,
     destroyParticles: particles.destroyParticles,
   };
 }

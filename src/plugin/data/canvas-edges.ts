@@ -1,9 +1,10 @@
 // ============================================================================
 // canvas-edges — Edge CRUD & DOM element access mixin for flow-canvas
 //
-// Public API: addEdges, removeEdges, getEdge, getEdgePathElement, getEdgeElement.
+// Public API: addEdges, removeEdges, getEdge, getEdgePathElement,
+//             getEdgeElement, getEdgeSvgElement.
 //
-// Five methods handling edge lifecycle operations. addEdges merges
+// Six methods handling edge lifecycle operations. addEdges merges
 // defaultEdgeOptions from config onto new edges.
 // ============================================================================
 
@@ -97,6 +98,15 @@ export function createEdgesMixin(ctx: CanvasContext) {
      */
     getEdgeElement(id: string): SVGElement | HTMLElement | null {
       return ctx._container?.querySelector(`[data-flow-edge-id="${CSS.escape(id)}"]`) as SVGElement | null;
+    },
+
+    /**
+     * Get the SVG element that hosts edge paths.
+     * Returns the first `.flow-edge-svg` element inside the viewport,
+     * used for injecting temporary paths (guide paths, particle paths).
+     */
+    getEdgeSvgElement(): SVGSVGElement | null {
+      return ctx._viewportEl?.querySelector('.flow-edge-svg') as SVGSVGElement | null;
     },
   };
 }

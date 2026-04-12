@@ -4,6 +4,8 @@ export interface FlowGroupHost {
     animate(targets: AnimateTargets, options?: AnimateOptions): FlowAnimationHandle;
     update(targets: AnimateTargets, options?: AnimateOptions): FlowAnimationHandle;
     sendParticle?(edgeId: string, options?: ParticleOptions): ParticleHandle | undefined;
+    sendParticleAlongPath?(svgPath: string, options?: ParticleOptions): ParticleHandle | undefined;
+    sendParticleBetween?(sourceNodeId: string, targetNodeId: string, options?: ParticleOptions): ParticleHandle | undefined;
     timeline?(): any;
     getHandles(filter?: { tag?: string; tags?: string[] }): FlowAnimationHandle[];
     cancelAll(filter: { tag?: string; tags?: string[] }, options?: StopOptions): void;
@@ -34,6 +36,14 @@ export class FlowGroup {
 
     sendParticle(edgeId: string, options?: ParticleOptions): ParticleHandle | undefined {
         return this._host.sendParticle?.(edgeId, { ...options, tag: this.name } as ParticleOptions);
+    }
+
+    sendParticleAlongPath(svgPath: string, options?: ParticleOptions): ParticleHandle | undefined {
+        return this._host.sendParticleAlongPath?.(svgPath, { ...options, tag: this.name } as ParticleOptions);
+    }
+
+    sendParticleBetween(sourceNodeId: string, targetNodeId: string, options?: ParticleOptions): ParticleHandle | undefined {
+        return this._host.sendParticleBetween?.(sourceNodeId, targetNodeId, { ...options, tag: this.name } as ParticleOptions);
     }
 
     timeline(): any {

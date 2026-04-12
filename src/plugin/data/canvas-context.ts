@@ -708,6 +708,15 @@ export interface CanvasContext {
   /** Fire a particle along an edge path */
   sendParticle(edgeId: string, options?: Record<string, any>): ParticleHandle | undefined;
 
+  /** Fire a particle along an arbitrary SVG path string */
+  sendParticleAlongPath(svgPath: string, options?: ParticleOptions): ParticleHandle | undefined;
+
+  /** Fire a particle along a straight line between two node centers */
+  sendParticleBetween(sourceNodeId: string, targetNodeId: string, options?: ParticleOptions): ParticleHandle | undefined;
+
+  /** Get the SVG element that hosts edge paths (for injecting temp paths) */
+  getEdgeSvgElement(): SVGSVGElement | null;
+
   /** Get all tracked animation handles, optionally filtered by tag */
   getHandles(filter?: { tag?: string; tags?: string[] }): FlowAnimationHandle[];
 

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { mockCtx } from './__test-utils';
 import { createParticleMixin, resolveDurationMs } from './canvas-particles';
-import type { FlowEdge } from '../../core/types';
+import type { FlowEdge, FlowNode } from '../../core/types';
+import { registerParticleRenderer } from '../../animate/particle-renderers';
 
 // ── Mock engine ──────────────────────────────────────────────────────────────
 
@@ -12,10 +13,58 @@ vi.mock('../../animate/engine', () => ({
   },
 }));
 
+// ── Polyfill SVG path methods & register circle renderer ─────────────────────
+
+// jsdom doesn't implement getTotalLength / getPointAtLength on SVG paths.
+// Wrap createElementNS to add stubs on any <path> element.
+const _origCreateElementNS = document.createElementNS.bind(document);
+document.createElementNS = function (ns: string, tag: string) {
+  const el = _origCreateElementNS(ns, tag);
+  if (tag === 'path') {
+    (el as any).getTotalLength = () => 200;
+    (el as any).getPointAtLength = () => ({ x: 0, y: 0 });
+  }
+  return el;
+} as typeof document.createElementNS;
+
+beforeAll(() => {
+  registerParticleRenderer('circle', {
+    create(svgLayer, options) {
+      const el = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      el.setAttribute('r', String(options.size ?? 4));
+      el.setAttribute('fill', options.color ?? '#8B5CF6');
+      el.classList.add('flow-edge-particle');
+      svgLayer.appendChild(el);
+      return el;
+    },
+    update(el, { x, y }) {
+      el.setAttribute('cx', String(x));
+      el.setAttribute('cy', String(y));
+    },
+    destroy(el) {
+      el.remove();
+    },
+  });
+});
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeEdge(id: string, overrides: Partial<FlowEdge> = {}): FlowEdge {
   return { id, source: 'a', target: 'b', ...overrides };
+}
+
+function makeNode(id: string, overrides: Partial<FlowNode> = {}): FlowNode {
+  return {
+    id,
+    position: { x: 100, y: 200 },
+    data: {},
+    dimensions: { width: 150, height: 40 },
+    ...overrides,
+  };
+}
+
+function makeSvgLayer(): SVGSVGElement {
+  return document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 }
 
 function makePathEl(totalLength = 200): SVGPathElement {
@@ -189,5 +238,213 @@ describe('particle duration resolution', () => {
 
     const particle = getActiveParticle(ctx);
     expect(particle.ms).toBe(2000);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// sendParticleAlongPath
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('sendParticleAlongPath', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('fires a particle along an arbitrary SVG path', () => {
+    const ctx = mockCtx();
+    const svgLayer = makeSvgLayer();
+    (ctx.getEdgeSvgElement as any).mockReturnValue(svgLayer);
+
+    const mixin = createParticleMixin(ctx);
+    const handle = mixin.sendParticleAlongPath('M 0 0 L 200 200');
+
+    expect(handle).toBeDefined();
+    expect(handle!.getCurrentPosition).toBeTypeOf('function');
+    expect(handle!.stop).toBeTypeOf('function');
+    expect(handle!.finished).toBeInstanceOf(Promise);
+    expect(ctx._activeParticles.size).toBe(1);
+  });
+
+  it('removes the temp path after particle completes via stop()', () => {
+    const ctx = mockCtx();
+    const svgLayer = makeSvgLayer();
+    (ctx.getEdgeSvgElement as any).mockReturnValue(svgLayer);
+
+    const onComplete = vi.fn();
+    const mixin = createParticleMixin(ctx);
+    const handle = mixin.sendParticleAlongPath('M 0 0 L 100 100', { onComplete });
+
+    expect(handle).toBeDefined();
+
+    // The temp path should be in the SVG layer (hidden)
+    const tempPaths = svgLayer.querySelectorAll('path');
+    expect(tempPaths.length).toBe(1);
+    expect(tempPaths[0].style.display).toBe('none');
+    expect(tempPaths[0].getAttribute('d')).toBe('M 0 0 L 100 100');
+
+    // Stop the particle
+    handle!.stop();
+
+    // Temp path should be removed
+    expect(svgLayer.querySelectorAll('path').length).toBe(0);
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
+
+  it('removes the temp path on natural completion via onComplete', () => {
+    const ctx = mockCtx();
+    const svgLayer = makeSvgLayer();
+    (ctx.getEdgeSvgElement as any).mockReturnValue(svgLayer);
+
+    const mixin = createParticleMixin(ctx);
+    mixin.sendParticleAlongPath('M 0 0 L 100 100');
+
+    // Grab the particle and manually trigger onComplete (simulating engine completion)
+    const particle = [...ctx._activeParticles][0];
+    expect(particle).toBeDefined();
+    particle.onComplete?.();
+
+    // Temp path should be removed from SVG layer
+    expect(svgLayer.querySelectorAll('path').length).toBe(0);
+  });
+
+  it('returns undefined when SVG layer is unavailable', () => {
+    const ctx = mockCtx();
+    // getEdgeSvgElement returns null by default in mockCtx
+
+    const mixin = createParticleMixin(ctx);
+    const handle = mixin.sendParticleAlongPath('M 0 0 L 100 100');
+
+    expect(handle).toBeUndefined();
+    expect(ctx._activeParticles.size).toBe(0);
+  });
+
+  it('injects a hidden temp path element into the SVG layer', () => {
+    const ctx = mockCtx();
+    const svgLayer = makeSvgLayer();
+    (ctx.getEdgeSvgElement as any).mockReturnValue(svgLayer);
+
+    const mixin = createParticleMixin(ctx);
+    mixin.sendParticleAlongPath('M 10 20 L 300 400');
+
+    const paths = svgLayer.querySelectorAll('path');
+    expect(paths.length).toBe(1);
+    expect(paths[0].getAttribute('d')).toBe('M 10 20 L 300 400');
+    expect(paths[0].style.display).toBe('none');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// sendParticleBetween
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('sendParticleBetween', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('fires a particle between two node centers', () => {
+    const ctx = mockCtx();
+    const svgLayer = makeSvgLayer();
+    (ctx.getEdgeSvgElement as any).mockReturnValue(svgLayer);
+
+    const nodeA = makeNode('a', { position: { x: 0, y: 0 }, dimensions: { width: 100, height: 40 } });
+    const nodeB = makeNode('b', { position: { x: 200, y: 100 }, dimensions: { width: 100, height: 40 } });
+    (ctx.getNode as any).mockImplementation((id: string) => {
+      if (id === 'a') return nodeA;
+      if (id === 'b') return nodeB;
+      return undefined;
+    });
+
+    const mixin = createParticleMixin(ctx);
+    const handle = mixin.sendParticleBetween('a', 'b');
+
+    expect(handle).toBeDefined();
+    expect(handle!.getCurrentPosition).toBeTypeOf('function');
+    expect(ctx._activeParticles.size).toBe(1);
+
+    // Center of A: (0 + 100/2, 0 + 40/2) = (50, 20)
+    // Center of B: (200 + 100/2, 100 + 40/2) = (250, 120)
+    const tempPath = svgLayer.querySelector('path');
+    expect(tempPath).not.toBeNull();
+    expect(tempPath!.getAttribute('d')).toBe('M 50 20 L 250 120');
+  });
+
+  it('returns undefined for missing source node', () => {
+    const ctx = mockCtx();
+    const svgLayer = makeSvgLayer();
+    (ctx.getEdgeSvgElement as any).mockReturnValue(svgLayer);
+
+    const nodeB = makeNode('b');
+    (ctx.getNode as any).mockImplementation((id: string) => {
+      if (id === 'b') return nodeB;
+      return undefined;
+    });
+
+    const mixin = createParticleMixin(ctx);
+    const handle = mixin.sendParticleBetween('nonexistent', 'b');
+
+    expect(handle).toBeUndefined();
+    expect(ctx._activeParticles.size).toBe(0);
+  });
+
+  it('returns undefined for missing target node', () => {
+    const ctx = mockCtx();
+    const svgLayer = makeSvgLayer();
+    (ctx.getEdgeSvgElement as any).mockReturnValue(svgLayer);
+
+    const nodeA = makeNode('a');
+    (ctx.getNode as any).mockImplementation((id: string) => {
+      if (id === 'a') return nodeA;
+      return undefined;
+    });
+
+    const mixin = createParticleMixin(ctx);
+    const handle = mixin.sendParticleBetween('a', 'nonexistent');
+
+    expect(handle).toBeUndefined();
+    expect(ctx._activeParticles.size).toBe(0);
+  });
+
+  it('uses default dimensions when node has no dimensions', () => {
+    const ctx = mockCtx();
+    const svgLayer = makeSvgLayer();
+    (ctx.getEdgeSvgElement as any).mockReturnValue(svgLayer);
+
+    const nodeA = makeNode('a', { position: { x: 0, y: 0 }, dimensions: undefined });
+    const nodeB = makeNode('b', { position: { x: 200, y: 100 }, dimensions: undefined });
+    (ctx.getNode as any).mockImplementation((id: string) => {
+      if (id === 'a') return nodeA;
+      if (id === 'b') return nodeB;
+      return undefined;
+    });
+
+    const mixin = createParticleMixin(ctx);
+    const handle = mixin.sendParticleBetween('a', 'b');
+
+    expect(handle).toBeDefined();
+
+    // Default dimensions: width=150, height=40
+    // Center of A: (0 + 150/2, 0 + 40/2) = (75, 20)
+    // Center of B: (200 + 150/2, 100 + 40/2) = (275, 120)
+    const tempPath = svgLayer.querySelector('path');
+    expect(tempPath!.getAttribute('d')).toBe('M 75 20 L 275 120');
+  });
+
+  it('returns undefined when SVG layer is unavailable', () => {
+    const ctx = mockCtx();
+    // getEdgeSvgElement returns null by default
+
+    const nodeA = makeNode('a');
+    const nodeB = makeNode('b');
+    (ctx.getNode as any).mockImplementation((id: string) => {
+      if (id === 'a') return nodeA;
+      if (id === 'b') return nodeB;
+      return undefined;
+    });
+
+    const mixin = createParticleMixin(ctx);
+    const handle = mixin.sendParticleBetween('a', 'b');
+
+    expect(handle).toBeUndefined();
   });
 });
