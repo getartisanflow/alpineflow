@@ -1072,3 +1072,119 @@ describe('createAnimationMixin — sendParticle', () => {
     expect(result).toBeUndefined();
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// animate — respectReducedMotion
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('animate — respectReducedMotion', () => {
+  it('collapses animate duration to 0 when respectReducedMotion is true', () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx({ _config: { respectReducedMotion: true } as any });
+    ctx._nodeMap.set('n1', n1);
+    const mixin = createAnimationMixin(ctx);
+
+    // With duration: 500 but reduced motion forced on, changes should be instant.
+    mixin.animate(
+      { nodes: { n1: { position: { x: 200, y: 300 } } } },
+      { duration: 500 },
+    );
+
+    // Values should have jumped to target immediately (instant path).
+    expect(n1.position.x).toBe(200);
+    expect(n1.position.y).toBe(300);
+    expect(ctx._flushNodePositions).toHaveBeenCalled();
+  });
+
+  it('does not reduce motion when respectReducedMotion is false', () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx({ _config: { respectReducedMotion: false } as any });
+    ctx._nodeMap.set('n1', n1);
+    ctx._animator = {
+      animate: vi.fn(() => ({
+        pause: vi.fn(),
+        resume: vi.fn(),
+        stop: vi.fn(),
+        reverse: vi.fn(),
+        finished: Promise.resolve(),
+      })),
+    } as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { nodes: { n1: { position: { x: 200, y: 300 } } } },
+      { duration: 500 },
+    );
+
+    // Animator should have been invoked with the full 500ms duration.
+    expect(ctx._animator!.animate).toHaveBeenCalled();
+    const callArgs = (ctx._animator!.animate as any).mock.calls[0][1];
+    expect(callArgs.duration).toBe(500);
+    // Position should NOT have jumped — still animating.
+    expect(n1.position.x).toBe(0);
+    expect(n1.position.y).toBe(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// destroy
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('createAnimationMixin — destroy()', () => {
+  it('stops all active animations on destroy', () => {
+    const ctx = mockCtx();
+    const stopAll = vi.fn();
+    ctx._animator = { animate: vi.fn(), stopAll } as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.destroy();
+
+    expect(stopAll).toHaveBeenCalledOnce();
+  });
+
+  it('is safe when _animator is null', () => {
+    const ctx = mockCtx();
+    ctx._animator = null;
+    const mixin = createAnimationMixin(ctx);
+
+    expect(() => mixin.destroy()).not.toThrow();
+  });
+
+  it('destroys all active particles on destroy', () => {
+    const ctx = mockCtx();
+    const stopHandle = vi.fn();
+    ctx._particleEngineHandle = { stop: stopHandle } as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.destroy();
+
+    // destroyParticles() stops the engine handle and clears active particles
+    expect(stopHandle).toHaveBeenCalledOnce();
+    expect(ctx._particleEngineHandle).toBeNull();
+  });
+
+  it('stops all active timelines on destroy', () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+
+    const tl1 = { stop: vi.fn(), locked: false } as any;
+    const tl2 = { stop: vi.fn(), locked: false } as any;
+    ctx._activeTimelines.add(tl1);
+    ctx._activeTimelines.add(tl2);
+
+    mixin.destroy();
+
+    expect(tl1.stop).toHaveBeenCalledOnce();
+    expect(tl2.stop).toHaveBeenCalledOnce();
+  });
+
+  it('clears _activeTimelines after destroy', () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+    ctx._activeTimelines.add({ stop: vi.fn(), locked: false } as any);
+
+    mixin.destroy();
+
+    expect(ctx._activeTimelines.size).toBe(0);
+  });
+});

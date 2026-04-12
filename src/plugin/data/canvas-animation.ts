@@ -677,6 +677,24 @@ export function createAnimationMixin(ctx: CanvasContext) {
       return handle;
     },
 
+    // ── Cleanup lifecycle ─────────────────────────────────────────────────
+
+    /**
+     * Stop all in-flight animations, particles, and timelines.
+     * Called by the canvas destroy() lifecycle hook when the element is
+     * removed from the DOM.
+     */
+    destroy(): void {
+      if (ctx._animator) {
+        ctx._animator.stopAll();
+      }
+      particles.destroyParticles();
+      for (const tl of ctx._activeTimelines) {
+        tl.stop();
+      }
+      ctx._activeTimelines.clear();
+    },
+
     // ── Particle system (delegated to canvas-particles sub-mixin) ────────
 
     _tickParticles: particles._tickParticles,
