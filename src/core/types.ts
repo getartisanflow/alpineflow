@@ -1255,6 +1255,23 @@ export interface AnimateOptions {
   tag?: string;
   /** Multiple tags for grouping animations. Merged with `tag` when both are provided. */
   tags?: string[];
+  /**
+   * Predicate evaluated once per frame. When it returns `false`, the animation
+   * auto-cancels using the mode defined by `whileStopMode`.
+   */
+  while?: () => boolean;
+  /**
+   * Declarative binding that is compiled into a `while` predicate by the canvas
+   * integration layer (Task 8). The Animator itself only handles `while`.
+   */
+  boundTo?: { node: string; property: string; equals: any } | { edge: string; property: string; equals: any };
+  /**
+   * Controls how the animation stops when `while` returns false.
+   * - 'jump-end'  — snap to target values (default)
+   * - 'rollback'  — revert to snapshot values
+   * - 'freeze'    — leave at current interpolated value
+   */
+  whileStopMode?: 'jump-end' | 'rollback' | 'freeze';
 }
 
 /** Options for handle.stop() / stopAll(). */

@@ -1286,3 +1286,103 @@ describe('Animator — tagged handles', () => {
     expect(animator.registry.getHandles({ tag: 'snap' })).not.toContain(handle);
   });
 });
+
+// ── State-aware cancellation ─────────────────────────────────────────────────
+
+describe('Animator — state-aware cancellation', () => {
+  it('while: predicate auto-stops animation when it returns false', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let condition = true;
+    let x = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { x = v as number; } }],
+      { duration: 1000, while: () => condition },
+    );
+
+    await advanceTimers(500); // halfway, condition still true
+    expect(x).toBeGreaterThan(0);
+    expect(x).toBeLessThan(100);
+
+    condition = false; // flip the predicate
+    await advanceTimers(16); // one frame
+
+    expect(x).toBe(100); // jump-end (default whileStopMode)
+  });
+
+  it('while: predicate does not stop when it returns true', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let x = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { x = v as number; } }],
+      { duration: 500, while: () => true },
+    );
+
+    await advanceTimers(600);
+    expect(x).toBe(100); // completed normally
+  });
+
+  it('whileStopMode: "rollback" reverts to snapshot when predicate fails', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let condition = true;
+    let x = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { x = v as number; } }],
+      { duration: 1000, while: () => condition, whileStopMode: 'rollback' },
+    );
+
+    await advanceTimers(500);
+    condition = false;
+    await advanceTimers(16);
+
+    expect(x).toBe(0); // rolled back to snapshot
+  });
+
+  it('whileStopMode: "freeze" leaves at current value', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let condition = true;
+    let x = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { x = v as number; } }],
+      { duration: 1000, while: () => condition, whileStopMode: 'freeze' },
+    );
+
+    await advanceTimers(500);
+    const midValue = x;
+    condition = false;
+    await advanceTimers(16);
+
+    expect(x).toBe(midValue); // frozen at current position
+  });
+
+  it('while: predicate is not evaluated when animation is paused', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let condition = true;
+    let x = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { x = v as number; } }],
+      { duration: 1000, while: () => condition },
+    );
+
+    await advanceTimers(200);
+    const valueAtPause = x;
+    handle.pause();
+
+    // Flip the predicate while paused
+    condition = false;
+    await advanceTimers(200); // advance time — tick is skipped while paused
+
+    // Should NOT have stopped because tick is skipped while paused
+    expect(x).toBeCloseTo(valueAtPause, 0);
+    expect(handle.isFinished).toBe(false);
+  });
+});

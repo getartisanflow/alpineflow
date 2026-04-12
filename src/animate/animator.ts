@@ -14,6 +14,7 @@ import { lerpNumber, interpolateColor } from './interpolators';
 import type { StopOptions } from '../core/types';
 import { HandleRegistry } from './handle-registry';
 import type { Taggable } from './handle-registry';
+import { Transaction } from './transaction';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +38,10 @@ export interface AnimateInternalOptions {
   onComplete?: () => void;
   tag?: string;
   tags?: string[];
+  /** Predicate evaluated once per frame; stops the animation when it returns false. */
+  while?: () => boolean;
+  /** Controls how the animation stops when `while` returns false. Default: 'jump-end'. */
+  whileStopMode?: 'jump-end' | 'rollback' | 'freeze';
 }
 
 /** Handle returned by `animate()` — controls the animation lifecycle. */
@@ -97,6 +102,10 @@ interface ActiveGroup {
   _currentFinished: Promise<void>;
   /** Reference to the public handle for registry deregistration. */
   _handle?: Taggable;
+  /** Optional predicate evaluated each frame; stops the animation when false. */
+  whilePredicate?: () => boolean;
+  /** How to stop the animation when whilePredicate returns false. */
+  whileStopMode: 'jump-end' | 'rollback' | 'freeze';
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -133,6 +142,7 @@ export class Animator {
   private _groups = new Set<ActiveGroup>();
   private _nextGroupId = 0;
   private _registry = new HandleRegistry();
+  private _activeTransaction: Transaction | null = null;
 
   constructor(engine: AnimationEngine) {
     this._engine = engine;
@@ -146,6 +156,18 @@ export class Animator {
   /** The handle registry for tag-based animation control. */
   get registry(): HandleRegistry {
     return this._registry;
+  }
+
+  /** Begin a new transaction — all subsequent `animate()` calls will be tracked until `endTransaction()`. */
+  beginTransaction(): Transaction {
+    const tx = new Transaction();
+    this._activeTransaction = tx;
+    return tx;
+  }
+
+  /** End the current transaction context (does NOT commit or rollback — the caller decides). */
+  endTransaction(): void {
+    this._activeTransaction = null;
   }
 
   /**
@@ -167,6 +189,8 @@ export class Animator {
       onComplete,
       tag,
       tags,
+      while: whilePredicate,
+      whileStopMode = 'jump-end',
     } = options;
 
     // Resolve easing once
@@ -189,6 +213,13 @@ export class Animator {
         if (existing.entries.length === 0) {
           this._stop(existing, 'superseded');
         }
+      }
+    }
+
+    // Transaction: capture property snapshots (after blend/compose resolves entry.from)
+    if (this._activeTransaction && this._activeTransaction.state === 'active') {
+      for (const entry of entries) {
+        this._activeTransaction.captureProperty(entry.key, entry.from, entry.apply);
       }
     }
 
@@ -228,6 +259,11 @@ export class Animator {
 
       this._registry.register(handle as Taggable);
       queueMicrotask(() => this._registry.unregister(handle as Taggable));
+
+      // Transaction: track instant handle
+      if (this._activeTransaction && this._activeTransaction.state === 'active') {
+        this._activeTransaction.trackHandle(handle);
+      }
 
       onComplete?.();
       return handle;
@@ -276,6 +312,8 @@ export class Animator {
       snapshot,
       target,
       _currentFinished: finished,
+      whilePredicate,
+      whileStopMode,
     };
 
     // Initialize current values
@@ -332,6 +370,11 @@ export class Animator {
     // Store handle reference on group for auto-deregister on completion
     group._handle = handle as Taggable;
 
+    // Transaction: track this handle
+    if (this._activeTransaction && this._activeTransaction.state === 'active') {
+      this._activeTransaction.trackHandle(handle);
+    }
+
     return handle;
   }
 
@@ -361,6 +404,12 @@ export class Animator {
     // Paused: don't advance
     if (group.pausedElapsed !== null) {
       return;
+    }
+
+    // State-aware cancellation: evaluate the while predicate and stop if false
+    if (group.whilePredicate && !group.whilePredicate()) {
+      this._stop(group, group.whileStopMode);
+      return true;
     }
 
     // Just resumed: adjust startTime so the animation continues from the paused position.
