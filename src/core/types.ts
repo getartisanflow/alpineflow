@@ -676,6 +676,27 @@ export interface ParticleOptions {
   class?: string;
   /** Called when the particle reaches the target and is removed. */
   onComplete?: () => void;
+  /** Named renderer to use. Defaults to 'circle'. */
+  renderer?: string;
+  /** Travel speed in SVG units per second (alternative to duration). */
+  speed?: number;
+}
+
+/** State passed to particle renderers each frame. */
+export interface ParticleRenderState {
+  x: number;
+  y: number;
+  progress: number;      // 0-1
+  velocity: { x: number; y: number };
+  pathLength: number;
+  elapsed: number;       // ms since particle start
+}
+
+/** Pluggable particle renderer — create/update/destroy lifecycle. */
+export interface ParticleRenderer {
+  create: (svgLayer: SVGElement, options: ParticleOptions) => SVGElement;
+  update: (el: SVGElement, state: ParticleRenderState) => void;
+  destroy: (el: SVGElement) => void;
 }
 
 /** Handle returned by sendParticle() for tracking a particle's position. */

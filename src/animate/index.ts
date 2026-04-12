@@ -41,5 +41,12 @@ export { Animator, type PropertyEntry, type AnimateInternalOptions, type Animati
 // ── Handle Registry ───────────────────────────────────────────────────────────
 export { HandleRegistry, type Taggable } from './handle-registry';
 
+// ── Transaction ──────────────────────────────────────────────────────────────
+export { Transaction, type TransactionState } from './transaction';
+
 // ── Flow Group ────────────────────────────────────────────────────────────────
 export { FlowGroup, type FlowGroupHost } from './flow-group';
+
+// ── Particle Renderers ───────────────────────────────────────────────────────
+export { registerParticleRenderer, getParticleRenderer, hasParticleRenderer, circleRenderer } from './particle-renderers';
+export type { ParticleRenderer, ParticleRenderState } from '../core/types';
