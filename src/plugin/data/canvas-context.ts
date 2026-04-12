@@ -35,6 +35,7 @@ import type {
 } from '../../core/types';
 import type { FlowGroup } from '../../animate/flow-group';
 import type { Transaction } from '../../animate/transaction';
+import type { Recording, RecordOptions, ReplayOptions, ReplayHandle } from '../../animate/recording';
 import type { FlowHistory } from '../../core/history';
 import type { FlowTimeline } from '../../animate/timeline';
 import type { Animator } from '../../animate/animator';
@@ -750,6 +751,12 @@ export interface CanvasContext {
 
   /** Capture current canvas state. Call restore() to revert */
   snapshot(): { restore: () => void };
+
+  /** Record canvas animation events during fn() execution. Returns a Recording */
+  record(fn: () => Promise<void> | void, options?: RecordOptions): Promise<Recording>;
+
+  /** Replay a previously recorded Recording on this canvas. Returns a ReplayHandle */
+  replay(recording: Recording, options?: ReplayOptions): ReplayHandle;
 
   /** Dagre layout */
   layout(options?: { direction?: 'TB' | 'LR' | 'BT' | 'RL'; nodesep?: number; ranksep?: number; adjustHandles?: boolean; fitView?: boolean; duration?: number }): Promise<void>;

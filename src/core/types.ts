@@ -12,6 +12,7 @@ import type { CollabConfig, CollabInstance } from '../collab/types';
 import type { FlowGroup } from '../animate/flow-group';
 import type { Transaction } from '../animate/transaction';
 import type { MotionConfig } from '../animate/motion/types';
+import type { Recording, RecordOptions, ReplayOptions, ReplayHandle } from '../animate/recording';
 
 /** 2D coordinate */
 export interface XYPosition {
@@ -1550,6 +1551,12 @@ export interface FlowInstance {
 
   /** Capture current canvas state. Call restore() to revert. */
   snapshot(): { restore: () => void };
+
+  /** Record canvas animation events during fn() execution. Returns a Recording. */
+  record(fn: () => Promise<void> | void, options?: RecordOptions): Promise<Recording>;
+
+  /** Replay a previously recorded Recording on this canvas. Returns a ReplayHandle. */
+  replay(recording: Recording, options?: ReplayOptions): ReplayHandle;
 
   /** Condense a node — switch to summary view hiding internal rows */
   condenseNode(id: string): void;

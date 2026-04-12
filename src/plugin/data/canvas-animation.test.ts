@@ -4,6 +4,10 @@ import { mockCtx } from './__test-utils';
 import { createAnimationMixin } from './canvas-animation';
 import type { FlowNode, FlowEdge, ParticleRenderer } from '../../core/types';
 import { registerParticleRenderer, getParticleRenderer } from '../../animate/particle-renderers';
+import { Recording } from '../../animate/recording/recording';
+import { ReplayHandle } from '../../animate/recording/replay';
+import type { RecordingData } from '../../animate/recording/types';
+import { RECORDING_VERSION } from '../../animate/recording/types';
 
 // ── Mock Alpine ──────────────────────────────────────────────────────────────
 
@@ -1751,5 +1755,147 @@ describe('canvas animation — motion option', () => {
     const callArgs = animator.animate.mock.calls[0][1];
     expect(callArgs.motion).toBeUndefined();
     expect(callArgs.maxDuration).toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// record and replay
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function makeRecordingData(overrides: Partial<RecordingData> = {}): RecordingData {
+  return {
+    version: RECORDING_VERSION,
+    duration: 0,
+    initialState: { nodes: {}, edges: {}, viewport: { x: 0, y: 0, zoom: 1 } },
+    events: [],
+    checkpoints: [],
+    ...overrides,
+  };
+}
+
+describe('createAnimationMixin — record and replay', () => {
+  it('record() returns a Promise that resolves to a Recording', async () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+
+    const recording = await mixin.record(() => {});
+
+    expect(recording).toBeInstanceOf(Recording);
+  });
+
+  it('record() captures animate calls made during fn()', async () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+
+    const recording = await mixin.record(() => {
+      mixin.animate({ nodes: { n1: { position: { x: 100, y: 200 } } } }, { duration: 300 });
+    });
+
+    expect(recording.events).toHaveLength(1);
+    expect(recording.events[0].type).toBe('animate');
+    expect(recording.events[0].args.targets).toEqual({ nodes: { n1: { position: { x: 100, y: 200 } } } });
+  });
+
+  it('record() captures update calls made during fn()', async () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+
+    const recording = await mixin.record(() => {
+      mixin.update({ nodes: { n1: { position: { x: 50, y: 50 } } } }, { duration: 0 });
+    });
+
+    expect(recording.events).toHaveLength(1);
+    expect(recording.events[0].type).toBe('update');
+  });
+
+  it('record() captures multiple events in order', async () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+
+    const recording = await mixin.record(() => {
+      mixin.update({ nodes: { n1: { position: { x: 10 } } } });
+      mixin.animate({ nodes: { n2: { position: { x: 20 } } } }, { duration: 500 });
+    });
+
+    expect(recording.events).toHaveLength(2);
+    expect(recording.events[0].type).toBe('update');
+    expect(recording.events[1].type).toBe('animate');
+  });
+
+  it('record() accepts options and passes captureMetadata to the Recording', async () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+
+    const recording = await mixin.record(
+      () => {},
+      { captureMetadata: { label: 'my-recording' } },
+    );
+
+    expect(recording.metadata).toEqual({ label: 'my-recording' });
+  });
+
+  it('replay() returns a ReplayHandle', () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+    const recording = new Recording(makeRecordingData({ duration: 100 }));
+
+    const handle = mixin.replay(recording, { paused: true });
+
+    expect(handle).toBeInstanceOf(ReplayHandle);
+  });
+
+  it('replay() handle exposes expected controls', () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+    const recording = new Recording(makeRecordingData({ duration: 100 }));
+
+    const handle = mixin.replay(recording, { paused: true });
+
+    expect(typeof handle.play).toBe('function');
+    expect(typeof handle.pause).toBe('function');
+    expect(typeof handle.stop).toBe('function');
+    expect(typeof handle.seek).toBe('function');
+    expect(handle.finished).toBeInstanceOf(Promise);
+  });
+
+  it('replay() handle exposes the original recording', () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+    const recording = new Recording(makeRecordingData({ duration: 250 }));
+
+    const handle = mixin.replay(recording, { paused: true });
+
+    expect(handle.recording).toBe(recording);
+    expect(handle.duration).toBe(250);
+  });
+
+  it('replay() starts paused when paused option is true', () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+    const recording = new Recording(makeRecordingData({ duration: 100 }));
+
+    const handle = mixin.replay(recording, { paused: true });
+
+    expect(handle.state).toBe('paused');
+  });
+
+  it('replay() applies initialState to canvas nodes on construction', () => {
+    const n1: FlowNode = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx();
+    ctx.nodes.push(n1);
+
+    const mixin = createAnimationMixin(ctx);
+    const recording = new Recording(makeRecordingData({
+      initialState: {
+        nodes: { n1: { position: { x: 42, y: 99 } } },
+        edges: {},
+        viewport: { x: 0, y: 0, zoom: 1 },
+      },
+    }));
+
+    mixin.replay(recording, { paused: true });
+
+    expect(ctx.nodes[0].position.x).toBe(42);
+    expect(ctx.nodes[0].position.y).toBe(99);
   });
 });

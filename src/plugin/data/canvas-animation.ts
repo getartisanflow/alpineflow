@@ -43,6 +43,8 @@ import { registerParticleRenderer as _registerParticleRenderer } from '../../ani
 import { FlowGroup } from '../../animate/flow-group';
 import type { Transaction } from '../../animate/transaction';
 import type { ParticleRenderer } from '../../core/types';
+import { Recorder, ReplayHandle, type RecordOptions, type ReplayOptions } from '../../animate/recording';
+import type { Recording } from '../../animate/recording';
 
 // ── Mixin factory ───────────────────────────────────────────────────────────
 
@@ -812,6 +814,106 @@ export function createAnimationMixin(ctx: CanvasContext) {
           Object.assign(ctx.viewport, savedViewport);
         },
       };
+    },
+
+    // ── Record & Replay ───────────────────────────────────────────────────
+
+    /**
+     * Record canvas animation events during `fn()` execution.
+     * Returns a `Recording` that can be passed to `replay()`.
+     */
+    record(fn: () => Promise<void> | void, options?: RecordOptions): Promise<Recording> {
+      // The Recorder hooks methods on a RecorderCanvas facade object. To ensure
+      // that calls to $flow.animate / $flow.update etc. during fn() are captured,
+      // we temporarily replace the mixin's own method slots with recording-aware
+      // wrappers, and restore them once recording completes.
+      const self = this;
+
+      // Save direct function references to the real mixin methods.
+      const realAnimate = self.animate;
+      const realUpdate = self.update;
+      const realSendParticle = self.sendParticle;
+      const realSendParticleAlongPath = self.sendParticleAlongPath;
+      const realSendParticleBetween = self.sendParticleBetween;
+      const realSendParticleBurst = self.sendParticleBurst;
+      const realSendConverging = self.sendConverging;
+
+      // Build a facade with real methods as its initial implementations.
+      // The Recorder will wrap these with event-capturing hooks.
+      // NOTE: facade.animate → realAnimate → this.update. To avoid double-
+      // recording when animate internally calls update, we use realUpdate
+      // (bypassing the hook) as the update impl inside the animate call chain.
+      // We achieve this by temporarily un-patching self.update during animate.
+      const facade: any = {
+        get nodes() { return ctx.nodes; },
+        get edges() { return ctx.edges; },
+        get viewport() { return ctx.viewport; },
+        animate: (targets: any, opts?: any) => {
+          // Temporarily restore real update so animate's internal update call
+          // is not double-recorded as an 'update' event.
+          const savedUpdate = (self as any).update;
+          (self as any).update = realUpdate;
+          try {
+            return realAnimate.call(self, targets, opts);
+          } finally {
+            (self as any).update = savedUpdate;
+          }
+        },
+        update: (targets: any, opts?: any) => realUpdate.call(self, targets, opts),
+        sendParticle: (edgeId: string, opts?: any) => realSendParticle.call(self, edgeId, opts),
+        sendParticleAlongPath: (path: string, opts?: any) => realSendParticleAlongPath.call(self, path, opts),
+        sendParticleBetween: (source: string, target: string, opts?: any) => realSendParticleBetween.call(self, source, target, opts),
+        sendParticleBurst: (edgeId: string, opts: any) => realSendParticleBurst.call(self, edgeId, opts),
+        sendConverging: (sources: string[], opts: any) => realSendConverging.call(self, sources, opts),
+        addNodes: (nodes: any) => ctx.addNodes(nodes),
+        removeNodes: (ids: any) => ctx.removeNodes(ids),
+        addEdges: (edges: any) => ctx.addEdges(edges),
+        removeEdges: (ids: any) => ctx.removeEdges(ids),
+      };
+
+      const recorder = new Recorder(facade, options);
+
+      // Wrap fn() so that $flow.animate / $flow.update calls during recording
+      // are routed through the hooked facade (which records events). Restore
+      // the originals once recording completes.
+      const wrappedFn = async () => {
+        (self as any).animate = (...args: any[]) => facade.animate(...args);
+        (self as any).update = (...args: any[]) => facade.update(...args);
+        (self as any).sendParticle = (...args: any[]) => facade.sendParticle(...args);
+        (self as any).sendParticleAlongPath = (...args: any[]) => facade.sendParticleAlongPath(...args);
+        (self as any).sendParticleBetween = (...args: any[]) => facade.sendParticleBetween(...args);
+        (self as any).sendParticleBurst = (...args: any[]) => facade.sendParticleBurst(...args);
+        (self as any).sendConverging = (...args: any[]) => facade.sendConverging(...args);
+        try {
+          const result = fn();
+          if (result instanceof Promise) {
+            await result;
+          }
+        } finally {
+          (self as any).animate = realAnimate;
+          (self as any).update = realUpdate;
+          (self as any).sendParticle = realSendParticle;
+          (self as any).sendParticleAlongPath = realSendParticleAlongPath;
+          (self as any).sendParticleBetween = realSendParticleBetween;
+          (self as any).sendParticleBurst = realSendParticleBurst;
+          (self as any).sendConverging = realSendConverging;
+        }
+      };
+
+      return recorder.record(wrappedFn, options?.captureMetadata);
+    },
+
+    /**
+     * Replay a previously recorded `Recording` on this canvas.
+     * Returns a `ReplayHandle` with play/pause/stop/scrub controls.
+     */
+    replay(recording: Recording, options?: ReplayOptions): ReplayHandle {
+      const replayCanvas = {
+        get nodes() { return ctx.nodes; },
+        get edges() { return ctx.edges; },
+        get viewport() { return ctx.viewport; },
+      };
+      return new ReplayHandle(replayCanvas as any, recording, options);
     },
 
     // ── Cleanup lifecycle ─────────────────────────────────────────────────

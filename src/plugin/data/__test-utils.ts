@@ -339,6 +339,8 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
       finished: Promise.resolve(),
     })),
     snapshot: vi.fn(() => ({ restore: vi.fn() })),
+    record: vi.fn(async () => ({}) as any),
+    replay: vi.fn(() => ({}) as any),
     layout: vi.fn(async () => {}),
     forceLayout: vi.fn(async () => {}),
     treeLayout: vi.fn(async () => {}),
