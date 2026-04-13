@@ -1,7 +1,21 @@
-import type { RecordingEvent, RecordingEventType, Checkpoint, CanvasSnapshot, RecordingData } from './types';
+import type { RecordingEvent, RecordingEventType, Checkpoint, CanvasSnapshot, RecordingData, InFlightAnimation } from './types';
 import { Recording } from './recording';
 import { RECORDING_VERSION } from './types';
 import { safeClone } from '../clone';
+
+/**
+ * Live record for an animation that's still in flight at the current virtual
+ * time. The Recorder stores these as each `animate`/`update` hook fires and
+ * drops them when the handle's `finished` promise resolves.
+ */
+interface ActiveAnim {
+    handleId: string;
+    eventT: number;           // virtual ms when the animate event was recorded
+    targets: any;             // AnimateTargets passed to animate()
+    options: any;             // AnimateOptions passed to animate()
+    handle: any;              // FlowAnimationHandle — exposes direction, currentValue, isFinished
+    fromValues: Record<string, number>;  // baseline values snapshotted at call time
+}
 
 export interface RecordOptions {
     /** How often (in ms) to snapshot canvas state during recording. Default: 500ms. */
@@ -51,6 +65,8 @@ export class Recorder {
     private _maxDuration: number;
     private _checkpointTimer: ReturnType<typeof setInterval> | null = null;
     private _eventCounter = 0;
+    /** In-flight animations indexed by handleId — populated by animate/update hooks, pruned by handle.finished. */
+    private _activeAnims = new Map<string, ActiveAnim>();
 
     constructor(canvas: RecorderCanvas, options: RecordOptions = {}) {
         this._canvas = canvas;
@@ -82,8 +98,10 @@ export class Recorder {
             }
         }
 
-        // Final checkpoint at recording end
+        // Final checkpoint at recording end — before clearing _activeAnims so
+        // any animations still in flight get captured into the final checkpoint.
         this._captureCheckpoint();
+        this._activeAnims.clear();
 
         const data: RecordingData = {
             version: RECORDING_VERSION,
@@ -145,6 +163,38 @@ export class Recorder {
         return result;
     }
 
+    /**
+     * Capture the live canvas values that an animate()/update() call is about
+     * to transition FROM. Keys are the same flat form VirtualEngine uses
+     * (e.g. `nodes.n.position.x`) so rehydration can lerp correctly.
+     */
+    private _snapshotFromValues(targets: any): Record<string, number> {
+        const out: Record<string, number> = {};
+        const nodeTargets = targets?.nodes ?? {};
+        const nodesById = new Map<string, any>();
+        for (const n of this._canvas.nodes ?? []) {
+            if (n && typeof n === 'object' && 'id' in n) {
+                nodesById.set(n.id, n);
+            }
+        }
+        for (const [nodeId, target] of Object.entries(nodeTargets)) {
+            const node = nodesById.get(nodeId);
+            if (!node) continue;
+            const position = (target as { position?: { x?: number; y?: number } }).position;
+            if (position?.x !== undefined) {
+                out[`nodes.${nodeId}.position.x`] = node.position?.x ?? 0;
+            }
+            if (position?.y !== undefined) {
+                out[`nodes.${nodeId}.position.y`] = node.position?.y ?? 0;
+            }
+        }
+        const viewport = targets?.viewport;
+        if (viewport?.pan?.x !== undefined) out['viewport.x'] = this._canvas.viewport.x;
+        if (viewport?.pan?.y !== undefined) out['viewport.y'] = this._canvas.viewport.y;
+        if (viewport?.zoom !== undefined) out['viewport.zoom'] = this._canvas.viewport.zoom;
+        return out;
+    }
+
     private _captureSnapshot(): CanvasSnapshot {
         const nodes: Record<string, any> = {};
         for (const n of this._canvas.nodes ?? []) {
@@ -169,10 +219,68 @@ export class Recorder {
         this._checkpoints.push({
             t: this._virtualNow(),
             canvas: this._captureSnapshot(),
-            // TODO: capture from animator's in-flight state — for alpha, leave empty
-            inFlight: [],
+            inFlight: this._captureInFlight(),
             tagRegistry: {},
         });
+    }
+
+    /**
+     * Serialize the current in-flight animations tracked by this recorder into
+     * the InFlightAnimation shape the VirtualEngine can restore from.
+     * Draws data from each ActiveAnim entry's original event args + the handle's
+     * live state. Finished handles are skipped (the finished promise cleanup
+     * typically runs before this, but we defend anyway).
+     */
+    private _captureInFlight(): InFlightAnimation[] {
+        const out: InFlightAnimation[] = [];
+        for (const active of this._activeAnims.values()) {
+            if (active.handle?.isFinished) continue;
+
+            const options = active.options ?? {};
+            const hasMotion = !!options.motion;
+
+            // Derive the inflight type from the options.motion if present.
+            let type: InFlightAnimation['type'] = 'eased';
+            if (hasMotion) {
+                const m = options.motion;
+                if (typeof m === 'string') {
+                    // 'spring.wobbly' → 'spring'
+                    const cat = m.split('.')[0];
+                    type = (cat as InFlightAnimation['type']);
+                } else if (m && typeof m === 'object' && m.type) {
+                    type = m.type as InFlightAnimation['type'];
+                }
+            }
+
+            // Serialize currentValues (a Map on the live handle) to a plain
+            // Record that can be structured-cloned and restored later.
+            let currentValues: Record<string, any> = {};
+            const cv = active.handle?.currentValue;
+            if (cv && typeof cv.forEach === 'function') {
+                cv.forEach((v: any, k: string) => {
+                    currentValues[k] = v;
+                });
+            }
+
+            out.push({
+                handleId: active.handleId,
+                type,
+                targets: safeClone(active.targets),
+                startTime: active.eventT,
+                duration: hasMotion ? undefined : (options.duration ?? 300),
+                easing: hasMotion ? undefined : options.easing,
+                motion: hasMotion ? safeClone(options.motion) : undefined,
+                direction: active.handle?.direction ?? 'forward',
+                currentValues,
+                fromValues: { ...active.fromValues },
+                // integratorState populated if/when handles expose physics state.
+                // For now, scrubbing into mid-physics relies on rehydration via
+                // walk-forward from the nearest event; physics state capture
+                // remains a GA-blocker follow-up for perfect fidelity.
+                integratorState: undefined,
+            });
+        }
+        return out;
     }
 
     private _scheduleCheckpoints(): void {
@@ -200,16 +308,45 @@ export class Recorder {
             };
         };
 
-        hook('animate', 'animate', (targets, options) => ({
-            targets,
-            options,
-            handleId: `rec-${++this._eventCounter}`,
-        }));
-        hook('update', 'update', (targets, options) => ({
-            targets,
-            options,
-            handleId: `rec-${++this._eventCounter}`,
-        }));
+        // animate/update are tracked for in-flight checkpoint capture — the
+        // hook wraps the real call, records the event, AND registers the
+        // returned handle so _captureCheckpoint can serialize active animations.
+        const animHook = (methodName: 'animate' | 'update', eventType: RecordingEventType): void => {
+            const original = (this._canvas as any)[methodName];
+            if (typeof original !== 'function') return;
+
+            this._originalMethods[methodName] = original;
+            (this._canvas as any)[methodName] = (targets: any, options: any) => {
+                const handleId = `rec-${++this._eventCounter}`;
+                const eventT = this._virtualNow();
+                // Snapshot baseline values BEFORE the call — any other in-flight
+                // animations on the same keys will update the canvas via rAF,
+                // so reading now captures the true pre-animation baseline for
+                // mid-flight checkpoint rehydration.
+                const fromValues = this._snapshotFromValues(targets);
+                this._recordEvent(eventType, { targets, options, handleId });
+
+                const handle = original.apply(this._canvas, [targets, options]);
+
+                // Track the handle only if it has the shape we need to serialize.
+                // `update()` with duration 0 returns a noop-like handle whose
+                // `finished` resolves immediately — skip those.
+                if (handle && typeof handle === 'object' && handle.finished && !handle.isFinished) {
+                    const active: ActiveAnim = { handleId, eventT, targets, options, handle, fromValues };
+                    this._activeAnims.set(handleId, active);
+                    handle.finished.then(() => {
+                        this._activeAnims.delete(handleId);
+                    }).catch(() => {
+                        this._activeAnims.delete(handleId);
+                    });
+                }
+
+                return handle;
+            };
+        };
+
+        animHook('animate', 'animate');
+        animHook('update', 'update');
         hook('sendParticle', 'particle', (edgeId, options) => ({ edgeId, options }));
         hook('sendParticleAlongPath', 'particle-along-path', (path, options) => ({ path, options }));
         hook('sendParticleBetween', 'particle-between', (source, target, options) => ({ source, target, options }));

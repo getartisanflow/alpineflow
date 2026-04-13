@@ -40,6 +40,12 @@ export interface InFlightAnimation {
         settled?: boolean;
     }>;
     currentValues: Record<string, any>;
+    /**
+     * Baseline values at animation start — snapshotted when animate() was called.
+     * For eased animations, rehydration needs this to correctly compute mid-flight
+     * lerp positions. Populated by Recorder; optional for back-compat.
+     */
+    fromValues?: Record<string, number>;
 }
 
 export interface Checkpoint {

@@ -276,6 +276,115 @@ describe('Recorder', () => {
         expect((canvas as any).sendParticle).toBeUndefined();
     });
 
+    describe('inFlight capture', () => {
+        function makeHandle() {
+            let resolveFinished!: () => void;
+            const finished = new Promise<void>((r) => { resolveFinished = r; });
+            return {
+                handle: {
+                    finished,
+                    isFinished: false,
+                    direction: 'forward' as const,
+                    currentValue: new Map<string, number>([
+                        ['nodes.n1.position.x', 50],
+                    ]),
+                },
+                finish() {
+                    (this.handle as any).isFinished = true;
+                    resolveFinished();
+                },
+            };
+        }
+
+        it('captures active animations into checkpoint.inFlight with fromValues', async () => {
+            vi.useFakeTimers();
+            try {
+                const canvas = makeMockCanvas();
+                const h = makeHandle();
+                (canvas.animate as ReturnType<typeof vi.fn>).mockReturnValue(h.handle);
+                const recorder = new Recorder(canvas, { checkpointInterval: 50 });
+
+                const promise = recorder.record(async () => {
+                    canvas.animate!(
+                        { nodes: { n1: { position: { x: 500 } } } },
+                        { duration: 1000, easing: 'easeInOut' },
+                    );
+                    await vi.advanceTimersByTimeAsync(120);
+                });
+
+                const recording = await promise;
+
+                const midCheckpoint = recording.checkpoints.find((c) => c.inFlight.length > 0);
+                expect(midCheckpoint).toBeDefined();
+                const inflight = midCheckpoint!.inFlight[0];
+                expect(inflight.type).toBe('eased');
+                expect(inflight.duration).toBe(1000);
+                expect(inflight.easing).toBe('easeInOut');
+                // fromValues snapshotted at call time — n1 was at x=0 initially
+                expect(inflight.fromValues).toEqual({ 'nodes.n1.position.x': 0 });
+                // currentValues serialized from the live handle's Map
+                expect(inflight.currentValues['nodes.n1.position.x']).toBe(50);
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('prunes finished animations from later checkpoints', async () => {
+            vi.useFakeTimers();
+            try {
+                const canvas = makeMockCanvas();
+                const h = makeHandle();
+                (canvas.animate as ReturnType<typeof vi.fn>).mockReturnValue(h.handle);
+                const recorder = new Recorder(canvas, { checkpointInterval: 50 });
+
+                const promise = recorder.record(async () => {
+                    canvas.animate!(
+                        { nodes: { n1: { position: { x: 500 } } } },
+                        { duration: 1000 },
+                    );
+                    await vi.advanceTimersByTimeAsync(60);
+                    h.finish();
+                    // Let the finished microtask resolve and the cleanup run.
+                    await Promise.resolve();
+                    await Promise.resolve();
+                    await vi.advanceTimersByTimeAsync(60);
+                });
+
+                const recording = await promise;
+                // Last checkpoint (final, captured on completion) should have no inFlight.
+                const last = recording.checkpoints[recording.checkpoints.length - 1];
+                expect(last.inFlight).toEqual([]);
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+
+        it('reads motion type from options.motion string or object', async () => {
+            vi.useFakeTimers();
+            try {
+                const canvas = makeMockCanvas();
+                const h = makeHandle();
+                (canvas.animate as ReturnType<typeof vi.fn>).mockReturnValue(h.handle);
+                const recorder = new Recorder(canvas, { checkpointInterval: 50 });
+
+                const promise = recorder.record(async () => {
+                    canvas.animate!(
+                        { nodes: { n1: { position: { x: 500 } } } },
+                        { motion: 'spring.wobbly' },
+                    );
+                    await vi.advanceTimersByTimeAsync(60);
+                });
+
+                const recording = await promise;
+                const cp = recording.checkpoints.find((c) => c.inFlight.length > 0);
+                expect(cp!.inFlight[0].type).toBe('spring');
+                expect(cp!.inFlight[0].duration).toBeUndefined();
+            } finally {
+                vi.useRealTimers();
+            }
+        });
+    });
+
     it('timestamps are monotonic non-decreasing', async () => {
         const canvas = makeMockCanvas();
         const recorder = new Recorder(canvas);

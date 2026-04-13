@@ -113,6 +113,42 @@ describe('Transaction', () => {
     expect(x).toBe(50); // reverted to pre-transaction value
   });
 
+  it('onAfterRollback() fires after property reverts with the reverted keys', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let x = 50;
+    const tx = animator.beginTransaction();
+
+    animator.animate(
+      [{ key: 'node:a:position.x', from: 50, to: 200, apply: (v) => { x = v as number; } }],
+      { duration: 500, easing: 'linear' },
+    );
+    animator.endTransaction();
+    await advanceTimers(100);
+
+    let observed: string[] = [];
+    let xAtCallback: number | null = null;
+    tx.onAfterRollback((keys) => {
+      observed = keys;
+      xAtCallback = x;
+    });
+
+    tx.rollback();
+
+    expect(observed).toEqual(['node:a:position.x']);
+    expect(xAtCallback).toBe(50); // reverts have already run when callback fires
+  });
+
+  it('onAfterRollback() is not called when rollback is a no-op (already settled)', () => {
+    const tx = new Transaction();
+    const cb = vi.fn();
+    tx.onAfterRollback(cb);
+    tx.commit();
+    tx.rollback();
+    expect(cb).not.toHaveBeenCalled();
+  });
+
   it('commit() releases the transaction', () => {
     const engine = createEngine();
     const animator = new Animator(engine);

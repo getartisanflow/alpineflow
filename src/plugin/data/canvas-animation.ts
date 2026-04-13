@@ -568,6 +568,23 @@ export function createAnimationMixin(ctx: CanvasContext) {
               if (target.strokeWidth !== undefined) edge.strokeWidth = raw.strokeWidth;
             }
           }
+          // Flush any moved/styled IDs left over from entry.apply() writes that
+          // ran after the last onProgress tick — notably stop({mode:'rollback'})
+          // and stop({mode:'jump-end'}) both mutate raw state during cleanup,
+          // and without this flush the DOM stays at the last-animated position.
+          if (movedNodeIds.size > 0) {
+            ctx._flushNodePositions(movedNodeIds);
+            ctx._refreshEdgePaths(movedNodeIds);
+            movedNodeIds.clear();
+          }
+          if (styledNodeIds.size > 0) {
+            ctx._flushNodeStyles(styledNodeIds);
+            styledNodeIds.clear();
+          }
+          if (styledEdgeIds.size > 0) {
+            ctx._flushEdgeStyles(styledEdgeIds);
+            styledEdgeIds.clear();
+          }
           options.onComplete?.();
         },
       });
@@ -780,6 +797,24 @@ export function createAnimationMixin(ctx: CanvasContext) {
     transaction(fn: () => Promise<void> | void): Transaction {
       const rawAnimator = getAlpine().raw(ctx._animator!) as Animator;
       const tx = rawAnimator.beginTransaction();
+      // Rollback writes raw-state values (via entry.apply) outside any
+      // active rAF tick, so the DOM never sees them. Flush affected nodes
+      // and their edges once properties have been reverted.
+      tx.onAfterRollback?.((keys) => {
+        const nodeIds = new Set<string>();
+        for (const key of keys) {
+          // Keys look like `node:<id>:position.x` or `node:<id>:style.*`
+          if (key.startsWith('node:')) {
+            const id = key.split(':')[1];
+            if (id) nodeIds.add(id);
+          }
+        }
+        if (nodeIds.size > 0) {
+          ctx._flushNodePositions(nodeIds);
+          ctx._flushNodeStyles(nodeIds);
+          ctx._refreshEdgePaths(nodeIds);
+        }
+      });
       try {
         const result = fn();
         if (result && typeof (result as any).then === 'function') {

@@ -86,6 +86,14 @@ describe('ReplayHandle', () => {
         expect(canvas.nodes[0].position.x).toBe(9999);
     });
 
+    it('construction with from > 0 walks engine forward so canvas reflects mid-recording state', () => {
+        // Recording animates n1.position.x from 0 to 1000 over 1000ms, linear.
+        // Starting at from=500 should show x ≈ 500, not 0 (initialState).
+        const handle = new ReplayHandle(canvas, recording, { paused: true, from: 500 });
+        expect(handle.currentTime).toBe(500);
+        expect(canvas.nodes[0].position.x).toBeCloseTo(500, 0);
+    });
+
     it('scrubTo jumps to specified time', () => {
         const handle = new ReplayHandle(canvas, recording, { paused: true });
         handle.scrubTo(500);
@@ -336,6 +344,128 @@ describe('ReplayHandle', () => {
                     3,
                 );
             }
+        });
+    });
+
+    describe('structural reconciliation', () => {
+        function recordingWithStructural(): Recording {
+            return new Recording({
+                version: RECORDING_VERSION,
+                duration: 1000,
+                initialState: makeInitialState(),
+                events: [
+                    {
+                        t: 100,
+                        type: 'node-add',
+                        args: { nodes: [{ id: 'n3', position: { x: 50, y: 50 }, data: {} }] },
+                    },
+                    {
+                        t: 200,
+                        type: 'edge-add',
+                        args: { edges: [{ id: 'e2', source: 'n2', target: 'n3' }] },
+                    },
+                    {
+                        t: 500,
+                        type: 'node-remove',
+                        args: { ids: ['n1'] },
+                    },
+                    {
+                        t: 500,
+                        type: 'edge-remove',
+                        args: { ids: ['e1'] },
+                    },
+                ],
+                checkpoints: [],
+                metadata: {},
+            });
+        }
+
+        it('adds nodes via addNodes method when present', () => {
+            const addNodes = vi.fn((nodes: any) => {
+                const arr = Array.isArray(nodes) ? nodes : [nodes];
+                canvas.nodes.push(...arr);
+            });
+            const removeNodes = vi.fn();
+            canvas.addNodes = addNodes;
+            canvas.removeNodes = removeNodes;
+
+            const handle = new ReplayHandle(canvas, recordingWithStructural(), { paused: true });
+            handle.scrubTo(300);
+
+            expect(addNodes).toHaveBeenCalled();
+            expect(canvas.nodes.some((n) => n.id === 'n3')).toBe(true);
+        });
+
+        it('removes nodes via removeNodes method when present', () => {
+            const addNodes = vi.fn((nodes: any) => {
+                const arr = Array.isArray(nodes) ? nodes : [nodes];
+                canvas.nodes.push(...arr);
+            });
+            const removeNodes = vi.fn((ids: any) => {
+                const idList = Array.isArray(ids) ? ids : [ids];
+                for (const id of idList) {
+                    const idx = canvas.nodes.findIndex((n) => n.id === id);
+                    if (idx !== -1) canvas.nodes.splice(idx, 1);
+                }
+            });
+            canvas.addNodes = addNodes;
+            canvas.removeNodes = removeNodes;
+
+            const handle = new ReplayHandle(canvas, recordingWithStructural(), { paused: true });
+            handle.scrubTo(800);
+
+            expect(removeNodes).toHaveBeenCalled();
+            expect(canvas.nodes.some((n) => n.id === 'n1')).toBe(false);
+            expect(canvas.nodes.some((n) => n.id === 'n3')).toBe(true);
+        });
+
+        it('falls back to direct array mutation when structural methods missing', () => {
+            const handle = new ReplayHandle(canvas, recordingWithStructural(), { paused: true });
+            handle.scrubTo(300);
+            expect(canvas.nodes.some((n) => n.id === 'n3')).toBe(true);
+
+            handle.scrubTo(800);
+            expect(canvas.nodes.some((n) => n.id === 'n1')).toBe(false);
+            expect(canvas.edges.some((e) => e.id === 'e1')).toBe(false);
+            expect(canvas.edges.some((e) => e.id === 'e2')).toBe(true);
+        });
+
+        it('reconciles edges the same way as nodes', () => {
+            const addEdges = vi.fn((edges: any) => {
+                const arr = Array.isArray(edges) ? edges : [edges];
+                canvas.edges.push(...arr);
+            });
+            const removeEdges = vi.fn((ids: any) => {
+                const idList = Array.isArray(ids) ? ids : [ids];
+                for (const id of idList) {
+                    const idx = canvas.edges.findIndex((e) => e.id === id);
+                    if (idx !== -1) canvas.edges.splice(idx, 1);
+                }
+            });
+            canvas.addEdges = addEdges;
+            canvas.removeEdges = removeEdges;
+
+            const handle = new ReplayHandle(canvas, recordingWithStructural(), { paused: true });
+            handle.scrubTo(300);
+            expect(addEdges).toHaveBeenCalled();
+            expect(canvas.edges.some((e) => e.id === 'e2')).toBe(true);
+
+            handle.scrubTo(800);
+            expect(removeEdges).toHaveBeenCalled();
+            expect(canvas.edges.some((e) => e.id === 'e1')).toBe(false);
+        });
+
+        it('is idempotent when canvas already matches virtual state', () => {
+            const addNodes = vi.fn();
+            const removeNodes = vi.fn();
+            canvas.addNodes = addNodes;
+            canvas.removeNodes = removeNodes;
+
+            // Initial state already matches — no structural changes needed.
+            new ReplayHandle(canvas, makeRecording(), { paused: true });
+
+            expect(addNodes).not.toHaveBeenCalled();
+            expect(removeNodes).not.toHaveBeenCalled();
         });
     });
 });

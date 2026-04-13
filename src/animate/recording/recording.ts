@@ -2,6 +2,7 @@ import type { RecordingData, RecordingEvent, Checkpoint, CanvasSnapshot } from '
 import { RECORDING_VERSION } from './types';
 import { VirtualEngine, REPLAY_DT } from './virtual-engine';
 import { getThumbnailRenderer } from './thumbnail';
+import { firstEventIndexAfter, firstEventIndexAtOrAfter } from './event-cursor';
 import { safeClone } from '../clone';
 
 function getNestedProperty(obj: any, path: string): any {
@@ -239,22 +240,25 @@ export class Recording {
 
         // Walk forward to t
         const startVt = nearest?.t ?? 0;
+        const events = this.events;
         let vt = startVt;
         const dtMs = REPLAY_DT * 1000;
 
-        // Apply any events that sit exactly at the start time before stepping.
-        for (const event of this.events) {
-            if (event.t === startVt) {
-                engine.applyEvent(event as RecordingEvent);
-            }
-        }
+        // Monotonic cursor. If a checkpoint was restored, the checkpoint
+        // already reflects the canvas state AFTER events at startVt ran, so
+        // skip them (strictly-after). Without a checkpoint, include events at
+        // startVt so t=0 events are picked up by the main loop on its first
+        // iteration (where nextVt = min(dtMs, t) covers them via `<= nextVt`).
+        // Matches ReplayHandle.getStateAt exactly — no pre-loop needed.
+        let cursor = nearest
+            ? firstEventIndexAfter(events, startVt)
+            : firstEventIndexAtOrAfter(events, startVt);
 
         while (vt < t) {
             const nextVt = Math.min(vt + dtMs, t);
-            for (const event of this.events) {
-                if (event.t > vt && event.t <= nextVt) {
-                    engine.applyEvent(event as RecordingEvent);
-                }
+            while (cursor < events.length && events[cursor].t <= nextVt) {
+                engine.applyEvent(events[cursor] as RecordingEvent);
+                cursor++;
             }
             const stepDt = (nextVt - vt) / 1000;
             engine.advance(stepDt);

@@ -668,7 +668,11 @@ export interface ShapeDefinition {
 
 /** Options for fire-and-forget edge particles. */
 export interface ParticleOptions {
-  /** Particle fill color. Falls back to edge.particleColor → --flow-edge-dot-fill. */
+  /**
+   * Particle fill color. Falls back to edge.particleColor → --flow-edge-dot-fill.
+   *
+   * Note: for the `beam` renderer, `color` is ignored when `gradient` is set.
+   */
   color?: string;
   /** Particle radius in SVG user units (scales with zoom). Falls back to edge.particleSize → --flow-edge-dot-size. */
   size?: number;
@@ -690,6 +694,52 @@ export interface ParticleOptions {
   width?: number;
   /** URL or SVG symbol href (e.g. '#my-symbol') for the image renderer. */
   href?: string;
+  /**
+   * Multi-stop gradient painted along the beam renderer's length.
+   *
+   * Each stop has `offset` in `0..1` (SVG-native), where:
+   *   - `offset: 0` → **tail** of the beam (the trailing edge)
+   *   - `offset: 1` → **head** of the beam (the leading edge, which travels first)
+   *
+   * When `gradient` is provided, it **overrides `color`** — `color` is ignored
+   * by the beam renderer. For single-color beams with a fading tail, use a
+   * 2-stop gradient rather than `color`.
+   *
+   * @example
+   * // Simple fading tail — transparent back → solid front
+   * gradient: [
+   *   { offset: 0, color: '#8B5CF6', opacity: 0 },
+   *   { offset: 1, color: '#8B5CF6', opacity: 1 },
+   * ]
+   *
+   * @example
+   * // Bright-head tracer — common photogenic pattern
+   * gradient: [
+   *   { offset: 0,    color: '#8B5CF6', opacity: 0 },   // transparent tail
+   *   { offset: 0.7,  color: '#D946EF', opacity: 0.9 }, // magenta mid
+   *   { offset: 1,    color: '#fff',    opacity: 1 },   // bright head
+   * ]
+   */
+  gradient?: Array<{
+    /** Position along the beam: 0 = tail (back), 1 = head (front). */
+    offset: number;
+    /** CSS color string for this stop. */
+    color: string;
+    /** Optional stop opacity (0..1). Defaults to 1. */
+    opacity?: number;
+  }>;
+  /**
+   * Beam renderer only. When `true` (default), the beam's tail continues past
+   * the target after the head arrives — the trail "catches up" and fades off.
+   * In this mode `duration` is the total beam lifetime (emerge → fully exit),
+   * so **`onComplete` fires after the tail exits, not when the head arrives**.
+   *
+   * Set to `false` for the pre-v0.1.3 behavior where `duration` meant
+   * "head reaches target" and the beam vanishes the instant the head arrives.
+   * Useful when you want `onComplete` to fire at head-arrival time (e.g., to
+   * trigger a downstream effect as the beam "hits" its target).
+   */
+  followThrough?: boolean;
 }
 
 /** State passed to particle renderers each frame. */
@@ -705,6 +755,13 @@ export interface ParticleRenderState {
   velocity: { x: number; y: number };
   pathLength: number;
   elapsed: number;       // ms since particle start
+  /**
+   * The SVG path element the particle is travelling along, if any. Renderers
+   * that want to follow the path's curvature (e.g. the beam) can clone its
+   * `d` attribute and drive `stroke-dasharray`/`stroke-dashoffset`. Optional
+   * because some rendering contexts may not expose a backing path.
+   */
+  pathEl?: SVGPathElement;
 }
 
 /** Pluggable particle renderer — create/update/destroy lifecycle. */

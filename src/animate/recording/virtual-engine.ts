@@ -283,9 +283,13 @@ export class VirtualEngine {
 
         if (anim.type === 'eased') {
             anim._easingFn = resolveEasing(anim.easing);
-            // For alpha: reconstructing exact from-values mid-flight is complex.
-            // Use currentValues as the baseline so the animation finishes from here.
-            anim._from = { ...(anim.currentValues ?? {}) };
+            // Prefer the baseline captured at animate() call time — lets
+            // _stepEased compute correct lerp(from, to, eased(elapsed/dur))
+            // from the original startTime. Fall back to currentValues for
+            // recordings captured before fromValues was added.
+            anim._from = anim.fromValues
+                ? { ...anim.fromValues }
+                : { ...(anim.currentValues ?? {}) };
             return;
         }
 
@@ -326,6 +330,7 @@ export class VirtualEngine {
             direction: anim.direction,
             integratorState: anim._physicsStates ? integratorState : anim.integratorState,
             currentValues: anim.currentValues,
+            fromValues: anim.fromValues,
         });
     }
 

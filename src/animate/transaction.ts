@@ -16,12 +16,27 @@ export class Transaction {
   private _state: TransactionState = 'active';
   private _propertySnapshots = new Map<string, { value: number | string; apply: (v: number | string) => void }>();
   private _resolveFinished!: () => void;
+  private _onAfterRollback: ((revertedKeys: string[]) => void) | null = null;
   readonly finished: Promise<void>;
 
   constructor() {
     this.finished = new Promise<void>((resolve) => {
       this._resolveFinished = resolve;
     });
+  }
+
+  /**
+   * @internal
+   * Register a callback fired after `rollback()` has reverted all captured
+   * properties. Receives the list of keys that were reverted. Used by the
+   * canvas layer to flush DOM for the affected nodes — without it, raw-state
+   * writes done outside the animation rAF loop never reach the DOM.
+   *
+   * Not part of the public API — do not call from application code. Canvas
+   * wiring is managed internally in `$flow.transaction()`.
+   */
+  onAfterRollback(cb: (revertedKeys: string[]) => void): void {
+    this._onAfterRollback = cb;
   }
 
   get state(): TransactionState { return this._state; }
@@ -58,10 +73,13 @@ export class Transaction {
       handle.stop({ mode: 'freeze' });
     }
     // Revert all captured properties
-    for (const [, snap] of this._propertySnapshots) {
+    const revertedKeys: string[] = [];
+    for (const [key, snap] of this._propertySnapshots) {
       snap.apply(snap.value);
+      revertedKeys.push(key);
     }
     this._state = 'rolled-back';
+    this._onAfterRollback?.(revertedKeys);
     this._resolveFinished();
   }
 }

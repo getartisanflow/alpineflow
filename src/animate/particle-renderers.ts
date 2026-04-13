@@ -76,31 +76,148 @@ export const orbRenderer: ParticleRenderer = {
     },
 };
 
-/** Beam renderer — elongated rectangle oriented along the travel tangent. */
+let beamUid = 0;
+
+/**
+ * Beam renderer — a traveling segment of the particle's path with an optional
+ * multi-stop gradient painted along its length (tail→head). Clones the
+ * backing SVG path and drives `stroke-dasharray`/`stroke-dashoffset` so the
+ * beam bends with the path's curvature. A per-instance `<linearGradient>`
+ * whose orientation vector is updated each frame paints the gradient along
+ * the chord from the beam's tail point to its head point.
+ *
+ * Options:
+ *   - `length`:   beam length in SVG user units (default 30)
+ *   - `width`:    beam thickness (stroke-width) in SVG user units (default 4)
+ *   - `color`:    solid stroke color (used when `gradient` is not provided)
+ *   - `gradient`: array of `{ offset, color, opacity? }` stops (tail→head)
+ *
+ * Falls back to an oriented rectangle when no `pathEl` is available on the
+ * render state (solid color only, gradient is ignored in fallback).
+ */
 export const beamRenderer: ParticleRenderer = {
     create(svgLayer, options) {
-        const el = document.createElementNS(NS, 'rect');
-        const length = options.length ?? 30;
-        const width = options.width ?? 4;
-        el.setAttribute('width', String(length));
-        el.setAttribute('height', String(width));
-        el.setAttribute('rx', String(width / 2));
-        el.setAttribute('fill', options.color ?? '#8B5CF6');
-        el.setAttribute('opacity', '0.8');
+        const g = document.createElementNS(NS, 'g');
+        (g as any).__beamLength = options.length ?? 30;
+        (g as any).__beamWidth = options.width ?? 4;
+        (g as any).__beamColor = options.color ?? '#8B5CF6';
+        (g as any).__beamGradient = options.gradient;
+        (g as any).__beamFollowThrough = options.followThrough ?? true;
+        (g as any).__beamUid = `afbeam-${++beamUid}`;
         if (options.class) {
             for (const cls of options.class.split(' ')) {
-                if (cls) { el.classList.add(cls); }
+                if (cls) { g.classList.add(cls); }
             }
         }
-        svgLayer.appendChild(el);
-        return el;
+        svgLayer.appendChild(g);
+        return g;
     },
-    update(el, { x, y, velocity }) {
-        const angle = Math.atan2(velocity.y, velocity.x) * (180 / Math.PI);
-        const length = parseFloat(el.getAttribute('width') ?? '30');
-        const height = parseFloat(el.getAttribute('height') ?? '4');
-        el.setAttribute('transform',
-            `translate(${x - length / 2},${y - height / 2}) rotate(${angle},${length / 2},${height / 2})`);
+    update(el, state) {
+        const g = el as SVGGElement;
+        const length = (g as any).__beamLength as number;
+        const width = (g as any).__beamWidth as number;
+        const color = (g as any).__beamColor as string;
+        const gradient = (g as any).__beamGradient as ParticleOptions['gradient'];
+        const uid = (g as any).__beamUid as string;
+
+        if (state.pathEl) {
+            let clone = (g as any).__pathClone as SVGPathElement | undefined;
+            let gradientEl = (g as any).__gradient as SVGLinearGradientElement | undefined;
+
+            if (!clone) {
+                // Build the optional gradient def first so we can reference it
+                // from the path's stroke attribute.
+                let stroke = color;
+                if (gradient && gradient.length > 0) {
+                    const defs = document.createElementNS(NS, 'defs');
+                    gradientEl = document.createElementNS(NS, 'linearGradient');
+                    gradientEl.setAttribute('id', uid);
+                    gradientEl.setAttribute('gradientUnits', 'userSpaceOnUse');
+                    for (const stop of gradient) {
+                        const stopEl = document.createElementNS(NS, 'stop');
+                        stopEl.setAttribute('offset', String(stop.offset));
+                        stopEl.setAttribute('stop-color', stop.color);
+                        if (stop.opacity !== undefined) {
+                            stopEl.setAttribute('stop-opacity', String(stop.opacity));
+                        }
+                        gradientEl.appendChild(stopEl);
+                    }
+                    defs.appendChild(gradientEl);
+                    g.appendChild(defs);
+                    stroke = `url(#${uid})`;
+                    (g as any).__gradient = gradientEl;
+                }
+
+                clone = document.createElementNS(NS, 'path');
+                clone.setAttribute('d', state.pathEl.getAttribute('d') ?? '');
+                clone.setAttribute('fill', 'none');
+                // Use inline styles (not presentation attributes) so a default
+                // `.flow-edges path { stroke: var(--flow-edge-stroke); … }`
+                // theme rule cannot override the beam's stroke.
+                clone.style.stroke = stroke;
+                clone.style.strokeWidth = String(width);
+                clone.style.strokeLinecap = 'round';
+                clone.style.fill = 'none';
+                if (!gradient) {
+                    clone.style.opacity = '0.85';
+                }
+                // Gap is the whole path length so the dash pattern period
+                // (length + pathLength) never wraps within the visible path.
+                // A shorter gap (e.g. pathLength - length) makes a phantom
+                // copy of the dash appear at the opposite end at low progress.
+                clone.setAttribute('stroke-dasharray', `${length} ${state.pathLength}`);
+                g.appendChild(clone);
+                (g as any).__pathClone = clone;
+            }
+
+            // Head travels from 0 to `pathLength + length` across the particle
+            // lifetime so the tail can "follow through" after the head has
+            // reached the target — the beam shrinks from the back as it exits
+            // instead of vanishing the instant its head hits the endpoint.
+            // When `followThrough: false`, fall back to the pre-v0.1.3 mapping
+            // where `progress=1` means the head has just reached the target.
+            const followThrough = (g as any).__beamFollowThrough as boolean;
+            const headAt = followThrough
+                ? state.progress * (state.pathLength + length)
+                : state.progress * state.pathLength;
+            const dashoffset = length - headAt;
+            clone.setAttribute('stroke-dashoffset', String(dashoffset));
+
+            // If we have a gradient, reorient it each frame to point from the
+            // beam's tail to its head so the stops paint along the chord.
+            // getPointAtLength naturally clamps at the path endpoints, which
+            // keeps the bright head color at the target during the follow-
+            // through phase.
+            if (gradientEl) {
+                const headLen = Math.max(0, Math.min(state.pathLength, headAt));
+                const tailLen = Math.max(0, Math.min(state.pathLength, headAt - length));
+                const headPt = state.pathEl.getPointAtLength(headLen);
+                const tailPt = state.pathEl.getPointAtLength(tailLen);
+                gradientEl.setAttribute('x1', String(tailPt.x));
+                gradientEl.setAttribute('y1', String(tailPt.y));
+                gradientEl.setAttribute('x2', String(headPt.x));
+                gradientEl.setAttribute('y2', String(headPt.y));
+            }
+            return;
+        }
+
+        // Fallback: oriented rectangle for callers without a pathEl.
+        let rect = (g as any).__fallbackRect as SVGRectElement | undefined;
+        if (!rect) {
+            rect = document.createElementNS(NS, 'rect');
+            rect.setAttribute('width', String(length));
+            rect.setAttribute('height', String(width));
+            rect.setAttribute('rx', String(width / 2));
+            rect.setAttribute('fill', color);
+            rect.setAttribute('opacity', '0.8');
+            g.appendChild(rect);
+            (g as any).__fallbackRect = rect;
+        }
+        const angle = Math.atan2(state.velocity.y, state.velocity.x) * (180 / Math.PI);
+        rect.setAttribute(
+            'transform',
+            `translate(${state.x - length / 2},${state.y - width / 2}) rotate(${angle},${length / 2},${width / 2})`,
+        );
     },
     destroy(el) {
         el.remove();

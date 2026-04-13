@@ -31,6 +31,13 @@ import { getParticleRenderer } from '../../animate/particle-renderers';
 
 // ── Local utility ───────────────────────────────────────────────────────────
 
+/**
+ * Warn-once latch for the beam `onComplete` + default-followThrough surprise.
+ * The timing differs from other renderers; if a caller attaches an onComplete
+ * without explicitly setting followThrough, we emit a single dev warning.
+ */
+let beamOnCompleteWarned = false;
+
 /** Parse a CSS duration string (e.g. '2s', '300ms') to milliseconds. */
 function parseDurationMs(dur: string): number {
   const match = dur.match(/^([\d.]+)(ms|s)?$/);
@@ -102,6 +109,24 @@ export function createParticleMixin(ctx: CanvasContext) {
       return undefined;
     }
 
+    // Warn once per session if a beam caller passed `onComplete` without
+    // explicitly opting out of follow-through — `onComplete` fires when the
+    // tail fully exits, not when the head reaches the target, which surprises
+    // devs expecting circle/orb/pulse semantics.
+    if (
+      rendererName === 'beam'
+      && typeof options.onComplete === 'function'
+      && options.followThrough === undefined
+      && !beamOnCompleteWarned
+    ) {
+      beamOnCompleteWarned = true;
+      console.warn(
+        '[AlpineFlow] beam `onComplete` fires after the tail exits the path '
+        + '(follow-through is on by default). Pass `followThrough: false` if '
+        + 'you want `onComplete` to fire when the head reaches the target.',
+      );
+    }
+
     const styles = ctx._containerStyles;
 
     const size = options.size
@@ -131,6 +156,7 @@ export function createParticleMixin(ctx: CanvasContext) {
       velocity: { x: 0, y: 0 },
       pathLength,
       elapsed: 0,
+      pathEl,
     };
     renderer.update(el, initialState);
 
@@ -266,6 +292,7 @@ export function createParticleMixin(ctx: CanvasContext) {
           },
           pathLength: len,
           elapsed: elapsed - particle.startElapsed,
+          pathEl: particle.pathEl,
         };
 
         particle.renderer.update(particle.element, renderState);

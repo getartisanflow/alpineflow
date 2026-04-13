@@ -9,6 +9,7 @@
 import type { RecordingEvent, CanvasSnapshot, Checkpoint } from './types';
 import type { Recording } from './recording';
 import { VirtualEngine, REPLAY_DT } from './virtual-engine';
+import { firstEventIndexAfter, firstEventIndexAtOrAfter } from './event-cursor';
 
 export interface ReplayOptions {
     /** Playback speed multiplier. Negative plays backward. Default 1.0. */
@@ -30,6 +31,16 @@ export interface ReplayCanvas {
     edges: any[];
     viewport: { x: number; y: number; zoom: number };
     update?(targets: any, options?: any): any;
+    /**
+     * Optional structural methods — when present, replay uses these to add or
+     * remove nodes/edges during state reconciliation. Without them, a recording
+     * that contains node-add/remove events only replays correctly on a canvas
+     * that already has the same nodes present.
+     */
+    addNodes?(nodes: any | any[]): void;
+    removeNodes?(ids: string | string[]): void;
+    addEdges?(edges: any | any[]): void;
+    removeEdges?(ids: string | string[]): void;
 }
 
 export type ReplayState = 'idle' | 'playing' | 'paused' | 'ended';
@@ -69,8 +80,17 @@ export class ReplayHandle {
         this._loop = options.loop ?? false;
         this._currentTime = this._from;
 
+        // If starting past t=0, walk the engine forward so it reflects the
+        // correct state at _from (accounting for checkpoints). Without this,
+        // events in [0, _from] are skipped and the first tick applies events
+        // strictly after _from — causing the canvas to jump from initialState
+        // to mid-recording state without reflecting anything in between.
+        if (this._from > 0) {
+            this._seekEngineTo(this._from);
+        }
+
         if (!options.skipInitialState) {
-            this._applyStateToCanvas(recording.initialState as CanvasSnapshot);
+            this._applyStateToCanvas(this._virtualEngine.getState());
         }
 
         this.finished = new Promise<void>((resolve) => {
@@ -115,7 +135,7 @@ export class ReplayHandle {
         }
         if (this._state === 'ended') {
             this._currentTime = this._from;
-            this._virtualEngine = new VirtualEngine(this.recording.initialState);
+            this._seekEngineTo(this._from);
             this._applyStateToCanvas(this._virtualEngine.getState());
         }
         this._state = 'playing';
@@ -142,17 +162,7 @@ export class ReplayHandle {
     scrubTo(target: number | string): void {
         const t = this._resolveTarget(target);
         this._currentTime = t;
-
-        const cp = this._findNearestCheckpoint(t);
-        if (cp) {
-            this._virtualEngine.restoreCheckpoint(cp);
-        } else {
-            this._virtualEngine = new VirtualEngine(this.recording.initialState);
-        }
-
-        const startT = cp?.t ?? 0;
-        this._walkTo(startT, t);
-
+        this._seekEngineTo(t);
         this._applyStateToCanvas(this._virtualEngine.getState());
     }
 
@@ -172,25 +182,22 @@ export class ReplayHandle {
         }
 
         const startT = cp?.t ?? 0;
+        const events = this.recording.events;
         let vt = startT;
         const dtMs = REPLAY_DT * 1000;
 
-        // Apply any events sitting exactly at startT (boundary: inclusive at start
-        // so events emitted at t=0 are not skipped when there's no prior checkpoint).
-        if (!cp) {
-            for (const event of this.recording.events) {
-                if (event.t === startT) {
-                    engine.applyEvent(event);
-                }
-            }
-        }
+        // Monotonic cursor — binary-search to the first event past startT.
+        // When there's no checkpoint, include events exactly at startT so t=0
+        // events aren't skipped.
+        let cursor = cp
+            ? firstEventIndexAfter(events, startT)
+            : firstEventIndexAtOrAfter(events, startT);
 
         while (vt < t) {
             const nextVt = Math.min(vt + dtMs, t);
-            for (const event of this.recording.events) {
-                if (event.t > vt && event.t <= nextVt) {
-                    engine.applyEvent(event);
-                }
+            while (cursor < events.length && events[cursor].t <= nextVt) {
+                engine.applyEvent(events[cursor]);
+                cursor++;
             }
             const stepDt = (nextVt - vt) / 1000;
             if (stepDt > 0) {
@@ -225,12 +232,8 @@ export class ReplayHandle {
             if (this._direction === 'forward') {
                 this._walkTo(this._currentTime, boundary);
             } else {
-                // Backward: re-seek to boundary from nearest checkpoint.
-                const cp = this._findNearestCheckpoint(boundary);
-                this._virtualEngine = cp
-                    ? (this._virtualEngine.restoreCheckpoint(cp), this._virtualEngine)
-                    : new VirtualEngine(this.recording.initialState);
-                this._walkTo(cp?.t ?? 0, boundary);
+                // Backward boundary: re-seek from nearest checkpoint.
+                this._seekEngineTo(boundary);
             }
             this._currentTime = boundary;
             this._applyStateToCanvas(this._virtualEngine.getState());
@@ -242,13 +245,7 @@ export class ReplayHandle {
             this._walkTo(this._currentTime, nextTime);
         } else if (virtualDtMs < 0) {
             // Backward step: re-seek via checkpoint.
-            const cp = this._findNearestCheckpoint(nextTime);
-            if (cp) {
-                this._virtualEngine.restoreCheckpoint(cp);
-            } else {
-                this._virtualEngine = new VirtualEngine(this.recording.initialState);
-            }
-            this._walkTo(cp?.t ?? 0, nextTime);
+            this._seekEngineTo(nextTime);
         }
 
         this._currentTime = nextTime;
@@ -277,32 +274,44 @@ export class ReplayHandle {
         this._rafHandle = null;
     }
 
+    /**
+     * Reset the virtual engine to reflect the canvas state at virtual time `t`
+     * — either by restoring the nearest checkpoint and walking forward, or by
+     * walking from the recording's initial state. Used when seeking discretely
+     * (play-after-ended, loop restart, constructor with non-zero `from`);
+     * scrubTo has its own inlined copy because it also updates `_currentTime`.
+     */
+    private _seekEngineTo(t: number): void {
+        const cp = this._findNearestCheckpoint(t);
+        if (cp) {
+            this._virtualEngine.restoreCheckpoint(cp);
+        } else {
+            this._virtualEngine = new VirtualEngine(this.recording.initialState);
+        }
+        this._walkTo(cp?.t ?? 0, t);
+    }
+
     private _walkTo(startT: number, endT: number): void {
         if (endT <= startT) {
             return;
         }
+        const events = this.recording.events;
         let vt = startT;
         const dtMs = REPLAY_DT * 1000;
 
-        // If walking from the very beginning, apply any events at t=0 first.
-        // The default window is (vt, nextVt] so events at t=startT are otherwise skipped.
-        if (startT === 0) {
-            for (const event of this.recording.events) {
-                if (event.t === 0) {
-                    this._virtualEngine.applyEvent(event);
-                }
-            }
-        }
+        // Monotonic cursor — one binary search, then linear advance per step.
+        // At t=0 we include events on the boundary (matching pre-refactor
+        // behavior); otherwise the scan window is (vt, nextVt].
+        let cursor = startT === 0
+            ? firstEventIndexAtOrAfter(events, 0)
+            : firstEventIndexAfter(events, startT);
 
         while (vt < endT) {
             const nextVt = Math.min(vt + dtMs, endT);
-
-            for (const event of this.recording.events) {
-                if (event.t > vt && event.t <= nextVt) {
-                    this._virtualEngine.applyEvent(event);
-                }
+            while (cursor < events.length && events[cursor].t <= nextVt) {
+                this._virtualEngine.applyEvent(events[cursor]);
+                cursor++;
             }
-
             const stepDt = (nextVt - vt) / 1000;
             if (stepDt > 0) {
                 this._virtualEngine.advance(stepDt);
@@ -350,7 +359,7 @@ export class ReplayHandle {
             if (remaining > 0) {
                 this._loop = typeof this._loop === 'number' ? remaining : true;
                 this._currentTime = this._from;
-                this._virtualEngine = new VirtualEngine(this.recording.initialState);
+                this._seekEngineTo(this._from);
                 this._applyStateToCanvas(this._virtualEngine.getState());
                 this._state = 'playing';
                 this._lastWallTime = now();
@@ -365,6 +374,9 @@ export class ReplayHandle {
     }
 
     private _applyStateToCanvas(state: CanvasSnapshot): void {
+        this._reconcileNodes(state);
+        this._reconcileEdges(state);
+
         for (const [id, node] of Object.entries(state.nodes)) {
             const realNode = this._canvas.nodes.find((n: any) => n.id === id);
             if (!realNode) {
@@ -387,6 +399,89 @@ export class ReplayHandle {
             this._canvas.viewport.x = state.viewport.x;
             this._canvas.viewport.y = state.viewport.y;
             this._canvas.viewport.zoom = state.viewport.zoom;
+        }
+    }
+
+    /**
+     * Diff virtual vs. real node sets and apply structural changes. Prefers
+     * the canvas's own addNodes/removeNodes when available so reactivity and
+     * measurement hooks fire; falls back to direct array mutation otherwise.
+     */
+    private _reconcileNodes(state: CanvasSnapshot): void {
+        const virtualIds = new Set(Object.keys(state.nodes));
+        const realIds = new Set(this._canvas.nodes.map((n: any) => n?.id).filter(Boolean));
+
+        const toAdd: any[] = [];
+        for (const id of virtualIds) {
+            if (!realIds.has(id)) {
+                toAdd.push(state.nodes[id]);
+            }
+        }
+        const toRemove: string[] = [];
+        for (const id of realIds) {
+            if (!virtualIds.has(id)) {
+                toRemove.push(id);
+            }
+        }
+
+        if (toAdd.length > 0) {
+            if (typeof this._canvas.addNodes === 'function') {
+                this._canvas.addNodes(toAdd);
+            } else {
+                this._canvas.nodes.push(...toAdd);
+            }
+        }
+        if (toRemove.length > 0) {
+            if (typeof this._canvas.removeNodes === 'function') {
+                this._canvas.removeNodes(toRemove);
+            } else {
+                // Splice-by-index preserves the array reference (callers may
+                // hold it). Safe here because reconciliation runs inside the
+                // replay rAF tick — before Alpine's reactive re-render — so
+                // no external iterator should be traversing `canvas.nodes`.
+                for (const id of toRemove) {
+                    const idx = this._canvas.nodes.findIndex((n: any) => n?.id === id);
+                    if (idx !== -1) this._canvas.nodes.splice(idx, 1);
+                }
+            }
+        }
+    }
+
+    private _reconcileEdges(state: CanvasSnapshot): void {
+        const virtualIds = new Set(Object.keys(state.edges));
+        const realIds = new Set(this._canvas.edges.map((e: any) => e?.id).filter(Boolean));
+
+        const toAdd: any[] = [];
+        for (const id of virtualIds) {
+            if (!realIds.has(id)) {
+                toAdd.push(state.edges[id]);
+            }
+        }
+        const toRemove: string[] = [];
+        for (const id of realIds) {
+            if (!virtualIds.has(id)) {
+                toRemove.push(id);
+            }
+        }
+
+        if (toAdd.length > 0) {
+            if (typeof this._canvas.addEdges === 'function') {
+                this._canvas.addEdges(toAdd);
+            } else {
+                this._canvas.edges.push(...toAdd);
+            }
+        }
+        if (toRemove.length > 0) {
+            if (typeof this._canvas.removeEdges === 'function') {
+                this._canvas.removeEdges(toRemove);
+            } else {
+                // See `_reconcileNodes` — splice-by-index is the least-bad
+                // fallback when no structural method is available.
+                for (const id of toRemove) {
+                    const idx = this._canvas.edges.findIndex((e: any) => e?.id === id);
+                    if (idx !== -1) this._canvas.edges.splice(idx, 1);
+                }
+            }
         }
     }
 }

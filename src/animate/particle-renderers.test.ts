@@ -107,33 +107,116 @@ describe('Beam renderer', () => {
         expect(getParticleRenderer('beam')).toBe(beamRenderer);
     });
 
-    it('creates a <rect> element', () => {
+    it('creates a <g> container', () => {
         const svg = document.createElementNS(NS, 'svg');
         const el = beamRenderer.create(svg, {});
-        expect(el.tagName).toBe('rect');
+        expect(el.tagName).toBe('g');
     });
 
-    it('uses provided length and width options', () => {
+    it('path-aware mode: clones the path and sets stroke-dasharray', () => {
         const svg = document.createElementNS(NS, 'svg');
-        const el = beamRenderer.create(svg, { length: 50, width: 6 });
-        expect(el.getAttribute('width')).toBe('50');
-        expect(el.getAttribute('height')).toBe('6');
-        expect(el.getAttribute('rx')).toBe('3');
+        const path = document.createElementNS(NS, 'path');
+        path.setAttribute('d', 'M 0 0 L 100 0');
+        svg.appendChild(path);
+
+        const el = beamRenderer.create(svg, { length: 20, width: 5, color: '#f00' });
+        beamRenderer.update(el, { ...baseState, pathEl: path as SVGPathElement, pathLength: 100 });
+
+        const clone = el.querySelector('path') as SVGPathElement;
+        expect(clone).not.toBeNull();
+        expect(clone.getAttribute('d')).toBe('M 0 0 L 100 0');
+        // Stroke/width applied via inline style to outrank theme CSS rules.
+        expect(clone.style.stroke).toBe('rgb(255, 0, 0)');
+        expect(clone.style.strokeWidth).toBe('5');
+        expect(clone.style.fill).toBe('none');
+        // Gap is the full pathLength so the pattern can't wrap inside the path.
+        expect(clone!.getAttribute('stroke-dasharray')).toBe('20 100');
     });
 
-    it('defaults to length=30 and width=4', () => {
+    it('path-aware mode: stroke-dashoffset advances with progress (incl. follow-through)', () => {
         const svg = document.createElementNS(NS, 'svg');
-        const el = beamRenderer.create(svg, {});
-        expect(el.getAttribute('width')).toBe('30');
-        expect(el.getAttribute('height')).toBe('4');
+        const path = document.createElementNS(NS, 'path');
+        path.setAttribute('d', 'M 0 0 L 100 0');
+        svg.appendChild(path);
+
+        const el = beamRenderer.create(svg, { length: 20 });
+        // Head travels 0→(pathLength+length)=120 over the particle lifetime so
+        // the tail catches up after the head reaches the target.
+
+        // progress 0: head at 0, dashoffset = 20 - 0 = 20.
+        beamRenderer.update(el, { ...baseState, pathEl: path as SVGPathElement, pathLength: 100, progress: 0 });
+        expect(el.querySelector('path')!.getAttribute('stroke-dashoffset')).toBe('20');
+
+        // progress 0.5 on 100-unit path w/ length=20: head=60, dashoffset=-40.
+        beamRenderer.update(el, { ...baseState, pathEl: path as SVGPathElement, pathLength: 100, progress: 0.5 });
+        expect(el.querySelector('path')!.getAttribute('stroke-dashoffset')).toBe('-40');
+
+        // progress 1: head at 120 (past target), dashoffset=-100. Beam exited.
+        beamRenderer.update(el, { ...baseState, pathEl: path as SVGPathElement, pathLength: 100, progress: 1 });
+        expect(el.querySelector('path')!.getAttribute('stroke-dashoffset')).toBe('-100');
     });
 
-    it('update() sets a transform based on velocity angle', () => {
+    it('path-aware mode: builds a linearGradient when `gradient` stops are provided', () => {
         const svg = document.createElementNS(NS, 'svg');
-        const el = beamRenderer.create(svg, {});
-        // velocity pointing right → angle 0
+        const path = document.createElementNS(NS, 'path');
+        path.setAttribute('d', 'M 0 0 L 100 0');
+        // JSDOM doesn't implement getPointAtLength — stub for a horizontal line.
+        (path as any).getPointAtLength = (len: number) => ({ x: len, y: 0 });
+        svg.appendChild(path);
+
+        const el = beamRenderer.create(svg, {
+            length: 20,
+            gradient: [
+                { offset: 0, color: '#000', opacity: 0 },
+                { offset: 1, color: '#fff', opacity: 1 },
+            ],
+        });
+        beamRenderer.update(el, { ...baseState, pathEl: path as SVGPathElement, pathLength: 100, progress: 0.5 });
+
+        const linearGradient = el.querySelector('linearGradient');
+        expect(linearGradient).not.toBeNull();
+        expect(linearGradient!.getAttribute('gradientUnits')).toBe('userSpaceOnUse');
+        const stops = linearGradient!.querySelectorAll('stop');
+        expect(stops.length).toBe(2);
+        expect(stops[0].getAttribute('stop-color')).toBe('#000');
+        expect(stops[1].getAttribute('stop-color')).toBe('#fff');
+
+        // Path stroke references the gradient, not a solid color.
+        const clone = el.querySelector('path') as SVGPathElement;
+        expect(clone.style.stroke).toMatch(/url\(["']?#afbeam-/);
+
+        // Gradient endpoints set to tail→head chord. At progress 0.5 on a 100-unit
+        // horizontal path with length 20, head is at x=60 (progress*(pathLen+length))
+        // and tail at x=40 (head-length), both in path user coords.
+        expect(linearGradient!.getAttribute('x1')).toBe('40');
+        expect(linearGradient!.getAttribute('x2')).toBe('60');
+    });
+
+    it('followThrough:false disables follow-through (pre-v0.1.3 semantics)', () => {
+        const svg = document.createElementNS(NS, 'svg');
+        const path = document.createElementNS(NS, 'path');
+        path.setAttribute('d', 'M 0 0 L 100 0');
+        svg.appendChild(path);
+
+        const el = beamRenderer.create(svg, { length: 20, followThrough: false });
+        // progress 0.5 with follow-through off: head = 0.5 * 100 = 50, dashoffset = -30
+        beamRenderer.update(el, { ...baseState, pathEl: path as SVGPathElement, pathLength: 100, progress: 0.5 });
+        expect(el.querySelector('path')!.getAttribute('stroke-dashoffset')).toBe('-30');
+
+        // progress 1: head at 100 (exactly at target), dashoffset = -80
+        beamRenderer.update(el, { ...baseState, pathEl: path as SVGPathElement, pathLength: 100, progress: 1 });
+        expect(el.querySelector('path')!.getAttribute('stroke-dashoffset')).toBe('-80');
+    });
+
+    it('fallback mode: renders an oriented rect when no pathEl is provided', () => {
+        const svg = document.createElementNS(NS, 'svg');
+        const el = beamRenderer.create(svg, { length: 30, width: 4 });
         beamRenderer.update(el, { ...baseState, x: 10, y: 20, velocity: { x: 1, y: 0 } });
-        const transform = el.getAttribute('transform') ?? '';
+        const rect = el.querySelector('rect');
+        expect(rect).not.toBeNull();
+        expect(rect!.getAttribute('width')).toBe('30');
+        expect(rect!.getAttribute('height')).toBe('4');
+        const transform = rect!.getAttribute('transform') ?? '';
         expect(transform).toContain('translate(');
         expect(transform).toContain('rotate(0,');
     });
