@@ -1,2 +1,6 @@
 node_modules/
 dist/
+# Browser-mode integration tests — Playwright captures on failure
+tests/integration/**/screenshots/
+tests/integration/**/__screenshots__/
+.vitest-cache/

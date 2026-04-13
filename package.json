@@ -78,7 +78,9 @@
         "build:bundle": "vite build --config vite.bundle.config.ts",
         "build:addons": "ADDON_NAME=alpineflow-whiteboard.esm ADDON_ENTRY=lib/whiteboard.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-dagre.esm ADDON_ENTRY=lib/dagre.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-force.esm ADDON_ENTRY=lib/force.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-hierarchy.esm ADDON_ENTRY=lib/hierarchy.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-elk.esm ADDON_ENTRY=lib/elk.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-collab.esm ADDON_ENTRY=lib/collab.ts vite build --config vite.addons.config.ts",
         "test": "vitest run",
-        "test:watch": "vitest"
+        "test:watch": "vitest",
+        "test:browser": "vitest run --config vitest.browser.config.ts",
+        "test:all": "npm run test && npm run test:browser"
     },
     "dependencies": {
         "d3-drag": "^3.0.0",
@@ -138,11 +140,14 @@
         "@types/d3-transition": "^3.0.9",
         "@types/d3-zoom": "^3.0.8",
         "@types/dagre": "^0.7.53",
+        "@vitest/browser": "^4.1.4",
+        "@vitest/browser-playwright": "^4.1.4",
         "alpinejs": "^3.15.8",
         "d3-force": "^3.0.0",
         "d3-hierarchy": "^3.1.2",
         "elkjs": "^0.11.1",
         "jsdom": "^28.1.0",
+        "playwright": "^1.59.1",
         "typescript": "^5.9.3",
         "vite": "^7.0.4",
         "vitest": "^4.0.18",
