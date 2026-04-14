@@ -42,7 +42,7 @@ Move nodes along arbitrary curves instead of straight-line interpolation. Path f
            $flow.update({ nodes: { mover: { position: { x: 10, y: 70 } } } });
            handle = $flow.animate({
                nodes: { mover: { followPath: wave({ startX: 10, startY: 80, endX: 380, endY: 80, amplitude: 50, frequency: 2 }) } },
-           }, { duration: 3000, loop: 'reverse', easing: 'linear' });
+           }, { duration: 3000, loop: 'ping-pong', easing: 'linear' });
        });
        document.getElementById('demo-path-stop').addEventListener('click', () => {
            if (handle) { handle.stop(); handle = null; }
@@ -88,7 +88,7 @@ $flow.animate({
             }),
         },
     },
-}, { duration: 2000, loop: 'reverse' });
+}, { duration: 2000, loop: 'ping-pong' });
 ```
 
 `followPath` accepts a `PathFunction` (a `(t: number) => { x, y }` function) or an SVG path `d` string.
@@ -308,6 +308,47 @@ Guide paths get the `.flow-guide-path` CSS class:
 }
 ```
 
+::demo
+```toolbar
+<button id="demo-guide-play" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Play</button>
+<button id="demo-guide-reset" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Reset</button>
+```
+```html
+<div x-data="flowCanvas({
+    nodes: [
+        { id: 'mover', position: { x: 40, y: 160 }, data: { label: 'Mover' } },
+    ],
+    edges: [],
+    background: 'dots',
+    controls: false, pannable: false, zoomable: false,
+})" class="flow-container" style="height: 240px;"
+   x-init="
+       document.getElementById('demo-guide-play').addEventListener('click', () => {
+           $flow.update({ nodes: { mover: { position: { x: 40, y: 160 } } } });
+           $flow.animate({
+               nodes: {
+                   mover: {
+                       followPath: 'M 40 160 Q 200 20 360 160',
+                       guidePath: { visible: true, autoRemove: false },
+                   },
+               },
+           }, { duration: 2000, easing: 'easeInOut' });
+       });
+       document.getElementById('demo-guide-reset').addEventListener('click', () => {
+           $flow.update({ nodes: { mover: { position: { x: 40, y: 160 } } } });
+       });
+   ">
+    <div x-flow-viewport>
+        <template x-for="node in nodes" :key="node.id">
+            <div x-flow-node="node">
+                <span x-text="node.data.label"></span>
+            </div>
+        </template>
+    </div>
+</div>
+```
+::enddemo
+
 ## Custom Path Functions
 
 Any function with the signature `(t: number) => { x: number, y: number }` works as a path:
@@ -323,6 +364,49 @@ $flow.animate({
     nodes: { 'n1': { followPath: figure8 } },
 }, { duration: 4000, loop: true, easing: 'linear' });
 ```
+
+::demo
+```toolbar
+<button id="demo-custom-play" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Play figure-8</button>
+<button id="demo-custom-stop" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Stop</button>
+```
+```html
+<div x-data="flowCanvas({
+    nodes: [
+        { id: 'c', position: { x: 200, y: 100 }, data: { label: '∞' } },
+    ],
+    edges: [],
+    background: 'dots',
+    controls: false, pannable: false, zoomable: false,
+})" class="flow-container" style="height: 240px;"
+   x-init="
+       let handle = null;
+       const figure8 = (t) => ({
+           x: 200 + 120 * Math.sin(t * Math.PI * 2),
+           y: 100 + 60  * Math.sin(t * Math.PI * 4),
+       });
+       document.getElementById('demo-custom-play').addEventListener('click', () => {
+           if (handle) handle.stop();
+           handle = $flow.animate(
+               { nodes: { c: { followPath: figure8 } } },
+               { duration: 3000, loop: true, easing: 'linear' },
+           );
+       });
+       document.getElementById('demo-custom-stop').addEventListener('click', () => {
+           if (handle) { handle.stop(); handle = null; }
+           $flow.update({ nodes: { c: { position: { x: 200, y: 100 } } } });
+       });
+   ">
+    <div x-flow-viewport>
+        <template x-for="node in nodes" :key="node.id">
+            <div x-flow-node="node">
+                <span x-text="node.data.label" style="font-size: 16px;"></span>
+            </div>
+        </template>
+    </div>
+</div>
+```
+::enddemo
 
 ## See also
 

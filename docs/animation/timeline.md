@@ -146,7 +146,9 @@ Click play to see each node move in sequence:
 ### TimelineStep Properties
 
 ```ts
-interface TimelineStep {
+interface TimelineStep<TContext = Record<string, any>> {
+    id?: string;            // optional name for this step (shows up in events)
+
     // Node targeting
     nodes?: string[];
     position?: Partial<XYPosition>;
@@ -180,8 +182,18 @@ interface TimelineStep {
     panTo?: string;      // node ID to center on
     fitViewPadding?: number;
 
-    // Parallel container
-    parallel?: TimelineStep[];
+    // Composition
+    parallel?: TimelineStep<TContext>[];   // run all in parallel
+    timeline?: FlowTimeline;               // sub-timeline — play another timeline as one step
+    independent?: boolean;                 // sub-timeline: run with its own context instead of inheriting
+
+    // Conditional
+    when?: (ctx: StepContext<TContext>) => boolean;  // run only if true
+    else?: TimelineStep<TContext>;                    // alternative step when `when` returns false
+
+    // Awaitable — pause until a promise resolves (or timeout fires)
+    await?: Promise<any> | { finished: Promise<any> } | (() => Promise<any> | { finished: Promise<any> });
+    timeout?: number;       // ms cap on the await
 
     // Timing
     duration?: number;
@@ -190,11 +202,13 @@ interface TimelineStep {
     lock?: boolean;
 
     // Hooks
-    onStart?: (ctx: StepContext) => void;
-    onProgress?: (progress: number, ctx: StepContext) => void;
-    onComplete?: (ctx: StepContext) => void;
+    onStart?: (ctx: StepContext<TContext>) => void;
+    onProgress?: (progress: number, ctx: StepContext<TContext>) => void;
+    onComplete?: (ctx: StepContext<TContext>) => void;
 }
 ```
+
+Steps can also be **functions** of context — `tl.step((ctx) => ({ nodes: [ctx.current], position: { x: ctx.targetX } }))` — which lets one step shape depend on data computed earlier in the timeline. See *Context* below.
 
 ### Timeline State
 
@@ -223,6 +237,246 @@ tl.on('step-complete', ({ stepIndex }) => {
     console.log(`Step ${stepIndex} done`);
 });
 ```
+
+## Context
+
+A timeline carries a mutable **context object** that every step callback can read and write. It's how one step passes data to the next without closures.
+
+```ts
+$flow.timeline<{ winner: string }>()
+    .step({ nodes: ['a'], position: { x: 200 }, duration: 300,
+        onComplete: (ctx) => { ctx.context.winner = 'a'; } })
+    .step((ctx) => ({
+        nodes: [ctx.context.winner],   // ← computed from prior step
+        position: { x: 400 },
+        duration: 300,
+    }))
+    .play();
+```
+
+The `TContext` generic parameter on `$flow.timeline<TContext>()` gives you autocomplete and type-checking on `ctx.context`. Initialize it with `setContext()`:
+
+```ts
+interface MyCtx { winner: string; score: number; }
+const tl = $flow.timeline<MyCtx>().setContext({ winner: '', score: 0 });
+```
+
+`ctx` in every callback is `StepContext<TContext>` — it also exposes `stepIndex`, `stepId`, and `timeline` (the parent handle).
+
+## Conditional steps
+
+Use `when:` to gate a step on state computed earlier, and optionally `else:` to fall back:
+
+```js
+$flow.timeline()
+    .step({ nodes: ['a'], position: { x: 200 }, duration: 300,
+        onComplete: (ctx) => { ctx.context.path = Math.random() > 0.5 ? 'left' : 'right'; } })
+    .step({
+        when: (ctx) => ctx.context.path === 'left',
+        nodes: ['a'], position: { x: 100, y: 100 }, duration: 400,
+        else: { nodes: ['a'], position: { x: 300, y: 100 }, duration: 400 },
+    })
+    .play();
+```
+
+If both `when` returns false AND `else` is absent, the step is skipped silently.
+
+::demo
+```toolbar
+<button id="demo-tl-cond-play"   class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Play</button>
+<button id="demo-tl-cond-toggle" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Toggle isPremium</button>
+<span id="demo-tl-cond-state" class="font-mono text-[10px] text-text-faint">isPremium = true</span>
+```
+```html
+<div x-data="flowCanvas({
+    nodes: [
+        { id: 'gate',    position: { x: 40, y: 30  }, data: { label: 'Start (gate)' } },
+        { id: 'premium', position: { x: 40, y: 100 }, data: { label: 'Premium path' } },
+        { id: 'upsell',  position: { x: 40, y: 170 }, data: { label: 'Upsell path' } },
+    ],
+    edges: [],
+    background: 'dots',
+    controls: false, pannable: false, zoomable: false,
+})" class="flow-container" style="height: 260px;"
+   x-init="
+       let isPremium = true;
+       const state = document.getElementById('demo-tl-cond-state');
+       document.getElementById('demo-tl-cond-toggle').addEventListener('click', () => {
+           isPremium = !isPremium;
+           state.textContent = 'isPremium = ' + isPremium;
+       });
+       document.getElementById('demo-tl-cond-play').addEventListener('click', () => {
+           $flow.update({ nodes: {
+               gate:    { position: { x: 40 } },
+               premium: { position: { x: 40 } },
+               upsell:  { position: { x: 40 } },
+           }});
+           const flag = isPremium;
+           $flow.timeline()
+               .step({ nodes: ['gate'], position: { x: 200 }, duration: 500, easing: 'easeOut' })
+               .step({
+                   when: () => flag,
+                   nodes: ['premium'], position: { x: 360 }, duration: 600, easing: 'easeOut',
+                   else: { nodes: ['upsell'], position: { x: 360 }, duration: 600, easing: 'easeOut' },
+               })
+               .play();
+       });
+   ">
+    <div x-flow-viewport>
+        <template x-for="node in nodes" :key="node.id">
+            <div x-flow-node="node">
+                <span x-text="node.data.label"></span>
+            </div>
+        </template>
+    </div>
+</div>
+```
+::enddemo
+
+## Awaitable steps
+
+Pause the timeline until an external promise resolves. The `await` value can be a bare `Promise`, an object with a `finished` promise (e.g. a `FlowAnimationHandle` or `ReplayHandle`), or a function that returns one.
+
+```js
+$flow.timeline()
+    .step({ nodes: ['trigger'], position: { x: 200 }, duration: 300 })
+    .step({
+        await: () => fetch('/api/ready').then(r => r.json()),
+        timeout: 5000,   // ms — step auto-resolves on timeout to avoid stalls
+    })
+    .step({ nodes: ['result'], position: { x: 400 }, duration: 300 })
+    .play();
+```
+
+Good for "wait until the user confirms" or "wait for a network call" pauses mid-sequence. `timeout` is recommended — without it, a never-resolving promise stalls the whole timeline.
+
+::demo
+```toolbar
+<button id="demo-tl-await-play" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Play</button>
+<span id="demo-tl-await-status" class="font-mono text-[10px] text-text-faint">idle</span>
+```
+```html
+<div x-data="flowCanvas({
+    nodes: [
+        { id: 'pre',  position: { x: 40, y: 30  }, data: { label: 'Pre (step 1)' } },
+        { id: 'post', position: { x: 40, y: 110 }, data: { label: 'Post (step 3)' } },
+    ],
+    edges: [],
+    background: 'dots',
+    controls: false, pannable: false, zoomable: false,
+})" class="flow-container" style="height: 220px;"
+   x-init="
+       const status = document.getElementById('demo-tl-await-status');
+       document.getElementById('demo-tl-await-play').addEventListener('click', () => {
+           $flow.update({ nodes: {
+               pre:  { position: { x: 40 } },
+               post: { position: { x: 40 } },
+           }});
+           status.textContent = 'running step 1…';
+           $flow.timeline()
+               .step({ nodes: ['pre'], position: { x: 360 }, duration: 600, easing: 'easeOut',
+                       onComplete: () => { status.textContent = 'awaiting 1500ms promise…'; } })
+               .step({ await: () => new Promise(r => setTimeout(r, 1500)) })
+               .step({ nodes: ['post'], position: { x: 360 }, duration: 600, easing: 'easeOut',
+                       onStart: () => { status.textContent = 'step 3 started'; },
+                       onComplete: () => { status.textContent = 'done'; } })
+               .play();
+       });
+   ">
+    <div x-flow-viewport>
+        <template x-for="node in nodes" :key="node.id">
+            <div x-flow-node="node">
+                <span x-text="node.data.label"></span>
+            </div>
+        </template>
+    </div>
+</div>
+```
+::enddemo
+
+## Sub-timelines
+
+Embed a whole timeline as a single step. Useful for reusing named sequences or grouping related steps:
+
+```js
+const intro = $flow.timeline()
+    .step({ nodes: ['title'], position: { y: 40 }, duration: 400 })
+    .step({ nodes: ['subtitle'], position: { y: 80 }, duration: 300 });
+
+$flow.timeline()
+    .step({ timeline: intro })                   // play the whole intro as step 1
+    .step({ nodes: ['cta'], position: { x: 300 }, duration: 400 })
+    .play();
+```
+
+By default the sub-timeline **inherits** the parent's context (shared object). Pass `independent: true` to give it a fresh isolated context:
+
+```js
+.step({ timeline: subflow, independent: true })
+```
+
+::demo
+```toolbar
+<button id="demo-tl-sub-play" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Play</button>
+```
+```html
+<div x-data="flowCanvas({
+    nodes: [
+        { id: 'main',  position: { x: 40,  y: 30  }, data: { label: 'Main A' } },
+        { id: 'main2', position: { x: 40,  y: 90  }, data: { label: 'Main B' } },
+        { id: 'bg',    position: { x: 200, y: 160 }, data: { label: 'Background' } },
+    ],
+    edges: [],
+    background: 'dots',
+    controls: false, pannable: false, zoomable: false,
+})" class="flow-container" style="height: 240px;"
+   x-init="
+       document.getElementById('demo-tl-sub-play').addEventListener('click', () => {
+           $flow.update({ nodes: {
+               main:  { position: { x: 40  } },
+               main2: { position: { x: 40  } },
+               bg:    { position: { x: 200 } },
+           }});
+           // Reusable sub-timeline — bg drifts out-and-back
+           const bgDrift = $flow.timeline()
+               .step({ nodes: ['bg'], position: { x: 340 }, duration: 500 })
+               .step({ nodes: ['bg'], position: { x: 60  }, duration: 500 });
+           // Parent embeds it as a single step
+           $flow.timeline()
+               .step({ nodes: ['main'],  position: { x: 360 }, duration: 600 })
+               .step({ timeline: bgDrift })
+               .step({ nodes: ['main2'], position: { x: 360 }, duration: 600 })
+               .play();
+       });
+   ">
+    <div x-flow-viewport>
+        <template x-for="node in nodes" :key="node.id">
+            <div x-flow-node="node">
+                <span x-text="node.data.label"></span>
+            </div>
+        </template>
+    </div>
+</div>
+```
+::enddemo
+
+## Interactive pause
+
+`tl.pause()` can take a callback that receives a `resume` function — useful when the pause should be driven by UI (a button, a confirmation modal, a user action):
+
+```js
+tl.step({ nodes: ['a'], position: { x: 200 }, duration: 300 })
+  .pause((resume) => {
+      // called when the timeline hits this pause — show UI
+      document.getElementById('continue-btn').addEventListener('click', () => {
+          resume({ chosenPath: 'left' });   // optional: merge into context
+      }, { once: true });
+  })
+  .step((ctx) => ({ nodes: [ctx.context.chosenPath === 'left' ? 'a' : 'b'], position: { x: 400 } }))
+  .play();
+```
+
+Without a callback, `tl.pause()` just stops the timeline until something else calls `tl.play()` again.
 
 ## Edge Transitions
 
@@ -428,7 +682,7 @@ The directive exposes a playback API on the host element via `el.__timeline`:
 | `play()` | `() => void` | Start or resume playback. |
 | `stop()` | `() => void` | Stop and hold at the current position. |
 | `reset()` | `() => void` | Stop and reset all animated properties to initial values. |
-| `state` | `'idle' \| 'playing' \| 'stopped'` | Current playback state (reactive). |
+| `state` | `'idle' \| 'playing' \| 'paused' \| 'stopped'` | Current playback state (reactive). |
 
 ```html
 <div x-flow-timeline="timelineConfig" x-ref="tl"></div>
