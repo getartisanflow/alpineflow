@@ -100,6 +100,11 @@ interface ActiveGroup {
   currentValues: Map<string, number | string>;
   /** Last elapsed time from engine tick, used for seamless reverse. */
   _lastElapsed: number;
+  /** Wall-clock performance.now() at the moment of the last tick. Used to
+   *  estimate the *current* elapsed time when reverse/restart is called
+   *  between ticks — without this, _lastElapsed can be up to 16ms stale
+   *  and a visible sub-frame jump shows up when flipping direction. */
+  _lastTickWallTime: number;
   /** Starting values captured at animate() call time. Persists after completion. */
   snapshot: Map<string, number | string>;
   /** Target values captured at animate() call time. Persists after completion. */
@@ -377,6 +382,7 @@ export class Animator {
       isFinished: false,
       currentValues: new Map(),
       _lastElapsed: 0,
+      _lastTickWallTime: 0,
       snapshot,
       target,
       _currentFinished: finished,
@@ -509,6 +515,7 @@ export class Animator {
     }
 
     group._lastElapsed = elapsed;
+    group._lastTickWallTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const timeSinceStart = elapsed - group.startTime;
     let rawProgress = Math.min(timeSinceStart / group.duration, 1);
 
@@ -614,6 +621,7 @@ export class Animator {
     const dt = Math.min((elapsed - prevElapsed) / 1000, 0.064); // cap at 64ms
     group._prevElapsed = elapsed;
     group._lastElapsed = elapsed;
+    group._lastTickWallTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
     if (dt <= 0) {
       return; // skip zero-delta ticks (first frame)
@@ -814,15 +822,51 @@ export class Animator {
       return;
     }
 
+    // Pre-first-tick reverse: the animation has been created but no tick has
+    // run yet, so the node is still at its `from` value. The first tick would
+    // otherwise compute `directedProgress = 1 - 0 = 1` for backward direction
+    // and snap the node to `to` — a visible teleport. Push startTime back by
+    // `duration` so the first tick sees `rawProgress = 1` and the animation
+    // completes immediately at the node's current (`from`) position. Net
+    // effect: reverse before anything has happened = silent no-op.
+    if (group._lastElapsed === 0 && group.startTime === 0) {
+      group.startTime = -group.duration;
+      return;
+    }
+
     // Adjust startTime so that directedProgress is continuous.
     // Before reverse at rawProgress p: directedProgress = p (or 1-p if already reversed).
     // After flipping, we need 1 - newRawProgress = oldRawProgress, so
     // newRawProgress = 1 - oldRawProgress, meaning newStartTime = elapsed - (1-p)*duration.
-    if (group._lastElapsed > 0 && group.startTime > 0) {
-      const elapsed = group._lastElapsed;
+    //
+    // Use the estimated *current* elapsed (last tick + wall time since) rather
+    // than the stale _lastElapsed — the gap can be up to 16ms, which shows up
+    // as a visible sub-frame jump backward when reverse fires between ticks.
+    //
+    // Guard is only `_lastElapsed > 0` (the tick has run at least once) —
+    // startTime can be negative after prior reverses at low progress, and the
+    // adjustment math works correctly for any startTime value.
+    if (group._lastElapsed > 0) {
+      const elapsed = this._estimatedCurrentElapsed(group);
       const rawProgress = Math.min((elapsed - group.startTime) / group.duration, 1);
       group.startTime = elapsed - (1 - rawProgress) * group.duration;
     }
+  }
+
+  /**
+   * Best estimate of the current elapsed time for a group, accounting for
+   * wall-clock time that has passed since the last engine tick. Used by
+   * reverse/restart/play-direction paths that run synchronously from user
+   * input between ticks — without this correction, _lastElapsed can be up
+   * to 16ms stale and causes a visible direction-flip jump.
+   */
+  private _estimatedCurrentElapsed(group: ActiveGroup): number {
+    if (group._lastTickWallTime <= 0) return group._lastElapsed;
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    const wallDelta = Math.max(0, now - group._lastTickWallTime);
+    // Cap the correction at one frame's worth — larger values mean the engine
+    // is paused/background-throttled and we shouldn't extrapolate blindly.
+    return group._lastElapsed + Math.min(wallDelta, 32);
   }
 
   private _play(group: ActiveGroup): void {
@@ -866,9 +910,12 @@ export class Animator {
         state.velocity = 0;
         state.settled = false;
       }
-    } else if (directionChanged && group._lastElapsed > 0 && group.startTime > 0) {
-      // Same adjustment as _reverse() for seamless mid-flight direction change
-      const elapsed = group._lastElapsed;
+    } else if (directionChanged && group._lastElapsed > 0) {
+      // Same adjustment as _reverse() for seamless mid-flight direction change.
+      // Uses _estimatedCurrentElapsed to avoid the inter-tick lag jump. Guard
+      // is only `_lastElapsed > 0` — startTime can be negative after prior
+      // direction flips and the math works regardless.
+      const elapsed = this._estimatedCurrentElapsed(group);
       const rawProgress = Math.min((elapsed - group.startTime) / group.duration, 1);
       group.startTime = elapsed - (1 - rawProgress) * group.duration;
     }

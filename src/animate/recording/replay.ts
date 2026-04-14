@@ -41,6 +41,18 @@ export interface ReplayCanvas {
     removeNodes?(ids: string | string[]): void;
     addEdges?(edges: any | any[]): void;
     removeEdges?(ids: string | string[]): void;
+    /**
+     * Optional particle emission methods — when present, replay dispatches
+     * captured particle events back to the live canvas during forward playback
+     * so recordings containing `sendParticle*` / `sendConverging` calls reproduce
+     * their visual effects. Not called during scrubbing (particles are
+     * momentary visuals; re-firing on every scrub frame would be disorienting).
+     */
+    sendParticle?(edgeId: string, options?: any): any;
+    sendParticleAlongPath?(path: string, options?: any): any;
+    sendParticleBetween?(source: string, target: string, options?: any): any;
+    sendParticleBurst?(edgeId: string, options: any): any;
+    sendConverging?(sources: string[], options: any): any;
 }
 
 export type ReplayState = 'idle' | 'playing' | 'paused' | 'ended';
@@ -230,7 +242,9 @@ export class ReplayHandle {
         if (hitEnd) {
             const boundary = this._direction === 'forward' ? this._to : this._from;
             if (this._direction === 'forward') {
-                this._walkTo(this._currentTime, boundary);
+                // Fire particles for the remaining forward range so any events
+                // sitting at the boundary still emit.
+                this._walkTo(this._currentTime, boundary, true);
             } else {
                 // Backward boundary: re-seek from nearest checkpoint.
                 this._seekEngineTo(boundary);
@@ -242,9 +256,13 @@ export class ReplayHandle {
         }
 
         if (virtualDtMs > 0) {
-            this._walkTo(this._currentTime, nextTime);
+            // Forward playback — dispatch captured particle events live so
+            // recordings that include sendParticle* calls visibly replay them.
+            this._walkTo(this._currentTime, nextTime, true);
         } else if (virtualDtMs < 0) {
-            // Backward step: re-seek via checkpoint.
+            // Backward step: re-seek via checkpoint. No particle dispatch —
+            // particles are momentary; firing them during reverse would be
+            // disorienting and doesn't match any real "undo" of the emission.
             this._seekEngineTo(nextTime);
         }
 
@@ -291,7 +309,7 @@ export class ReplayHandle {
         this._walkTo(cp?.t ?? 0, t);
     }
 
-    private _walkTo(startT: number, endT: number): void {
+    private _walkTo(startT: number, endT: number, dispatchLiveParticles = false): void {
         if (endT <= startT) {
             return;
         }
@@ -309,7 +327,11 @@ export class ReplayHandle {
         while (vt < endT) {
             const nextVt = Math.min(vt + dtMs, endT);
             while (cursor < events.length && events[cursor].t <= nextVt) {
-                this._virtualEngine.applyEvent(events[cursor]);
+                const event = events[cursor];
+                this._virtualEngine.applyEvent(event);
+                if (dispatchLiveParticles) {
+                    this._dispatchLiveParticle(event);
+                }
                 cursor++;
             }
             const stepDt = (nextVt - vt) / 1000;
@@ -317,6 +339,34 @@ export class ReplayHandle {
                 this._virtualEngine.advance(stepDt);
             }
             vt = nextVt;
+        }
+    }
+
+    /**
+     * Forward a captured particle event to the live canvas so its visual
+     * effect replays. Non-particle events (animate, update, structural) are
+     * already driven by `_applyStateToCanvas` via the virtual engine's state
+     * — particles are the one event class that only exists as a visual and
+     * therefore must be re-emitted on the real canvas.
+     */
+    private _dispatchLiveParticle(event: RecordingEvent): void {
+        const c = this._canvas;
+        switch (event.type) {
+            case 'particle':
+                c.sendParticle?.(event.args.edgeId, event.args.options);
+                break;
+            case 'particle-along-path':
+                c.sendParticleAlongPath?.(event.args.path, event.args.options);
+                break;
+            case 'particle-between':
+                c.sendParticleBetween?.(event.args.source, event.args.target, event.args.options);
+                break;
+            case 'particle-burst':
+                c.sendParticleBurst?.(event.args.edgeId, event.args.options);
+                break;
+            case 'converging':
+                c.sendConverging?.(event.args.sources, event.args.options);
+                break;
         }
     }
 

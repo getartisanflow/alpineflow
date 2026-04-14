@@ -275,8 +275,8 @@ export class Recorder {
                 fromValues: { ...active.fromValues },
                 // integratorState populated if/when handles expose physics state.
                 // For now, scrubbing into mid-physics relies on rehydration via
-                // walk-forward from the nearest event; physics state capture
-                // remains a GA-blocker follow-up for perfect fidelity.
+                // walk-forward from the nearest event; direct physics state
+                // capture is a planned follow-up for perfect fidelity.
                 integratorState: undefined,
             });
         }

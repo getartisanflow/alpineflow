@@ -943,10 +943,25 @@ export function createAnimationMixin(ctx: CanvasContext) {
      * Returns a `ReplayHandle` with play/pause/stop/scrub controls.
      */
     replay(recording: Recording, options?: ReplayOptions): ReplayHandle {
+      const self = this;
+      // Expose structural + particle methods to the replay handle so that
+      // recordings containing node-add/remove, edge-add/remove, or particle
+      // emissions replay with the right side effects. Without these the handle
+      // falls back to raw array splicing (structural) or silently drops
+      // particle events entirely.
       const replayCanvas = {
         get nodes() { return ctx.nodes; },
         get edges() { return ctx.edges; },
         get viewport() { return ctx.viewport; },
+        addNodes: (nodes: any) => (self as any).addNodes(nodes),
+        removeNodes: (ids: any) => (self as any).removeNodes(ids),
+        addEdges: (edges: any) => (self as any).addEdges(edges),
+        removeEdges: (ids: any) => (self as any).removeEdges(ids),
+        sendParticle: (edgeId: string, opts: any) => (self as any).sendParticle(edgeId, opts),
+        sendParticleAlongPath: (path: string, opts: any) => (self as any).sendParticleAlongPath(path, opts),
+        sendParticleBetween: (source: string, target: string, opts: any) => (self as any).sendParticleBetween(source, target, opts),
+        sendParticleBurst: (edgeId: string, opts: any) => (self as any).sendParticleBurst(edgeId, opts),
+        sendConverging: (sources: string[], opts: any) => (self as any).sendConverging(sources, opts),
       };
       return new ReplayHandle(replayCanvas as any, recording, options);
     },

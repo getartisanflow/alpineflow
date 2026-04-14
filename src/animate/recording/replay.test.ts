@@ -468,4 +468,56 @@ describe('ReplayHandle', () => {
             expect(removeNodes).not.toHaveBeenCalled();
         });
     });
+
+    describe('particle dispatch during forward playback', () => {
+        function recordingWithParticles(): Recording {
+            return new Recording({
+                version: RECORDING_VERSION,
+                duration: 1000,
+                initialState: makeInitialState(),
+                events: [
+                    { t: 100, type: 'particle', args: { edgeId: 'e1', options: { color: '#f00' } } },
+                    { t: 300, type: 'particle-along-path', args: { path: 'M 0 0 L 50 50', options: {} } },
+                    { t: 500, type: 'particle-between', args: { source: 'n1', target: 'n2', options: {} } },
+                    { t: 700, type: 'particle-burst', args: { edgeId: 'e1', options: { count: 3 } } },
+                    { t: 900, type: 'converging', args: { sources: ['e1'], options: { targetNodeId: 'n2' } } },
+                ],
+                checkpoints: [],
+                metadata: {},
+            });
+        }
+
+        it('forwards every particle event to the live canvas during forward play', async () => {
+            const sendParticle = vi.fn();
+            const sendParticleAlongPath = vi.fn();
+            const sendParticleBetween = vi.fn();
+            const sendParticleBurst = vi.fn();
+            const sendConverging = vi.fn();
+            canvas.sendParticle = sendParticle;
+            canvas.sendParticleAlongPath = sendParticleAlongPath;
+            canvas.sendParticleBetween = sendParticleBetween;
+            canvas.sendParticleBurst = sendParticleBurst;
+            canvas.sendConverging = sendConverging;
+
+            const handle = new ReplayHandle(canvas, recordingWithParticles(), { paused: false });
+            await handle.finished;
+
+            expect(sendParticle).toHaveBeenCalledWith('e1', { color: '#f00' });
+            expect(sendParticleAlongPath).toHaveBeenCalledWith('M 0 0 L 50 50', {});
+            expect(sendParticleBetween).toHaveBeenCalledWith('n1', 'n2', {});
+            expect(sendParticleBurst).toHaveBeenCalledWith('e1', { count: 3 });
+            expect(sendConverging).toHaveBeenCalledWith(['e1'], { targetNodeId: 'n2' });
+        });
+
+        it('does NOT dispatch particles during scrubTo', () => {
+            const sendParticle = vi.fn();
+            canvas.sendParticle = sendParticle;
+
+            const handle = new ReplayHandle(canvas, recordingWithParticles(), { paused: true });
+            handle.scrubTo(500);   // covers the t=100 and t=300 particle events
+            handle.scrubTo(1000);
+
+            expect(sendParticle).not.toHaveBeenCalled();
+        });
+    });
 });
