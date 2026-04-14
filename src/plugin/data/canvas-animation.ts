@@ -1,14 +1,15 @@
 // ============================================================================
-// canvas-animation — Animation, timeline, particle, and follow mixin for
-//                    flow-canvas
+// canvas-animation — Animation, timeline, and follow mixin for flow-canvas
 //
-// Public API: animate, timeline, registerAnimation, unregisterAnimation,
-//             playAnimation, follow, sendParticle.
+// Public API: animate, update, timeline, registerAnimation, unregisterAnimation,
+//             playAnimation, follow, sendParticle, sendParticleAlongPath,
+//             sendParticleBetween, getHandles, cancelAll,
+//             pauseAll, resumeAll, group, transaction, snapshot.
 // Internal:   _syncAnimationState, _tickParticles.
 //
-// This is the largest mixin module, covering the core animation engine wiring,
-// the timeline factory, named animation registry, viewport follow tracking,
-// and edge particle effects.
+// Covers the core animation engine wiring, the timeline factory, named
+// animation registry, and viewport follow tracking. Particle effects are
+// delegated to the canvas-particles sub-mixin.
 //
 // Cross-mixin deps (via ctx): getNode, getEdge, getEdgePathElement,
 //   getEdgeElement, getAbsolutePosition, _flushNodePositions,
@@ -27,28 +28,30 @@ import type {
   FlowAnimationHandle,
   FollowOptions,
   ParticleHandle,
+  StopOptions,
 } from '../../core/types';
 import type { Animator, PropertyEntry } from '../../animate/animator';
 import { parseStyle, interpolateStyle } from '../../animate/interpolators';
+import { checkReducedMotion } from '../../animate/easing';
 import { FlowTimeline, type TimelineStep } from '../../animate/timeline';
 import { type PathFunction, svgPathToFunction } from '../../animate/paths';
 import { engine } from '../../animate/engine';
 import { debug } from '../../core/debug';
-import { CONNECTION_ACTIVE_COLOR, DEFAULT_STROKE_COLOR } from '../../core/constants';
-
-// ── Local utility ───────────────────────────────────────────────────────────
-
-/** Parse a CSS duration string (e.g. '2s', '300ms') to milliseconds. */
-function parseDurationMs(dur: string): number {
-  const match = dur.match(/^([\d.]+)(ms|s)?$/);
-  if (!match) return 2000;
-  const val = parseFloat(match[1]);
-  return match[2] === 'ms' ? val : val * 1000;
-}
+import { DEFAULT_STROKE_COLOR } from '../../core/constants';
+import { createParticleMixin } from './canvas-particles';
+import { registerParticleRenderer as _registerParticleRenderer } from '../../animate/particle-renderers';
+import { FlowGroup } from '../../animate/flow-group';
+import type { Transaction } from '../../animate/transaction';
+import type { ParticleRenderer } from '../../core/types';
+import { Recorder, ReplayHandle, type RecordOptions, type ReplayOptions } from '../../animate/recording';
+import type { Recording } from '../../animate/recording';
 
 // ── Mixin factory ───────────────────────────────────────────────────────────
 
 export function createAnimationMixin(ctx: CanvasContext) {
+  // Delegate particle system to the dedicated sub-mixin
+  const particles = createParticleMixin(ctx);
+
   return {
     // ── Internal: Sync animation lock state ───────────────────────────────
 
@@ -73,7 +76,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
      * history suspension are automatically managed via timeline events.
      */
     timeline(): FlowTimeline {
-      const tl = new FlowTimeline(ctx);
+      const tl = new FlowTimeline(ctx, engine);
 
       tl.on('play', () => {
         ctx._activeTimelines.add(tl);
@@ -148,6 +151,28 @@ export function createAnimationMixin(ctx: CanvasContext) {
       targets: AnimateTargets,
       options: AnimateOptions = {},
     ): FlowAnimationHandle {
+      // Compile boundTo into a while predicate
+      if (options?.boundTo) {
+        const binding = options.boundTo;
+        if ('node' in binding) {
+          options = {
+            ...options,
+            while: () => {
+              const node = ctx.getNode(binding.node);
+              return node?.[binding.property as keyof typeof node] === binding.equals;
+            },
+          };
+        } else if ('edge' in binding) {
+          options = {
+            ...options,
+            while: () => {
+              const edge = ctx.getEdge(binding.edge);
+              return edge?.[binding.property as keyof typeof edge] === binding.equals;
+            },
+          };
+        }
+      }
+
       const duration = options.duration ?? 0;
       const entries: PropertyEntry[] = [];
       const movedNodeIds = new Set<string>();
@@ -191,7 +216,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
               typeof target.followPath === 'string' &&
               typeof document !== 'undefined'
             ) {
-              const svgContainer = (ctx as any).getEdgeSvgElement?.();
+              const svgContainer = ctx.getEdgeSvgElement?.();
               if (svgContainer) {
                 guidePathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 guidePathEl.setAttribute('d', target.followPath);
@@ -466,6 +491,13 @@ export function createAnimationMixin(ctx: CanvasContext) {
           resume: () => {},
           stop: () => {},
           reverse: () => {},
+          play: () => {},
+          playForward: () => {},
+          playBackward: () => {},
+          restart: () => {},
+          get direction(): 'forward' | 'backward' { return 'forward'; },
+          get isFinished() { return true; },
+          get currentValue() { return new Map(); },
           finished: Promise.resolve(),
           _targetNodeIds: targets.nodes ? Object.keys(targets.nodes) : undefined,
         };
@@ -483,6 +515,13 @@ export function createAnimationMixin(ctx: CanvasContext) {
         easing: options.easing,
         delay: options.delay,
         loop: options.loop,
+        startAt: options.startAt,
+        while: options.while,
+        whileStopMode: options.whileStopMode,
+        tag: options.tag,
+        tags: options.tags,
+        motion: options.motion,
+        maxDuration: options.maxDuration,
         onProgress(progress) {
           // Flush moved nodes to DOM each frame
           if (movedNodeIds.size > 0) {
@@ -529,6 +568,23 @@ export function createAnimationMixin(ctx: CanvasContext) {
               if (target.strokeWidth !== undefined) edge.strokeWidth = raw.strokeWidth;
             }
           }
+          // Flush any moved/styled IDs left over from entry.apply() writes that
+          // ran after the last onProgress tick — notably stop({mode:'rollback'})
+          // and stop({mode:'jump-end'}) both mutate raw state during cleanup,
+          // and without this flush the DOM stays at the last-animated position.
+          if (movedNodeIds.size > 0) {
+            ctx._flushNodePositions(movedNodeIds);
+            ctx._refreshEdgePaths(movedNodeIds);
+            movedNodeIds.clear();
+          }
+          if (styledNodeIds.size > 0) {
+            ctx._flushNodeStyles(styledNodeIds);
+            styledNodeIds.clear();
+          }
+          if (styledEdgeIds.size > 0) {
+            ctx._flushEdgeStyles(styledEdgeIds);
+            styledEdgeIds.clear();
+          }
           options.onComplete?.();
         },
       });
@@ -546,12 +602,16 @@ export function createAnimationMixin(ctx: CanvasContext) {
      *
      * Convenience wrapper around `update()` that defaults to 300ms duration.
      * Pass `duration: 0` for instant changes, or use `update()` directly.
+     *
+     * When `respectReducedMotion` is active (via config or OS media query),
+     * the effective duration is collapsed to 0 for an instant snap.
      */
     animate(
       targets: AnimateTargets,
       options: AnimateOptions = {},
     ): FlowAnimationHandle {
-      return this.update(targets, { duration: 300, ...options });
+      const effectiveDuration = checkReducedMotion(ctx._config?.respectReducedMotion) ? 0 : (options.duration ?? 300);
+      return this.update(targets, { ...options, duration: effectiveDuration });
     },
 
     // ── Follow (viewport tracking) ────────────────────────────────────────
@@ -663,166 +723,285 @@ export function createAnimationMixin(ctx: CanvasContext) {
           resolveFinished!();
         },
         reverse: () => {},
+        play: () => {},
+        playForward: () => {},
+        playBackward: () => {},
+        restart: () => {},
+        get direction(): 'forward' | 'backward' { return 'forward'; },
+        get isFinished() { return stopped; },
+        get currentValue() { return new Map(); },
         get finished() { return finished; },
       };
 
       return handle;
     },
 
-    // ── Particle tick loop ────────────────────────────────────────────────
+    // ── Registry & group helpers ─────────────────────────────────────────
 
     /**
-     * Engine tick callback — processes all active particles in one pass.
-     * Returns true to unregister from engine when all particles are done.
+     * Get all tracked animation handles, optionally filtered by tag.
      */
-    _tickParticles(): boolean {
-      const now = performance.now();
-      const lengthCache = new Map<SVGPathElement, number>();
+    getHandles(filter?: { tag?: string; tags?: string[] }): FlowAnimationHandle[] {
+      const rawAnimator = getAlpine().raw(ctx._animator!) as Animator;
+      return rawAnimator.registry.getHandles(filter) as FlowAnimationHandle[];
+    },
 
-      for (const particle of ctx._activeParticles) {
-        const progress = (now - particle.t0) / particle.ms;
-        if (progress >= 1 || !particle.circle.parentNode) {
-          clearTimeout(particle.safetyTimer);
-          particle.circle.remove();
-          if (typeof particle.onComplete === 'function') {
-            particle.onComplete();
+    /**
+     * Cancel all animations matching a tag filter.
+     */
+    cancelAll(filter: { tag?: string; tags?: string[] }, options?: StopOptions): void {
+      const rawAnimator = getAlpine().raw(ctx._animator!) as Animator;
+      rawAnimator.registry.cancelAll(filter, options);
+    },
+
+    /**
+     * Pause all animations matching a tag filter.
+     */
+    pauseAll(filter: { tag?: string; tags?: string[] }): void {
+      const rawAnimator = getAlpine().raw(ctx._animator!) as Animator;
+      rawAnimator.registry.pauseAll(filter);
+    },
+
+    /**
+     * Resume all animations matching a tag filter.
+     */
+    resumeAll(filter: { tag?: string; tags?: string[] }): void {
+      const rawAnimator = getAlpine().raw(ctx._animator!) as Animator;
+      rawAnimator.registry.resumeAll(filter);
+    },
+
+    /**
+     * Create a named group that auto-tags all animations made through it.
+     */
+    group(name: string): FlowGroup {
+      const self = this;
+      return new FlowGroup(name, {
+        animate: (t, o) => self.animate(t, o),
+        update: (t, o) => self.update(t, o),
+        sendParticle: (id, o) => self.sendParticle(id, o),
+        sendParticleAlongPath: (p, o) => self.sendParticleAlongPath(p, o),
+        sendParticleBetween: (s, t, o) => self.sendParticleBetween(s, t, o),
+        sendParticleBurst: (id, o) => self.sendParticleBurst(id, o),
+        sendConverging: (ids, o) => self.sendConverging(ids, o),
+        timeline: () => self.timeline(),
+        getHandles: (f) => self.getHandles(f),
+        cancelAll: (f, o) => self.cancelAll(f, o),
+        pauseAll: (f) => self.pauseAll(f),
+        resumeAll: (f) => self.resumeAll(f),
+      });
+    },
+
+    /**
+     * Create a transaction for grouped rollback of multiple animations.
+     */
+    transaction(fn: () => Promise<void> | void): Transaction {
+      const rawAnimator = getAlpine().raw(ctx._animator!) as Animator;
+      const tx = rawAnimator.beginTransaction();
+      // Rollback writes raw-state values (via entry.apply) outside any
+      // active rAF tick, so the DOM never sees them. Flush affected nodes
+      // and their edges once properties have been reverted.
+      tx.onAfterRollback?.((keys) => {
+        const nodeIds = new Set<string>();
+        for (const key of keys) {
+          // Keys look like `node:<id>:position.x` or `node:<id>:style.*`
+          if (key.startsWith('node:')) {
+            const id = key.split(':')[1];
+            if (id) nodeIds.add(id);
           }
-          ctx._activeParticles.delete(particle);
-          continue;
         }
-
-        let len = lengthCache.get(particle.pathEl);
-        if (len === undefined) {
-          len = particle.pathEl.getTotalLength();
-          lengthCache.set(particle.pathEl, len);
+        if (nodeIds.size > 0) {
+          ctx._flushNodePositions(nodeIds);
+          ctx._flushNodeStyles(nodeIds);
+          ctx._refreshEdgePaths(nodeIds);
         }
-
-        const pt = particle.pathEl.getPointAtLength(progress * len);
-        particle.circle.setAttribute('cx', String(pt.x));
-        particle.circle.setAttribute('cy', String(pt.y));
+      });
+      try {
+        const result = fn();
+        if (result && typeof (result as any).then === 'function') {
+          (result as Promise<void>)
+            .then(() => rawAnimator.endTransaction())
+            .catch(() => {
+              tx.rollback();
+              rawAnimator.endTransaction();
+            });
+        } else {
+          rawAnimator.endTransaction();
+        }
+      } catch (err) {
+        tx.rollback();
+        rawAnimator.endTransaction();
+        throw err;
       }
-
-      // Return true to unregister from engine when all particles are done
-      if (ctx._activeParticles.size === 0) {
-        ctx._particleEngineHandle = null;
-        return true;
-      }
-      return false;
+      return tx;
     },
-
-    // ── Send particle along edge ──────────────────────────────────────────
 
     /**
-     * Fire a particle along an edge path. The particle is an SVG circle
-     * that follows the edge's `<path>` element using `getPointAtLength`.
+     * Capture current canvas state. Call restore() to revert.
      */
-    sendParticle(edgeId: string, options: Record<string, any> = {}): ParticleHandle | undefined {
-      // Skip particles on culled (hidden) edges — zero wasted work off-screen
-      const svg = ctx._edgeSvgElements.get(edgeId);
-      if (svg && svg.style.display === 'none') return undefined;
-
-      const edge = ctx.edges.find((e: FlowEdge) => e.id === edgeId);
-      if (!edge) {
-        debug('particle', `sendParticle: edge "${edgeId}" not found`);
-        return undefined;
-      }
-
-      const pathEl = ctx.getEdgePathElement(edgeId);
-      if (!pathEl) {
-        debug('particle', `sendParticle: no path element for edge "${edgeId}"`);
-        return undefined;
-      }
-
-      const pathD = pathEl.getAttribute('d');
-      if (!pathD) {
-        debug('particle', `sendParticle: edge "${edgeId}" path has no d attribute`);
-        return undefined;
-      }
-
-      // Resolve cascade: options -> edge properties -> CSS variables
-      const styles = ctx._containerStyles;
-
-      const size = options.size
-        ?? edge.particleSize
-        ?? (parseFloat(styles?.getPropertyValue('--flow-edge-dot-size').trim() ?? '4') || 4);
-      const color = options.color
-        ?? edge.particleColor
-        ?? styles?.getPropertyValue('--flow-edge-dot-fill').trim()
-        ?? CONNECTION_ACTIVE_COLOR;
-      const duration = options.duration
-        ?? edge.animationDuration
-        ?? styles?.getPropertyValue('--flow-edge-dot-duration').trim()
-        ?? '2s';
-
-      // Create circle and animate via getPointAtLength + setAttribute.
-      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      circle.setAttribute('r', String(size));
-      circle.setAttribute('fill', color);
-      circle.classList.add('flow-edge-particle');
-      if (options.class) {
-        for (const cls of options.class.split(' ')) {
-          if (cls) circle.classList.add(cls);
-        }
-      }
-
-      const gEl = ctx.getEdgeElement(edgeId);
-      if (!gEl) return undefined;
-
-      const ms = parseDurationMs(duration);
-
-      // Position at path start immediately — no origin flash.
-      const startPt = pathEl.getPointAtLength(0);
-      circle.setAttribute('cx', String(startPt.x));
-      circle.setAttribute('cy', String(startPt.y));
-      gEl.appendChild(circle);
-
-      const t0 = performance.now();
-
-      // Promise for handle.finished
-      let resolveHandleFinished: () => void;
-      const handleFinished = new Promise<void>((r) => { resolveHandleFinished = r; });
-
-      const wrappedOnComplete = () => {
-        if (typeof options.onComplete === 'function') {
-          options.onComplete();
-        }
-        resolveHandleFinished!();
-      };
-
-      // Safety timeout in case rAF loop stalls
-      const safetyTimer = setTimeout(() => {
-        ctx._activeParticles.delete(particle);
-        circle.remove();
-        wrappedOnComplete();
-      }, ms * 2);
-
-      const particle = { circle, pathEl, t0, ms, safetyTimer, onComplete: wrappedOnComplete };
-      ctx._activeParticles.add(particle);
-      debug('particle', `sendParticle on edge "${edgeId}"`, { size, color, duration: ms });
-
-      // Register on shared AnimationEngine if not already running
-      if (!ctx._particleEngineHandle) {
-        ctx._particleEngineHandle = engine.register(() => ctx._tickParticles());
-      }
-
-      const handle: ParticleHandle = {
-        getCurrentPosition(): XYPosition | null {
-          if (!ctx._activeParticles.has(particle)) return null;
-          const cx = parseFloat(circle.getAttribute('cx') || '0');
-          const cy = parseFloat(circle.getAttribute('cy') || '0');
-          return { x: cx, y: cy };
+    snapshot(): { restore: () => void } {
+      const savedNodes = structuredClone(getAlpine().raw(ctx.nodes));
+      const savedEdges = structuredClone(getAlpine().raw(ctx.edges));
+      const savedViewport = { ...ctx.viewport };
+      return {
+        restore: () => {
+          ctx.nodes.splice(0, ctx.nodes.length, ...structuredClone(savedNodes));
+          ctx.edges.splice(0, ctx.edges.length, ...structuredClone(savedEdges));
+          Object.assign(ctx.viewport, savedViewport);
         },
-        stop() {
-          if (!ctx._activeParticles.has(particle)) return;
-          clearTimeout(safetyTimer);
-          circle.remove();
-          ctx._activeParticles.delete(particle);
-          wrappedOnComplete();
-        },
-        get finished() { return handleFinished; },
       };
-
-      return handle;
     },
+
+    // ── Record & Replay ───────────────────────────────────────────────────
+
+    /**
+     * Record canvas animation events during `fn()` execution.
+     * Returns a `Recording` that can be passed to `replay()`.
+     */
+    record(fn: () => Promise<void> | void, options?: RecordOptions): Promise<Recording> {
+      // The Recorder hooks methods on a RecorderCanvas facade object. To ensure
+      // that calls to $flow.animate / $flow.update etc. during fn() are captured,
+      // we temporarily replace the mixin's own method slots with recording-aware
+      // wrappers, and restore them once recording completes.
+      const self = this;
+
+      // Save direct function references to the real mixin methods.
+      const realAnimate = self.animate;
+      const realUpdate = self.update;
+      const realSendParticle = self.sendParticle;
+      const realSendParticleAlongPath = self.sendParticleAlongPath;
+      const realSendParticleBetween = self.sendParticleBetween;
+      const realSendParticleBurst = self.sendParticleBurst;
+      const realSendConverging = self.sendConverging;
+
+      // Build a facade with real methods as its initial implementations.
+      // The Recorder will wrap these with event-capturing hooks.
+      // NOTE: facade.animate → realAnimate → this.update. To avoid double-
+      // recording when animate internally calls update, we use realUpdate
+      // (bypassing the hook) as the update impl inside the animate call chain.
+      // We achieve this by temporarily un-patching self.update during animate.
+      const facade: any = {
+        get nodes() { return ctx.nodes; },
+        get edges() { return ctx.edges; },
+        get viewport() { return ctx.viewport; },
+        animate: (targets: any, opts?: any) => {
+          // Temporarily restore real update so animate's internal update call
+          // is not double-recorded as an 'update' event.
+          const savedUpdate = (self as any).update;
+          (self as any).update = realUpdate;
+          try {
+            return realAnimate.call(self, targets, opts);
+          } finally {
+            (self as any).update = savedUpdate;
+          }
+        },
+        update: (targets: any, opts?: any) => realUpdate.call(self, targets, opts),
+        sendParticle: (edgeId: string, opts?: any) => realSendParticle.call(self, edgeId, opts),
+        sendParticleAlongPath: (path: string, opts?: any) => realSendParticleAlongPath.call(self, path, opts),
+        sendParticleBetween: (source: string, target: string, opts?: any) => realSendParticleBetween.call(self, source, target, opts),
+        sendParticleBurst: (edgeId: string, opts: any) => realSendParticleBurst.call(self, edgeId, opts),
+        sendConverging: (sources: string[], opts: any) => realSendConverging.call(self, sources, opts),
+        addNodes: (nodes: any) => ctx.addNodes(nodes),
+        removeNodes: (ids: any) => ctx.removeNodes(ids),
+        addEdges: (edges: any) => ctx.addEdges(edges),
+        removeEdges: (ids: any) => ctx.removeEdges(ids),
+      };
+
+      const recorder = new Recorder(facade, options);
+
+      // Wrap fn() so that $flow.animate / $flow.update calls during recording
+      // are routed through the hooked facade (which records events). Restore
+      // the originals once recording completes.
+      const wrappedFn = async () => {
+        (self as any).animate = (...args: any[]) => facade.animate(...args);
+        (self as any).update = (...args: any[]) => facade.update(...args);
+        (self as any).sendParticle = (...args: any[]) => facade.sendParticle(...args);
+        (self as any).sendParticleAlongPath = (...args: any[]) => facade.sendParticleAlongPath(...args);
+        (self as any).sendParticleBetween = (...args: any[]) => facade.sendParticleBetween(...args);
+        (self as any).sendParticleBurst = (...args: any[]) => facade.sendParticleBurst(...args);
+        (self as any).sendConverging = (...args: any[]) => facade.sendConverging(...args);
+        try {
+          const result = fn();
+          if (result instanceof Promise) {
+            await result;
+          }
+        } finally {
+          (self as any).animate = realAnimate;
+          (self as any).update = realUpdate;
+          (self as any).sendParticle = realSendParticle;
+          (self as any).sendParticleAlongPath = realSendParticleAlongPath;
+          (self as any).sendParticleBetween = realSendParticleBetween;
+          (self as any).sendParticleBurst = realSendParticleBurst;
+          (self as any).sendConverging = realSendConverging;
+        }
+      };
+
+      return recorder.record(wrappedFn, options?.captureMetadata);
+    },
+
+    /**
+     * Replay a previously recorded `Recording` on this canvas.
+     * Returns a `ReplayHandle` with play/pause/stop/scrub controls.
+     */
+    replay(recording: Recording, options?: ReplayOptions): ReplayHandle {
+      const self = this;
+      // Expose structural + particle methods to the replay handle so that
+      // recordings containing node-add/remove, edge-add/remove, or particle
+      // emissions replay with the right side effects. Without these the handle
+      // falls back to raw array splicing (structural) or silently drops
+      // particle events entirely.
+      const replayCanvas = {
+        get nodes() { return ctx.nodes; },
+        get edges() { return ctx.edges; },
+        get viewport() { return ctx.viewport; },
+        addNodes: (nodes: any) => (self as any).addNodes(nodes),
+        removeNodes: (ids: any) => (self as any).removeNodes(ids),
+        addEdges: (edges: any) => (self as any).addEdges(edges),
+        removeEdges: (ids: any) => (self as any).removeEdges(ids),
+        sendParticle: (edgeId: string, opts: any) => (self as any).sendParticle(edgeId, opts),
+        sendParticleAlongPath: (path: string, opts: any) => (self as any).sendParticleAlongPath(path, opts),
+        sendParticleBetween: (source: string, target: string, opts: any) => (self as any).sendParticleBetween(source, target, opts),
+        sendParticleBurst: (edgeId: string, opts: any) => (self as any).sendParticleBurst(edgeId, opts),
+        sendConverging: (sources: string[], opts: any) => (self as any).sendConverging(sources, opts),
+      };
+      return new ReplayHandle(replayCanvas as any, recording, options);
+    },
+
+    // ── Cleanup lifecycle ─────────────────────────────────────────────────
+
+    /**
+     * Stop all in-flight animations, particles, and timelines.
+     * Called by the canvas destroy() lifecycle hook when the element is
+     * removed from the DOM.
+     */
+    destroy(): void {
+      if (ctx._animator) {
+        ctx._animator.stopAll();
+      }
+      particles.destroyParticles();
+      for (const tl of ctx._activeTimelines) {
+        tl.stop();
+      }
+      ctx._activeTimelines.clear();
+    },
+
+    // ── Particle renderer registry ────────────────────────────────────────
+
+    /**
+     * Register a custom particle renderer by name. Once registered, pass
+     * `renderer: 'your-name'` in any `sendParticle*` options to use it.
+     */
+    registerParticleRenderer(name: string, renderer: ParticleRenderer): void {
+      _registerParticleRenderer(name, renderer);
+    },
+
+    // ── Particle system (delegated to canvas-particles sub-mixin) ────────
+
+    _tickParticles: particles._tickParticles,
+    sendParticle: particles.sendParticle,
+    sendParticleAlongPath: particles.sendParticleAlongPath,
+    sendParticleBetween: particles.sendParticleBetween,
+    sendParticleBurst: particles.sendParticleBurst,
+    sendConverging: particles.sendConverging,
+    destroyParticles: particles.destroyParticles,
   };
 }

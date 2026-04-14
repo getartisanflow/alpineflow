@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AnimationEngine } from '../../animate/engine';
-import type { ParticleHandle, XYPosition, FlowAnimationHandle } from '../../core/types';
+import type { ParticleHandle, ParticleRenderer, XYPosition, FlowAnimationHandle } from '../../core/types';
+import { getParticleRenderer, registerParticleRenderer } from '../../animate/particle-renderers';
 
 /**
  * Minimal SVG path mock — getPointAtLength returns linear interpolation
@@ -64,15 +65,18 @@ function makeParticleCanvas() {
     getEdgePathElement(_edgeId: string) { return pathEl; },
     getEdgeElement(_edgeId: string) { return gEl; },
 
-    _tickParticles(): boolean {
-      const now = performance.now();
-
+    _tickParticles(elapsed: number): boolean {
       for (const particle of this._activeParticles) {
-        const progress = (now - particle.t0) / particle.ms;
-        if (progress >= 1 || !particle.circle._parent) {
-          clearTimeout(particle.safetyTimer);
-          // Simulate circle.remove()
-          particle.circle._parent = null;
+        // Set startElapsed on first tick
+        if (particle.startElapsed < 0) {
+          particle.startElapsed = elapsed;
+        }
+
+        const progress = (elapsed - particle.startElapsed) / particle.ms;
+
+        // Complete particle if progress finished or if the DOM element was detached.
+        if (progress >= 1 || !particle.element._parent) {
+          particle.renderer.destroy(particle.element);
           if (typeof particle.onComplete === 'function') {
             particle.onComplete();
           }
@@ -82,8 +86,18 @@ function makeParticleCanvas() {
 
         const len = particle.pathEl.getTotalLength();
         const pt = particle.pathEl.getPointAtLength(progress * len);
-        particle.circle.setAttribute('cx', String(pt.x));
-        particle.circle.setAttribute('cy', String(pt.y));
+
+        particle.renderer.update(particle.element, {
+          x: pt.x,
+          y: pt.y,
+          progress,
+          velocity: { x: pt.x - particle.currentPosition.x, y: pt.y - particle.currentPosition.y },
+          pathLength: len,
+          elapsed: elapsed - particle.startElapsed,
+        });
+
+        // Track position internally
+        particle.currentPosition = { x: pt.x, y: pt.y };
       }
 
       if (this._activeParticles.size === 0) {
@@ -104,30 +118,40 @@ function makeParticleCanvas() {
       if (!pe) return undefined;
       if (!pe.getAttribute('d')) return undefined;
 
+      const rendererName = options.renderer ?? 'circle';
+      const renderer = getParticleRenderer(rendererName);
+      if (!renderer) return undefined;
+
       const ge = this.getEdgeElement(edgeId);
       if (!ge) return undefined;
 
       const duration = options.duration ?? '2s';
       const ms = parseDurationMs(duration);
 
-      // Create mock circle
+      // Create mock element via a mock renderer that mirrors real behavior
       const attrs: Record<string, string> = {};
-      const circle = {
+      const element = {
         setAttribute(k: string, v: string) { attrs[k] = v; },
         getAttribute(k: string) { return attrs[k] ?? null; },
         classList: { add() {} },
         remove() { this._parent = null; },
         _parent: null as any,
       };
-      circle.setAttribute('r', '4');
-      circle.setAttribute('fill', '#64748b');
 
       const startPt = pe.getPointAtLength(0);
-      circle.setAttribute('cx', String(startPt.x));
-      circle.setAttribute('cy', String(startPt.y));
-      ge.appendChild(circle);
+      element.setAttribute('cx', String(startPt.x));
+      element.setAttribute('cy', String(startPt.y));
+      ge.appendChild(element);
 
-      const t0 = performance.now();
+      // Mock renderer that uses the mock element
+      const mockRenderer: ParticleRenderer = {
+        create: () => element as any,
+        update: (el: any, state: any) => {
+          el.setAttribute('cx', String(state.x));
+          el.setAttribute('cy', String(state.y));
+        },
+        destroy: (el: any) => { el._parent = null; },
+      };
 
       let resolveHandleFinished: () => void;
       const handleFinished = new Promise<void>((r) => { resolveHandleFinished = r; });
@@ -137,31 +161,30 @@ function makeParticleCanvas() {
         resolveHandleFinished!();
       };
 
-      const safetyTimer = setTimeout(() => {
-        this._activeParticles.delete(particle);
-        circle.remove();
-        wrappedOnComplete();
-      }, ms * 2);
-
-      const particle = { circle, pathEl: pe, t0, ms, safetyTimer, onComplete: wrappedOnComplete };
+      const particle = {
+        element,
+        renderer: mockRenderer,
+        pathEl: pe,
+        startElapsed: -1,    // set on first engine tick
+        ms,
+        onComplete: wrappedOnComplete,
+        currentPosition: { x: startPt.x, y: startPt.y },
+      };
       this._activeParticles.add(particle);
 
       if (!this._particleEngineHandle) {
-        this._particleEngineHandle = eng.register(() => this._tickParticles());
+        this._particleEngineHandle = eng.register((elapsed) => this._tickParticles(elapsed));
       }
 
       const self = this;
       const handle: ParticleHandle = {
         getCurrentPosition(): XYPosition | null {
           if (!self._activeParticles.has(particle)) return null;
-          const cx = parseFloat(circle.getAttribute('cx') || '0');
-          const cy = parseFloat(circle.getAttribute('cy') || '0');
-          return { x: cx, y: cy };
+          return { ...particle.currentPosition };
         },
         stop() {
           if (!self._activeParticles.has(particle)) return;
-          clearTimeout(safetyTimer);
-          circle.remove();
+          particle.renderer.destroy(particle.element);
           self._activeParticles.delete(particle);
           wrappedOnComplete();
         },
@@ -245,6 +268,13 @@ function makeParticleCanvas() {
           resolveFinished!();
         },
         reverse: () => {},
+        play: () => {},
+        playForward: () => {},
+        playBackward: () => {},
+        restart: () => {},
+        get direction(): 'forward' | 'backward' { return 'forward'; },
+        get isFinished() { return stopped; },
+        get currentValue() { return new Map(); },
         get finished() { return finished; },
       };
 
@@ -283,11 +313,11 @@ describe('ParticleHandle', () => {
     expect(handle!.finished).toBeInstanceOf(Promise);
   });
 
-  it('getCurrentPosition reads cx/cy from circle', () => {
+  it('getCurrentPosition returns start position from internal tracking', () => {
     const { canvas } = makeParticleCanvas();
     const handle = canvas.sendParticle('e1', { duration: '2s' })!;
 
-    // Initially at start of path (x=0, y=0)
+    // Initially at start of path (x=0, y=0) — read from internal state
     const pos = handle.getCurrentPosition();
     expect(pos).not.toBeNull();
     expect(pos!.x).toBe(0);
@@ -367,6 +397,79 @@ describe('ParticleHandle', () => {
     await advanceTimers(600);
     await vi.advanceTimersByTimeAsync(0);
 
+    expect(onComplete).toHaveBeenCalledOnce();
+  });
+});
+
+describe('Engine-relative time and position tracking', () => {
+  it('getCurrentPosition returns start position before first tick', () => {
+    const { canvas } = makeParticleCanvas();
+    const handle = canvas.sendParticle('e1', { duration: '2s' })!;
+
+    // Before any engine tick, getCurrentPosition should return the start position
+    // (from the particle's internal currentPosition, set to path start)
+    const pos = handle.getCurrentPosition();
+    expect(pos).not.toBeNull();
+    expect(pos!.x).toBe(0);
+    expect(pos!.y).toBe(0);
+  });
+
+  it('stop() before first tick cleans up without errors', () => {
+    const { canvas } = makeParticleCanvas();
+    const handle = canvas.sendParticle('e1', { duration: '2s' })!;
+
+    // Stop immediately — no engine tick has occurred yet
+    expect(() => handle.stop()).not.toThrow();
+    expect(canvas._activeParticles.size).toBe(0);
+    expect(handle.getCurrentPosition()).toBeNull();
+  });
+
+  it('getCurrentPosition reads from internal state, not DOM', async () => {
+    const { canvas } = makeParticleCanvas();
+    const handle = canvas.sendParticle('e1', { duration: '2s' })!;
+
+    // Advance so particle moves
+    await advanceTimers(500);
+
+    const pos = handle.getCurrentPosition();
+    expect(pos).not.toBeNull();
+    // The position is tracked internally, not parsed from DOM cx/cy.
+    // For the mock path (linear x=len, y=0), position.x > 0 after partial time.
+    expect(pos!.x).toBeGreaterThan(0);
+  });
+
+  it('multiple particles on same edge each track their own startElapsed', async () => {
+    const { canvas } = makeParticleCanvas();
+
+    const handle1 = canvas.sendParticle('e1', { duration: '2s' })!;
+
+    // Advance a bit, then send a second particle
+    await advanceTimers(200);
+
+    const handle2 = canvas.sendParticle('e1', { duration: '2s' })!;
+
+    // Advance more — both should be active with different positions
+    await advanceTimers(300);
+
+    const pos1 = handle1.getCurrentPosition();
+    const pos2 = handle2.getCurrentPosition();
+    expect(pos1).not.toBeNull();
+    expect(pos2).not.toBeNull();
+    // First particle has been moving longer, so it should be further along
+    expect(pos1!.x).toBeGreaterThan(pos2!.x);
+  });
+
+  it('particle is cleaned up by engine-based safety check (no setTimeout)', async () => {
+    const { canvas } = makeParticleCanvas();
+    const onComplete = vi.fn();
+    canvas.sendParticle('e1', { duration: '500ms', onComplete })!;
+
+    // Even if we advance well past 2x duration, particle should be cleaned up
+    // by the engine-based safety check, not a setTimeout
+    await advanceTimers(1500);
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(canvas._activeParticles.size).toBe(0);
     expect(onComplete).toHaveBeenCalledOnce();
   });
 });

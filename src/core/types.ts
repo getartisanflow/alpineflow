@@ -9,6 +9,10 @@
 import type { EasingName } from '../animate/easing';
 import type { PathFunction } from '../animate/paths';
 import type { CollabConfig, CollabInstance } from '../collab/types';
+import type { FlowGroup } from '../animate/flow-group';
+import type { Transaction } from '../animate/transaction';
+import type { MotionConfig } from '../animate/motion/types';
+import type { Recording, RecordOptions, ReplayOptions, ReplayHandle } from '../animate/recording';
 
 /** 2D coordinate */
 export interface XYPosition {
@@ -664,16 +668,107 @@ export interface ShapeDefinition {
 
 /** Options for fire-and-forget edge particles. */
 export interface ParticleOptions {
-  /** Particle fill color. Falls back to edge.particleColor → --flow-edge-dot-fill. */
+  /**
+   * Particle fill color. Falls back to edge.particleColor → --flow-edge-dot-fill.
+   *
+   * Note: for the `beam` renderer, `color` is ignored when `gradient` is set.
+   */
   color?: string;
   /** Particle radius in SVG user units (scales with zoom). Falls back to edge.particleSize → --flow-edge-dot-size. */
   size?: number;
-  /** Travel duration (CSS time value). Falls back to edge.animationDuration → --flow-edge-dot-duration. */
-  duration?: string;
+  /** Travel duration — CSS time value (e.g. '2s', '300ms') or numeric milliseconds (e.g. 800).
+   *  Falls back to edge.animationDuration → --flow-edge-dot-duration.
+   *  If `speed` is also provided, `speed` takes precedence. */
+  duration?: string | number;
   /** CSS class(es) to add to the circle element. */
   class?: string;
   /** Called when the particle reaches the target and is removed. */
   onComplete?: () => void;
+  /** Named renderer to use. Defaults to 'circle'. */
+  renderer?: string;
+  /** Travel speed in SVG units per second (alternative to duration). */
+  speed?: number;
+  /** Length of the beam renderer rectangle in SVG user units. */
+  length?: number;
+  /** Width (thickness) of the beam renderer rectangle in SVG user units. */
+  width?: number;
+  /** URL or SVG symbol href (e.g. '#my-symbol') for the image renderer. */
+  href?: string;
+  /**
+   * Multi-stop gradient painted along the beam renderer's length.
+   *
+   * Each stop has `offset` in `0..1` (SVG-native), where:
+   *   - `offset: 0` → **tail** of the beam (the trailing edge)
+   *   - `offset: 1` → **head** of the beam (the leading edge, which travels first)
+   *
+   * When `gradient` is provided, it **overrides `color`** — `color` is ignored
+   * by the beam renderer. For single-color beams with a fading tail, use a
+   * 2-stop gradient rather than `color`.
+   *
+   * @example
+   * // Simple fading tail — transparent back → solid front
+   * gradient: [
+   *   { offset: 0, color: '#8B5CF6', opacity: 0 },
+   *   { offset: 1, color: '#8B5CF6', opacity: 1 },
+   * ]
+   *
+   * @example
+   * // Bright-head tracer — common photogenic pattern
+   * gradient: [
+   *   { offset: 0,    color: '#8B5CF6', opacity: 0 },   // transparent tail
+   *   { offset: 0.7,  color: '#D946EF', opacity: 0.9 }, // magenta mid
+   *   { offset: 1,    color: '#fff',    opacity: 1 },   // bright head
+   * ]
+   */
+  gradient?: Array<{
+    /** Position along the beam: 0 = tail (back), 1 = head (front). */
+    offset: number;
+    /** CSS color string for this stop. */
+    color: string;
+    /** Optional stop opacity (0..1). Defaults to 1. */
+    opacity?: number;
+  }>;
+  /**
+   * Beam renderer only. When `true` (default), the beam's tail continues past
+   * the target after the head arrives — the trail "catches up" and fades off.
+   * In this mode `duration` is the total beam lifetime (emerge → fully exit),
+   * so **`onComplete` fires after the tail exits, not when the head arrives**.
+   *
+   * Set to `false` for the pre-v0.1.3 behavior where `duration` meant
+   * "head reaches target" and the beam vanishes the instant the head arrives.
+   * Useful when you want `onComplete` to fire at head-arrival time (e.g., to
+   * trigger a downstream effect as the beam "hits" its target).
+   */
+  followThrough?: boolean;
+}
+
+/** State passed to particle renderers each frame. */
+export interface ParticleRenderState {
+  x: number;
+  y: number;
+  progress: number;      // 0-1
+  /**
+   * Position delta (SVG user units) since the previous frame — not a per-second velocity.
+   * Direction is correct for angle computation (e.g. `Math.atan2(velocity.y, velocity.x)`);
+   * magnitude varies with frame rate and is not suitable for speed calculations.
+   */
+  velocity: { x: number; y: number };
+  pathLength: number;
+  elapsed: number;       // ms since particle start
+  /**
+   * The SVG path element the particle is travelling along, if any. Renderers
+   * that want to follow the path's curvature (e.g. the beam) can clone its
+   * `d` attribute and drive `stroke-dasharray`/`stroke-dashoffset`. Optional
+   * because some rendering contexts may not expose a backing path.
+   */
+  pathEl?: SVGPathElement;
+}
+
+/** Pluggable particle renderer — create/update/destroy lifecycle. */
+export interface ParticleRenderer {
+  create: (svgLayer: SVGElement, options: ParticleOptions) => SVGElement;
+  update: (el: SVGElement, state: ParticleRenderState) => void;
+  destroy: (el: SVGElement) => void;
 }
 
 /** Handle returned by sendParticle() for tracking a particle's position. */
@@ -684,6 +779,46 @@ export interface ParticleHandle {
   stop(): void;
   /** Resolves when the particle finishes (naturally or via stop()). */
   readonly finished: Promise<void>;
+}
+
+/** Options for sendParticleBurst — sequenced multi-particle emission. */
+export interface BurstOptions extends ParticleOptions {
+  /** Number of particles to fire. */
+  count: number;
+  /** Milliseconds between each particle start. Default: 100. */
+  stagger?: number;
+  /** Per-particle customization function. Receives index and total count. */
+  variant?: (i: number, total: number) => Partial<ParticleOptions>;
+}
+
+/** Handle returned by sendParticleBurst() for controlling the burst. */
+export interface ParticleBurstHandle {
+  /** Individual particle handles (grows as staggered particles fire). */
+  readonly handles: ParticleHandle[];
+  /** Resolves when all particles in the burst have completed. */
+  readonly finished: Promise<void>;
+  /** Cancel all pending timers and stop all active particles. */
+  stopAll(): void;
+}
+
+/** Options for sendConverging — fan-in particle visualization. */
+export interface ConvergingOptions extends ParticleOptions {
+  /** ID of the target node where all particles converge. */
+  targetNodeId: string;
+  /** Whether to synchronize particle arrival or departure. Default: 'arrival'. */
+  synchronize?: 'arrival' | 'departure';
+  /** Called when all particles have arrived at the target. */
+  onAllArrived?: () => void;
+}
+
+/** Handle returned by sendConverging() for controlling the fan-in. */
+export interface ConvergingHandle {
+  /** Individual particle handles. */
+  readonly handles: ParticleHandle[];
+  /** Resolves when all converging particles have completed. */
+  readonly finished: Promise<void>;
+  /** Stop all particles and cancel pending timers. */
+  stopAll(): void;
 }
 
 // ─── Flow Canvas Config ─────────────────────────────────────────────────────
@@ -995,6 +1130,11 @@ export interface FlowCanvasConfig {
   /** Max snapshots to retain. Default: 50 */
   historyMaxSize?: number;
 
+  // ── Animation ──────────────────────────────────────────────────
+  /** Respect prefers-reduced-motion media query for $flow.animate().
+   *  'auto' (default): check media query. true: always reduce. false: never reduce. */
+  respectReducedMotion?: boolean | 'auto';
+
   // ── Event callbacks ────────────────────────────────────────────────
 
   /** Called when a node is clicked */
@@ -1189,6 +1329,7 @@ export interface FlowCanvasConfig {
 export interface ElementTimingOverrides {
   _duration?: number;
   _easing?: EasingName | ((t: number) => number);
+  _motion?: MotionConfig | string;
 }
 
 /** Node animation targets. */
@@ -1234,22 +1375,63 @@ export interface AnimateOptions {
   duration?: number;
   /** Easing preset or custom function. Default: 'easeInOut'. */
   easing?: EasingName | ((t: number) => number);
+  /** Physics-based motion config or preset string (e.g. 'spring.wobbly'). */
+  motion?: MotionConfig | string;
+  /** Maximum duration in ms when using physics-based motion. Default: 5000. */
+  maxDuration?: number;
   /** Delay before starting in ms. Default: 0. */
   delay?: number;
-  /** true = loop forever, 'reverse' = ping-pong. Default: false. */
-  loop?: boolean | 'reverse';
+  /** true = loop forever, 'reverse' | 'ping-pong' = ping-pong. Default: false. */
+  loop?: boolean | 'reverse' | 'ping-pong';
+  /** Start position. 'end' snaps to target and plays backward. Default: 'start'. */
+  startAt?: 'start' | 'end';
+  /** Called once on the first tick after delay elapses. */
+  onStart?: () => void;
   /** Called each frame with progress 0–1. */
   onProgress?: (progress: number) => void;
   /** Called when animation completes. */
   onComplete?: () => void;
+  /** Single tag for grouping animations by identity. */
+  tag?: string;
+  /** Multiple tags for grouping animations. Merged with `tag` when both are provided. */
+  tags?: string[];
+  /**
+   * Predicate evaluated once per frame. When it returns `false`, the animation
+   * auto-cancels using the mode defined by `whileStopMode`.
+   */
+  while?: () => boolean;
+  /**
+   * Declarative binding that is compiled into a `while` predicate by the canvas
+   * integration layer (Task 8). The Animator itself only handles `while`.
+   */
+  boundTo?: { node: string; property: string; equals: any } | { edge: string; property: string; equals: any };
+  /**
+   * Controls how the animation stops when `while` returns false.
+   * - 'jump-end'  — snap to target values (default)
+   * - 'rollback'  — revert to snapshot values
+   * - 'freeze'    — leave at current interpolated value
+   */
+  whileStopMode?: 'jump-end' | 'rollback' | 'freeze';
+}
+
+/** Options for handle.stop() / stopAll(). */
+export interface StopOptions {
+  mode?: 'jump-end' | 'rollback' | 'freeze';
 }
 
 /** Handle returned by animate(). */
 export interface FlowAnimationHandle {
   pause(): void;
   resume(): void;
-  stop(): void;
+  stop(options?: StopOptions): void;
   reverse(): void;
+  play(): void;
+  playForward(): void;
+  playBackward(): void;
+  restart(options?: { direction?: 'forward' | 'backward' }): void;
+  readonly direction: 'forward' | 'backward';
+  readonly isFinished: boolean;
+  readonly currentValue: Map<string, number | string>;
   readonly finished: Promise<void>;
   /** @internal Node IDs targeted by this animation (used by follow()). */
   _targetNodeIds?: string[];
@@ -1390,6 +1572,48 @@ export interface FlowInstance {
 
   /** Fire a particle along an edge path. Returns a handle for tracking, or undefined if the particle couldn't be created. */
   sendParticle(edgeId: string, options?: ParticleOptions): ParticleHandle | undefined;
+
+  /** Fire a particle along an arbitrary SVG path string. A temporary invisible path element is injected and cleaned up on completion. */
+  sendParticleAlongPath(svgPath: string, options?: ParticleOptions): ParticleHandle | undefined;
+
+  /** Fire a particle along a straight line between two node centers. */
+  sendParticleBetween(sourceNodeId: string, targetNodeId: string, options?: ParticleOptions): ParticleHandle | undefined;
+
+  /** Fire a burst of staggered particles along an edge. */
+  sendParticleBurst(edgeId: string, options: BurstOptions): ParticleBurstHandle;
+
+  /** Fire particles from multiple edges converging on a target node. */
+  sendConverging(sourceEdgeIds: string[], options: ConvergingOptions): ConvergingHandle;
+
+  /** Register a custom particle renderer by name so it can be used via `renderer: 'name'` in sendParticle* options. */
+  registerParticleRenderer(name: string, renderer: ParticleRenderer): void;
+
+  /** Get all tracked animation handles, optionally filtered by tag. */
+  getHandles(filter?: { tag?: string; tags?: string[] }): FlowAnimationHandle[];
+
+  /** Cancel all animations matching a tag filter. */
+  cancelAll(filter: { tag?: string; tags?: string[] }, options?: StopOptions): void;
+
+  /** Pause all animations matching a tag filter. */
+  pauseAll(filter: { tag?: string; tags?: string[] }): void;
+
+  /** Resume all animations matching a tag filter. */
+  resumeAll(filter: { tag?: string; tags?: string[] }): void;
+
+  /** Create a named group that auto-tags all animations made through it. */
+  group(name: string): FlowGroup;
+
+  /** Create a transaction for grouped rollback of multiple animations. */
+  transaction(fn: () => Promise<void> | void): Transaction;
+
+  /** Capture current canvas state. Call restore() to revert. */
+  snapshot(): { restore: () => void };
+
+  /** Record canvas animation events during fn() execution. Returns a Recording. */
+  record(fn: () => Promise<void> | void, options?: RecordOptions): Promise<Recording>;
+
+  /** Replay a previously recorded Recording on this canvas. Returns a ReplayHandle. */
+  replay(recording: Recording, options?: ReplayOptions): ReplayHandle;
 
   /** Condense a node — switch to summary view hiding internal rows */
   condenseNode(id: string): void;

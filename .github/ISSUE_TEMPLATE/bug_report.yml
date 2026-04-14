@@ -1,0 +1,68 @@
+name: Bug Report
+description: Report something that isn't working correctly
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill out the information below to help us reproduce and fix it.
+
+  - type: input
+    id: version
+    attributes:
+      label: AlpineFlow version
+      description: What version are you using? (run `npm list @getartisanflow/alpineflow`)
+      placeholder: "e.g. 0.1.2-alpha"
+    validations:
+      required: true
+
+  - type: input
+    id: alpine-version
+    attributes:
+      label: Alpine.js version
+      description: What version of Alpine.js are you using?
+      placeholder: "e.g. 3.15.8"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear description of what the bug is and what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to reproduce the issue. A link to a reproduction repo or CodeSandbox is ideal.
+      placeholder: |
+        1. Create a flow with these nodes...
+        2. Click on...
+        3. See error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: code
+    attributes:
+      label: Relevant code
+      description: The minimal code snippet that triggers the bug.
+      render: javascript
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser, OS, and any other relevant details.
+      placeholder: "Chrome 130, macOS 14, using Vite 6"
+
+  - type: textarea
+    id: errors
+    attributes:
+      label: Console errors
+      description: Any JavaScript errors or warnings from the browser console.
+      render: shell

@@ -80,29 +80,20 @@ The first argument accepts four target types:
 |---|---|---|
 | Node ID | `string` | Centers on the node, respects `nodeOrigin` and dimensions |
 | Position | `{ x, y }` | Centers on a fixed point in canvas coordinates |
-| ParticleHandle | `ParticleHandle` | Tracks a moving particle; auto-stops when particle completes |
-| AnimationHandle | `FlowAnimationHandle` | Tracks an animation in progress |
+| Particle handle | `ParticleHandle` | Tracks a moving particle; auto-stops when particle completes |
+| Animation handle | `FlowAnimationHandle` | Tracks an animation in progress |
 
 ## Options
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `zoom` | `number` | Current zoom | Zoom level to maintain while following |
-| `padding` | `number` | — | Viewport padding around the target |
+
+The follow loop uses a fixed lerp factor (0.08) for smoothing and does not currently expose tuning options like `speed` or `padding` — reserved for future use.
 
 ## Return Value
 
-Returns a `FlowAnimationHandle` with `stop()` and `finished`:
-
-```ts
-interface FlowAnimationHandle {
-    pause(): void;
-    resume(): void;
-    stop(): void;
-    reverse(): void;
-    readonly finished: Promise<void>;
-}
-```
+Returns a `FlowAnimationHandle`. In practice you'll mostly use `.stop()` (to end tracking) and `await .finished` (which resolves when the target is done). See [Animate & Update → FlowAnimationHandle](./animate.md#flowanimationhandle) for the full interface including `pause`/`resume`/`reverse`/`direction`/etc.
 
 ## Follow an Animated Node
 
@@ -251,7 +242,7 @@ Pan the camera to keep a node centered using a declarative directive on any clic
 <button x-flow-follow="'node-1'">Follow Node 1</button>
 
 <!-- Follow with options -->
-<button x-flow-follow="{ target: 'node-1', zoom: 1.5, speed: 300 }">
+<button x-flow-follow="{ target: 'node-1', zoom: 1.5 }">
   Follow (zoomed)
 </button>
 

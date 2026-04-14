@@ -74,4 +74,27 @@ describe('resolveEasing', () => {
     expect(fn(1)).toBe(1);
     expect(fn(0.5)).toBe(0.5); // easeInOut quad
   });
+
+  // ── Expanded easing presets ───────────────────────────────────────────
+
+  describe('expanded easing presets', () => {
+    const expandedNames: EasingName[] = [
+      'easeCubicIn', 'easeCubicOut', 'easeCubicInOut',
+      'easeCircIn', 'easeCircOut', 'easeCircInOut',
+      'easeSinIn', 'easeSinOut', 'easeSinInOut',
+      'easeExpoIn', 'easeExpoOut', 'easeExpoInOut',
+      'easeBounceIn', 'easeBounceInOut',
+      'easeElasticIn', 'easeElasticInOut',
+      'easeBackIn', 'easeBackOut',
+    ];
+
+    for (const name of expandedNames) {
+      it(`resolves "${name}" to a function`, () => {
+        const fn = resolveEasing(name);
+        expect(typeof fn).toBe('function');
+        expect(fn(0)).toBeCloseTo(0, 1);
+        expect(fn(1)).toBeCloseTo(1, 1);
+      });
+    }
+  });
 });

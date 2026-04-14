@@ -441,4 +441,1951 @@ describe('Animator', () => {
     // Final value is the exact "to" string since we apply entry.to on completion
     expect(value).toBe('#ffffff');
   });
+
+  it('onStart fires on the first tick', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let started = false;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 500, onStart: () => { started = true; } },
+    );
+
+    expect(started).toBe(false);
+    await advanceTimers(16);
+    expect(started).toBe(true);
+  });
+
+  it('onStart fires after delay elapses', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let started = false;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 500, delay: 200, onStart: () => { started = true; } },
+    );
+
+    await advanceTimers(100);
+    expect(started).toBe(false);
+    await advanceTimers(200);
+    expect(started).toBe(true);
+  });
+
+  it('onStart fires only once', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let count = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 500, onStart: () => { count++; } },
+    );
+
+    await advanceTimers(16);
+    await advanceTimers(16);
+    await advanceTimers(16);
+    expect(count).toBe(1);
+  });
+
+  it('onStart fires immediately for duration 0', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let started = false;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 0, onStart: () => { started = true; } },
+    );
+
+    expect(started).toBe(true);
+  });
+
+  it('pause/resume uses engine-relative time, not wall-clock', async () => {
+    // Use a custom scheduler that passes its own counter as `elapsed`,
+    // independent of performance.now(). This lets us simulate the engine
+    // elapsed diverging from wall-clock time.
+    let engineElapsed = 0;
+    let scheduledCb: FrameRequestCallback | null = null;
+
+    const detachedScheduler: FrameScheduler = {
+      request: (cb) => {
+        scheduledCb = cb;
+        return 1;
+      },
+      cancel: () => {
+        scheduledCb = null;
+      },
+    };
+
+    /** Advance engine by `ms`, firing as many 16ms frames as needed. */
+    function driveEngine(ms: number): void {
+      const target = engineElapsed + ms;
+      while (engineElapsed < target && scheduledCb) {
+        engineElapsed = Math.min(engineElapsed + 16, target);
+        const cb = scheduledCb;
+        scheduledCb = null;
+        cb(engineElapsed);
+      }
+    }
+
+    const engine = new AnimationEngine();
+    engine.setScheduler(detachedScheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 1000, easing: 'linear' },
+    );
+
+    // Advance ~500ms of engine time (roughly 50% through)
+    driveEngine(500);
+    const valueAtPause = value;
+    expect(valueAtPause).toBeGreaterThan(40);
+    expect(valueAtPause).toBeLessThan(60);
+
+    // Pause the animation
+    handle.pause();
+
+    // Simulate wall-clock advancing 2000ms — but we do NOT drive the engine.
+    // This diverges wall-clock from engine time. If pause used performance.now()
+    // those 2000ms would corrupt startTime on resume.
+    engineElapsed += 2000;
+
+    // Resume
+    handle.resume();
+
+    // Drive one frame so the resume adjustment is applied
+    driveEngine(16);
+
+    // The animation should still be at ~50%, not jumped to completion
+    expect(value).toBeGreaterThan(40);
+    expect(value).toBeLessThan(60);
+
+    // Advance another ~600ms of engine time so the animation reaches completion
+    driveEngine(600);
+    expect(value).toBe(100);
+  });
+});
+
+describe('Animator — per-handle snapshot', () => {
+  it('captures from-values at animate() time as _snapshot', () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const handle = animator.animate(
+      [{ key: 'x', from: 50, to: 200, apply: () => {} }],
+      { duration: 500 },
+    );
+
+    expect(handle._snapshot.get('x')).toBe(50);
+  });
+
+  it('captures target values as _target', () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 500 },
+    );
+
+    expect(handle._target.get('x')).toBe(100);
+  });
+
+  it('preserves snapshot after animation completes', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const handle = animator.animate(
+      [{ key: 'x', from: 10, to: 90, apply: () => {} }],
+      { duration: 80 },
+    );
+
+    // Advance past duration to complete the animation
+    await advanceTimers(160);
+    await handle.finished;
+
+    // Maps must survive after completion
+    expect(handle._snapshot.get('x')).toBe(10);
+    expect(handle._target.get('x')).toBe(90);
+  });
+
+  it('captures in-flight value in new handle snapshot during blend/compose', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const apply = (v: number | string): void => { value = v as number; };
+
+    // Animate x from 0 → 100 over 160ms with linear easing
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply }],
+      { duration: 160, easing: 'linear' },
+    );
+
+    // Advance ~80ms to reach ~50%
+    await advanceTimers(80);
+    const midValue = value;
+    expect(midValue).toBeGreaterThan(20);
+    expect(midValue).toBeLessThan(80);
+
+    // Start a new animation on the same key; blend/compose will capture mid-value as new from
+    const handle2 = animator.animate(
+      [{ key: 'x', from: 0, to: 200, apply }],
+      { duration: 160, easing: 'linear' },
+    );
+
+    // The new handle's snapshot should reflect the captured mid-flight value
+    expect(handle2._snapshot.get('x')).toBeGreaterThan(20);
+    expect(handle2._snapshot.get('x')).toBeLessThan(80);
+    expect(handle2._target.get('x')).toBe(200);
+
+    handle2.stop();
+  });
+
+  it('provides snapshot and target for duration-0 instant animations', () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const handle = animator.animate(
+      [{ key: 'y', from: 5, to: 75, apply: () => {} }],
+      { duration: 0 },
+    );
+
+    expect(handle._snapshot.get('y')).toBe(5);
+    expect(handle._target.get('y')).toBe(75);
+  });
+});
+
+describe('Animator — configurable stop modes', () => {
+  it('stop() defaults to jump-end (existing behavior)', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 500, easing: 'linear' },
+    );
+
+    // Advance to ~50%
+    await advanceTimers(250);
+    expect(value).toBeGreaterThan(0);
+    expect(value).toBeLessThan(100);
+
+    handle.stop();
+    expect(value).toBe(100);
+  });
+
+  it('stop({ mode: "rollback" }) reverts to snapshot values', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 500, easing: 'linear' },
+    );
+
+    // Advance to ~50%
+    await advanceTimers(250);
+    expect(value).toBeGreaterThan(0);
+    expect(value).toBeLessThan(100);
+
+    handle.stop({ mode: 'rollback' });
+    expect(value).toBe(0);
+  });
+
+  it('stop({ mode: "freeze" }) leaves at current value', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 500, easing: 'linear' },
+    );
+
+    // Advance to ~50%
+    await advanceTimers(250);
+    const frozenAt = value;
+    expect(frozenAt).toBeGreaterThan(0);
+    expect(frozenAt).toBeLessThan(100);
+
+    handle.stop({ mode: 'freeze' });
+    // Value should remain exactly where it was
+    expect(value).toBe(frozenAt);
+  });
+
+  it('stopAll({ mode: "rollback" }) reverts all animations', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let valueA = 50;
+    let valueB = 200;
+
+    animator.animate(
+      [{ key: 'a', from: 50, to: 150, apply: (v) => { valueA = v as number; } }],
+      { duration: 500, easing: 'linear' },
+    );
+    animator.animate(
+      [{ key: 'b', from: 200, to: 400, apply: (v) => { valueB = v as number; } }],
+      { duration: 500, easing: 'linear' },
+    );
+
+    // Advance partway
+    await advanceTimers(250);
+    expect(valueA).toBeGreaterThan(50);
+    expect(valueB).toBeGreaterThan(200);
+
+    animator.stopAll({ mode: 'rollback' });
+
+    expect(valueA).toBe(50);
+    expect(valueB).toBe(200);
+    expect(animator.active).toBe(false);
+  });
+
+  it('blend/compose uses superseded mode (no onComplete)', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const onComplete = vi.fn();
+
+    // Start first animation with onComplete spy
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 500, easing: 'linear', onComplete },
+    );
+
+    // Advance partway so the first group has a current value
+    await advanceTimers(250);
+
+    // Start second animation on the same key — steals ownership, supersedes first
+    animator.animate(
+      [{ key: 'x', from: 0, to: 200, apply: () => {} }],
+      { duration: 500, easing: 'linear' },
+    );
+
+    // onComplete should NOT have been called (superseded, not a consumer stop)
+    expect(onComplete).not.toHaveBeenCalled();
+
+    // Advance to completion of second animation
+    await advanceTimers(500);
+  });
+});
+
+describe('Animator — direction state machine', () => {
+  it('handle.direction starts as "forward"', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 160 },
+    );
+
+    expect(handle.direction).toBe('forward');
+    handle.stop();
+  });
+
+  it('handle.isFinished is true when animation reaches endpoint', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 80 },
+    );
+
+    expect(handle.isFinished).toBe(false);
+
+    // Advance past duration
+    await advanceTimers(160);
+    await handle.finished;
+
+    expect(handle.isFinished).toBe(true);
+  });
+
+  it('reverse() on a finished handle plays backward to snapshot', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear' },
+    );
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(handle.isFinished).toBe(true);
+    expect(value).toBe(100);
+
+    // Reverse the finished handle
+    handle.reverse();
+    expect(handle.direction).toBe('backward');
+    expect(handle.isFinished).toBe(false);
+
+    // Advance to completion of backward animation
+    await advanceTimers(160);
+    await handle.finished;
+
+    // Should be back at snapshot value
+    expect(value).toBe(0);
+    expect(handle.isFinished).toBe(true);
+  });
+
+  it('restart() resets to snapshot and plays forward again', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear' },
+    );
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(100);
+
+    // Restart
+    handle.restart();
+    expect(handle.direction).toBe('forward');
+    expect(handle.isFinished).toBe(false);
+
+    // Value should be reset to snapshot
+    expect(value).toBe(0);
+
+    // Advance to completion again
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(100);
+  });
+
+  it('restart({ direction: "backward" }) resets to target and plays backward', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear' },
+    );
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(100);
+
+    // Restart backward
+    handle.restart({ direction: 'backward' });
+    expect(handle.direction).toBe('backward');
+
+    // Value should be at target (reset for backward play)
+    expect(value).toBe(100);
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(0);
+  });
+
+  it('playBackward() sets direction and plays from current position', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear' },
+    );
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(100);
+
+    // playBackward from finished state
+    handle.playBackward();
+    expect(handle.direction).toBe('backward');
+    expect(handle.isFinished).toBe(false);
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(0);
+  });
+
+  it('playForward() sets direction and plays from current position', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear' },
+    );
+
+    // Advance to completion, then reverse to finish backward
+    await advanceTimers(160);
+    await handle.finished;
+    handle.reverse();
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(0);
+    expect(handle.direction).toBe('backward');
+
+    // Now playForward from the backward-finished state
+    handle.playForward();
+    expect(handle.direction).toBe('forward');
+    expect(handle.isFinished).toBe(false);
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(100);
+  });
+
+  it('play() on a finished handle restarts in current direction', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear' },
+    );
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(100);
+    expect(handle.isFinished).toBe(true);
+
+    // play() on finished restarts in current (forward) direction
+    handle.play();
+    expect(handle.isFinished).toBe(false);
+
+    // Advance to completion again
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(100);
+  });
+
+  it('play() on a paused handle resumes', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 160, easing: 'linear' },
+    );
+
+    // Advance partway and pause
+    await advanceTimers(48);
+    const midValue = value;
+    expect(midValue).toBeGreaterThan(0);
+    handle.pause();
+
+    // Advance while paused — value should not change
+    await advanceTimers(80);
+    expect(value).toBe(midValue);
+
+    // play() should resume
+    handle.play();
+
+    // Advance to completion
+    await advanceTimers(160);
+    expect(value).toBe(100);
+  });
+
+  it('loop "ping-pong" works as an alias for "reverse"', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const values: number[] = [];
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { values.push(v as number); } }],
+      { duration: 80, easing: 'linear', loop: 'ping-pong' },
+    );
+
+    // Advance through ~2 cycles (160ms)
+    await advanceTimers(176);
+
+    // Should ping-pong just like loop: 'reverse'
+    const peak = Math.max(...values);
+    const peakIndex = values.indexOf(peak);
+    expect(peak).toBeGreaterThan(80);
+
+    // Values after the peak should include some that are decreasing
+    const afterPeak = values.slice(peakIndex + 1);
+    const decreasingValues = afterPeak.filter((v) => v < peak - 10);
+    expect(decreasingValues.length).toBeGreaterThan(0);
+
+    handle.stop();
+  });
+
+  it('startAt "end" starts at target with backward direction', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear', startAt: 'end' },
+    );
+
+    // Should immediately be at target
+    expect(value).toBe(100);
+    expect(handle.direction).toBe('backward');
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+
+    // Should be at snapshot value
+    expect(value).toBe(0);
+  });
+
+  it('currentValue reflects latest interpolated state', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 160, easing: 'linear' },
+    );
+
+    // Initially at start
+    expect(handle.currentValue.get('x')).toBe(0);
+
+    // Advance partway
+    await advanceTimers(80);
+    const cv = handle.currentValue.get('x') as number;
+    expect(cv).toBeGreaterThan(0);
+    expect(cv).toBeLessThan(100);
+    // currentValue should match what was applied
+    expect(cv).toBe(value);
+
+    handle.stop();
+  });
+
+  it('reverse() mid-animation flips direction smoothly', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 160, easing: 'linear' },
+    );
+
+    // Advance to ~50%
+    await advanceTimers(80);
+    const midValue = value;
+    expect(midValue).toBeGreaterThan(20);
+    expect(midValue).toBeLessThan(80);
+    expect(handle.direction).toBe('forward');
+
+    // Reverse mid-flight
+    handle.reverse();
+    expect(handle.direction).toBe('backward');
+
+    // Advance — value should head back toward 0
+    await advanceTimers(80);
+    expect(value).toBeLessThan(midValue);
+
+    handle.stop();
+  });
+
+  it('finished promise renews after reverse() on finished handle', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear' },
+    );
+
+    // Complete forward
+    await advanceTimers(160);
+    const firstFinished = handle.finished;
+    await firstFinished;
+
+    // Reverse
+    handle.reverse();
+
+    // New finished promise should be different from the old one
+    const secondFinished = handle.finished;
+    expect(secondFinished).not.toBe(firstFinished);
+
+    // Complete backward
+    await advanceTimers(160);
+    await secondFinished;
+    expect(value).toBe(0);
+    expect(handle.isFinished).toBe(true);
+  });
+});
+
+// ── Animator — tagged handles ─────────────────────────────────────────────────
+
+describe('Animator — tagged handles', () => {
+  it('animate with tag registers handle in registry', () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const entry: PropertyEntry = { key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } };
+
+    const handle = animator.animate([entry], { duration: 100, tag: 'slide' });
+
+    const handles = animator.registry.getHandles({ tag: 'slide' });
+    expect(handles).toContain(handle);
+    expect((handle as any)._tags).toEqual(['slide']);
+  });
+
+  it('animate with tags array registers handle with all tags', () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const entry: PropertyEntry = { key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } };
+
+    const handle = animator.animate([entry], { duration: 100, tags: ['entrance', 'node-1'] });
+
+    expect((handle as any)._tags).toEqual(['entrance', 'node-1']);
+    expect(animator.registry.getHandles({ tag: 'entrance' })).toContain(handle);
+    expect(animator.registry.getHandles({ tag: 'node-1' })).toContain(handle);
+  });
+
+  it('animate with tag and tags merges both', () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const entry: PropertyEntry = { key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } };
+
+    const handle = animator.animate([entry], { duration: 100, tag: 'primary', tags: ['secondary'] });
+
+    expect((handle as any)._tags).toEqual(['primary', 'secondary']);
+  });
+
+  it('handles auto-deregister after completion', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const entry: PropertyEntry = { key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } };
+
+    const handle = animator.animate([entry], { duration: 100, tag: 'slide' });
+
+    expect(animator.registry.getHandles({ tag: 'slide' })).toContain(handle);
+
+    // Run animation to completion
+    await advanceTimers(200);
+    await handle.finished;
+
+    // Microtask for deregister must flush
+    await Promise.resolve();
+
+    expect(animator.registry.getHandles({ tag: 'slide' })).not.toContain(handle);
+  });
+
+  it('registry.cancelAll stops tagged animations', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const values: number[] = [0, 0];
+    const entries: PropertyEntry[] = [
+      { key: 'x', from: 0, to: 100, apply: (v) => { values[0] = v as number; } },
+      { key: 'y', from: 0, to: 200, apply: (v) => { values[1] = v as number; } },
+    ];
+
+    animator.animate([entries[0]], { duration: 500, tag: 'move' });
+    animator.animate([entries[1]], { duration: 500, tag: 'move' });
+
+    // Advance partway
+    await advanceTimers(100);
+    const valueAtCancel0 = values[0];
+    const valueAtCancel1 = values[1];
+
+    // Cancel all 'move' animations (jump-end snaps to target)
+    animator.registry.cancelAll({ tag: 'move' });
+
+    // Values should have been snapped to final target (jump-end mode)
+    expect(values[0]).toBe(100);
+    expect(values[1]).toBe(200);
+
+    // No further changes after cancel
+    await advanceTimers(500);
+    expect(values[0]).toBe(100);
+    expect(values[1]).toBe(200);
+
+    // Values were mid-way before cancel
+    expect(valueAtCancel0).toBeGreaterThan(0);
+    expect(valueAtCancel0).toBeLessThan(100);
+  });
+
+  it('registry.pauseAll pauses tagged animations', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const entry: PropertyEntry = { key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } };
+
+    animator.animate([entry], { duration: 500, tag: 'slide' });
+
+    await advanceTimers(100);
+    animator.registry.pauseAll({ tag: 'slide' });
+
+    const valueAtPause = value;
+    await advanceTimers(200);
+
+    // Value should not have changed after pause
+    expect(value).toBeCloseTo(valueAtPause, 0);
+  });
+
+  it('handles without tags are not returned by tag filter', () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const entry: PropertyEntry = { key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } };
+
+    // Animate without any tag
+    const handle = animator.animate([entry], { duration: 100 });
+
+    expect((handle as any)._tags).toBeUndefined();
+    expect(animator.registry.getHandles({ tag: 'anything' })).not.toContain(handle);
+  });
+
+  it('instant (duration 0) animations auto-deregister after microtask', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const entry: PropertyEntry = { key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } };
+
+    const handle = animator.animate([entry], { duration: 0, tag: 'snap' });
+
+    // Registered synchronously
+    expect(animator.registry.getHandles({ tag: 'snap' })).toContain(handle);
+
+    // After microtask flush, deregistered
+    await Promise.resolve();
+
+    expect(animator.registry.getHandles({ tag: 'snap' })).not.toContain(handle);
+  });
+});
+
+// ── State-aware cancellation ─────────────────────────────────────────────────
+
+describe('Animator — state-aware cancellation', () => {
+  it('while: predicate auto-stops animation when it returns false', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let condition = true;
+    let x = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { x = v as number; } }],
+      { duration: 1000, while: () => condition },
+    );
+
+    await advanceTimers(500); // halfway, condition still true
+    expect(x).toBeGreaterThan(0);
+    expect(x).toBeLessThan(100);
+
+    condition = false; // flip the predicate
+    await advanceTimers(16); // one frame
+
+    expect(x).toBe(100); // jump-end (default whileStopMode)
+  });
+
+  it('while: predicate does not stop when it returns true', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let x = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { x = v as number; } }],
+      { duration: 500, while: () => true },
+    );
+
+    await advanceTimers(600);
+    expect(x).toBe(100); // completed normally
+  });
+
+  it('whileStopMode: "rollback" reverts to snapshot when predicate fails', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let condition = true;
+    let x = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { x = v as number; } }],
+      { duration: 1000, while: () => condition, whileStopMode: 'rollback' },
+    );
+
+    await advanceTimers(500);
+    condition = false;
+    await advanceTimers(16);
+
+    expect(x).toBe(0); // rolled back to snapshot
+  });
+
+  it('whileStopMode: "freeze" leaves at current value', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let condition = true;
+    let x = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { x = v as number; } }],
+      { duration: 1000, while: () => condition, whileStopMode: 'freeze' },
+    );
+
+    await advanceTimers(500);
+    const midValue = x;
+    condition = false;
+    await advanceTimers(16);
+
+    expect(x).toBe(midValue); // frozen at current position
+  });
+
+  it('while: predicate is not evaluated when animation is paused', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let condition = true;
+    let x = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { x = v as number; } }],
+      { duration: 1000, while: () => condition },
+    );
+
+    await advanceTimers(200);
+    const valueAtPause = x;
+    handle.pause();
+
+    // Flip the predicate while paused
+    condition = false;
+    await advanceTimers(200); // advance time — tick is skipped while paused
+
+    // Should NOT have stopped because tick is skipped while paused
+    expect(x).toBeCloseTo(valueAtPause, 0);
+    expect(handle.isFinished).toBe(false);
+  });
+});
+
+// ── I-1: _revive() re-registers handle in registry ────────────────────────────
+
+describe('Animator — revive re-registers handle in registry', () => {
+  it('reverse() on a finished handle re-registers it in getHandles()', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear', tag: 'revive-test' },
+    );
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(handle.isFinished).toBe(true);
+
+    // Flush microtask that deregisters the handle
+    await Promise.resolve();
+    expect(animator.registry.getHandles({ tag: 'revive-test' })).not.toContain(handle);
+
+    // Reverse the finished handle — should re-register
+    handle.reverse();
+    expect(handle.isFinished).toBe(false);
+
+    // Handle should be back in the registry
+    expect(animator.registry.getHandles({ tag: 'revive-test' })).toContain(handle);
+
+    // Complete the reversed animation
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(0);
+  });
+
+  it('play() on a finished handle re-registers it in getHandles()', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear', tag: 'play-revive' },
+    );
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+
+    // Flush microtask
+    await Promise.resolve();
+    expect(animator.registry.getHandles({ tag: 'play-revive' })).not.toContain(handle);
+
+    // play() on finished — should re-register
+    handle.play();
+
+    expect(animator.registry.getHandles({ tag: 'play-revive' })).toContain(handle);
+
+    // Complete again
+    await advanceTimers(160);
+    await handle.finished;
+    expect(value).toBe(100);
+  });
+
+  it('guarded microtask does not unregister a revived handle', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 80, easing: 'linear', tag: 'guard-test' },
+    );
+
+    // Advance to completion
+    await advanceTimers(160);
+    await handle.finished;
+    expect(handle.isFinished).toBe(true);
+
+    // Reverse BEFORE the microtask flushes — the guard should prevent deregister
+    handle.reverse();
+    expect(handle.isFinished).toBe(false);
+
+    // Flush microtask — should NOT unregister because group is no longer finished
+    await Promise.resolve();
+    expect(animator.registry.getHandles({ tag: 'guard-test' })).toContain(handle);
+
+    handle.stop();
+  });
+});
+
+// ── I-2: _playDirection() startTime adjustment ────────────────────────────────
+
+describe('Animator — playDirection mid-flight timing', () => {
+  it('playBackward() mid-animation does not cause a visual jump', async () => {
+    // Use a detached scheduler for precise control
+    let engineElapsed = 0;
+    let scheduledCb: FrameRequestCallback | null = null;
+
+    const detachedScheduler: FrameScheduler = {
+      request: (cb) => {
+        scheduledCb = cb;
+        return 1;
+      },
+      cancel: () => {
+        scheduledCb = null;
+      },
+    };
+
+    function driveEngine(ms: number): void {
+      const target = engineElapsed + ms;
+      while (engineElapsed < target && scheduledCb) {
+        engineElapsed = Math.min(engineElapsed + 16, target);
+        const cb = scheduledCb;
+        scheduledCb = null;
+        cb(engineElapsed);
+      }
+    }
+
+    const engine = new AnimationEngine();
+    engine.setScheduler(detachedScheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 1000, easing: 'linear' },
+    );
+
+    // Advance to ~50%
+    driveEngine(500);
+    const valueBeforeFlip = value;
+    expect(valueBeforeFlip).toBeGreaterThan(40);
+    expect(valueBeforeFlip).toBeLessThan(60);
+
+    // Switch to backward mid-flight
+    handle.playBackward();
+
+    // Drive one frame and check continuity — should not jump to 100 or 0
+    driveEngine(16);
+    const valueAfterFlip = value;
+
+    // Value should be close to where it was (within ~2% movement per frame)
+    expect(Math.abs(valueAfterFlip - valueBeforeFlip)).toBeLessThan(10);
+
+    // Value should now be heading toward 0 (backward direction)
+    driveEngine(200);
+    expect(value).toBeLessThan(valueBeforeFlip);
+
+    handle.stop();
+  });
+
+  it('playForward() mid-backward-animation adjusts startTime seamlessly', async () => {
+    let engineElapsed = 0;
+    let scheduledCb: FrameRequestCallback | null = null;
+
+    const detachedScheduler: FrameScheduler = {
+      request: (cb) => {
+        scheduledCb = cb;
+        return 1;
+      },
+      cancel: () => {
+        scheduledCb = null;
+      },
+    };
+
+    function driveEngine(ms: number): void {
+      const target = engineElapsed + ms;
+      while (engineElapsed < target && scheduledCb) {
+        engineElapsed = Math.min(engineElapsed + 16, target);
+        const cb = scheduledCb;
+        scheduledCb = null;
+        cb(engineElapsed);
+      }
+    }
+
+    const engine = new AnimationEngine();
+    engine.setScheduler(detachedScheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 1000, easing: 'linear', startAt: 'end' },
+    );
+
+    // Starting backward from 100, advance ~500ms to ~50%
+    driveEngine(500);
+    const valueBeforeFlip = value;
+    expect(valueBeforeFlip).toBeGreaterThan(40);
+    expect(valueBeforeFlip).toBeLessThan(60);
+
+    // Switch to forward mid-flight
+    handle.playForward();
+
+    // Drive one frame — should not jump
+    driveEngine(16);
+    const valueAfterFlip = value;
+    expect(Math.abs(valueAfterFlip - valueBeforeFlip)).toBeLessThan(10);
+
+    // Value should now head toward 100 (forward direction)
+    driveEngine(200);
+    expect(value).toBeGreaterThan(valueBeforeFlip);
+
+    handle.stop();
+  });
+});
+
+// ── Animator — spring motion ────────────────────────────────────────────────
+
+describe('Animator — spring motion', () => {
+  /**
+   * Create a detached scheduler for precise frame-by-frame physics control.
+   * Returns the scheduler, a drive function, and current elapsed getter.
+   */
+  function createDetachedScheduler() {
+    let engineElapsed = 0;
+    let scheduledCb: FrameRequestCallback | null = null;
+
+    const scheduler: FrameScheduler = {
+      request: (cb) => {
+        scheduledCb = cb;
+        return 1;
+      },
+      cancel: () => {
+        scheduledCb = null;
+      },
+    };
+
+    /** Advance engine by `ms`, firing as many 16ms frames as needed. */
+    function driveEngine(ms: number): void {
+      const target = engineElapsed + ms;
+      while (engineElapsed < target && scheduledCb) {
+        engineElapsed = Math.min(engineElapsed + 16, target);
+        const cb = scheduledCb;
+        scheduledCb = null;
+        cb(engineElapsed);
+      }
+    }
+
+    return { scheduler, driveEngine, getElapsed: () => engineElapsed };
+  }
+
+  it('spring animation settles at target', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    // Stiff spring (300/30) should settle well within 2 seconds
+    driveEngine(2000);
+
+    expect(value).toBeCloseTo(100, 0);
+  });
+
+  it('spring preset string resolves and works', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: 'spring.wobbly' },
+    );
+
+    // Wobbly spring should start moving toward target
+    driveEngine(200);
+    expect(value).toBeGreaterThan(0);
+
+    // Eventually settle
+    driveEngine(3000);
+    expect(value).toBeCloseTo(100, 0);
+  });
+
+  it('spring motion object works', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: { type: 'spring', stiffness: 200, damping: 20 } },
+    );
+
+    // Drive to settle
+    driveEngine(2000);
+    expect(value).toBeCloseTo(100, 0);
+  });
+
+  it('maxDuration caps runaway spring', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    let completed = false;
+    // Very underdamped spring: stiffness=300, damping=1 — will oscillate for a long time
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      {
+        duration: 300,
+        motion: { type: 'spring', stiffness: 300, damping: 1, mass: 1 },
+        maxDuration: 500,
+        onComplete: () => { completed = true; },
+      },
+    );
+
+    // Drive past maxDuration
+    driveEngine(600);
+
+    // Should have force-settled at target
+    expect(value).toBe(100);
+    expect(completed).toBe(true);
+    expect(handle.isFinished).toBe(true);
+  });
+
+  it('non-numeric property falls back with warning', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    let colorValue = '';
+    let numValue = 0;
+    animator.animate(
+      [
+        { key: 'color', from: '#000000', to: '#ffffff', apply: (v) => { colorValue = v as string; } },
+        { key: 'x', from: 0, to: 100, apply: (v) => { numValue = v as number; } },
+      ],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    // Non-numeric property should be snapped to target immediately
+    expect(colorValue).toBe('#ffffff');
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('"color" is non-numeric'),
+    );
+
+    // Numeric property should be driven by physics
+    driveEngine(2000);
+    expect(numValue).toBeCloseTo(100, 0);
+
+    warnSpy.mockRestore();
+  });
+
+  it('all non-numeric properties fall back to eased animation entirely', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    let colorValue = '';
+    animator.animate(
+      [{ key: 'color', from: '#000000', to: '#ffffff', apply: (v) => { colorValue = v as string; } }],
+      { duration: 160, easing: 'linear', motion: 'spring.stiff' },
+    );
+
+    expect(warnSpy).toHaveBeenCalled();
+
+    // Since all entries are non-numeric, physics falls back to eased.
+    // The color entry was already snapped by the physics init code.
+    // With no physics entries, isPhysics is false, so eased path runs.
+    await advanceTimers(80);
+    // Color should be mid-interpolation (eased path handles it)
+    // Actually the entry was already snapped to target, so the eased path
+    // interpolates from #ffffff to #ffffff (from was updated to to).
+    // Let's just verify it completes.
+    await advanceTimers(160);
+    expect(colorValue).toBe('#ffffff');
+
+    warnSpy.mockRestore();
+  });
+
+  it('handle.finished resolves when spring settles', async () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let resolved = false;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    handle.finished.then(() => { resolved = true; });
+
+    driveEngine(200);
+    // Flush microtask queue
+    await Promise.resolve();
+    // Stiff spring may not have settled yet in 200ms
+    // Drive more to ensure settlement
+    driveEngine(2000);
+    await Promise.resolve();
+
+    expect(resolved).toBe(true);
+    expect(handle.isFinished).toBe(true);
+  });
+
+  it('handle.reverse() on spring reverses toward snapshot', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    // Let spring settle at 100
+    driveEngine(2000);
+    expect(value).toBeCloseTo(100, 0);
+
+    // Reverse — should spring back to 0
+    handle.reverse();
+    expect(handle.direction).toBe('backward');
+
+    driveEngine(2000);
+    expect(value).toBeCloseTo(0, 0);
+  });
+
+  it('handle.restart() resets spring state', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    // Let spring settle at 100
+    driveEngine(2000);
+    expect(value).toBeCloseTo(100, 0);
+
+    // Restart — should reset to snapshot and play forward again
+    handle.restart();
+    expect(value).toBe(0);
+    expect(handle.direction).toBe('forward');
+
+    // Let it settle again
+    driveEngine(2000);
+    expect(value).toBeCloseTo(100, 0);
+  });
+
+  it('while: predicate works with spring motion', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let condition = true;
+    let value = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: 'spring.stiff', while: () => condition },
+    );
+
+    // Run a few frames
+    driveEngine(200);
+    expect(value).toBeGreaterThan(0);
+
+    // Flip the predicate
+    condition = false;
+    driveEngine(16); // one more frame triggers the check
+
+    // Default whileStopMode is 'jump-end', which should snap to target
+    expect(value).toBe(100);
+  });
+
+  it('stop({ mode: "rollback" }) works with spring', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    // Run a few frames
+    driveEngine(200);
+    expect(value).toBeGreaterThan(0);
+
+    handle.stop({ mode: 'rollback' });
+    expect(value).toBe(0);
+  });
+
+  it('stop({ mode: "freeze" }) works with spring', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    // Run a few frames
+    driveEngine(200);
+    const frozenAt = value;
+    expect(frozenAt).toBeGreaterThan(0);
+
+    handle.stop({ mode: 'freeze' });
+    expect(value).toBe(frozenAt);
+
+    // Ensure no further changes
+    driveEngine(500);
+    expect(value).toBe(frozenAt);
+  });
+
+  it('onStart fires on first physics tick', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let started = false;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      { duration: 300, motion: 'spring.stiff', onStart: () => { started = true; } },
+    );
+
+    expect(started).toBe(false);
+    driveEngine(16);
+    expect(started).toBe(true);
+  });
+
+  it('onProgress is called during spring animation', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    const progressValues: number[] = [];
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: () => {} }],
+      {
+        duration: 300,
+        motion: 'spring.stiff',
+        maxDuration: 1000,
+        onProgress: (p) => { progressValues.push(p); },
+      },
+    );
+
+    driveEngine(500);
+
+    // Should have received progress values
+    expect(progressValues.length).toBeGreaterThan(0);
+    // Progress values should be increasing (time-based approximation)
+    for (let i = 1; i < progressValues.length; i++) {
+      expect(progressValues[i]).toBeGreaterThanOrEqual(progressValues[i - 1]);
+    }
+  });
+
+  it('multiple numeric properties animate independently via spring', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let x = 0;
+    let y = 0;
+    animator.animate(
+      [
+        { key: 'x', from: 0, to: 100, apply: (v) => { x = v as number; } },
+        { key: 'y', from: 0, to: 200, apply: (v) => { y = v as number; } },
+      ],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    // Drive a few frames — both should be moving
+    driveEngine(200);
+    expect(x).toBeGreaterThan(0);
+    expect(y).toBeGreaterThan(0);
+
+    // Let settle
+    driveEngine(2000);
+    expect(x).toBeCloseTo(100, 0);
+    expect(y).toBeCloseTo(200, 0);
+  });
+
+  it('invalid motion string falls back to eased animation', async () => {
+    const engine = createEngine();
+    const animator = new Animator(engine);
+
+    let value = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 160, easing: 'linear', motion: 'spring.nonexistent' },
+    );
+
+    // resolveMotion returns null for invalid preset, so resolvedMotion is null/undefined
+    // and isPhysics is false — falls back to eased
+    await advanceTimers(80);
+    expect(value).toBeGreaterThan(0);
+    expect(value).toBeLessThan(100);
+
+    await advanceTimers(160);
+    expect(value).toBe(100);
+  });
+
+  it('pause/resume works with spring motion', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: 'spring.stiff' },
+    );
+
+    // Drive a few frames
+    driveEngine(200);
+    const valueAtPause = value;
+    expect(valueAtPause).toBeGreaterThan(0);
+
+    // Pause
+    handle.pause();
+
+    // Advance — value should not change
+    driveEngine(500);
+    expect(value).toBe(valueAtPause);
+
+    // Resume
+    handle.resume();
+
+    // Drive to completion
+    driveEngine(2000);
+    expect(value).toBeCloseTo(100, 0);
+  });
+});
+
+// ── Animator — decay motion ────────────────────────────────────────────────
+
+describe('Animator — decay motion', () => {
+  function createDetachedScheduler() {
+    let engineElapsed = 0;
+    let scheduledCb: FrameRequestCallback | null = null;
+
+    const scheduler: FrameScheduler = {
+      request: (cb) => {
+        scheduledCb = cb;
+        return 1;
+      },
+      cancel: () => {
+        scheduledCb = null;
+      },
+    };
+
+    function driveEngine(ms: number): void {
+      const target = engineElapsed + ms;
+      while (engineElapsed < target && scheduledCb) {
+        engineElapsed = Math.min(engineElapsed + 16, target);
+        const cb = scheduledCb;
+        scheduledCb = null;
+        cb(engineElapsed);
+      }
+    }
+
+    return { scheduler, driveEngine };
+  }
+
+  it('decay animation decelerates from initial velocity', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 0, apply: (v) => { value = v as number; } }],
+      { duration: 300, motion: { type: 'decay', velocity: 500 } },
+    );
+
+    // After a few frames, the value should have moved in the velocity direction
+    driveEngine(200);
+    expect(value).toBeGreaterThan(0);
+  });
+
+  it("'decay.snappy' preset settles without diverging (regression)", () => {
+    // Regression guard: snappy was defined with power: 1.2, which previously
+    // caused per-frame velocity growth and NaN/Infinity values.
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    let completed = false;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 0, apply: (v) => { value = v as number; } }],
+      {
+        duration: 300,
+        motion: 'decay.snappy',
+        maxDuration: 5000,
+        onComplete: () => { completed = true; },
+      },
+    );
+
+    driveEngine(4000);
+
+    expect(completed).toBe(true);
+    expect(handle.isFinished).toBe(true);
+    expect(Number.isFinite(value)).toBe(true);
+    // Without the fix, value grows into the millions. Constrain it sanely:
+    // initial velocity for snappy is 0 (preset default), so no motion happens
+    // unless velocity is overridden — the guard is that it doesn't explode.
+    expect(Math.abs(value)).toBeLessThan(10_000);
+  });
+
+  it("'decay.snappy' with overridden velocity moves and settles", () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    let completed = false;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 0, apply: (v) => { value = v as number; } }],
+      {
+        duration: 300,
+        motion: { type: 'decay', velocity: 500, power: 1.2, timeConstant: 200 },
+        maxDuration: 5000,
+        onComplete: () => { completed = true; },
+      },
+    );
+
+    driveEngine(4000);
+
+    expect(completed).toBe(true);
+    expect(handle.isFinished).toBe(true);
+    expect(value).toBeGreaterThan(0);
+    expect(Number.isFinite(value)).toBe(true);
+    // Distance travelled should be bounded
+    expect(value).toBeLessThan(1000);
+  });
+
+  it('decay settles naturally', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    let completed = false;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 0, apply: (v) => { value = v as number; } }],
+      {
+        duration: 300,
+        motion: { type: 'decay', velocity: 500 },
+        maxDuration: 5000,
+        onComplete: () => { completed = true; },
+      },
+    );
+
+    // Drive enough for decay to settle
+    driveEngine(3000);
+
+    expect(completed).toBe(true);
+    expect(handle.isFinished).toBe(true);
+    // Value should have moved from initial position
+    expect(value).toBeGreaterThan(0);
+  });
+});
+
+// ── Animator — inertia motion ──────────────────────────────────────────────
+
+describe('Animator — inertia motion', () => {
+  function createDetachedScheduler() {
+    let engineElapsed = 0;
+    let scheduledCb: FrameRequestCallback | null = null;
+
+    const scheduler: FrameScheduler = {
+      request: (cb) => {
+        scheduledCb = cb;
+        return 1;
+      },
+      cancel: () => {
+        scheduledCb = null;
+      },
+    };
+
+    function driveEngine(ms: number): void {
+      const target = engineElapsed + ms;
+      while (engineElapsed < target && scheduledCb) {
+        engineElapsed = Math.min(engineElapsed + 16, target);
+        const cb = scheduledCb;
+        scheduledCb = null;
+        cb(engineElapsed);
+      }
+    }
+
+    return { scheduler, driveEngine };
+  }
+
+  it('inertia bounces off bounds', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 50;
+    let completed = false;
+    animator.animate(
+      [{ key: 'x', from: 50, to: 50, apply: (v) => { value = v as number; } }],
+      {
+        duration: 300,
+        motion: {
+          type: 'inertia',
+          velocity: 2000,
+          bounds: { x: [0, 100] },
+          bounceDamping: 50,
+        },
+        maxDuration: 5000,
+        onComplete: () => { completed = true; },
+      },
+    );
+
+    // Drive to settle
+    driveEngine(3000);
+
+    expect(completed).toBe(true);
+    // Should have settled within bounds
+    expect(value).toBeGreaterThanOrEqual(0);
+    expect(value).toBeLessThanOrEqual(100);
+  });
+
+  it('inertia snaps to nearest point on settle', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    let completed = false;
+    animator.animate(
+      [{ key: 'x', from: 0, to: 0, apply: (v) => { value = v as number; } }],
+      {
+        duration: 300,
+        motion: {
+          type: 'inertia',
+          velocity: 100,
+          snapTo: [{ x: 0 }, { x: 50 }, { x: 100 }],
+        },
+        maxDuration: 5000,
+        onComplete: () => { completed = true; },
+      },
+    );
+
+    // Drive to settle
+    driveEngine(3000);
+
+    expect(completed).toBe(true);
+    // Should snap to one of the snap points
+    const snapPoints = [0, 50, 100];
+    const isSnapped = snapPoints.some(p => Math.abs(value - p) < 1);
+    expect(isSnapped).toBe(true);
+  });
+});
+
+// ── Animator — keyframes motion ────────────────────────────────────────────
+
+describe('Animator — keyframes motion', () => {
+  function createDetachedScheduler() {
+    let engineElapsed = 0;
+    let scheduledCb: FrameRequestCallback | null = null;
+
+    const scheduler: FrameScheduler = {
+      request: (cb) => {
+        scheduledCb = cb;
+        return 1;
+      },
+      cancel: () => {
+        scheduledCb = null;
+      },
+    };
+
+    function driveEngine(ms: number): void {
+      const target = engineElapsed + ms;
+      while (engineElapsed < target && scheduledCb) {
+        engineElapsed = Math.min(engineElapsed + 16, target);
+        const cb = scheduledCb;
+        scheduledCb = null;
+        cb(engineElapsed);
+      }
+    }
+
+    return { scheduler, driveEngine };
+  }
+
+  it('keyframes interpolates through waypoints', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    const values: number[] = [];
+    animator.animate(
+      [{ key: 'x', from: 0, to: 100, apply: (v) => { values.push(v as number); } }],
+      {
+        duration: 300,
+        motion: {
+          type: 'keyframes',
+          values: [{ x: 0 }, { x: 50 }, { x: 100 }],
+          duration: 1000,
+        },
+        maxDuration: 2000,
+      },
+    );
+
+    // Drive partway — should be interpolating through waypoints
+    driveEngine(500);
+    expect(values.length).toBeGreaterThan(0);
+    // Mid-animation values should be between 0 and 100
+    const midValues = values.filter(v => v > 0 && v < 100);
+    expect(midValues.length).toBeGreaterThan(0);
+  });
+
+  it('keyframes uses custom offsets', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    const values: number[] = [];
+    animator.animate(
+      [{ key: 'x', from: 0, to: 50, apply: (v) => { values.push(v as number); } }],
+      {
+        duration: 300,
+        motion: {
+          type: 'keyframes',
+          values: [{ x: 0 }, { x: 100 }, { x: 50 }],
+          offsets: [0, 0.2, 1],
+          duration: 1000,
+        },
+        maxDuration: 2000,
+      },
+    );
+
+    // Drive to completion
+    driveEngine(1200);
+
+    // Should have values above 50 (the 100 waypoint is at offset 0.2)
+    const aboveFifty = values.filter(v => v > 50);
+    expect(aboveFifty.length).toBeGreaterThan(0);
+  });
+
+  it('keyframes completes at final waypoint', () => {
+    const { scheduler, driveEngine } = createDetachedScheduler();
+    const engine = new AnimationEngine();
+    engine.setScheduler(scheduler);
+    const animator = new Animator(engine);
+
+    let value = 0;
+    let completed = false;
+    const handle = animator.animate(
+      [{ key: 'x', from: 0, to: 200, apply: (v) => { value = v as number; } }],
+      {
+        duration: 300,
+        motion: {
+          type: 'keyframes',
+          values: [{ x: 0 }, { x: 100 }, { x: 200 }],
+          duration: 500,
+        },
+        maxDuration: 2000,
+        onComplete: () => { completed = true; },
+      },
+    );
+
+    // Drive past the keyframes duration
+    driveEngine(600);
+
+    expect(value).toBe(200);
+    expect(completed).toBe(true);
+    expect(handle.isFinished).toBe(true);
+  });
 });

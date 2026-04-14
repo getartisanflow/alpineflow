@@ -8,31 +8,6 @@ order: 1
 
 AlpineFlow provides two core methods for changing node, edge, and viewport properties: `update()` for instant changes and `animate()` for smooth transitions.
 
-## update() vs animate()
-
-Both methods accept the same `AnimateTargets` shape and `AnimateOptions`, but differ in their defaults:
-
-| Method | Default Duration | Use Case |
-|--------|-----------------|----------|
-| `$flow.update()` | `0` (instant) | Snap properties to new values without visual transition |
-| `$flow.animate()` | `300` ms | Smoothly interpolate properties over time |
-
-```js
-// Instant — node jumps to the new position
-$flow.update({ nodes: { 'node-1': { position: { x: 300, y: 200 } } } });
-
-// Smooth — node glides to the new position over 300ms
-$flow.animate({ nodes: { 'node-1': { position: { x: 300, y: 200 } } } });
-
-// update() with an explicit duration behaves identically to animate()
-$flow.update(
-  { nodes: { 'node-1': { position: { x: 300, y: 200 } } } },
-  { duration: 500, easing: 'easeInOut' }
-);
-```
-
-Click each button to see the difference — "Update" snaps instantly, "Animate" glides smoothly:
-
 ::demo
 ```toolbar
 <button id="demo-update-btn" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Update (instant)</button>
@@ -80,6 +55,29 @@ Click each button to see the difference — "Update" snaps instantly, "Animate" 
 ```
 ::enddemo
 
+## update() vs animate()
+
+Both methods accept the same `AnimateTargets` shape and `AnimateOptions`, but differ in their defaults:
+
+| Method | Default Duration | Use Case |
+|--------|-----------------|----------|
+| `$flow.update()` | `0` (instant) | Snap properties to new values without visual transition |
+| `$flow.animate()` | `300` ms | Smoothly interpolate properties over time |
+
+```js
+// Instant — node jumps to the new position
+$flow.update({ nodes: { 'node-1': { position: { x: 300, y: 200 } } } });
+
+// Smooth — node glides to the new position over 300ms
+$flow.animate({ nodes: { 'node-1': { position: { x: 300, y: 200 } } } });
+
+// update() with an explicit duration behaves identically to animate()
+$flow.update(
+  { nodes: { 'node-1': { position: { x: 300, y: 200 } } } },
+  { duration: 500, easing: 'easeInOut' }
+);
+```
+
 ## AnimateTargets
 
 The `targets` object has three optional keys — `nodes`, `edges`, and `viewport`:
@@ -125,14 +123,33 @@ interface AnimateTargets {
 
 ```ts
 interface AnimateOptions {
+    // Timing
     duration?: number;    // ms. 0 = instant. Default: 300 (animate) / 0 (update)
     easing?: EasingName | ((t: number) => number);  // Default: 'easeInOut'
     delay?: number;       // ms before starting. Default: 0
-    loop?: boolean | 'reverse';  // true = forever, 'reverse' = ping-pong
+    loop?: boolean | 'ping-pong';  // true = forever, 'ping-pong' = bounce back and forth
+    startAt?: 'start' | 'end';  // 'end' snaps to target and plays backward. Default: 'start'.
+
+    // Physics — use instead of duration+easing
+    motion?: MotionConfig | string;   // e.g. 'spring.wobbly' or { type: 'spring', stiffness: 100 }
+    maxDuration?: number;              // safety cap for physics motion (ms). Default: 5000.
+
+    // Lifecycle callbacks
+    onStart?: () => void;
     onProgress?: (progress: number) => void;
     onComplete?: () => void;
+
+    // Tagging — group animations so `$flow.cancelAll({ tag })` can stop them together
+    tag?: string;
+    tags?: string[];
+
+    // State-aware cancellation — `while:` auto-cancels when the predicate returns false
+    while?: () => boolean;
+    whileStopMode?: 'jump-end' | 'rollback' | 'freeze';  // how to stop. Default: 'jump-end'.
 }
 ```
+
+`loop: 'reverse'` still works and is aliased to `'ping-pong'` for backwards compatibility.
 
 Compare easing presets — all nodes move to the same target, each with a different curve:
 
@@ -193,11 +210,25 @@ Both `update()` and `animate()` return a `FlowAnimationHandle` for controlling t
 
 ```ts
 interface FlowAnimationHandle {
+    // Transport
     pause(): void;
     resume(): void;
-    stop(): void;
-    reverse(): void;
+    play(): void;                        // revive a finished handle and play from current position
+    playForward(): void;                  // set direction 'forward' and play
+    playBackward(): void;                 // set direction 'backward' and play
+    reverse(): void;                      // flip direction and keep playing
+    restart(options?: { direction?: 'forward' | 'backward' }): void;
+    stop(options?: StopOptions): void;    // see "Stop modes" below
+
+    // State (all readonly)
+    readonly direction: 'forward' | 'backward';
+    readonly isFinished: boolean;
+    readonly currentValue: Map<string, number | string>;  // current per-key interpolated values
     readonly finished: Promise<void>;
+}
+
+interface StopOptions {
+    mode?: 'jump-end' | 'rollback' | 'freeze';  // default 'jump-end'
 }
 ```
 
@@ -221,76 +252,370 @@ handle.pause();
 handle.resume();
 ```
 
-Start a slow animation, then use the controls to pause, resume, reverse, or stop it:
+Start a slow animation, then use the controls to pause, resume, reverse, or stop it. Buttons are disabled when they'd be a no-op (e.g. Start while running, Reverse while idle):
 
 ::demo
 ```toolbar
-<button id="demo-handle-start" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Start</button>
-<button id="demo-handle-pause" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Pause</button>
-<button id="demo-handle-resume" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Resume</button>
-<button id="demo-handle-reverse" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Reverse</button>
-<button id="demo-handle-stop" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Stop</button>
+<button id="demo-handle-start" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body disabled:opacity-40 disabled:cursor-not-allowed">Start</button>
+<button id="demo-handle-pause" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body disabled:opacity-40 disabled:cursor-not-allowed" disabled>Pause</button>
+<button id="demo-handle-resume" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body disabled:opacity-40 disabled:cursor-not-allowed" disabled>Resume</button>
+<button id="demo-handle-reverse" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body disabled:opacity-40 disabled:cursor-not-allowed" disabled>Reverse</button>
+<button id="demo-handle-stop" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body disabled:opacity-40 disabled:cursor-not-allowed" disabled>Stop</button>
 ```
 ```html
 <div x-data="flowCanvas({
     nodes: [
         { id: 'mover', position: { x: 0, y: 50 }, data: { label: 'Controlled' } },
-        { id: 'target', position: { x: 450, y: 50 }, data: { label: 'Target' }, draggable: false },
     ],
-    edges: [
-        { id: 'e1', source: 'mover', target: 'target' },
-    ],
+    edges: [],
     background: 'dots',
-    fitViewOnInit: true,
     controls: false,
     pannable: false,
     zoomable: false,
 })" class="flow-container" style="height: 220px;"
    x-init="
        let handle = null;
-       let done = false;
+       let paused = false;
        const startPos = { x: 0, y: 50 };
        const endPos = { x: 400, y: 50 };
-       function go(from, to, edgeColor, edgeWidth) {
-           $flow.update({ nodes: { mover: { position: from } } });
-           done = false;
-           handle = $flow.animate({
-               nodes: { mover: { position: to } },
-               edges: { e1: { color: edgeColor, strokeWidth: edgeWidth } },
-           }, { duration: 3000, easing: 'linear', onComplete: () => { done = true; } });
-       }
-       document.getElementById('demo-handle-start').addEventListener('click', () => {
-           if (handle) handle.stop();
-           go(startPos, endPos, '#10b981', 3);
+       const btns = {
+           start:   document.getElementById('demo-handle-start'),
+           pause:   document.getElementById('demo-handle-pause'),
+           resume:  document.getElementById('demo-handle-resume'),
+           reverse: document.getElementById('demo-handle-reverse'),
+           stop:    document.getElementById('demo-handle-stop'),
+       };
+       const syncButtons = () => {
+           const running = !!handle && !handle.isFinished;
+           btns.start.disabled   = running;
+           btns.pause.disabled   = !running || paused;
+           btns.resume.disabled  = !running || !paused;
+           btns.reverse.disabled = !running;
+           btns.stop.disabled    = !running;
+       };
+       btns.start.addEventListener('click', () => {
+           if (handle && !handle.isFinished) return;
+           $flow.update({ nodes: { mover: { position: startPos } } });
+           paused = false;
+           handle = $flow.animate(
+               { nodes: { mover: { position: endPos } } },
+               { duration: 3000, easing: 'linear', onComplete: syncButtons },
+           );
+           syncButtons();
        });
-       document.getElementById('demo-handle-pause').addEventListener('click', () => handle?.pause());
-       document.getElementById('demo-handle-resume').addEventListener('click', () => handle?.resume());
-       document.getElementById('demo-handle-reverse').addEventListener('click', () => {
-           if (!handle) return;
-           if (done) {
-               go(endPos, startPos, null, null);
-           } else {
-               handle.reverse();
-           }
-       });
-       document.getElementById('demo-handle-stop').addEventListener('click', () => {
-           if (handle) { handle.stop(); handle = null; }
-           done = false;
-           $flow.update({ nodes: { mover: { position: startPos } }, edges: { e1: { color: null, strokeWidth: null } } });
+       btns.pause.addEventListener('click',   () => { handle?.pause();   paused = true;  syncButtons(); });
+       btns.resume.addEventListener('click',  () => { handle?.resume();  paused = false; syncButtons(); });
+       btns.reverse.addEventListener('click', () => handle?.reverse());
+       btns.stop.addEventListener('click',    () => {
+           handle?.stop();
+           $flow.update({ nodes: { mover: { position: startPos } } });
+           handle = null;
+           paused = false;
+           syncButtons();
        });
    ">
     <div x-flow-viewport>
         <template x-for="node in nodes" :key="node.id">
             <div x-flow-node="node">
-                <div x-flow-handle:target></div>
                 <span x-text="node.data.label"></span>
-                <div x-flow-handle:source></div>
             </div>
         </template>
     </div>
 </div>
 ```
 ::enddemo
+
+## Stop modes
+
+`handle.stop()` and `$flow.cancelAll(filter)` both accept a `mode` option that decides what the final visual state looks like when the animation ends:
+
+| Mode | Behavior |
+|---|---|
+| `'jump-end'` *(default)* | Snap to target values — the animation completes instantly |
+| `'rollback'` | Revert to the values captured when the animation started |
+| `'freeze'` | Leave nodes at whatever interpolated value they happen to be at |
+
+```js
+// Snap the node to its destination
+handle.stop({ mode: 'jump-end' });
+
+// Revert to the starting values
+handle.stop({ mode: 'rollback' });
+
+// Leave it wherever it is — useful for user-cancellation UX
+handle.stop({ mode: 'freeze' });
+```
+
+This matters for UX choices — "user cancelled, keep their in-progress position" is freeze; "operation failed, undo everything we changed" is rollback; "success, commit the destination" is jump-end.
+
+Start three 4-second animations, then click "Stop all" — each one uses a different mode so you can see them side-by-side:
+
+::demo
+```toolbar
+<button id="demo-stopmode-start" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Start all</button>
+<button id="demo-stopmode-stop" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Stop all</button>
+```
+```html
+<div x-data="flowCanvas({
+    nodes: [
+        { id: 'jump',   position: { x: 40, y: 20  }, data: { label: 'jump-end  → snaps to target' } },
+        { id: 'roll',   position: { x: 40, y: 80  }, data: { label: 'rollback  → reverts to start' } },
+        { id: 'freeze', position: { x: 40, y: 140 }, data: { label: 'freeze    → stays mid-flight' } },
+    ],
+    edges: [],
+    background: 'dots',
+    controls: false, pannable: false, zoomable: false,
+})" class="flow-container" style="height: 220px;"
+   x-init="
+       let handles = {};
+       const startAll = () => {
+           $flow.update({ nodes: {
+               jump:   { position: { x: 40 } },
+               roll:   { position: { x: 40 } },
+               freeze: { position: { x: 40 } },
+           }});
+           handles.jump   = $flow.animate({ nodes: { jump:   { position: { x: 360 } } } }, { duration: 4000, easing: 'linear' });
+           handles.roll   = $flow.animate({ nodes: { roll:   { position: { x: 360 } } } }, { duration: 4000, easing: 'linear' });
+           handles.freeze = $flow.animate({ nodes: { freeze: { position: { x: 360 } } } }, { duration: 4000, easing: 'linear' });
+       };
+       document.getElementById('demo-stopmode-start').addEventListener('click', startAll);
+       document.getElementById('demo-stopmode-stop').addEventListener('click', () => {
+           handles.jump?.stop({ mode: 'jump-end' });
+           handles.roll?.stop({ mode: 'rollback' });
+           handles.freeze?.stop({ mode: 'freeze' });
+       });
+   ">
+    <div x-flow-viewport>
+        <template x-for="node in nodes" :key="node.id">
+            <div x-flow-node="node">
+                <span x-text="node.data.label" style="font-family: monospace; font-size: 11px;"></span>
+            </div>
+        </template>
+    </div>
+</div>
+```
+::enddemo
+
+## Transactions
+
+A transaction wraps several animations so you can roll them all back as a unit:
+
+```js
+const tx = $flow.transaction(async () => {
+    $flow.animate({ nodes: { a: { position: { x: 360 } } } }, { duration: 2500 });
+    await new Promise(r => setTimeout(r, 500));
+    $flow.animate({ nodes: { b: { position: { x: 360 } } } }, { duration: 2500 });
+    await new Promise(r => setTimeout(r, 500));
+    $flow.animate({ nodes: { c: { position: { x: 360 } } } }, { duration: 2500 });
+});
+
+// Sometime later — revert everything the transaction animated
+tx.rollback();
+```
+
+`tx.rollback()` stops every tracked animation with `'freeze'` mode, then re-applies the pre-transaction values for every property that was touched. The canvas ends up exactly where it was before the transaction started, even for animations that had already completed.
+
+`tx.commit()` is the no-op counterpart — it marks the transaction as finalized and resolves `tx.finished`. Async `fn` returns commit automatically when it resolves; thrown errors auto-rollback.
+
+Start the transaction, then click rollback mid-sequence — all three nodes freeze in place, then snap back to the origin:
+
+::demo
+```toolbar
+<button id="demo-tx-run" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Run transaction</button>
+<button id="demo-tx-rollback" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Rollback</button>
+```
+```html
+<div x-data="flowCanvas({
+    nodes: [
+        { id: 'a', position: { x: 40, y: 20  }, data: { label: 'A' } },
+        { id: 'b', position: { x: 40, y: 80  }, data: { label: 'B' } },
+        { id: 'c', position: { x: 40, y: 140 }, data: { label: 'C' } },
+    ],
+    edges: [],
+    background: 'dots',
+    controls: false, pannable: false, zoomable: false,
+})" class="flow-container" style="height: 220px;"
+   x-init="
+       let tx = null;
+       document.getElementById('demo-tx-run').addEventListener('click', () => {
+           $flow.update({ nodes: {
+               a: { position: { x: 40 } },
+               b: { position: { x: 40 } },
+               c: { position: { x: 40 } },
+           }});
+           tx = $flow.transaction(async () => {
+               $flow.animate({ nodes: { a: { position: { x: 360 } } } }, { duration: 2500, easing: 'linear' });
+               await new Promise(r => setTimeout(r, 500));
+               $flow.animate({ nodes: { b: { position: { x: 360 } } } }, { duration: 2500, easing: 'linear' });
+               await new Promise(r => setTimeout(r, 500));
+               $flow.animate({ nodes: { c: { position: { x: 360 } } } }, { duration: 2500, easing: 'linear' });
+           });
+       });
+       document.getElementById('demo-tx-rollback').addEventListener('click', () => tx?.rollback());
+   ">
+    <div x-flow-viewport>
+        <template x-for="node in nodes" :key="node.id">
+            <div x-flow-node="node">
+                <span x-text="node.data.label"></span>
+            </div>
+        </template>
+    </div>
+</div>
+```
+::enddemo
+
+## Groups
+
+Tag multiple animations with a shared name so you can stop, pause, or resume them together:
+
+```js
+const ambient = $flow.group('ambient');
+
+ambient.animate({ nodes: { g1: { position: { x: 360 } } } }, { duration: 5000 });
+ambient.animate({ nodes: { g2: { position: { x: 360 } } } }, { duration: 5000 });
+ambient.animate({ nodes: { g3: { position: { x: 360 } } } }, { duration: 5000 });
+
+// Later — stop every handle tagged 'ambient'
+ambient.cancelAll({ mode: 'rollback' });
+ambient.pauseAll();
+ambient.resumeAll();
+```
+
+`FlowGroup` auto-tags every animation it creates, so callers never touch the `tag` option directly. You can still tag animations manually via `AnimateOptions.tag` / `.tags` and use `$flow.cancelAll({ tag: 'ambient' })` for the same effect.
+
+::demo
+```toolbar
+<button id="demo-group-start" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Start group</button>
+<button id="demo-group-rollback" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">cancelAll({ mode: 'rollback' })</button>
+<button id="demo-group-jump" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">cancelAll() jump-end</button>
+```
+```html
+<div x-data="flowCanvas({
+    nodes: [
+        { id: 'g1', position: { x: 40, y: 20  }, data: { label: 'g1 (ambient)' } },
+        { id: 'g2', position: { x: 40, y: 80  }, data: { label: 'g2 (ambient)' } },
+        { id: 'g3', position: { x: 40, y: 140 }, data: { label: 'g3 (ambient)' } },
+    ],
+    edges: [],
+    background: 'dots',
+    controls: false, pannable: false, zoomable: false,
+})" class="flow-container" style="height: 220px;"
+   x-init="
+       let group = null;
+       document.getElementById('demo-group-start').addEventListener('click', () => {
+           $flow.update({ nodes: {
+               g1: { position: { x: 40 } },
+               g2: { position: { x: 40 } },
+               g3: { position: { x: 40 } },
+           }});
+           group = $flow.group('ambient');
+           group.animate({ nodes: { g1: { position: { x: 360 } } } }, { duration: 5000, easing: 'linear' });
+           group.animate({ nodes: { g2: { position: { x: 360 } } } }, { duration: 5000, easing: 'linear' });
+           group.animate({ nodes: { g3: { position: { x: 360 } } } }, { duration: 5000, easing: 'linear' });
+       });
+       document.getElementById('demo-group-rollback').addEventListener('click', () => group?.cancelAll({ mode: 'rollback' }));
+       document.getElementById('demo-group-jump').addEventListener('click', () => group?.cancelAll());
+   ">
+    <div x-flow-viewport>
+        <template x-for="node in nodes" :key="node.id">
+            <div x-flow-node="node">
+                <span x-text="node.data.label"></span>
+            </div>
+        </template>
+    </div>
+</div>
+```
+::enddemo
+
+## State-aware cancellation
+
+Sometimes an animation should stop when some state flips — e.g. "run this pulse while the node is hovered." Pass a `while:` predicate that the engine evaluates once per frame:
+
+```js
+let hovering = true;
+
+$flow.animate(
+    { nodes: { n: { position: { x: 360 } } } },
+    {
+        duration: 6000,
+        easing: 'linear',
+        while: () => hovering,
+        whileStopMode: 'freeze',   // stay where the animation was when predicate flipped
+    },
+);
+
+// Later — flip the predicate
+hovering = false;
+// animation auto-terminates on the next frame with 'freeze' stop mode
+```
+
+`while:` is **terminal** — when the predicate returns false, the animation stops (with `whileStopMode`) and the handle ends. It's not a pause/resume gate; toggling the predicate back to `true` won't resume the animation. Think of it as a kill switch that fires when a condition changes.
+
+::demo
+```toolbar
+<button id="demo-while-run" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Run while active</button>
+<button id="demo-while-toggle" class="rounded-md border border-border-subtle bg-elevated px-3 py-1 font-mono text-[11px] text-text-muted cursor-pointer hover:text-text-body">Toggle active</button>
+<span id="demo-while-state" class="font-mono text-[10px] text-text-faint">active = true</span>
+```
+```html
+<div x-data="flowCanvas({
+    nodes: [
+        { id: 'w', position: { x: 40, y: 80 }, data: { label: 'Animates while active' } },
+    ],
+    edges: [],
+    background: 'dots',
+    controls: false, pannable: false, zoomable: false,
+})" class="flow-container" style="height: 200px;"
+   x-init="
+       let active = true;
+       const label = document.getElementById('demo-while-state');
+       document.getElementById('demo-while-run').addEventListener('click', () => {
+           active = true;
+           label.textContent = 'active = true';
+           $flow.update({ nodes: { w: { position: { x: 40 } } } });
+           $flow.animate(
+               { nodes: { w: { position: { x: 360 } } } },
+               { duration: 6000, easing: 'linear', while: () => active, whileStopMode: 'freeze' },
+           );
+       });
+       document.getElementById('demo-while-toggle').addEventListener('click', () => {
+           active = !active;
+           label.textContent = 'active = ' + active + (active ? '' : ' → animation terminates next frame');
+       });
+   ">
+    <div x-flow-viewport>
+        <template x-for="node in nodes" :key="node.id">
+            <div x-flow-node="node">
+                <span x-text="node.data.label"></span>
+            </div>
+        </template>
+    </div>
+</div>
+```
+::enddemo
+
+## Direction state machine
+
+A `FlowAnimationHandle` carries a `direction` (`'forward'` or `'backward'`) that controls which way it plays. The control methods adjust both `direction` and playback state:
+
+| Call | Effect |
+|---|---|
+| `handle.play()` | Revive (if finished) and play from the current value in the current `direction` |
+| `handle.playForward()` | Set `direction = 'forward'` and play |
+| `handle.playBackward()` | Set `direction = 'backward'` and play |
+| `handle.reverse()` | Flip `direction` and keep playing |
+| `handle.restart({ direction })` | Jump to the appropriate end and play in the given direction (defaults to the current one) |
+
+```js
+const handle = $flow.animate({ nodes: { n: { position: { x: 360 } } } }, { duration: 1500 });
+await handle.finished;
+
+handle.playBackward();        // replay in reverse without resetting
+handle.playForward();         // play forward again from current position
+handle.restart({ direction: 'backward' });  // jump to the end and play backward
+```
+
+This is the difference between `reverse()` (which always flips the current direction) and `playBackward()` (which forces backward regardless of prior direction). `restart()` is useful for "rewind and go" UX — it snaps to the start of the chosen direction before playing.
 
 ## Per-Element Timing Overrides
 
@@ -448,15 +773,15 @@ $flow.playAnimation('intro');
 
 ## Demo
 
-Hover over each node to see it react — the directive handles the animation and auto-reverses on mouse leave:
+Hover over each node — it animates on mouse enter and reverses on mouse leave. Shown as an imperative pattern; the `x-flow-animate` directive above is the declarative equivalent.
 
 ::demo
 ```html
 <div x-data="flowCanvas({
     nodes: [
-        { id: 'a', position: { x: 0, y: 60 }, data: { label: 'Hover me' } },
-        { id: 'b', position: { x: 200, y: 0 }, data: { label: 'Or me' } },
-        { id: 'c', position: { x: 400, y: 60 }, data: { label: 'Or me' } },
+        { id: 'a', position: { x: 20,  y: 60 }, data: { label: 'Hover me', baseY: 60 } },
+        { id: 'b', position: { x: 220, y: 0  }, data: { label: 'Or me',   baseY: 0  } },
+        { id: 'c', position: { x: 420, y: 60 }, data: { label: 'Or me',   baseY: 60 } },
     ],
     edges: [
         { id: 'e1', source: 'a', target: 'b' },
@@ -471,12 +796,8 @@ Hover over each node to see it react — the directive handles the animation and
     <div x-flow-viewport>
         <template x-for="node in nodes" :key="node.id">
             <div x-flow-node="node"
-                 x-flow-animate.mouseenter.reverse="{
-                     nodes: [node.id],
-                     style: { transform: 'scale(1.08) translateY(-10px)' },
-                     duration: 250,
-                     easing: 'easeOut',
-                 }">
+                 @mouseenter="$flow.animate({ nodes: { [node.id]: { position: { y: node.data.baseY - 10 } } } }, { duration: 200, easing: 'easeOut' })"
+                 @mouseleave="$flow.animate({ nodes: { [node.id]: { position: { y: node.data.baseY      } } } }, { duration: 200, easing: 'easeOut' })">
                 <div x-flow-handle:target></div>
                 <span x-text="node.data.label"></span>
                 <div x-flow-handle:source></div>

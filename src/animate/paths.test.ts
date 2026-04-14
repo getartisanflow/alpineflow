@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { svgPathToFunction, orbit, wave, along, pendulum, drift, stagger } from './paths';
+import { svgPathToFunction, orbit, wave, along, pendulum, drift, stagger, _clearPathCache } from './paths';
 import type { PathFunction } from './paths';
 
 describe('PathFunction type', () => {
@@ -15,6 +15,24 @@ describe('svgPathToFunction', () => {
   it('returns null when SVG APIs are unavailable', () => {
     const result = svgPathToFunction('M 0 0 L 100 100');
     expect(result).toBeNull();
+  });
+});
+
+describe('svgPathToFunction — memoization', () => {
+  it('returns the same function instance for the same path string', () => {
+    _clearPathCache();
+    const fn1 = svgPathToFunction('M 0 0 L 100 100');
+    const fn2 = svgPathToFunction('M 0 0 L 100 100');
+    if (fn1 === null) return;
+    expect(fn1).toBe(fn2);
+  });
+
+  it('returns different instances for different path strings', () => {
+    _clearPathCache();
+    const fn1 = svgPathToFunction('M 0 0 L 100 100');
+    const fn2 = svgPathToFunction('M 0 0 L 200 200');
+    if (fn1 === null || fn2 === null) return;
+    expect(fn1).not.toBe(fn2);
   });
 });
 

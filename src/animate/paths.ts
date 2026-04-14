@@ -13,24 +13,46 @@ export type PathFunction = (t: number) => { x: number; y: number };
 
 // ── SVG Path ────────────────────────────────────────────────────────────────
 
+const SVG_PATH_CACHE = new Map<string, PathFunction>();
+const SVG_PATH_CACHE_MAX = 64;
+
 /**
  * Convert an SVG path `d` attribute string into a PathFunction.
  * Creates an off-screen <path> element for geometry calculations.
  * Returns null in environments without SVG DOM support (e.g. Node/vitest).
+ * Results are cached with an LRU policy (max 64 entries).
  */
 export function svgPathToFunction(d: string): PathFunction | null {
   if (typeof document === 'undefined' || typeof document.createElementNS !== 'function') {
     return null;
   }
 
+  const cached = SVG_PATH_CACHE.get(d);
+  if (cached) return cached;
+
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   path.setAttribute('d', d);
   const totalLength = path.getTotalLength();
 
-  return (t: number) => {
+  const fn: PathFunction = (t: number) => {
     const pt = path.getPointAtLength(t * totalLength);
     return { x: pt.x, y: pt.y };
   };
+
+  if (SVG_PATH_CACHE.size >= SVG_PATH_CACHE_MAX) {
+    const firstKey = SVG_PATH_CACHE.keys().next().value;
+    if (firstKey !== undefined) SVG_PATH_CACHE.delete(firstKey);
+  }
+  SVG_PATH_CACHE.set(d, fn);
+
+  return fn;
+}
+
+/**
+ * Clear the SVG path cache. Used for testing.
+ */
+export function _clearPathCache(): void {
+  SVG_PATH_CACHE.clear();
 }
 
 // ── Orbit ───────────────────────────────────────────────────────────────────

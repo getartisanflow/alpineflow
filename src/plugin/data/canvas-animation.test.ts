@@ -2,7 +2,12 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest';
 import { mockCtx } from './__test-utils';
 import { createAnimationMixin } from './canvas-animation';
-import type { FlowNode, FlowEdge } from '../../core/types';
+import type { FlowNode, FlowEdge, ParticleRenderer } from '../../core/types';
+import { registerParticleRenderer, getParticleRenderer } from '../../animate/particle-renderers';
+import { Recording } from '../../animate/recording/recording';
+import { ReplayHandle } from '../../animate/recording/replay';
+import type { RecordingData } from '../../animate/recording/types';
+import { RECORDING_VERSION } from '../../animate/recording/types';
 
 // ── Mock Alpine ──────────────────────────────────────────────────────────────
 
@@ -714,7 +719,7 @@ describe('createAnimationMixin — _tickParticles', () => {
     ctx._particleEngineHandle = { stop: vi.fn() } as any;
     const mixin = createAnimationMixin(ctx);
 
-    const result = mixin._tickParticles();
+    const result = mixin._tickParticles(0);
 
     expect(result).toBe(true);
     expect(ctx._particleEngineHandle).toBeNull();
@@ -722,40 +727,45 @@ describe('createAnimationMixin — _tickParticles', () => {
 
   it('removes completed particles (progress >= 1)', () => {
     const ctx = mockCtx();
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const element = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    container.appendChild(circle);
+    container.appendChild(element);
 
     const onComplete = vi.fn();
-    const safetyTimer = setTimeout(() => {}, 10000);
+    const mockRenderer = { create: vi.fn(), update: vi.fn(), destroy: vi.fn((el: SVGElement) => el.remove()) };
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
 
     const particle = {
-      circle,
+      element,
+      renderer: mockRenderer,
       pathEl,
-      t0: performance.now() - 2000, // started 2s ago
-      ms: 1000, // 1s duration — way past completion
-      safetyTimer,
+      startElapsed: 0,     // started at elapsed=0
+      ms: 1000,            // 1s duration
       onComplete,
+      currentPosition: { x: 0, y: 0 },
     };
 
     ctx._activeParticles.add(particle);
     const mixin = createAnimationMixin(ctx);
 
-    const result = mixin._tickParticles();
+    // Pass elapsed=2000, well past the 1000ms duration
+    const result = mixin._tickParticles(2000);
 
     expect(ctx._activeParticles.size).toBe(0);
     expect(onComplete).toHaveBeenCalledOnce();
+    expect(mockRenderer.destroy).toHaveBeenCalledWith(element);
     expect(result).toBe(true); // all particles done
   });
 
-  it('updates position of in-progress particles', () => {
+  it('updates position of in-progress particles via renderer', () => {
     const ctx = mockCtx();
 
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const element = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    container.appendChild(circle);
+    container.appendChild(element);
+
+    const mockRenderer = { create: vi.fn(), update: vi.fn(), destroy: vi.fn() };
 
     // Create an SVG path with mock methods
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -764,22 +774,115 @@ describe('createAnimationMixin — _tickParticles', () => {
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 42, y: 84 }));
 
     const particle = {
-      circle,
+      element,
+      renderer: mockRenderer,
       pathEl,
-      t0: performance.now(), // just started — progress ~0
-      ms: 10000, // long duration
-      safetyTimer: setTimeout(() => {}, 10000),
+      startElapsed: 0,     // started at elapsed=0
+      ms: 10000,           // long duration
       onComplete: vi.fn(),
+      currentPosition: { x: 0, y: 0 },
     };
 
     ctx._activeParticles.add(particle);
     const mixin = createAnimationMixin(ctx);
 
-    const result = mixin._tickParticles();
+    // Pass elapsed=100 (small progress)
+    const result = mixin._tickParticles(100);
 
     expect(result).toBe(false); // still running
-    expect(circle.getAttribute('cx')).toBe('42');
-    expect(circle.getAttribute('cy')).toBe('84');
+    expect(mockRenderer.update).toHaveBeenCalledWith(element, expect.objectContaining({ x: 42, y: 84 }));
+  });
+
+  it('sets startElapsed on first tick when particle has startElapsed=-1', () => {
+    const ctx = mockCtx();
+    const element = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    container.appendChild(element);
+
+    const mockRenderer = { create: vi.fn(), update: vi.fn(), destroy: vi.fn() };
+
+    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    (pathEl as any).getTotalLength = vi.fn(() => 100);
+    (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 10, y: 20 }));
+
+    const particle = {
+      element,
+      renderer: mockRenderer,
+      pathEl,
+      startElapsed: -1,    // not yet ticked
+      ms: 2000,
+      onComplete: vi.fn(),
+      currentPosition: { x: 0, y: 0 },
+    };
+
+    ctx._activeParticles.add(particle);
+    const mixin = createAnimationMixin(ctx);
+
+    mixin._tickParticles(500);
+
+    // startElapsed should now be set to the elapsed value from first tick
+    expect(particle.startElapsed).toBe(500);
+  });
+
+  it('updates currentPosition on each tick', () => {
+    const ctx = mockCtx();
+    const element = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    container.appendChild(element);
+
+    const mockRenderer = { create: vi.fn(), update: vi.fn(), destroy: vi.fn() };
+
+    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    (pathEl as any).getTotalLength = vi.fn(() => 100);
+    (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 55, y: 33 }));
+
+    const particle = {
+      element,
+      renderer: mockRenderer,
+      pathEl,
+      startElapsed: 0,
+      ms: 10000,
+      onComplete: vi.fn(),
+      currentPosition: { x: 0, y: 0 },
+    };
+
+    ctx._activeParticles.add(particle);
+    const mixin = createAnimationMixin(ctx);
+
+    mixin._tickParticles(500);
+
+    expect(particle.currentPosition).toEqual({ x: 55, y: 33 });
+  });
+
+  it('removes particle correctly with a very large elapsed value', () => {
+    const ctx = mockCtx();
+    const element = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    const container = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    container.appendChild(element);
+
+    const mockRenderer = { create: vi.fn(), update: vi.fn(), destroy: vi.fn((el: SVGElement) => el.remove()) };
+    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    const onComplete = vi.fn();
+
+    const particle = {
+      element,
+      renderer: mockRenderer,
+      pathEl,
+      startElapsed: 0,
+      ms: 1000,
+      onComplete,
+      currentPosition: { x: 0, y: 0 },
+    };
+
+    ctx._activeParticles.add(particle);
+    const mixin = createAnimationMixin(ctx);
+
+    // Elapsed far beyond duration — progress >= 1 completes it normally
+    const result = mixin._tickParticles(999999);
+
+    expect(ctx._activeParticles.size).toBe(0);
+    expect(onComplete).toHaveBeenCalledOnce();
+    expect(result).toBe(true);
   });
 });
 
@@ -841,6 +944,7 @@ describe('createAnimationMixin — sendParticle', () => {
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getTotalLength = vi.fn(() => 200);
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
     (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
 
@@ -858,12 +962,13 @@ describe('createAnimationMixin — sendParticle', () => {
     expect(ctx._activeParticles.size).toBe(1);
   });
 
-  it('applies custom CSS class to particle circle', () => {
+  it('applies custom CSS class to particle element via renderer', () => {
     const ctx = mockCtx();
     ctx.edges = [makeEdge('e1')];
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getTotalLength = vi.fn(() => 200);
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
     (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
 
@@ -874,7 +979,9 @@ describe('createAnimationMixin — sendParticle', () => {
 
     mixin.sendParticle('e1', { class: 'custom-dot glow' });
 
+    // The circle renderer creates a <circle> element in the gEl
     const circle = gEl.querySelector('circle')!;
+    expect(circle).not.toBeNull();
     expect(circle.classList.contains('flow-edge-particle')).toBe(true);
     expect(circle.classList.contains('custom-dot')).toBe(true);
     expect(circle.classList.contains('glow')).toBe(true);
@@ -886,6 +993,7 @@ describe('createAnimationMixin — sendParticle', () => {
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getTotalLength = vi.fn(() => 200);
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
     (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
 
@@ -909,6 +1017,7 @@ describe('createAnimationMixin — sendParticle', () => {
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getTotalLength = vi.fn(() => 200);
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 50, y: 75 }));
     (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
 
@@ -918,11 +1027,8 @@ describe('createAnimationMixin — sendParticle', () => {
     const mixin = createAnimationMixin(ctx);
 
     const handle = mixin.sendParticle('e1')!;
-    // Update circle position to simulate animation
-    const circle = gEl.querySelector('circle')!;
-    circle.setAttribute('cx', '50');
-    circle.setAttribute('cy', '75');
 
+    // getCurrentPosition reads from internal state set by renderer.update at creation
     const pos = handle.getCurrentPosition();
 
     expect(pos).toEqual({ x: 50, y: 75 });
@@ -934,6 +1040,7 @@ describe('createAnimationMixin — sendParticle', () => {
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getTotalLength = vi.fn(() => 200);
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
     (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
 
@@ -958,6 +1065,7 @@ describe('createAnimationMixin — sendParticle', () => {
 
     const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getTotalLength = vi.fn(() => 200);
     (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
     (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
 
@@ -985,5 +1093,809 @@ describe('createAnimationMixin — sendParticle', () => {
     const result = mixin.sendParticle('e1');
 
     expect(result).toBeUndefined();
+  });
+
+  it('sendParticle uses the default circle renderer', () => {
+    const ctx = mockCtx();
+    ctx.edges = [makeEdge('e1')];
+
+    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getTotalLength = vi.fn(() => 200);
+    (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
+    (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
+
+    const gEl = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    (ctx.getEdgeElement as any).mockReturnValue(gEl);
+
+    const mixin = createAnimationMixin(ctx);
+
+    const handle = mixin.sendParticle('e1');
+
+    expect(handle).toBeDefined();
+    // The default circle renderer creates a <circle> SVG element
+    const circle = gEl.querySelector('circle');
+    expect(circle).not.toBeNull();
+  });
+
+  it('sendParticle uses a custom renderer when specified', () => {
+    const mockCreate = vi.fn((svgLayer: SVGElement) => {
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      svgLayer.appendChild(rect);
+      return rect;
+    });
+    const mockUpdate = vi.fn();
+    const mockDestroy = vi.fn((el: SVGElement) => el.remove());
+
+    registerParticleRenderer('custom-test', {
+      create: mockCreate,
+      update: mockUpdate,
+      destroy: mockDestroy,
+    });
+
+    const ctx = mockCtx();
+    ctx.edges = [makeEdge('e1')];
+
+    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getTotalLength = vi.fn(() => 200);
+    (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
+    (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
+
+    const gEl = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    (ctx.getEdgeElement as any).mockReturnValue(gEl);
+
+    const mixin = createAnimationMixin(ctx);
+
+    const handle = mixin.sendParticle('e1', { renderer: 'custom-test' });
+
+    expect(handle).toBeDefined();
+    expect(mockCreate).toHaveBeenCalled();
+    // The custom renderer's update is called for initial positioning
+    expect(mockUpdate).toHaveBeenCalled();
+  });
+
+  it('unknown renderer returns undefined', () => {
+    const ctx = mockCtx();
+    ctx.edges = [makeEdge('e1')];
+
+    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    pathEl.setAttribute('d', 'M0,0 L100,100');
+    (pathEl as any).getPointAtLength = vi.fn(() => ({ x: 0, y: 0 }));
+    (ctx.getEdgePathElement as any).mockReturnValue(pathEl);
+
+    const gEl = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    (ctx.getEdgeElement as any).mockReturnValue(gEl);
+
+    const mixin = createAnimationMixin(ctx);
+
+    const result = mixin.sendParticle('e1', { renderer: 'nonexistent' });
+
+    expect(result).toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// animate — respectReducedMotion
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('animate — respectReducedMotion', () => {
+  it('collapses animate duration to 0 when respectReducedMotion is true', () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx({ _config: { respectReducedMotion: true } as any });
+    ctx._nodeMap.set('n1', n1);
+    const mixin = createAnimationMixin(ctx);
+
+    // With duration: 500 but reduced motion forced on, changes should be instant.
+    mixin.animate(
+      { nodes: { n1: { position: { x: 200, y: 300 } } } },
+      { duration: 500 },
+    );
+
+    // Values should have jumped to target immediately (instant path).
+    expect(n1.position.x).toBe(200);
+    expect(n1.position.y).toBe(300);
+    expect(ctx._flushNodePositions).toHaveBeenCalled();
+  });
+
+  it('does not reduce motion when respectReducedMotion is false', () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx({ _config: { respectReducedMotion: false } as any });
+    ctx._nodeMap.set('n1', n1);
+    ctx._animator = {
+      animate: vi.fn(() => ({
+        pause: vi.fn(),
+        resume: vi.fn(),
+        stop: vi.fn(),
+        reverse: vi.fn(),
+        finished: Promise.resolve(),
+      })),
+    } as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { nodes: { n1: { position: { x: 200, y: 300 } } } },
+      { duration: 500 },
+    );
+
+    // Animator should have been invoked with the full 500ms duration.
+    expect(ctx._animator!.animate).toHaveBeenCalled();
+    const callArgs = (ctx._animator!.animate as any).mock.calls[0][1];
+    expect(callArgs.duration).toBe(500);
+    // Position should NOT have jumped — still animating.
+    expect(n1.position.x).toBe(0);
+    expect(n1.position.y).toBe(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// destroy
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('createAnimationMixin — destroy()', () => {
+  it('stops all active animations on destroy', () => {
+    const ctx = mockCtx();
+    const stopAll = vi.fn();
+    ctx._animator = { animate: vi.fn(), stopAll } as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.destroy();
+
+    expect(stopAll).toHaveBeenCalledOnce();
+  });
+
+  it('is safe when _animator is null', () => {
+    const ctx = mockCtx();
+    ctx._animator = null;
+    const mixin = createAnimationMixin(ctx);
+
+    expect(() => mixin.destroy()).not.toThrow();
+  });
+
+  it('destroys all active particles on destroy', () => {
+    const ctx = mockCtx();
+    const stopHandle = vi.fn();
+    ctx._particleEngineHandle = { stop: stopHandle } as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.destroy();
+
+    // destroyParticles() stops the engine handle and clears active particles
+    expect(stopHandle).toHaveBeenCalledOnce();
+    expect(ctx._particleEngineHandle).toBeNull();
+  });
+
+  it('stops all active timelines on destroy', () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+
+    const tl1 = { stop: vi.fn(), locked: false } as any;
+    const tl2 = { stop: vi.fn(), locked: false } as any;
+    ctx._activeTimelines.add(tl1);
+    ctx._activeTimelines.add(tl2);
+
+    mixin.destroy();
+
+    expect(tl1.stop).toHaveBeenCalledOnce();
+    expect(tl2.stop).toHaveBeenCalledOnce();
+  });
+
+  it('clears _activeTimelines after destroy', () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+    ctx._activeTimelines.add({ stop: vi.fn(), locked: false } as any);
+
+    mixin.destroy();
+
+    expect(ctx._activeTimelines.size).toBe(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Tier A integration — getHandles, cancelAll, group, transaction, snapshot, boundTo
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('canvas animation — Tier A integration', () => {
+  function makeAnimator() {
+    const registry = {
+      getHandles: vi.fn(() => []),
+      cancelAll: vi.fn(),
+      pauseAll: vi.fn(),
+      resumeAll: vi.fn(),
+      register: vi.fn(),
+      unregister: vi.fn(),
+    };
+    const animator = {
+      animate: vi.fn(() => ({
+        pause: vi.fn(),
+        resume: vi.fn(),
+        stop: vi.fn(),
+        reverse: vi.fn(),
+        play: vi.fn(),
+        playForward: vi.fn(),
+        playBackward: vi.fn(),
+        restart: vi.fn(),
+        direction: 'forward' as const,
+        isFinished: false,
+        currentValue: new Map(),
+        finished: Promise.resolve(),
+      })),
+      stopAll: vi.fn(),
+      registry,
+      beginTransaction: vi.fn(() => ({
+        state: 'active',
+        handles: [],
+        commit: vi.fn(),
+        rollback: vi.fn(),
+        trackHandle: vi.fn(),
+        captureProperty: vi.fn(),
+        finished: Promise.resolve(),
+      })),
+      endTransaction: vi.fn(),
+    };
+    return animator;
+  }
+
+  it('getHandles() returns handles from the registry', () => {
+    const ctx = mockCtx();
+    const animator = makeAnimator();
+    const mockHandles = [
+      { _tags: ['test'], pause: vi.fn(), resume: vi.fn(), stop: vi.fn(), isFinished: false },
+    ];
+    animator.registry.getHandles.mockReturnValue(mockHandles);
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    const handles = mixin.getHandles({ tag: 'test' });
+
+    expect(animator.registry.getHandles).toHaveBeenCalledWith({ tag: 'test' });
+    expect(handles).toBe(mockHandles);
+  });
+
+  it('cancelAll() stops tagged handles', () => {
+    const ctx = mockCtx();
+    const animator = makeAnimator();
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.cancelAll({ tag: 'highlight' }, { mode: 'freeze' });
+
+    expect(animator.registry.cancelAll).toHaveBeenCalledWith(
+      { tag: 'highlight' },
+      { mode: 'freeze' },
+    );
+  });
+
+  it('pauseAll() pauses tagged handles', () => {
+    const ctx = mockCtx();
+    const animator = makeAnimator();
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.pauseAll({ tag: 'bg' });
+
+    expect(animator.registry.pauseAll).toHaveBeenCalledWith({ tag: 'bg' });
+  });
+
+  it('resumeAll() resumes tagged handles', () => {
+    const ctx = mockCtx();
+    const animator = makeAnimator();
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.resumeAll({ tags: ['a', 'b'] });
+
+    expect(animator.registry.resumeAll).toHaveBeenCalledWith({ tags: ['a', 'b'] });
+  });
+
+  it('group() returns a FlowGroup that auto-tags', () => {
+    const ctx = mockCtx();
+    const animator = makeAnimator();
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    const grp = mixin.group('my-group');
+
+    expect(grp).toBeDefined();
+    expect(grp.name).toBe('my-group');
+
+    // Calling animate on the group should delegate to the mixin with the group tag
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    ctx._nodeMap.set('n1', n1);
+
+    grp.animate(
+      { nodes: { n1: { position: { x: 100 } } } },
+      { duration: 300 },
+    );
+
+    expect(animator.animate).toHaveBeenCalled();
+    const callArgs = animator.animate.mock.calls[0][1];
+    expect(callArgs.tag).toBe('my-group');
+  });
+
+  it('transaction() tracks handles and supports rollback', () => {
+    const ctx = mockCtx();
+    const animator = makeAnimator();
+    const mockTx = {
+      state: 'active' as const,
+      handles: [],
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      trackHandle: vi.fn(),
+      captureProperty: vi.fn(),
+      finished: Promise.resolve(),
+    };
+    animator.beginTransaction.mockReturnValue(mockTx);
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    const tx = mixin.transaction(() => {
+      // Synchronous work inside transaction
+    });
+
+    expect(animator.beginTransaction).toHaveBeenCalledOnce();
+    expect(animator.endTransaction).toHaveBeenCalledOnce();
+    expect(tx).toBe(mockTx);
+  });
+
+  it('transaction() calls rollback on sync error', () => {
+    const ctx = mockCtx();
+    const animator = makeAnimator();
+    const mockTx = {
+      state: 'active' as const,
+      handles: [],
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      trackHandle: vi.fn(),
+      captureProperty: vi.fn(),
+      finished: Promise.resolve(),
+    };
+    animator.beginTransaction.mockReturnValue(mockTx);
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    expect(() => {
+      mixin.transaction(() => {
+        throw new Error('boom');
+      });
+    }).toThrow();
+
+    expect(mockTx.rollback).toHaveBeenCalledOnce();
+    expect(animator.endTransaction).toHaveBeenCalledOnce();
+  });
+
+  it('transaction() ends transaction after async resolution', async () => {
+    const ctx = mockCtx();
+    const animator = makeAnimator();
+    const mockTx = {
+      state: 'active' as const,
+      handles: [],
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      trackHandle: vi.fn(),
+      captureProperty: vi.fn(),
+      finished: Promise.resolve(),
+    };
+    animator.beginTransaction.mockReturnValue(mockTx);
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.transaction(async () => {
+      // async work
+    });
+
+    // Wait for the microtask to resolve
+    await new Promise((r) => setTimeout(r, 0));
+
+    // beginTransaction called once, endTransaction called twice:
+    // once in the sync path (since result is a promise, it doesn't call
+    // endTransaction there), actually the logic calls endTransaction in .then()
+    expect(animator.beginTransaction).toHaveBeenCalledOnce();
+    // endTransaction is called in the .then() callback
+    expect(animator.endTransaction).toHaveBeenCalled();
+  });
+
+  it('snapshot() captures and restores canvas state', () => {
+    const ctx = mockCtx();
+    const n1 = makeNode('n1', { position: { x: 10, y: 20 } });
+    const n2 = makeNode('n2', { position: { x: 30, y: 40 } });
+    const e1 = makeEdge('e1');
+    ctx.nodes = [n1, n2];
+    ctx.edges = [e1];
+    ctx.viewport = { x: 100, y: 200, zoom: 1.5 };
+    const mixin = createAnimationMixin(ctx);
+
+    const snap = mixin.snapshot();
+
+    // Mutate the state
+    ctx.nodes[0].position.x = 999;
+    ctx.nodes.splice(1, 1); // Remove n2
+    ctx.edges.splice(0, 1); // Remove e1
+    ctx.viewport.x = 0;
+    ctx.viewport.y = 0;
+    ctx.viewport.zoom = 1;
+
+    // Restore
+    snap.restore();
+
+    expect(ctx.nodes).toHaveLength(2);
+    expect(ctx.nodes[0].position.x).toBe(10);
+    expect(ctx.nodes[1].position.x).toBe(30);
+    expect(ctx.edges).toHaveLength(1);
+    expect(ctx.edges[0].id).toBe('e1');
+    expect(ctx.viewport.x).toBe(100);
+    expect(ctx.viewport.y).toBe(200);
+    expect(ctx.viewport.zoom).toBe(1.5);
+  });
+
+  it('boundTo compiles to a while predicate for nodes', () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 }, data: { runState: 'running' } });
+    const ctx = mockCtx();
+    ctx._nodeMap.set('n1', n1);
+    ctx.nodes = [n1];
+
+    const animator = makeAnimator();
+    ctx._animator = animator as any;
+
+    // Wire up getNode to actually return from nodeMap
+    (ctx.getNode as any).mockImplementation((id: string) => ctx._nodeMap.get(id));
+
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { nodes: { n1: { position: { x: 100 } } } },
+      {
+        duration: 300,
+        boundTo: { node: 'n1', property: 'runState', equals: 'running' },
+      },
+    );
+
+    // The animate call should pass a `while` predicate to the animator
+    expect(animator.animate).toHaveBeenCalled();
+    const callArgs = animator.animate.mock.calls[0][1];
+    expect(callArgs.while).toBeTypeOf('function');
+
+    // While data.runState is 'running', predicate returns true
+    // Actually, the binding is on the node object itself, not data
+    // Since 'runState' doesn't exist on node directly, let's set it
+    (n1 as any).runState = 'running';
+    expect(callArgs.while()).toBe(true);
+
+    // Change the state — predicate should return false
+    (n1 as any).runState = 'stopped';
+    expect(callArgs.while()).toBe(false);
+  });
+
+  it('boundTo compiles to a while predicate for edges', () => {
+    const e1 = makeEdge('e1', { animated: true, color: '#000' });
+    const ctx = mockCtx();
+    ctx._edgeMap.set('e1', e1);
+    ctx.edges = [e1];
+
+    const animator = makeAnimator();
+    ctx._animator = animator as any;
+
+    // Wire up getEdge to return from edgeMap
+    (ctx.getEdge as any).mockImplementation((id: string) => ctx._edgeMap.get(id));
+
+    // We need at least one animatable entry, so let's animate edge color
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { edges: { e1: { color: '#fff' } } },
+      {
+        duration: 300,
+        boundTo: { edge: 'e1', property: 'animated', equals: true },
+      },
+    );
+
+    expect(animator.animate).toHaveBeenCalled();
+    const callArgs = animator.animate.mock.calls[0][1];
+    expect(callArgs.while).toBeTypeOf('function');
+
+    // animated is true — predicate should return true
+    expect(callArgs.while()).toBe(true);
+
+    // Change animated to false — predicate should return false
+    e1.animated = false;
+    expect(callArgs.while()).toBe(false);
+  });
+
+  it('boundTo passes through to update() via animate()', () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx();
+    ctx._nodeMap.set('n1', n1);
+
+    const animator = makeAnimator();
+    ctx._animator = animator as any;
+
+    (ctx.getNode as any).mockImplementation((id: string) => ctx._nodeMap.get(id));
+
+    const mixin = createAnimationMixin(ctx);
+
+    // Use update() directly
+    mixin.update(
+      { nodes: { n1: { position: { x: 50 } } } },
+      {
+        duration: 500,
+        boundTo: { node: 'n1', property: 'selected', equals: true },
+      },
+    );
+
+    const callArgs = animator.animate.mock.calls[0][1];
+    expect(callArgs.while).toBeTypeOf('function');
+
+    n1.selected = true;
+    expect(callArgs.while()).toBe(true);
+
+    n1.selected = false;
+    expect(callArgs.while()).toBe(false);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// registerParticleRenderer
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('registerParticleRenderer', () => {
+  it('$flow.registerParticleRenderer delegates to the registry', () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+
+    const mockRenderer: ParticleRenderer = {
+      create: vi.fn((svgLayer: SVGElement) => {
+        const el = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        svgLayer.appendChild(el);
+        return el;
+      }),
+      update: vi.fn(),
+      destroy: vi.fn((el: SVGElement) => el.remove()),
+    };
+
+    mixin.registerParticleRenderer('test-custom-renderer', mockRenderer);
+
+    expect(getParticleRenderer('test-custom-renderer')).toBe(mockRenderer);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// canvas animation — motion option
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('canvas animation — motion option', () => {
+  function makeAnimatorSpy() {
+    return {
+      animate: vi.fn(() => ({
+        pause: vi.fn(),
+        resume: vi.fn(),
+        stop: vi.fn(),
+        reverse: vi.fn(),
+        play: vi.fn(),
+        playForward: vi.fn(),
+        playBackward: vi.fn(),
+        restart: vi.fn(),
+        direction: 'forward' as const,
+        isFinished: false,
+        currentValue: new Map(),
+        finished: Promise.resolve(),
+      })),
+      stopAll: vi.fn(),
+    };
+  }
+
+  it('passes motion through to animator', () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx();
+    ctx._nodeMap.set('n1', n1);
+    const animator = makeAnimatorSpy();
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { nodes: { n1: { position: { x: 100, y: 100 } } } },
+      { duration: 500, motion: 'spring.wobbly' },
+    );
+
+    expect(animator.animate).toHaveBeenCalled();
+    const callArgs = animator.animate.mock.calls[0][1];
+    expect(callArgs.motion).toBe('spring.wobbly');
+  });
+
+  it('passes maxDuration through to animator', () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx();
+    ctx._nodeMap.set('n1', n1);
+    const animator = makeAnimatorSpy();
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { nodes: { n1: { position: { x: 50, y: 50 } } } },
+      { duration: 500, motion: 'spring.stiff', maxDuration: 2000 },
+    );
+
+    expect(animator.animate).toHaveBeenCalled();
+    const callArgs = animator.animate.mock.calls[0][1];
+    expect(callArgs.maxDuration).toBe(2000);
+  });
+
+  it('passes motion object config through to animator', () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx();
+    ctx._nodeMap.set('n1', n1);
+    const animator = makeAnimatorSpy();
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    const motionConfig = { type: 'spring' as const, stiffness: 200, damping: 20 };
+    mixin.animate(
+      { nodes: { n1: { position: { x: 75 } } } },
+      { duration: 500, motion: motionConfig },
+    );
+
+    expect(animator.animate).toHaveBeenCalled();
+    const callArgs = animator.animate.mock.calls[0][1];
+    expect(callArgs.motion).toBe(motionConfig);
+  });
+
+  it('motion is undefined in animator call when not provided', () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx();
+    ctx._nodeMap.set('n1', n1);
+    const animator = makeAnimatorSpy();
+    ctx._animator = animator as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { nodes: { n1: { position: { x: 100 } } } },
+      { duration: 300 },
+    );
+
+    expect(animator.animate).toHaveBeenCalled();
+    const callArgs = animator.animate.mock.calls[0][1];
+    expect(callArgs.motion).toBeUndefined();
+    expect(callArgs.maxDuration).toBeUndefined();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// record and replay
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function makeRecordingData(overrides: Partial<RecordingData> = {}): RecordingData {
+  return {
+    version: RECORDING_VERSION,
+    duration: 0,
+    initialState: { nodes: {}, edges: {}, viewport: { x: 0, y: 0, zoom: 1 } },
+    events: [],
+    checkpoints: [],
+    ...overrides,
+  };
+}
+
+describe('createAnimationMixin — record and replay', () => {
+  it('record() returns a Promise that resolves to a Recording', async () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+
+    const recording = await mixin.record(() => {});
+
+    expect(recording).toBeInstanceOf(Recording);
+  });
+
+  it('record() captures animate calls made during fn()', async () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+
+    const recording = await mixin.record(() => {
+      mixin.animate({ nodes: { n1: { position: { x: 100, y: 200 } } } }, { duration: 300 });
+    });
+
+    expect(recording.events).toHaveLength(1);
+    expect(recording.events[0].type).toBe('animate');
+    expect(recording.events[0].args.targets).toEqual({ nodes: { n1: { position: { x: 100, y: 200 } } } });
+  });
+
+  it('record() captures update calls made during fn()', async () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+
+    const recording = await mixin.record(() => {
+      mixin.update({ nodes: { n1: { position: { x: 50, y: 50 } } } }, { duration: 0 });
+    });
+
+    expect(recording.events).toHaveLength(1);
+    expect(recording.events[0].type).toBe('update');
+  });
+
+  it('record() captures multiple events in order', async () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+
+    const recording = await mixin.record(() => {
+      mixin.update({ nodes: { n1: { position: { x: 10 } } } });
+      mixin.animate({ nodes: { n2: { position: { x: 20 } } } }, { duration: 500 });
+    });
+
+    expect(recording.events).toHaveLength(2);
+    expect(recording.events[0].type).toBe('update');
+    expect(recording.events[1].type).toBe('animate');
+  });
+
+  it('record() accepts options and passes captureMetadata to the Recording', async () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+
+    const recording = await mixin.record(
+      () => {},
+      { captureMetadata: { label: 'my-recording' } },
+    );
+
+    expect(recording.metadata).toEqual({ label: 'my-recording' });
+  });
+
+  it('replay() returns a ReplayHandle', () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+    const recording = new Recording(makeRecordingData({ duration: 100 }));
+
+    const handle = mixin.replay(recording, { paused: true });
+
+    expect(handle).toBeInstanceOf(ReplayHandle);
+  });
+
+  it('replay() handle exposes expected controls', () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+    const recording = new Recording(makeRecordingData({ duration: 100 }));
+
+    const handle = mixin.replay(recording, { paused: true });
+
+    expect(typeof handle.play).toBe('function');
+    expect(typeof handle.pause).toBe('function');
+    expect(typeof handle.stop).toBe('function');
+    expect(typeof handle.seek).toBe('function');
+    expect(handle.finished).toBeInstanceOf(Promise);
+  });
+
+  it('replay() handle exposes the original recording', () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+    const recording = new Recording(makeRecordingData({ duration: 250 }));
+
+    const handle = mixin.replay(recording, { paused: true });
+
+    expect(handle.recording).toBe(recording);
+    expect(handle.duration).toBe(250);
+  });
+
+  it('replay() starts paused when paused option is true', () => {
+    const ctx = mockCtx();
+    const mixin = createAnimationMixin(ctx);
+    const recording = new Recording(makeRecordingData({ duration: 100 }));
+
+    const handle = mixin.replay(recording, { paused: true });
+
+    expect(handle.state).toBe('paused');
+  });
+
+  it('replay() applies initialState to canvas nodes on construction', () => {
+    const n1: FlowNode = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx();
+    ctx.nodes.push(n1);
+
+    const mixin = createAnimationMixin(ctx);
+    const recording = new Recording(makeRecordingData({
+      initialState: {
+        nodes: { n1: { position: { x: 42, y: 99 } } },
+        edges: {},
+        viewport: { x: 0, y: 0, zoom: 1 },
+      },
+    }));
+
+    mixin.replay(recording, { paused: true });
+
+    expect(ctx.nodes[0].position.x).toBe(42);
+    expect(ctx.nodes[0].position.y).toBe(99);
   });
 });

@@ -75,7 +75,7 @@ import { createValidationMixin } from './canvas-validation';
 import { createComputeMixin } from './canvas-compute';
 import { createDomMixin } from './canvas-dom';
 import { createConfigMixin } from './canvas-config';
-import type { CanvasContext } from './canvas-context';
+import type { CanvasContext, ActiveParticle } from './canvas-context';
 
 let instanceCounter = 0;
 
@@ -287,14 +287,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _hydratedFromStatic: false,
 
     // ── Shared Particle Loop ────────────────────────────────────────────
-    _activeParticles: new Set<{
-      circle: SVGCircleElement;
-      pathEl: SVGPathElement;
-      t0: number;
-      ms: number;
-      safetyTimer: ReturnType<typeof setTimeout>;
-      onComplete?: () => void;
-    }>(),
+    _activeParticles: new Set<ActiveParticle>(),
     _particleEngineHandle: null as EngineHandle | null,
     /** Live CSSStyleDeclaration for the container — cached to avoid per-particle getComputedStyle calls. */
     _containerStyles: null as CSSStyleDeclaration | null,
@@ -1540,15 +1533,6 @@ export function registerFlowCanvas(Alpine: Alpine) {
         cancelAnimationFrame(this._layoutAnimFrame);
         this._layoutAnimFrame = 0;
       }
-
-      // Clean up particle engine registration
-      this._particleEngineHandle?.stop();
-      this._particleEngineHandle = null;
-      for (const p of this._activeParticles) {
-        clearTimeout(p.safetyTimer);
-        p.circle.remove();
-      }
-      this._activeParticles.clear();
 
       // Clean up auto-layout timer
       if (this._autoLayoutTimer) {

@@ -18,15 +18,24 @@ import type {
   AnimateOptions,
   FlowAnimationHandle,
   FollowOptions,
+  BurstOptions,
+  ParticleBurstHandle,
+  ConvergingOptions,
+  ConvergingHandle,
   ParticleHandle,
   ParticleOptions,
+  ParticleRenderer,
   PatchableConfig,
   ChildValidation,
   AutoLayoutConfig,
   RowFilter,
   ShapeDefinition,
   ToImageOptions,
+  StopOptions,
 } from '../../core/types';
+import type { FlowGroup } from '../../animate/flow-group';
+import type { Transaction } from '../../animate/transaction';
+import type { Recording, RecordOptions, ReplayOptions, ReplayHandle } from '../../animate/recording';
 import type { FlowHistory } from '../../core/history';
 import type { FlowTimeline } from '../../animate/timeline';
 import type { Animator } from '../../animate/animator';
@@ -45,12 +54,13 @@ import type { KeyboardShortcuts } from '../../core/keyboard-shortcuts';
 // ── Active particle entry (shared loop) ─────────────────────────────────────
 
 export interface ActiveParticle {
-  circle: SVGCircleElement;
+  element: SVGElement;          // generic — could be circle, rect, g, etc.
+  renderer: ParticleRenderer;   // the renderer that created it
   pathEl: SVGPathElement;
-  t0: number;
+  startElapsed: number;       // engine-relative start time; -1 until first tick
   ms: number;
-  safetyTimer: ReturnType<typeof setTimeout>;
   onComplete?: () => void;
+  currentPosition: { x: number; y: number };
 }
 
 // ── Context menu state ──────────────────────────────────────────────────────
@@ -443,7 +453,10 @@ export interface CanvasContext {
   _deleteSelected(): Promise<void>;
 
   /** Engine tick callback for processing active particles */
-  _tickParticles(): boolean;
+  _tickParticles(elapsed: number): boolean;
+
+  /** Stop particle engine and remove all active particles from the DOM */
+  destroyParticles(): void;
 
   /** Internal implementation for config patching */
   _applyConfigPatch(changes: Record<string, any>): void;
@@ -699,6 +712,51 @@ export interface CanvasContext {
 
   /** Fire a particle along an edge path */
   sendParticle(edgeId: string, options?: Record<string, any>): ParticleHandle | undefined;
+
+  /** Fire a particle along an arbitrary SVG path string */
+  sendParticleAlongPath(svgPath: string, options?: ParticleOptions): ParticleHandle | undefined;
+
+  /** Fire a particle along a straight line between two node centers */
+  sendParticleBetween(sourceNodeId: string, targetNodeId: string, options?: ParticleOptions): ParticleHandle | undefined;
+
+  /** Fire a burst of staggered particles along an edge */
+  sendParticleBurst(edgeId: string, options: BurstOptions): ParticleBurstHandle;
+
+  /** Fire particles from multiple edges converging on a target node */
+  sendConverging(sourceEdgeIds: string[], options: ConvergingOptions): ConvergingHandle;
+
+  /** Register a custom particle renderer by name */
+  registerParticleRenderer(name: string, renderer: ParticleRenderer): void;
+
+  /** Get the SVG element that hosts edge paths (for injecting temp paths) */
+  getEdgeSvgElement(): SVGSVGElement | null;
+
+  /** Get all tracked animation handles, optionally filtered by tag */
+  getHandles(filter?: { tag?: string; tags?: string[] }): FlowAnimationHandle[];
+
+  /** Cancel all animations matching a tag filter */
+  cancelAll(filter: { tag?: string; tags?: string[] }, options?: StopOptions): void;
+
+  /** Pause all animations matching a tag filter */
+  pauseAll(filter: { tag?: string; tags?: string[] }): void;
+
+  /** Resume all animations matching a tag filter */
+  resumeAll(filter: { tag?: string; tags?: string[] }): void;
+
+  /** Create a named group that auto-tags all animations made through it */
+  group(name: string): FlowGroup;
+
+  /** Create a transaction for grouped rollback of multiple animations */
+  transaction(fn: () => Promise<void> | void): Transaction;
+
+  /** Capture current canvas state. Call restore() to revert */
+  snapshot(): { restore: () => void };
+
+  /** Record canvas animation events during fn() execution. Returns a Recording */
+  record(fn: () => Promise<void> | void, options?: RecordOptions): Promise<Recording>;
+
+  /** Replay a previously recorded Recording on this canvas. Returns a ReplayHandle */
+  replay(recording: Recording, options?: ReplayOptions): ReplayHandle;
 
   /** Dagre layout */
   layout(options?: { direction?: 'TB' | 'LR' | 'BT' | 'RL'; nodesep?: number; ranksep?: number; adjustHandles?: boolean; fitView?: boolean; duration?: number }): Promise<void>;

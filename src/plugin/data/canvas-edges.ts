@@ -1,9 +1,10 @@
 // ============================================================================
 // canvas-edges — Edge CRUD & DOM element access mixin for flow-canvas
 //
-// Public API: addEdges, removeEdges, getEdge, getEdgePathElement, getEdgeElement.
+// Public API: addEdges, removeEdges, getEdge, getEdgePathElement,
+//             getEdgeElement, getEdgeSvgElement.
 //
-// Five methods handling edge lifecycle operations. addEdges merges
+// Six methods handling edge lifecycle operations. addEdges merges
 // defaultEdgeOptions from config onto new edges.
 // ============================================================================
 
@@ -97,6 +98,42 @@ export function createEdgesMixin(ctx: CanvasContext) {
      */
     getEdgeElement(id: string): SVGElement | HTMLElement | null {
       return ctx._container?.querySelector(`[data-flow-edge-id="${CSS.escape(id)}"]`) as SVGElement | null;
+    },
+
+    /**
+     * Get the SVG element that hosts edge paths.
+     * Returns the first `.flow-edge-svg` element inside the viewport if any edges
+     * exist. When the canvas has zero edges (e.g., a particle-only canvas using
+     * sendParticleAlongPath or sendParticleBetween), lazily creates and caches a
+     * dedicated `.flow-particle-svg` element inside the edges container so
+     * particle emission methods have a place to inject temporary paths.
+     */
+    getEdgeSvgElement(): SVGSVGElement | null {
+      if (!ctx._viewportEl) return null;
+      const existing = ctx._viewportEl.querySelector('.flow-edge-svg') as SVGSVGElement | null;
+      if (existing) return existing;
+
+      const edgesDiv = ctx._viewportEl.querySelector('.flow-edges');
+      if (!edgesDiv) return null;
+
+      let fallback = edgesDiv.querySelector('.flow-particle-svg') as SVGSVGElement | null;
+      if (!fallback) {
+        fallback = document.createElementNS('http://www.w3.org/2000/svg', 'svg') as SVGSVGElement;
+        // Match the structural.css .flow-edge-svg sizing pattern exactly:
+        // 1px × 1px with overflow:visible so children render at their absolute
+        // SVG user-space coordinates. 100% width/height would resolve to 0×0
+        // because .flow-edges has no explicit dimensions.
+        fallback.setAttribute('class', 'flow-particle-svg');
+        fallback.style.position = 'absolute';
+        fallback.style.top = '0';
+        fallback.style.left = '0';
+        fallback.style.width = '1px';
+        fallback.style.height = '1px';
+        fallback.style.overflow = 'visible';
+        fallback.style.pointerEvents = 'none';
+        edgesDiv.appendChild(fallback);
+      }
+      return fallback;
     },
   };
 }
