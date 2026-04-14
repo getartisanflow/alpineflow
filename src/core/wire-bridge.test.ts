@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { WIRE_PAYLOAD_MAP, WIRE_COMMAND_MAP, registerWireCommands, registerWireEvents } from './wire-bridge';
+import { WIRE_PAYLOAD_MAP, WIRE_COMMAND_MAP, registerWireCommands, registerWireEvents, registerCustomWireCommands } from './wire-bridge';
 
 // ── WIRE_PAYLOAD_MAP ──────────────────────────────────────────────────
 
@@ -280,6 +280,112 @@ describe('registerWireCommands', () => {
     registerWireCommands({} as any, mockWire);
 
     expect(() => listeners['flow:addNodes']({ nodes: [] })).not.toThrow();
+  });
+
+  it('routes v0.2.0-alpha particle firing methods with correct args', () => {
+    const listeners: Record<string, Function> = {};
+    const mockWire = { on: (event: string, cb: Function) => { listeners[event] = cb; } };
+    const mockCanvas = {
+      sendParticleAlongPath: vi.fn(),
+      sendParticleBetween: vi.fn(),
+      sendParticleBurst: vi.fn(),
+      sendConverging: vi.fn(),
+    };
+
+    registerWireCommands(mockCanvas as any, mockWire);
+
+    listeners['flow:sendParticleAlongPath']({ path: 'M 0 0 L 100 100', options: { renderer: 'beam' } });
+    expect(mockCanvas.sendParticleAlongPath).toHaveBeenCalledWith('M 0 0 L 100 100', { renderer: 'beam' });
+
+    listeners['flow:sendParticleBetween']({ source: 'a', target: 'b', options: { color: 'red' } });
+    expect(mockCanvas.sendParticleBetween).toHaveBeenCalledWith('a', 'b', { color: 'red' });
+
+    listeners['flow:sendParticleBurst']({ edgeId: 'e1', options: { count: 5, stagger: 100 } });
+    expect(mockCanvas.sendParticleBurst).toHaveBeenCalledWith('e1', { count: 5, stagger: 100 });
+
+    listeners['flow:sendConverging']({ sources: ['e1', 'e2'], options: { targetNodeId: 'sink' } });
+    expect(mockCanvas.sendConverging).toHaveBeenCalledWith(['e1', 'e2'], { targetNodeId: 'sink' });
+  });
+
+  it('routes v0.2.0-alpha bulk animation controls with tag filters', () => {
+    const listeners: Record<string, Function> = {};
+    const mockWire = { on: (event: string, cb: Function) => { listeners[event] = cb; } };
+    const mockCanvas = {
+      cancelAll: vi.fn(),
+      pauseAll: vi.fn(),
+      resumeAll: vi.fn(),
+    };
+
+    registerWireCommands(mockCanvas as any, mockWire);
+
+    listeners['flow:cancelAll']({ filter: { tag: 'ambient' }, options: { mode: 'rollback' } });
+    expect(mockCanvas.cancelAll).toHaveBeenCalledWith({ tag: 'ambient' }, { mode: 'rollback' });
+
+    listeners['flow:pauseAll']({ filter: { tag: 'ambient' } });
+    expect(mockCanvas.pauseAll).toHaveBeenCalledWith({ tag: 'ambient' });
+
+    listeners['flow:resumeAll']({ filter: { tags: ['ambient', 'background'] } });
+    expect(mockCanvas.resumeAll).toHaveBeenCalledWith({ tags: ['ambient', 'background'] });
+  });
+
+  it('defaults cancelAll/pauseAll/resumeAll filter to empty object when omitted', () => {
+    const listeners: Record<string, Function> = {};
+    const mockWire = { on: (event: string, cb: Function) => { listeners[event] = cb; } };
+    const mockCanvas = { cancelAll: vi.fn(), pauseAll: vi.fn(), resumeAll: vi.fn() };
+
+    registerWireCommands(mockCanvas as any, mockWire);
+
+    // Missing filter — should default to {} (cancel/pause/resume all, no filter)
+    listeners['flow:cancelAll']({});
+    expect(mockCanvas.cancelAll).toHaveBeenCalledWith({}, {});
+
+    listeners['flow:pauseAll']({});
+    expect(mockCanvas.pauseAll).toHaveBeenCalledWith({});
+  });
+});
+
+describe('flow:highlightPath — option pass-through (v0.2.0-alpha fix)', () => {
+  it('forwards every particle option (renderer, gradient, followThrough) through to sendParticle', () => {
+    vi.useFakeTimers();
+    try {
+      const listeners: Record<string, Function> = {};
+      const mockWire = { on: (event: string, cb: Function) => { listeners[event] = cb; } };
+      const sendParticle = vi.fn();
+      const mockCanvas = {
+        edges: [{ id: 'e1', source: 'a', target: 'b' }],
+        sendParticle,
+      };
+
+      registerCustomWireCommands(mockCanvas as any, mockWire);
+
+      listeners['flow:highlightPath']({
+        nodeIds: ['a', 'b'],
+        options: {
+          renderer: 'beam',
+          length: 60,
+          width: 4,
+          gradient: [
+            { offset: 0, color: '#000', opacity: 0 },
+            { offset: 1, color: '#fff', opacity: 1 },
+          ],
+          followThrough: false,
+        },
+      });
+
+      vi.runAllTimers();
+
+      expect(sendParticle).toHaveBeenCalledTimes(1);
+      const [edgeId, opts] = sendParticle.mock.calls[0];
+      expect(edgeId).toBe('e1');
+      // All user-provided options should reach sendParticle, not just color/size/duration
+      expect(opts.renderer).toBe('beam');
+      expect(opts.length).toBe(60);
+      expect(opts.width).toBe(4);
+      expect(opts.gradient).toHaveLength(2);
+      expect(opts.followThrough).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

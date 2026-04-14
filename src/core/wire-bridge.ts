@@ -53,7 +53,17 @@ export const WIRE_COMMAND_MAP: Record<string, string> = {
   'flow:removeEdges':  'removeEdges',
   'flow:update':       'update',
   'flow:animate':      'animate',
-  'flow:sendParticle': 'sendParticle',
+  // Particle emission — all five firing methods
+  'flow:sendParticle':          'sendParticle',
+  'flow:sendParticleAlongPath': 'sendParticleAlongPath',
+  'flow:sendParticleBetween':   'sendParticleBetween',
+  'flow:sendParticleBurst':     'sendParticleBurst',
+  'flow:sendConverging':        'sendConverging',
+  // Tag-filtered bulk animation control (v0.2.0-alpha)
+  'flow:cancelAll':  'cancelAll',
+  'flow:pauseAll':   'pauseAll',
+  'flow:resumeAll':  'resumeAll',
+  // Viewport
   'flow:fitView':      'fitView',
   'flow:zoomIn':       'zoomIn',
   'flow:zoomOut':      'zoomOut',
@@ -88,7 +98,17 @@ const WIRE_COMMAND_ARGS: Record<string, (params: any) => any[]> = {
   'flow:removeEdges':  (p) => [p.ids],
   'flow:update':       (p) => [p.targets, p.options ?? {}],
   'flow:animate':      (p) => [p.targets, p.options ?? {}],
-  'flow:sendParticle': (p) => [p.edgeId, p.options ?? {}],
+  // Particle emission — all five firing methods
+  'flow:sendParticle':          (p) => [p.edgeId, p.options ?? {}],
+  'flow:sendParticleAlongPath': (p) => [p.path, p.options ?? {}],
+  'flow:sendParticleBetween':   (p) => [p.source, p.target, p.options ?? {}],
+  'flow:sendParticleBurst':     (p) => [p.edgeId, p.options ?? {}],
+  'flow:sendConverging':        (p) => [p.sources, p.options ?? {}],
+  // Tag-filtered bulk animation control
+  'flow:cancelAll':  (p) => [p.filter ?? {}, p.options ?? {}],
+  'flow:pauseAll':   (p) => [p.filter ?? {}],
+  'flow:resumeAll':  (p) => [p.filter ?? {}],
+  // Viewport
   'flow:fitView':      ()  => [],
   'flow:zoomIn':       ()  => [],
   'flow:zoomOut':      ()  => [],
@@ -217,11 +237,21 @@ export function registerCustomWireCommands(canvas: any, $wire: any): () => void 
     }, 100 + holdTime);
   }));
 
-  // flow:highlightPath — fire particles along edges connecting a sequence of nodes
+  // flow:highlightPath — fire particles along edges connecting a sequence of nodes.
+  // All particle options pass through transparently so beam gradients,
+  // followThrough, custom renderers, etc. all work from Livewire.
   cleanups.push($wire.on('flow:highlightPath', (p: any) => {
     const nodeIds: string[] = p.nodeIds;
     const options = p.options ?? {};
-    const delay = options.delay ?? 200;
+    const { delay: rawDelay, ...particleOptions } = options;
+    const delay = rawDelay ?? 200;
+    // Apply sensible defaults without clobbering user-provided values.
+    const resolved = {
+      color: '#3b82f6',
+      size: 5,
+      duration: '800ms',
+      ...particleOptions,
+    };
 
     for (let i = 0; i < nodeIds.length - 1; i++) {
       const source = nodeIds[i];
@@ -229,11 +259,7 @@ export function registerCustomWireCommands(canvas: any, $wire: any): () => void 
       const edge = canvas.edges.find((e: any) => e.source === source && e.target === target);
       if (edge) {
         setTimeout(() => {
-          canvas.sendParticle(edge.id, {
-            color: options.color ?? '#3b82f6',
-            size: options.size ?? 5,
-            duration: options.duration ?? '800ms',
-          });
+          canvas.sendParticle(edge.id, resolved);
         }, i * delay);
       }
     }
