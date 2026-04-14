@@ -5236,7 +5236,17 @@ const ff = {
   "flow:removeEdges": "removeEdges",
   "flow:update": "update",
   "flow:animate": "animate",
+  // Particle emission — all five firing methods
   "flow:sendParticle": "sendParticle",
+  "flow:sendParticleAlongPath": "sendParticleAlongPath",
+  "flow:sendParticleBetween": "sendParticleBetween",
+  "flow:sendParticleBurst": "sendParticleBurst",
+  "flow:sendConverging": "sendConverging",
+  // Tag-filtered bulk animation control (v0.2.0-alpha)
+  "flow:cancelAll": "cancelAll",
+  "flow:pauseAll": "pauseAll",
+  "flow:resumeAll": "resumeAll",
+  // Viewport
   "flow:fitView": "fitView",
   "flow:zoomIn": "zoomIn",
   "flow:zoomOut": "zoomOut",
@@ -5265,7 +5275,17 @@ const ff = {
   "flow:removeEdges": (t) => [t.ids],
   "flow:update": (t) => [t.targets, t.options ?? {}],
   "flow:animate": (t) => [t.targets, t.options ?? {}],
+  // Particle emission — all five firing methods
   "flow:sendParticle": (t) => [t.edgeId, t.options ?? {}],
+  "flow:sendParticleAlongPath": (t) => [t.path, t.options ?? {}],
+  "flow:sendParticleBetween": (t) => [t.source, t.target, t.options ?? {}],
+  "flow:sendParticleBurst": (t) => [t.edgeId, t.options ?? {}],
+  "flow:sendConverging": (t) => [t.sources, t.options ?? {}],
+  // Tag-filtered bulk animation control
+  "flow:cancelAll": (t) => [t.filter ?? {}, t.options ?? {}],
+  "flow:pauseAll": (t) => [t.filter ?? {}],
+  "flow:resumeAll": (t) => [t.filter ?? {}],
+  // Viewport
   "flow:fitView": () => [],
   "flow:zoomIn": () => [],
   "flow:zoomOut": () => [],
@@ -5334,16 +5354,17 @@ function gf(t, e) {
       }, { duration: a });
     }, 100 + l);
   })), n.push(e.on("flow:highlightPath", (o) => {
-    const i = o.nodeIds, r = o.options ?? {}, s = r.delay ?? 200;
-    for (let l = 0; l < i.length - 1; l++) {
-      const a = i[l], c = i[l + 1], d = t.edges.find((f) => f.source === a && f.target === c);
-      d && setTimeout(() => {
-        t.sendParticle(d.id, {
-          color: r.color ?? "#3b82f6",
-          size: r.size ?? 5,
-          duration: r.duration ?? "800ms"
-        });
-      }, l * s);
+    const i = o.nodeIds, r = o.options ?? {}, { delay: s, ...l } = r, a = s ?? 200, c = {
+      color: "#3b82f6",
+      size: 5,
+      duration: "800ms",
+      ...l
+    };
+    for (let d = 0; d < i.length - 1; d++) {
+      const f = i[d], u = i[d + 1], h = t.edges.find((p) => p.source === f && p.target === u);
+      h && setTimeout(() => {
+        t.sendParticle(h.id, c);
+      }, d * a);
     }
   })), n.push(e.on("flow:lockNode", (o) => {
     const i = t.getNode(o.id);
@@ -8257,8 +8278,8 @@ class nh {
         fromValues: { ...n.fromValues },
         // integratorState populated if/when handles expose physics state.
         // For now, scrubbing into mid-physics relies on rehydration via
-        // walk-forward from the nearest event; physics state capture
-        // remains a GA-blocker follow-up for perfect fidelity.
+        // walk-forward from the nearest event; direct physics state
+        // capture is a planned follow-up for perfect fidelity.
         integratorState: void 0
       });
     }
