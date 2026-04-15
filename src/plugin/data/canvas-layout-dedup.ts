@@ -18,6 +18,10 @@ export interface LayoutDedup {
     resetLoopCounter(parentId: string): void;
     /** Teardown — cancels any pending RAF. */
     dispose(): void;
+    /** Pause reconciliation. Calls to safeLayoutChildren queue until matching resume(). */
+    suspend(): void;
+    /** Resume and run all queued parents once (outermost call only). */
+    resume(): void;
 }
 
 export function createLayoutDedup(layoutFn: (parentId: string) => void): LayoutDedup {
@@ -26,6 +30,8 @@ export function createLayoutDedup(layoutFn: (parentId: string) => void): LayoutD
     const suppressed = new Set<string>();
     let rafHandle: number | null = null;
     let prevFrameParents = new Set<string>();
+    let suspendDepth = 0;
+    const queuedWhileSuspended = new Set<string>();
 
     function schedule(): void {
         if (rafHandle !== null) return;
@@ -60,6 +66,10 @@ export function createLayoutDedup(layoutFn: (parentId: string) => void): LayoutD
     return {
         safeLayoutChildren(parentId) {
             if (suppressed.has(parentId)) return;
+            if (suspendDepth > 0) {
+                queuedWhileSuspended.add(parentId);
+                return;
+            }
             if (laidOutThisFrame.has(parentId)) return;
             laidOutThisFrame.add(parentId);
             schedule();
@@ -73,6 +83,22 @@ export function createLayoutDedup(layoutFn: (parentId: string) => void): LayoutD
             if (rafHandle !== null) {
                 cancelAnimationFrame(rafHandle);
                 rafHandle = null;
+            }
+        },
+        suspend() {
+            suspendDepth++;
+        },
+        resume() {
+            if (suspendDepth === 0) return;
+            suspendDepth--;
+            if (suspendDepth === 0) {
+                for (const parentId of queuedWhileSuspended) {
+                    if (suppressed.has(parentId) || laidOutThisFrame.has(parentId)) continue;
+                    laidOutThisFrame.add(parentId);
+                    schedule();
+                    layoutFn(parentId);
+                }
+                queuedWhileSuspended.clear();
             }
         },
     };

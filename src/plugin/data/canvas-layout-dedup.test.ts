@@ -135,4 +135,74 @@ describe('canvas layout dedup', () => {
         expect(layoutFn).toHaveBeenCalledTimes(7);
         warnSpy.mockRestore();
     });
+
+    describe('suspend / resume', () => {
+        it('queues calls during suspend and runs them on resume', () => {
+            const layoutFn = vi.fn();
+            const { safeLayoutChildren, suspend, resume } = createLayoutDedup(layoutFn);
+
+            suspend();
+            safeLayoutChildren('parent-1');
+            safeLayoutChildren('parent-1');
+            safeLayoutChildren('parent-2');
+            expect(layoutFn).not.toHaveBeenCalled();
+
+            resume();
+            expect(layoutFn).toHaveBeenCalledTimes(2);
+            expect(layoutFn).toHaveBeenCalledWith('parent-1');
+            expect(layoutFn).toHaveBeenCalledWith('parent-2');
+        });
+
+        it('nested suspend/resume — only outermost triggers drain', () => {
+            const layoutFn = vi.fn();
+            const { safeLayoutChildren, suspend, resume } = createLayoutDedup(layoutFn);
+
+            suspend();
+            safeLayoutChildren('parent-1');
+            suspend();
+            safeLayoutChildren('parent-2');
+            resume(); // inner — still suspended
+            expect(layoutFn).not.toHaveBeenCalled();
+            resume(); // outer — drains
+            expect(layoutFn).toHaveBeenCalledTimes(2);
+        });
+
+        it('resume with nothing queued is a no-op', () => {
+            const layoutFn = vi.fn();
+            const { suspend, resume } = createLayoutDedup(layoutFn);
+
+            suspend();
+            resume();
+            expect(layoutFn).not.toHaveBeenCalled();
+        });
+
+        it('resume without preceding suspend is a no-op', () => {
+            const layoutFn = vi.fn();
+            const { resume, safeLayoutChildren } = createLayoutDedup(layoutFn);
+
+            resume(); // depth was 0 — nothing to do
+            safeLayoutChildren('parent-1');
+            expect(layoutFn).toHaveBeenCalledTimes(1);
+        });
+
+        it('suppressed parents stay suppressed across suspend cycle', () => {
+            const layoutFn = vi.fn();
+            const { safeLayoutChildren, suspend, resume } = createLayoutDedup(layoutFn);
+            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+            // Suppress parent-1 first
+            for (let i = 0; i < 7; i++) {
+                safeLayoutChildren('parent-1');
+                tickFrame();
+            }
+            expect(layoutFn).toHaveBeenCalledTimes(6);
+
+            // Now try through suspend/resume — should still be suppressed
+            suspend();
+            safeLayoutChildren('parent-1');
+            resume();
+            expect(layoutFn).toHaveBeenCalledTimes(6); // no new call
+            warnSpy.mockRestore();
+        });
+    });
 });
