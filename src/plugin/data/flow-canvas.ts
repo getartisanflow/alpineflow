@@ -59,6 +59,8 @@ import { getAddon } from '../../core/registry';
 import { FlowAnnouncer } from '../../core/announcer';
 import { ComputeEngine } from '../../core/compute';
 import { registerWireEvents, registerWireCommands, registerCustomWireCommands } from '../../core/wire-bridge';
+import { createLayoutDedup, type LayoutDedup } from './canvas-layout-dedup';
+import { createBatch } from './canvas-batch';
 
 // ── Mixin factories ──────────────────────────────────────────────────────────
 import { createNodesMixin } from './canvas-nodes';
@@ -285,6 +287,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _collapseState: new Map<string, CollapseState>(),
     /** Whether this canvas was hydrated from a pre-rendered static diagram */
     _hydratedFromStatic: false,
+
+    // ── Layout Dedup ─────────────────────────────────────────────────────
+    _layoutDedup: null as LayoutDedup | null,
 
     // ── Shared Particle Loop ────────────────────────────────────────────
     _activeParticles: new Set<ActiveParticle>(),
@@ -1258,6 +1263,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
     /** Run initial child layouts for all layout parents. */
     _initChildLayout() {
+      // Instantiate the layout dedup now that Alpine is ready and _container is set.
+      this._layoutDedup = createLayoutDedup((parentId: string) => {
+        this.layoutChildren(parentId);
+      });
+
       // Wire bridge: detect $wire (Livewire) and activate bidirectional bridge
       if ((this as any).$wire) {
         const $wire = (this as any).$wire;
@@ -1569,6 +1579,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._announcer?.destroy();
       this._announcer = null;
       if (this._computeDebounceTimer) { clearTimeout(this._computeDebounceTimer); this._computeDebounceTimer = null; }
+
+      // Dispose layout dedup RAF handle
+      this._layoutDedup?.dispose();
+      this._layoutDedup = null;
     },
 
     // ── Remaining Flat Methods ────────────────────────────────────────
@@ -1602,6 +1616,17 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this.contextMenu.position = null;
       this.contextMenu.nodes = null;
       this.contextMenu.event = null;
+    },
+
+    /**
+     * Batch multiple canvas mutations so that layout reconciliation runs once
+     * after the whole block rather than once per mutation. Nested calls join
+     * the outermost batch. fn's return value is forwarded; layout still runs
+     * even if fn throws.
+     */
+    batch<T>(fn: () => T): T {
+      if (!this._layoutDedup) return fn();
+      return createBatch(this._layoutDedup)<T>(fn);
     },
 
     get collab() {

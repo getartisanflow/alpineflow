@@ -330,6 +330,11 @@ export interface CanvasContext {
   /** Whether this canvas was hydrated from a pre-rendered static diagram */
   _hydratedFromStatic: boolean;
 
+  // === Layout dedup ===
+
+  /** Frame-aligned layout dedup — created in _initChildLayout, disposed in destroy(). */
+  _layoutDedup: import('./canvas-layout-dedup').LayoutDedup | null;
+
   // === Layout animation edge refresh ===
 
   /** Reactive tick bumped each frame during layout animation so edges re-measure DOM */

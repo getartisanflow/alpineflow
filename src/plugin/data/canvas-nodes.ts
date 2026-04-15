@@ -165,7 +165,16 @@ export function createNodesMixin(ctx: CanvasContext) {
         }
         addRoots.add(topmost);
       }
-      for (const rid of addRoots) ctx.layoutChildren?.(rid);
+      // A4: route through dedup so multiple addNodes calls within the same
+      // batch/frame collapse to a single layout pass per parent (consistent
+      // with removeNodes behavior, which also calls layoutChildren per parent).
+      for (const rid of addRoots) {
+        if (ctx._layoutDedup) {
+          ctx._layoutDedup.safeLayoutChildren(rid);
+        } else {
+          ctx.layoutChildren?.(rid);
+        }
+      }
 
       ctx._scheduleAutoLayout();
     },
