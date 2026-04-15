@@ -476,6 +476,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
           snapToGrid: canvas._config?.snapToGrid ?? false,
 
           onDragStart({ nodeId, position, sourceEvent }) {
+            el.classList.add('flow-node-dragging');
             didDrag = false;
             dragStartSelected = false;
             groupDragStartPositions = null;
@@ -1215,6 +1216,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
           },
 
           onDragEnd({ nodeId, position }) {
+            el.classList.remove('flow-node-dragging');
             debug('drag', `Node "${nodeId}" drag end`, position);
 
             // Unmark node as dragging so collab bridge resumes normal sync
