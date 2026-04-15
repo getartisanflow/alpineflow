@@ -37,7 +37,9 @@ interface FlowNode<T = Record<string, any>> {
 
   /**
    * Opt-in to inline `style.height` on leaf nodes and opt out of ResizeObserver updates.
-   * Use for decorative or fixed-size nodes.
+   * Use for decorative or fixed-size nodes. Container nodes (those with `childLayout`
+   * or that are parents via `parentId`) receive inline height unconditionally —
+   * this flag is specifically for making a leaf node behave as fixed-size.
    * Auto-set to `true` by the system on resize drag, compute output, and `dimensions.height` animations.
    */
   fixedDimensions?: boolean;

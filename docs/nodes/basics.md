@@ -60,7 +60,7 @@ Apply `x-flow-node` to any element inside a flow canvas. The expression must eva
 - Selects on click (Shift+click for multi-select — on touch devices, two-finger tap enters selection mode — see [Touch & Mobile](../interaction/touch.md))
 - Applies CSS classes reactively: `.flow-node`, `.flow-node-selected`, `.flow-node-locked`, custom `node.class`
 - Applies inline styles from `node.style`
-- Applies dimensions from `node.dimensions` — inline `style.height` is only set when the node is a container (has `childLayout`), is a parent of other nodes (some node references it via `parentId`), or has `fixedDimensions: true`; plain leaf nodes let content determine height and the ResizeObserver captures the natural height back into `node.dimensions`
+- Applies dimensions from `node.dimensions` — inline `style.height` is only set when the node is a container (has `childLayout`), is a parent of other nodes (some other node references it via `parentId`), or has `fixedDimensions: true`; plain leaf nodes let content determine height and the ResizeObserver captures the natural height back into `node.dimensions`
 - Respects per-node flags: `draggable`, `selectable`, `deletable`, `connectable`, `locked`, `hidden`
 
 ## Node data shape
