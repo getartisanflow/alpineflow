@@ -291,6 +291,30 @@ describe('Tier A — layout lifecycle', () => {
             expect(el.style.height).not.toBe('');
         });
 
+        it('DOES set inline height when node is a parent (has children via parentId)', async () => {
+            // Regression: group nodes without childLayout but WITH children
+            // (positioned manually via parentId) were treated as leaf nodes by
+            // A2, losing their inline height. Children rendered outside the
+            // group. Fix: "has children" is an implicit container signal.
+            const { flow, canvas } = await mountCanvas({
+                nodes: [
+                    {
+                        id: 'group',
+                        type: 'group',
+                        position: { x: 0, y: 0 },
+                        data: {},
+                        dimensions: { width: 300, height: 180 },
+                    },
+                    { id: 'child1', position: { x: 20, y: 40 }, data: {}, parentId: 'group' },
+                ],
+                edges: [],
+            });
+            await nextFrame();
+            const groupEl = canvas.querySelector('[data-flow-node-id="group"]') as HTMLElement;
+
+            expect(groupEl.style.height).toBe('180px');
+        });
+
         it('DOES set inline height when fixedDimensions=true', async () => {
             const { flow, canvas } = await mountCanvas({
                 nodes: [{

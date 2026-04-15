@@ -249,18 +249,26 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
         el.style.top = (absPos.y - nh * nodeOrig[1]) + 'px';
 
         // Auto-apply dimensions when explicitly set.
-        // Height is conditional: containers (childLayout) and fixed-dim nodes need
-        // inline height for child positioning or consumer-opted fixed sizing.
-        // Plain leaf nodes get NO inline height — content determines height, and the
-        // A1 ResizeObserver captures the natural post-render height back into
-        // node.dimensions.
+        // Height is conditional: containers (childLayout), fixed-dim nodes, and
+        // any node that is a parent (has child nodes via parentId) need inline
+        // height for child positioning or consumer-opted fixed sizing.
+        // Plain leaf nodes get NO inline height — content determines height, and
+        // the A1 ResizeObserver captures the natural post-render height back
+        // into node.dimensions.
         if (node.dimensions) {
           // Access childLayout and fixedDimensions at the top of the effect block so
           // Alpine tracks them reactively in case they change after mount.
           const _childLayout = node.childLayout;
           const _fixedDimensions = node.fixedDimensions;
+          // Treat "has children" as an implicit container signal — group nodes
+          // with positioned children need their dimensions to hold. Alpine
+          // reactivity tracks parentId across the nodes array, so this
+          // re-evaluates when children are added or removed.
+          const _hasChildren = (canvas.nodes as FlowNode[]).some(
+            (n: FlowNode) => n.parentId === node.id,
+          );
           el.style.width = node.dimensions.width + 'px';
-          if (_childLayout || _fixedDimensions) {
+          if (_childLayout || _fixedDimensions || _hasChildren) {
             el.style.height = node.dimensions.height + 'px';
           } else {
             el.style.height = ''; // leaf node: let content determine height
