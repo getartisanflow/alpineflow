@@ -452,6 +452,38 @@ describe('Tier A — layout lifecycle', () => {
     });
 
     describe('A1: template-aware measurement via ResizeObserver', () => {
+        it('writes border-box dimensions (matches offsetWidth/offsetHeight, not contentRect)', async () => {
+            // Regression: the observer initially used entry.contentRect, which is
+            // the CONTENT BOX (excludes padding + border). Consumers and fitView
+            // expect border-box dims (matching offsetWidth/offsetHeight). When
+            // nodes have non-zero padding/border, the content-box vs border-box
+            // mismatch caused fitView to over-zoom and visually clip nodes.
+            const { flow, canvas } = await mountCanvas({
+                nodes: [{ id: 'n1', position: { x: 0, y: 0 }, data: { label: 'A' } }],
+                edges: [],
+            });
+            await nextFrame();
+            const el = canvas.querySelector('[data-flow-node-id="n1"]') as HTMLElement;
+
+            // Force a measurable padding + border so content-box != border-box
+            el.style.width = '200px';
+            el.style.padding = '20px';
+            el.style.border = '2px solid transparent';
+            el.style.boxSizing = 'border-box';
+
+            // Let the observer capture the new box
+            await nextFrame();
+            await nextFrame();
+            await nextFrame();
+
+            // Border-box = 200 (style.width with border-box sizing, padding and border included)
+            // Content-box would be 200 - 40 (padding) - 4 (border) = 156
+            // node.dimensions must reflect the border-box value.
+            expect(flow.nodes[0].dimensions?.width).toBe(200);
+            // Cross-check against offsetWidth, which is always border-box
+            expect(flow.nodes[0].dimensions?.width).toBe(el.offsetWidth);
+        });
+
         it('updates node.dimensions when element resizes', async () => {
             const { flow, canvas } = await mountCanvas({
                 nodes: [{ id: 'n1', position: { x: 0, y: 0 }, data: { label: 'A' } }],

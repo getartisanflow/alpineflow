@@ -1320,11 +1320,19 @@ export function registerFlowCanvas(Alpine: Alpine) {
           const node = this._nodeMap.get(nodeId);
           if (!node) continue;
 
+          // Use border-box dimensions so `node.dimensions` matches the element's
+          // visual footprint (padding + border included) — the same measurement
+          // offsetWidth / offsetHeight produce, and what fitView and the minimap
+          // expect. contentRect is the CONTENT BOX (excludes padding/border) and
+          // would produce systematically under-sized bounds.
+          const borderBox = entry.borderBoxSize?.[0];
+          const rawWidth = borderBox ? borderBox.inlineSize : el.offsetWidth;
+          const rawHeight = borderBox ? borderBox.blockSize : el.offsetHeight;
+
           // Skip viewport-culled elements (display:none produces 0×0).
-          const rect = entry.contentRect;
-          if (rect.width === 0 && rect.height === 0) continue;
+          if (rawWidth === 0 && rawHeight === 0) continue;
           // Defense-in-depth: some browsers fire ResizeObserver for display:none
-          // with non-zero contentRect in specific cases. Check computed style.
+          // with non-zero size in specific cases. Check computed style.
           if (el.offsetParent === null && el.tagName !== 'BODY') continue;
 
           // Fixed-dim nodes: inline style is authoritative; don't write node.dimensions.
@@ -1332,8 +1340,8 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
           // Round to integer — browser zoom produces fractional values, and the
           // 1px-threshold comparison needs stable integer values.
-          const width = Math.round(rect.width);
-          const height = Math.round(rect.height);
+          const width = Math.round(rawWidth);
+          const height = Math.round(rawHeight);
 
           // 1px threshold: skip micro-updates smaller than 1px on both axes.
           const current = node.dimensions;
