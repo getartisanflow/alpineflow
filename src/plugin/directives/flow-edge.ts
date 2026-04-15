@@ -258,6 +258,7 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
       let dotCircle: SVGCircleElement | null = null;
       let currentAnimMode: 'none' | 'dash' | 'pulse' | 'dot' = 'none';
       let currentGradientId: string | null = null;
+      let currentEdgeClass: string | null = null;
 
       function ensureDotAnimation(dotGEl: SVGGElement, pathD: string, containerEl: Element, edge: FlowEdge, durationOverride?: string): void {
         if (!dotCircle) {
@@ -1081,9 +1082,22 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         }
 
         // ── Custom CSS class ─────────────────────────────────────
+        // Remove previous class from group if it changed
+        if (currentEdgeClass && currentEdgeClass !== edge.class) {
+          gEl.classList.remove(currentEdgeClass);
+        }
         if (edge.class) {
           const animClass = mode === 'dash' ? ' flow-edge-animated' : mode === 'pulse' ? ' flow-edge-pulse' : '';
           pathEl.setAttribute('class', edge.class + animClass);
+          // Also apply to the SVG group so edge styling can be driven at group level
+          gEl.classList.add(edge.class);
+          currentEdgeClass = edge.class;
+        } else {
+          // Remove edge.class from group if it was previously set but now cleared
+          if (currentEdgeClass) {
+            gEl.classList.remove(currentEdgeClass);
+            currentEdgeClass = null;
+          }
         }
 
         // ── Selection class + selected stroke styling ────────────
@@ -1251,12 +1265,18 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           }
         }
 
-        // Apply label visibility classes
+        // Apply label visibility classes and custom edge class
         for (const lbl of [labelEl, labelStartEl, labelEndEl]) {
           if (!lbl) continue;
           lbl.classList.toggle('flow-edge-label-hover', labelVis === 'hover');
           lbl.classList.toggle('flow-edge-label-on-select', labelVis === 'selected');
           lbl.classList.toggle('flow-edge-label-selected', !!edge.selected);
+          // Forward edge.class to label so label styling can track edge state
+          if (edge.class) {
+            lbl.classList.add(edge.class);
+          } else if (currentEdgeClass) {
+            lbl.classList.remove(currentEdgeClass);
+          }
         }
       });
 
