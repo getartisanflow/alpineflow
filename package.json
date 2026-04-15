@@ -80,7 +80,8 @@
         "test": "vitest run",
         "test:watch": "vitest",
         "test:browser": "vitest run --config vitest.browser.config.ts",
-        "test:all": "npm run test && npm run test:browser"
+        "test:all": "npm run test && npm run test:browser",
+        "bench": "vitest bench --config vitest.bench.config.ts --run"
     },
     "dependencies": {
         "d3-drag": "^3.0.0",

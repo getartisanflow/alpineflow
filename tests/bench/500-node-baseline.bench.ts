@@ -1,3 +1,13 @@
+/**
+ * Baseline benchmark — captures 500-node canvas mount/add/drag timings.
+ * Task 10 reruns this file against the Tier A branch to verify no >10% regression.
+ *
+ * Noise note: running at bench speed surfaces unhandled `_x_dataStack` errors
+ * from Alpine's teardown path (observers fire after Alpine.destroyTree). These
+ * are not a bug in this file and do not affect timing. If Tier A resolves them
+ * (via proper observer cleanup), great — otherwise they're acceptable noise
+ * scoped to bench runs. See tests/bench/baseline.txt for the captured output.
+ */
 import { bench, describe } from 'vitest';
 import { mountCanvas, unmountAll, nextFrame } from '../integration/helpers/mount';
 
