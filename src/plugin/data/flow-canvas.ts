@@ -330,6 +330,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
     // ── Drop Zone ───────────────────────────────────────────────────────
     _onDropZoneDragOver: null as ((e: DragEvent) => void) | null,
+    _onDropZoneDragleave: null as ((e: DragEvent) => void) | null,
     _onDropZoneDrop: null as ((e: DragEvent) => void) | null,
 
     // ── Event Dispatch ────────────────────────────────────────────────
@@ -1236,36 +1237,107 @@ export function registerFlowCanvas(Alpine: Alpine) {
     /** Drop zone drag/drop handlers if onDrop configured. */
     _initDropZone() {
       if (config.onDrop) {
-        this._onDropZoneDragOver = (e: DragEvent) => {
-          e.preventDefault();
-          if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        const mimeTypes = config.dropMimeTypes ?? ['application/alpineflow'];
+
+        /**
+         * Walk the elementsFromPoint stack (topmost DOM element first) inward
+         * to find the deepest FlowNode element under the given client point.
+         * This correctly handles nested containers (page → section → column):
+         * the innermost positioned element is encountered first in the stack.
+         */
+        const findDeepestNodeAtPoint = (clientX: number, clientY: number): FlowNode | null => {
+          const elements = document.elementsFromPoint(clientX, clientY);
+          for (const el of elements) {
+            const nodeEl = (el as HTMLElement).closest?.('[data-flow-node-id]') as HTMLElement | null;
+            if (!nodeEl) { continue; }
+            const id = nodeEl.getAttribute('data-flow-node-id');
+            if (!id) { continue; }
+            const node = this._nodeMap.get(id);
+            if (node) { return node; }
+          }
+          return null;
         };
+
+        this._onDropZoneDragOver = (e: DragEvent) => {
+          if (!e.dataTransfer) { return; }
+          // Only signal acceptance if at least one of our MIME types is present.
+          const hasMatch = mimeTypes.some((m) => e.dataTransfer!.types.includes(m));
+          if (!hasMatch) { return; }
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          this._container?.classList.add('flow-canvas-drag-over');
+        };
+
+        this._onDropZoneDragleave = (e: DragEvent) => {
+          // Only remove the class when the pointer truly exits the container —
+          // dragleave fires for every child boundary crossing, so check relatedTarget.
+          if (!this._container) { return; }
+          const related = e.relatedTarget as Node | null;
+          if (related && this._container.contains(related)) { return; }
+          this._container.classList.remove('flow-canvas-drag-over');
+        };
+
         this._onDropZoneDrop = (e: DragEvent) => {
           e.preventDefault();
-          const raw = e.dataTransfer?.getData('application/alpineflow');
-          if (!raw || !config.onDrop) return;
+          this._container?.classList.remove('flow-canvas-drag-over');
+
+          if (!e.dataTransfer || !config.onDrop) { return; }
+
+          // Find which MIME type matched.
+          let matchedMime: string | null = null;
+          let raw: string | null = null;
+          for (const mime of mimeTypes) {
+            const value = e.dataTransfer.getData(mime);
+            if (value) {
+              matchedMime = mime;
+              raw = value;
+              break;
+            }
+          }
+          if (!matchedMime || !raw) { return; }
 
           let data: any;
           try { data = JSON.parse(raw); } catch { data = raw; }
 
-          if (!this._container) return;
+          if (!this._container) { return; }
           const position = screenToFlowPosition(
             e.clientX,
             e.clientY,
             this.viewport,
             this._container.getBoundingClientRect(),
           );
-          const dropEl = document.elementFromPoint(e.clientX, e.clientY);
-          const nodeEl = dropEl?.closest('[x-flow-node]') as HTMLElement | null;
-          const targetNode = nodeEl?.dataset.flowNodeId
-            ? this.getNode(nodeEl.dataset.flowNodeId) ?? null
-            : null;
-          const node = config.onDrop({ data, position, targetNode });
-          if (node) this.addNodes(node, { center: true });
+
+          const targetNode = findDeepestNodeAtPoint(e.clientX, e.clientY);
+
+          const node = config.onDrop({ data, position, targetNode, mimeType: matchedMime });
+          if (node) { this.addNodes(node, { center: true }); }
         };
+
         this._container.addEventListener('dragover', this._onDropZoneDragOver);
+        this._container.addEventListener('dragleave', this._onDropZoneDragleave);
         this._container.addEventListener('drop', this._onDropZoneDrop);
       }
+    },
+
+    /**
+     * Return the deepest FlowNode under the given client coordinates.
+     * Uses document.elementsFromPoint and walks inward to find the first
+     * element carrying a data-flow-node-id attribute.
+     *
+     * Useful for context menus, tooltips, and custom pointer interactions
+     * beyond the built-in drop zone.
+     */
+    getNodeAtPoint(clientX: number, clientY: number): FlowNode | null {
+      const elements = document.elementsFromPoint(clientX, clientY);
+      for (const el of elements) {
+        const nodeEl = (el as HTMLElement).closest?.('[data-flow-node-id]') as HTMLElement | null;
+        if (!nodeEl) { continue; }
+        const id = nodeEl.getAttribute('data-flow-node-id');
+        if (!id) { continue; }
+        const node = this._nodeMap.get(id);
+        if (node) { return node; }
+      }
+      return null;
     },
 
     /**
@@ -1640,6 +1712,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._viewportEl = null;
       if (this._container) {
         this._container.removeEventListener('dragover', this._onDropZoneDragOver);
+        this._container.removeEventListener('dragleave', this._onDropZoneDragleave);
         this._container.removeEventListener('drop', this._onDropZoneDrop);
       }
       // Clean up follow tracking

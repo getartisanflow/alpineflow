@@ -1296,14 +1296,21 @@ export interface FlowCanvasConfig {
   wireEvents?: Record<string, string>;
 
   // ── Drop Zone ───────────────────────────────────────────────────────
+  /** MIME types accepted by the drop zone. Defaults to `['application/alpineflow']`.
+   *  Builder applications can pass custom types (e.g. `'application/alpineform-field'`).
+   *  The first matching MIME is reported in the `onDrop` detail as `mimeType`. */
+  dropMimeTypes?: string[];
+
   /** Enable drag-and-drop onto canvas. When set, the container accepts drops from
-   *  `x-flow-draggable` elements (or any source using `application/alpineflow` MIME).
+   *  `x-flow-draggable` elements (or any source using a MIME type listed in `dropMimeTypes`).
    *  Return a FlowNode to add it, or falsy to cancel.
    *
    *  @param detail.data - The value set by x-flow-draggable (string or parsed object)
+   *  @param detail.mimeType - The specific MIME type that matched from `dropMimeTypes`
    *  @param detail.position - Drop coordinates already converted via screenToFlowPosition
-   *  @param detail.targetNode - The FlowNode under the cursor at drop time, or null if dropped on empty space */
-  onDrop?: (detail: { data: any; position: XYPosition; targetNode: FlowNode | null }) => FlowNode | null | undefined | false;
+   *  @param detail.targetNode - The deepest FlowNode under the cursor at drop time, or null if dropped on empty space.
+   *                             Traverse `node.parentId` upward if you need the outermost container. */
+  onDrop?: (detail: { data: any; mimeType: string; position: XYPosition; targetNode: FlowNode | null }) => FlowNode | null | undefined | false;
 
   /** Called when a connection is dropped on empty canvas space. Return a FlowNode to auto-create
    *  it and connect it to the source. Return null to cancel. The auto-created edge uses defaults
@@ -1710,4 +1717,11 @@ export interface FlowInstance {
   /** Walk up from any element to find the enclosing node's ID via the data-flow-node-id attribute.
    *  Returns null if no ancestor (or the element itself) carries the attribute. */
   getNodeIdFromElement(el: HTMLElement): string | null;
+
+  /** Return the deepest FlowNode under the given client coordinates.
+   *  Uses document.elementsFromPoint and walks inward to find the first element carrying
+   *  a data-flow-node-id attribute. Returns null if no node is found.
+   *
+   *  Useful beyond drops: context menus, tooltips, custom pointer interactions. */
+  getNodeAtPoint(clientX: number, clientY: number): FlowNode | null;
 }
