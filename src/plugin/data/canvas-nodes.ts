@@ -109,9 +109,15 @@ export function createNodesMixin(ctx: CanvasContext) {
 
       // A3: Install childLayout watchers for any newly added container nodes so
       // that mutations to their layout properties trigger re-layout automatically.
+      // Look up each node via _nodeMap to get the Alpine reactive proxy (not the
+      // original plain object) — Alpine.watch must receive the reactive version so
+      // mutations go through the proxy and trigger watchers correctly.
       for (const node of arr) {
         if (node.childLayout) {
-          ctx._installChildLayoutWatchers(node);
+          const reactiveNode = ctx._nodeMap.get(node.id);
+          if (reactiveNode) {
+            ctx._installChildLayoutWatchers(reactiveNode);
+          }
         }
       }
 
@@ -277,10 +283,11 @@ export function createNodesMixin(ctx: CanvasContext) {
       ctx._rebuildEdgeMap();
       ctx.nodes = ctx.nodes.filter((n: FlowNode) => !idSet.has(n.id));
       ctx._rebuildNodeMap();
-      // Clean up selection
+      // Clean up selection and childLayout watchers
       for (const id of idSet) {
         ctx.selectedNodes.delete(id);
         ctx._initialDimensions.delete(id);
+        ctx._uninstallChildLayoutWatchers(id);
       }
       if (removed.length) ctx._emit('nodes-change', { type: 'remove', nodes: removed });
       if (reconnected.length) ctx._emit('edges-change', { type: 'add', edges: reconnected });

@@ -99,6 +99,70 @@ describe('Tier A — layout lifecycle', () => {
 
             expect(calls).toContain('parent');
         });
+
+        it('installs watchers for containers added at runtime via addNodes', async () => {
+            const { flow } = await mountCanvas({
+                nodes: [], // no containers at mount
+                edges: [],
+            });
+            await nextFrame();
+
+            // Add a container node at runtime
+            flow.addNodes([{
+                id: 'runtime-parent',
+                position: { x: 0, y: 0 },
+                data: {},
+                childLayout: { type: 'vertical', columns: 1, gap: 4 },
+            }]);
+            await nextFrame();
+
+            // Set up layout interceptor AFTER add (so we only see reactive triggers, not A4's initial)
+            const calls: string[] = [];
+            const original = flow.layoutChildren;
+            (flow as any).layoutChildren = function (id: string) {
+                calls.push(id);
+                return original.call(this, id);
+            };
+
+            // Mutate the runtime-added container's childLayout
+            (flow.nodes[0].childLayout as any).columns = 3;
+            await nextFrame();
+
+            expect(calls).toContain('runtime-parent');
+        });
+
+        it('stops watchers when a node is removed via removeNodes', async () => {
+            const { flow } = await mountCanvas({
+                nodes: [{
+                    id: 'parent',
+                    position: { x: 0, y: 0 },
+                    data: {},
+                    childLayout: { type: 'vertical', columns: 1, gap: 4 },
+                }],
+                edges: [],
+            });
+            await nextFrame();
+
+            // Capture the childLayout reference BEFORE removal
+            const childLayout = flow.nodes[0].childLayout as any;
+
+            flow.removeNodes(['parent']);
+            await nextFrame();
+
+            // Intercept AFTER removal
+            const calls: string[] = [];
+            const original = flow.layoutChildren;
+            (flow as any).layoutChildren = function (id: string) {
+                calls.push(id);
+                return original.call(this, id);
+            };
+
+            // Mutate the removed node's (stale) childLayout — watcher should not fire
+            childLayout.columns = 99;
+            await nextFrame();
+
+            expect(calls).not.toContain('parent');
+        });
     });
 
     describe('A4: addNodes auto-layout parents', () => {

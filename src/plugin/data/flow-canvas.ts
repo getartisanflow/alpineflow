@@ -291,6 +291,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
     // ── Layout Dedup ─────────────────────────────────────────────────────
     _layoutDedup: null as LayoutDedup | null,
 
+    // ── childLayout watcher cleanup fns (keyed by node id) ───────────────
+    _childLayoutCleanups: new Map<string, Array<() => void>>(),
+
     // ── Shared Particle Loop ────────────────────────────────────────────
     _activeParticles: new Set<ActiveParticle>(),
     _particleEngineHandle: null as EngineHandle | null,
@@ -1276,16 +1279,30 @@ export function registerFlowCanvas(Alpine: Alpine) {
      */
     _installChildLayoutWatchers(node: FlowNode): void {
       if (!node.childLayout) return;
+
+      // Defensive: tear down any pre-existing watchers for this node first.
+      this._uninstallChildLayoutWatchers(node.id);
+
       const WATCHED_CHILD_LAYOUT_PROPS = [
         'columns', 'gap', 'padding', 'headerHeight', 'direction', 'stretch',
       ] as const;
       const nodeId = node.id;
+      const cleanups: Array<() => void> = [];
       for (const prop of WATCHED_CHILD_LAYOUT_PROPS) {
-        Alpine.watch(
+        const stop = Alpine.watch(
           () => (node.childLayout as any)?.[prop],
           () => { this._layoutDedup?.safeLayoutChildren(nodeId); },
         );
+        cleanups.push(stop);
       }
+      this._childLayoutCleanups.set(nodeId, cleanups);
+    },
+
+    _uninstallChildLayoutWatchers(nodeId: string): void {
+      const cleanups = this._childLayoutCleanups.get(nodeId);
+      if (!cleanups) return;
+      for (const stop of cleanups) stop();
+      this._childLayoutCleanups.delete(nodeId);
     },
 
     /** Run initial child layouts for all layout parents. */
@@ -1613,6 +1630,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._announcer?.destroy();
       this._announcer = null;
       if (this._computeDebounceTimer) { clearTimeout(this._computeDebounceTimer); this._computeDebounceTimer = null; }
+
+      // Stop all childLayout watchers
+      for (const nodeId of [...this._childLayoutCleanups.keys()]) {
+        this._uninstallChildLayoutWatchers(nodeId);
+      }
 
       // Dispose layout dedup RAF handle
       this._layoutDedup?.dispose();
