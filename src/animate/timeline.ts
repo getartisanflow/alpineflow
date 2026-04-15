@@ -1134,6 +1134,9 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
           node.dimensions.width = lerpNumber(from.width, step.dimensions.width, progress);
         }
         if (step.dimensions.height !== undefined) {
+          // A2: height control requires fixedDimensions to prevent the Alpine effect
+          // from clearing inline height on leaf nodes. Timeline is authoritative here.
+          node.fixedDimensions = true;
           node.dimensions.height = lerpNumber(from.height, step.dimensions.height, progress);
         }
       }
@@ -1414,7 +1417,12 @@ export class FlowTimeline<TContext extends Record<string, any> = Record<string, 
         if (step.zIndex !== undefined) node.zIndex = step.zIndex;
         if (step.dimensions && node.dimensions) {
           if (step.dimensions.width !== undefined) node.dimensions.width = step.dimensions.width;
-          if (step.dimensions.height !== undefined) node.dimensions.height = step.dimensions.height;
+          if (step.dimensions.height !== undefined) {
+            // A2: height control requires fixedDimensions to prevent the Alpine effect
+            // from clearing inline height on leaf nodes. Timeline is authoritative here.
+            node.fixedDimensions = true;
+            node.dimensions.height = step.dimensions.height;
+          }
         }
         if (step.style !== undefined) node.style = step.style;
       }

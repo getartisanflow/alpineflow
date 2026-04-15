@@ -310,6 +310,121 @@ describe('Tier A — layout lifecycle', () => {
         });
     });
 
+    describe('A2 ripple effects — system-driven height promotion', () => {
+        it('resize: leaf node becomes fixedDimensions after user drags resize handle', async () => {
+            // Build a custom template that includes x-flow-resizer so the handle
+            // elements exist in the DOM and the pointerdown handler can fire.
+            const viewport = document.createElement('div');
+            viewport.setAttribute('x-flow-viewport', '');
+
+            const tmpl = document.createElement('template');
+            tmpl.setAttribute('x-for', 'node in nodes');
+            tmpl.setAttribute(':key', 'node.id');
+
+            const nodeEl = document.createElement('div');
+            nodeEl.setAttribute('x-flow-node', 'node');
+
+            const resizer = document.createElement('div');
+            resizer.setAttribute('x-flow-resizer', '');
+            nodeEl.appendChild(resizer);
+
+            tmpl.content.appendChild(nodeEl);
+            viewport.appendChild(tmpl);
+
+            const { flow, canvas } = await mountCanvas({
+                nodes: [{
+                    id: 'n1',
+                    position: { x: 0, y: 0 },
+                    data: {},
+                    dimensions: { width: 200, height: 100 },
+                    resizable: true,
+                }],
+                edges: [],
+            }, viewport);
+            await nextFrame();
+
+            const node = flow.nodes[0];
+            expect(node.fixedDimensions).toBeFalsy(); // not fixed initially
+
+            // The resizer directive listens on the handle element for pointerdown.
+            // We find the handle and dispatch a pointerdown event, which triggers
+            // the resize-start handler that now sets fixedDimensions = true.
+            const handle = canvas.querySelector('.flow-resizer-handle') as HTMLElement;
+            expect(handle).not.toBeNull(); // template must have rendered handles
+            handle!.dispatchEvent(new PointerEvent('pointerdown', {
+                bubbles: true,
+                clientX: 200,
+                clientY: 100,
+                pointerType: 'mouse',
+                button: 0,
+            }));
+            await nextFrame();
+
+            expect(node.fixedDimensions).toBe(true);
+        });
+
+        it('compute: node becomes fixedDimensions when compute writes height', async () => {
+            // The compute re-measure path (canvas-compute.ts) sets fixedDimensions = true
+            // on any node whose dimensions are written back after a compute() call.
+            // To exercise this path, the node must have a registered compute type so
+            // it appears in the results map and the rAF re-measure loop runs for it.
+            const { flow } = await mountCanvas({
+                nodes: [{
+                    id: 'n1',
+                    position: { x: 0, y: 0 },
+                    data: {},
+                    dimensions: { width: 200, height: 100 },
+                    type: 'adder',
+                }],
+                edges: [],
+            });
+            await nextFrame();
+
+            expect(flow.nodes[0].fixedDimensions).toBeFalsy();
+
+            // Register a compute definition for the node's type so it enters results.
+            flow.registerCompute('adder', {
+                compute: (_inputs, _data) => ({ value: 1 }),
+            });
+
+            // Trigger compute — this queues a $nextTick → rAF re-measure that will
+            // set fixedDimensions = true on n1 (per the Fix B in canvas-compute.ts).
+            flow.compute();
+
+            // Wait for Alpine $nextTick + rAF to fire (two nextFrame() calls)
+            await nextFrame();
+            await nextFrame();
+
+            expect(flow.nodes[0].fixedDimensions).toBe(true);
+        });
+
+        it('animation: node becomes fixedDimensions when dimensions.height is animated', async () => {
+            const { flow } = await mountCanvas({
+                nodes: [{
+                    id: 'n1',
+                    position: { x: 0, y: 0 },
+                    data: {},
+                    dimensions: { width: 200, height: 100 },
+                }],
+                edges: [],
+            });
+            await nextFrame();
+
+            expect(flow.nodes[0].fixedDimensions).toBeFalsy();
+
+            // Animate dimensions.height — the update() code path in canvas-animation.ts
+            // now sets fixedDimensions = true before scheduling the height tween.
+            flow.animate({
+                nodes: { 'n1': { dimensions: { height: 300 } } },
+            }, { duration: 50 });
+
+            await nextFrame();
+            await nextFrame();
+
+            expect(flow.nodes[0].fixedDimensions).toBe(true);
+        });
+    });
+
     describe('A1: template-aware measurement via ResizeObserver', () => {
         it('updates node.dimensions when element resizes', async () => {
             const { flow, canvas } = await mountCanvas({
