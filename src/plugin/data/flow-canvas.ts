@@ -1261,6 +1261,33 @@ export function registerFlowCanvas(Alpine: Alpine) {
       }
     },
 
+    /**
+     * Install per-property Alpine watchers on a container node's childLayout.
+     *
+     * Watches the six layout-affecting properties explicitly so that any
+     * mutation — direct assignment or via wire-bridge — triggers a re-layout
+     * through the existing safeLayoutChildren dedup (at most one call per
+     * parent per frame). Unwatched props (e.g. custom user data on childLayout)
+     * never cause spurious layouts.
+     *
+     * Uses Alpine.watch(getter, callback) — the same low-level primitive that
+     * $watch delegates to — because $watch only accepts string expressions
+     * evaluated in component scope, which can't address per-node sub-objects.
+     */
+    _installChildLayoutWatchers(node: FlowNode): void {
+      if (!node.childLayout) return;
+      const WATCHED_CHILD_LAYOUT_PROPS = [
+        'columns', 'gap', 'padding', 'headerHeight', 'direction', 'stretch',
+      ] as const;
+      const nodeId = node.id;
+      for (const prop of WATCHED_CHILD_LAYOUT_PROPS) {
+        Alpine.watch(
+          () => (node.childLayout as any)?.[prop],
+          () => { this._layoutDedup?.safeLayoutChildren(nodeId); },
+        );
+      }
+    },
+
     /** Run initial child layouts for all layout parents. */
     _initChildLayout() {
       // Instantiate the layout dedup now that Alpine is ready and _container is set.
@@ -1283,6 +1310,13 @@ export function registerFlowCanvas(Alpine: Alpine) {
       debug('init', `flowCanvas "${this._id}" ready`);
       this._emit('init');
       this._recomputeChildValidation();
+
+      // A3: Install childLayout property watchers for all initial container nodes.
+      for (const node of this.nodes) {
+        if (node.childLayout) {
+          this._installChildLayoutWatchers(node);
+        }
+      }
 
       // Run initial child layout for all layout parents (bottom-up via recursion)
       for (const node of this.nodes) {

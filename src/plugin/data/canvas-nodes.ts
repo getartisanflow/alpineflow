@@ -106,6 +106,15 @@ export function createNodesMixin(ctx: CanvasContext) {
 
       ctx.nodes = sortNodesTopological(ctx.nodes);
       ctx._rebuildNodeMap();
+
+      // A3: Install childLayout watchers for any newly added container nodes so
+      // that mutations to their layout properties trigger re-layout automatically.
+      for (const node of arr) {
+        if (node.childLayout) {
+          ctx._installChildLayoutWatchers(node);
+        }
+      }
+
       ctx._emit('nodes-change', { type: 'add', nodes: arr });
 
       const collab = ctx._container ? collabStore.get(ctx._container) : undefined;

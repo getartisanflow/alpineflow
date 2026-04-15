@@ -62,6 +62,13 @@ declare module 'alpinejs' {
 
     /** Batch DOM mutations so Alpine defers reactivity until complete */
     mutateDom(callback: () => void): void;
+
+    /**
+     * Low-level reactive watcher — the same primitive $watch delegates to.
+     * Accepts a getter function (for deep / computed paths) rather than a
+     * string expression. Returns a cleanup function that stops watching.
+     */
+    watch<T>(getter: () => T, callback: (value: T, oldValue: T) => void): () => void;
   }
 
   const Alpine: Alpine;

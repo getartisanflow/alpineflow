@@ -157,6 +157,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
 
     // === Layout dedup ===
     _layoutDedup: null,
+    _installChildLayoutWatchers: vi.fn(),
 
     // === Layout animation ===
     _layoutAnimTick: 0,

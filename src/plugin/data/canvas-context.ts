@@ -335,6 +335,15 @@ export interface CanvasContext {
   /** Frame-aligned layout dedup — created in _initChildLayout, disposed in destroy(). */
   _layoutDedup: import('./canvas-layout-dedup').LayoutDedup | null;
 
+  /**
+   * Install per-property Alpine watchers on a container node's childLayout.
+   *
+   * Called once during _initChildLayout for each initial container node,
+   * and again from addNodes for any container node added at runtime.
+   * No-op when the node has no childLayout.
+   */
+  _installChildLayoutWatchers(node: import('../../core/types').FlowNode): void;
+
   // === Layout animation edge refresh ===
 
   /** Reactive tick bumped each frame during layout animation so edges re-measure DOM */
