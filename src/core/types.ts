@@ -1699,4 +1699,11 @@ export interface FlowInstance {
 
   /** Collaboration instance. Only present when collab config is provided. */
   readonly collab?: CollabInstance;
+
+  /** Return the registered DOM element for a node by ID, or undefined if not mounted. */
+  getNodeElement(id: string): HTMLElement | undefined;
+
+  /** Walk up from any element to find the enclosing node's ID via the data-flow-node-id attribute.
+   *  Returns null if no ancestor (or the element itself) carries the attribute. */
+  getNodeIdFromElement(el: HTMLElement): string | null;
 }

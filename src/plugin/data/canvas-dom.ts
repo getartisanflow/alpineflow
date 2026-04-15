@@ -190,5 +190,17 @@ export function createDomMixin(ctx: CanvasContext, Alpine: any) {
         }
       }
     },
+
+    /** Return the registered DOM element for a node by ID, or undefined if not mounted. */
+    getNodeElement(id: string): HTMLElement | undefined {
+      return ctx._nodeElements.get(id);
+    },
+
+    /** Walk up from any element to find the enclosing node's ID via the data-flow-node-id attribute.
+     *  Returns null if no ancestor (or the element itself) carries the attribute. */
+    getNodeIdFromElement(el: HTMLElement): string | null {
+      const match = el.closest('[data-flow-node-id]');
+      return match ? match.getAttribute('data-flow-node-id') : null;
+    },
   };
 }
