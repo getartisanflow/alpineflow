@@ -231,4 +231,115 @@ describe('Tier A — layout lifecycle', () => {
             expect(parentCalls.length).toBe(1);
         });
     });
+
+    describe('A1: template-aware measurement via ResizeObserver', () => {
+        it('updates node.dimensions when element resizes', async () => {
+            const { flow, canvas } = await mountCanvas({
+                nodes: [{ id: 'n1', position: { x: 0, y: 0 }, data: { label: 'A' } }],
+                edges: [],
+            });
+            await nextFrame();
+            const el = canvas.querySelector('[data-flow-node-id="n1"]') as HTMLElement;
+
+            // Grow the element to a specific size
+            el.style.width = '400px';
+            el.style.height = '200px';
+
+            // ResizeObserver is async — wait a few frames
+            await nextFrame();
+            await nextFrame();
+            await nextFrame();
+
+            expect(flow.nodes[0].dimensions?.width).toBeGreaterThanOrEqual(400);
+            expect(flow.nodes[0].dimensions?.height).toBeGreaterThanOrEqual(200);
+        });
+
+        it('ignores 0x0 observations (viewport culling via display:none)', async () => {
+            const { flow, canvas } = await mountCanvas({
+                nodes: [{ id: 'n1', position: { x: 0, y: 0 }, data: {}, dimensions: { width: 100, height: 50 } }],
+                edges: [],
+            });
+            await nextFrame();
+            const el = canvas.querySelector('[data-flow-node-id="n1"]') as HTMLElement;
+
+            el.style.display = 'none';
+            await nextFrame();
+            await nextFrame();
+
+            // dimensions must NOT be clobbered to 0x0
+            expect(flow.nodes[0].dimensions).toEqual({ width: 100, height: 50 });
+        });
+
+        it('clamps observed dims to min/max bounds (A5)', async () => {
+            const { flow, canvas } = await mountCanvas({
+                nodes: [{
+                    id: 'n1',
+                    position: { x: 0, y: 0 },
+                    data: {},
+                    minDimensions: { width: 50, height: 20 },
+                    maxDimensions: { width: 300, height: 100 },
+                }],
+                edges: [],
+            });
+            await nextFrame();
+            const el = canvas.querySelector('[data-flow-node-id="n1"]') as HTMLElement;
+
+            // Force to an over-max width and under-min height
+            el.style.width = '500px';
+            el.style.height = '10px';
+            await nextFrame();
+            await nextFrame();
+            await nextFrame();
+
+            expect(flow.nodes[0].dimensions?.width).toBe(300);  // clamped to max
+            expect(flow.nodes[0].dimensions?.height).toBe(20);  // clamped to min
+        });
+
+        it('skips observation for nodes with resizeObserver: false', async () => {
+            const { flow, canvas } = await mountCanvas({
+                nodes: [{
+                    id: 'n1', position: { x: 0, y: 0 }, data: {},
+                    dimensions: { width: 100, height: 50 },
+                    resizeObserver: false,
+                }],
+                edges: [],
+            });
+            await nextFrame();
+            const el = canvas.querySelector('[data-flow-node-id="n1"]') as HTMLElement;
+
+            el.style.width = '999px';
+            await nextFrame();
+            await nextFrame();
+
+            // dimensions unchanged — observer didn't track this node
+            expect(flow.nodes[0].dimensions).toEqual({ width: 100, height: 50 });
+        });
+
+        it('schedules parent layout when child resizes', async () => {
+            const { flow, canvas } = await mountCanvas({
+                nodes: [
+                    { id: 'parent', position: { x: 0, y: 0 }, data: {}, childLayout: { type: 'vertical', gap: 4 } },
+                    { id: 'child', parentId: 'parent', position: { x: 0, y: 0 }, data: {} },
+                ],
+                edges: [],
+            });
+            await nextFrame();
+
+            // Intercept layoutChildren AFTER mount (so we don't see initial layouts)
+            const calls: string[] = [];
+            const original = flow.layoutChildren;
+            (flow as any).layoutChildren = function (id: string) {
+                calls.push(id);
+                return original.call(this, id);
+            };
+
+            const el = canvas.querySelector('[data-flow-node-id="child"]') as HTMLElement;
+            el.style.height = '150px';
+            await nextFrame();
+            await nextFrame();
+            await nextFrame();
+
+            expect(calls).toContain('parent');
+        });
+    });
 });

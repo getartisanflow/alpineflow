@@ -335,6 +335,11 @@ export interface CanvasContext {
   /** Frame-aligned layout dedup — created in _initChildLayout, disposed in destroy(). */
   _layoutDedup: import('./canvas-layout-dedup').LayoutDedup | null;
 
+  // === Shared ResizeObserver (A1) ===
+
+  /** Single ResizeObserver instance shared across all node elements. Created in _initChildLayout, disconnected in destroy(). */
+  _resizeObserver: ResizeObserver | null;
+
   /** Cleanup functions for per-node childLayout watchers, keyed by node id. */
   _childLayoutCleanups: Map<string, Array<() => void>>;
 

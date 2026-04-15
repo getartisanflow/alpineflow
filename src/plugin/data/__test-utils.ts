@@ -158,6 +158,9 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     // === Layout dedup ===
     _layoutDedup: null,
     _childLayoutCleanups: new Map<string, Array<() => void>>(),
+
+    // === Shared ResizeObserver (A1) ===
+    _resizeObserver: null,
     _installChildLayoutWatchers: vi.fn(),
     _uninstallChildLayoutWatchers: vi.fn(),
 

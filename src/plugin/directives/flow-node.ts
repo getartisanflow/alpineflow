@@ -1670,6 +1670,11 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
 
         // Register element for CSS-based viewport culling (outside reactive system)
         canvas?._nodeElements?.set(node.id, el);
+
+        // A1: Begin ResizeObserver tracking unless the node opts out.
+        if (node.resizeObserver !== false && canvas?._resizeObserver) {
+          canvas._resizeObserver.observe(el);
+        }
       });
 
       cleanup(() => {
@@ -1683,11 +1688,12 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
         el.removeEventListener('click', handleClick);
         el.removeEventListener('contextmenu', handleContextMenu);
 
-        // Unregister from viewport culling
+        // Unregister from viewport culling and ResizeObserver
         const nodeId = el.dataset.flowNodeId;
         if (nodeId) {
           const canvas = Alpine.$data(el.closest('[x-data]') as HTMLElement);
           canvas?._nodeElements?.delete(nodeId);
+          canvas?._resizeObserver?.unobserve(el);
         }
       });
     },
