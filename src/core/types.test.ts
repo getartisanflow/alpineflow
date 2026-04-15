@@ -1,5 +1,5 @@
 import { expectTypeOf, it } from 'vitest';
-import type { FlowNode } from './types';
+import type { FlowNode, Dimensions } from './types';
 
 it('FlowNode accepts optional fixedDimensions', () => {
     const node: FlowNode = { id: 'a', position: { x: 0, y: 0 }, data: {}, fixedDimensions: true };
@@ -11,14 +11,21 @@ it('FlowNode accepts optional resizeObserver', () => {
     expectTypeOf(node.resizeObserver).toEqualTypeOf<boolean | undefined>();
 });
 
-it('FlowNode accepts optional min/maxDimensions', () => {
-    const node: FlowNode = {
+it('FlowNode accepts optional min/maxDimensions (Partial<Dimensions>)', () => {
+    // Pre-existing on FlowNode — both bounds are Partial, so consumers may
+    // specify only width OR only height.
+    const nodeBoth: FlowNode = {
         id: 'a', position: { x: 0, y: 0 }, data: {},
         minDimensions: { width: 100, height: 40 },
         maxDimensions: { width: 600, height: Infinity },
     };
-    expectTypeOf(node.minDimensions).toMatchTypeOf<{ width: number; height: number } | undefined>();
-    expectTypeOf(node.maxDimensions).toMatchTypeOf<{ width: number; height: number } | undefined>();
+    const nodeWidthOnly: FlowNode = {
+        id: 'a', position: { x: 0, y: 0 }, data: {},
+        minDimensions: { width: 100 },  // height optional by design
+    };
+    expectTypeOf(nodeBoth.minDimensions).toEqualTypeOf<Partial<Dimensions> | undefined>();
+    expectTypeOf(nodeBoth.maxDimensions).toEqualTypeOf<Partial<Dimensions> | undefined>();
+    expectTypeOf(nodeWidthOnly.minDimensions).toEqualTypeOf<Partial<Dimensions> | undefined>();
 });
 
 it('existing FlowNode literals still compile', () => {
