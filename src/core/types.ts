@@ -87,6 +87,12 @@ export interface FlowNode<T = Record<string, any>> {
   /** Can this node be resized via x-flow-resizer? Default: true */
   resizable?: boolean;
 
+  /** If true, inline style height is applied and the ResizeObserver ignores this node. */
+  fixedDimensions?: boolean;
+
+  /** If false, the ResizeObserver does not track this node (for annotations, decorative nodes). Default: true. */
+  resizeObserver?: boolean;
+
   /** Can this node receive keyboard focus? Default: follows `nodesFocusable` config (true). */
   focusable?: boolean;
 

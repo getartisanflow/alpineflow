@@ -166,7 +166,8 @@ Modifiers can be combined to show specific handles:
 
 - Respects the per-node `resizable` flag. If `node.resizable` is `false`, the handles will not appear.
 - Respects grid snapping when enabled in the canvas configuration. Resized dimensions snap to the grid increment.
-- During a resize, the node's `width` and `height` properties are updated in real time.
+- During a resize, `node.dimensions.width` and `node.dimensions.height` are updated in real time as the user drags.
+- Resize-start automatically sets `fixedDimensions: true` on the node so the explicit dimension persists after the ResizeObserver measures it. If you later reset `fixedDimensions` to `false`, the node returns to content-driven sizing and the ResizeObserver takes over again.
 
 The first node snaps to a 20px grid when resized. The second has `resizable: false` — no handles appear:
 

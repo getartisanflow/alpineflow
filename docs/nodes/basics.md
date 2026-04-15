@@ -60,7 +60,7 @@ Apply `x-flow-node` to any element inside a flow canvas. The expression must eva
 - Selects on click (Shift+click for multi-select — on touch devices, two-finger tap enters selection mode — see [Touch & Mobile](../interaction/touch.md))
 - Applies CSS classes reactively: `.flow-node`, `.flow-node-selected`, `.flow-node-locked`, custom `node.class`
 - Applies inline styles from `node.style`
-- Applies dimensions from `node.dimensions`
+- Applies dimensions from `node.dimensions` — inline `style.height` is only set when the node is a container (has `childLayout`), is a parent of other nodes (some other node references it via `parentId`), or has `fixedDimensions: true`; plain leaf nodes let content determine height and the ResizeObserver captures the natural height back into `node.dimensions`
 - Respects per-node flags: `draggable`, `selectable`, `deletable`, `connectable`, `locked`, `hidden`
 
 ## Node data shape
@@ -76,6 +76,10 @@ Every node is a plain object with the following properties:
     class: 'my-class',                        // Optional. CSS class(es) added to the node element.
     style: 'background: red',                // Optional. Inline styles or style object.
     dimensions: { width: 200, height: 80 },  // Optional. Explicit dimensions.
+    fixedDimensions: false,                  // Optional. Opt-in to inline style.height; ResizeObserver skips node.
+    resizeObserver: true,                    // Optional. false excludes node from the shared ResizeObserver.
+    minDimensions: { width: 100 },           // Optional. Lower bound applied by observer (Partial<Dimensions>).
+    maxDimensions: { width: 800 },           // Optional. Upper bound applied by observer (Partial<Dimensions>).
     selected: false,                          // Optional. Selection state.
     draggable: true,                          // Optional. Per-node drag override.
     selectable: true,                         // Optional. Per-node selection override.

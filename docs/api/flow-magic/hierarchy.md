@@ -20,6 +20,8 @@ $flow.layoutChildren(parentId: string, options?: {
 
 Compute and apply child layout for a parent node. Recursively lays out nested layout parents bottom-up (unless `shallow` is true). Applies computed positions, dimension overrides with min/max constraint clamping, and auto-sizes the parent.
 
+As of v0.2.1-alpha, `addNodes` and mutations to `node.childLayout` properties (`columns`, `gap`, `padding`, `headerHeight`, `direction`, `stretch`) trigger `layoutChildren` automatically. Manual calls remain useful when repositioning children by directly mutating `node.position` without going through `addNodes`, or when you need `{ shallow: true }`.
+
 ### propagateLayoutUp
 
 ```ts

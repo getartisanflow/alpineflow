@@ -59,6 +59,9 @@ import { getAddon } from '../../core/registry';
 import { FlowAnnouncer } from '../../core/announcer';
 import { ComputeEngine } from '../../core/compute';
 import { registerWireEvents, registerWireCommands, registerCustomWireCommands } from '../../core/wire-bridge';
+import { createLayoutDedup, type LayoutDedup } from './canvas-layout-dedup';
+import { createBatch } from './canvas-batch';
+import { clampDimensions } from '../../animate/clamp-dimensions';
 
 // ── Mixin factories ──────────────────────────────────────────────────────────
 import { createNodesMixin } from './canvas-nodes';
@@ -285,6 +288,15 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _collapseState: new Map<string, CollapseState>(),
     /** Whether this canvas was hydrated from a pre-rendered static diagram */
     _hydratedFromStatic: false,
+
+    // ── Layout Dedup ─────────────────────────────────────────────────────
+    _layoutDedup: null as LayoutDedup | null,
+
+    // ── Shared ResizeObserver (A1) ────────────────────────────────────────
+    _resizeObserver: null as ResizeObserver | null,
+
+    // ── childLayout watcher cleanup fns (keyed by node id) ───────────────
+    _childLayoutCleanups: new Map<string, Array<() => void>>(),
 
     // ── Shared Particle Loop ────────────────────────────────────────────
     _activeParticles: new Set<ActiveParticle>(),
@@ -1256,8 +1268,117 @@ export function registerFlowCanvas(Alpine: Alpine) {
       }
     },
 
+    /**
+     * Install per-property Alpine watchers on a container node's childLayout.
+     *
+     * Watches the six layout-affecting properties explicitly so that any
+     * mutation — direct assignment or via wire-bridge — triggers a re-layout
+     * through the existing safeLayoutChildren dedup (at most one call per
+     * parent per frame). Unwatched props (e.g. custom user data on childLayout)
+     * never cause spurious layouts.
+     *
+     * Uses Alpine.watch(getter, callback) — the same low-level primitive that
+     * $watch delegates to — because $watch only accepts string expressions
+     * evaluated in component scope, which can't address per-node sub-objects.
+     */
+    _installChildLayoutWatchers(node: FlowNode): void {
+      if (!node.childLayout) return;
+
+      // Defensive: tear down any pre-existing watchers for this node first.
+      this._uninstallChildLayoutWatchers(node.id);
+
+      const WATCHED_CHILD_LAYOUT_PROPS = [
+        'columns', 'gap', 'padding', 'headerHeight', 'direction', 'stretch',
+      ] as const;
+      const nodeId = node.id;
+      const cleanups: Array<() => void> = [];
+      for (const prop of WATCHED_CHILD_LAYOUT_PROPS) {
+        const stop = Alpine.watch(
+          () => (node.childLayout as any)?.[prop],
+          () => { this._layoutDedup?.safeLayoutChildren(nodeId); },
+        );
+        cleanups.push(stop);
+      }
+      this._childLayoutCleanups.set(nodeId, cleanups);
+    },
+
+    _uninstallChildLayoutWatchers(nodeId: string): void {
+      const cleanups = this._childLayoutCleanups.get(nodeId);
+      if (!cleanups) return;
+      for (const stop of cleanups) stop();
+      this._childLayoutCleanups.delete(nodeId);
+    },
+
+    /** Create the shared ResizeObserver instance (A1). Called from _initChildLayout. */
+    _resizeObserverInit(): void {
+      if (typeof ResizeObserver === 'undefined') return; // SSR / very old browsers
+      this._resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const el = entry.target as HTMLElement;
+          const nodeId = el.getAttribute('data-flow-node-id');
+          if (!nodeId) continue;
+          const node = this._nodeMap.get(nodeId);
+          if (!node) continue;
+
+          // Use border-box dimensions so `node.dimensions` matches the element's
+          // visual footprint (padding + border included) — the same measurement
+          // offsetWidth / offsetHeight produce, and what fitView and the minimap
+          // expect. contentRect is the CONTENT BOX (excludes padding/border) and
+          // would produce systematically under-sized bounds.
+          const borderBox = entry.borderBoxSize?.[0];
+          const rawWidth = borderBox ? borderBox.inlineSize : el.offsetWidth;
+          const rawHeight = borderBox ? borderBox.blockSize : el.offsetHeight;
+
+          // Skip viewport-culled elements (display:none produces 0×0).
+          if (rawWidth === 0 && rawHeight === 0) continue;
+          // Defense-in-depth: some browsers fire ResizeObserver for display:none
+          // with non-zero size in specific cases. Check computed style.
+          if (el.offsetParent === null && el.tagName !== 'BODY') continue;
+
+          // Fixed-dim nodes: inline style is authoritative; don't write node.dimensions.
+          if ((node as any).fixedDimensions === true) continue;
+
+          // Round to integer — browser zoom produces fractional values, and the
+          // 1px-threshold comparison needs stable integer values.
+          const width = Math.round(rawWidth);
+          const height = Math.round(rawHeight);
+
+          // 1px threshold: skip micro-updates smaller than 1px on both axes.
+          const current = node.dimensions;
+          if (
+            current
+            && Math.abs((current.width ?? 0) - width) < 1
+            && Math.abs((current.height ?? 0) - height) < 1
+          ) {
+            continue;
+          }
+
+          // A5: clamp to min/max bounds (fields may be undefined or partial).
+          const clamped = clampDimensions(
+            { width, height },
+            (node as any).minDimensions,
+            (node as any).maxDimensions,
+          );
+          node.dimensions = clamped;
+
+          // Schedule parent re-layout (deduped per frame).
+          if (node.parentId) {
+            this._layoutDedup?.safeLayoutChildren(node.parentId);
+          }
+        }
+      });
+    },
+
     /** Run initial child layouts for all layout parents. */
     _initChildLayout() {
+      // Instantiate the layout dedup now that Alpine is ready and _container is set.
+      this._layoutDedup = createLayoutDedup((parentId: string) => {
+        this.layoutChildren(parentId);
+      });
+
+      // A1: Create the shared ResizeObserver now that Alpine + _nodeMap are ready.
+      this._resizeObserverInit();
+
       // Wire bridge: detect $wire (Livewire) and activate bidirectional bridge
       if ((this as any).$wire) {
         const $wire = (this as any).$wire;
@@ -1273,6 +1394,13 @@ export function registerFlowCanvas(Alpine: Alpine) {
       debug('init', `flowCanvas "${this._id}" ready`);
       this._emit('init');
       this._recomputeChildValidation();
+
+      // A3: Install childLayout property watchers for all initial container nodes.
+      for (const node of this.nodes) {
+        if (node.childLayout) {
+          this._installChildLayoutWatchers(node);
+        }
+      }
 
       // Run initial child layout for all layout parents (bottom-up via recursion)
       for (const node of this.nodes) {
@@ -1569,6 +1697,20 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._announcer?.destroy();
       this._announcer = null;
       if (this._computeDebounceTimer) { clearTimeout(this._computeDebounceTimer); this._computeDebounceTimer = null; }
+
+      // Stop all childLayout watchers
+      for (const nodeId of [...this._childLayoutCleanups.keys()]) {
+        this._uninstallChildLayoutWatchers(nodeId);
+      }
+
+      // Disconnect shared ResizeObserver before disposing dedup (callback must
+      // not fire safeLayoutChildren after dedup is gone).
+      this._resizeObserver?.disconnect();
+      this._resizeObserver = null;
+
+      // Dispose layout dedup RAF handle
+      this._layoutDedup?.dispose();
+      this._layoutDedup = null;
     },
 
     // ── Remaining Flat Methods ────────────────────────────────────────
@@ -1602,6 +1744,17 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this.contextMenu.position = null;
       this.contextMenu.nodes = null;
       this.contextMenu.event = null;
+    },
+
+    /**
+     * Batch multiple canvas mutations so that layout reconciliation runs once
+     * after the whole block rather than once per mutation. Nested calls join
+     * the outermost batch. fn's return value is forwarded; layout still runs
+     * even if fn throws.
+     */
+    batch<T>(fn: () => T): T {
+      if (!this._layoutDedup) return fn();
+      return createBatch(this._layoutDedup)<T>(fn);
     },
 
     get collab() {

@@ -155,6 +155,15 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     // === Hydration ===
     _hydratedFromStatic: false,
 
+    // === Layout dedup ===
+    _layoutDedup: null,
+    _childLayoutCleanups: new Map<string, Array<() => void>>(),
+
+    // === Shared ResizeObserver (A1) ===
+    _resizeObserver: null,
+    _installChildLayoutWatchers: vi.fn(),
+    _uninstallChildLayoutWatchers: vi.fn(),
+
     // === Layout animation ===
     _layoutAnimTick: 0,
     _layoutAnimFrame: 0,

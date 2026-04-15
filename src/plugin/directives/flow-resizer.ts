@@ -91,6 +91,11 @@ export function registerFlowResizerDirective(Alpine: Alpine) {
           if (!node) return;
           if (!isResizable(node)) return;
 
+          // A2: height control requires fixedDimensions to prevent the Alpine effect
+          // from clearing inline height on leaf nodes. User dragged a handle — they
+          // chose a size, so the node is now explicitly fixed-dimension.
+          node.fixedDimensions = true;
+
           // Merge node-level min/maxDimensions with directive constraints.
           // Node properties serve as base; directive expression overrides.
           const effectiveConstraints: ResizeConstraints = { ...constraints };

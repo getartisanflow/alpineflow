@@ -26,6 +26,25 @@ $flow.removeNodes(ids: string | string[]): void
 
 Remove one or more nodes by ID. Cascades removal to all descendants (via `parentId` hierarchy). Removes connected edges and optionally creates reconnection bridges (when `reconnectOnDelete` is enabled). Validates child constraints before allowing removal.
 
+### batch
+
+```ts
+$flow.batch<T>(fn: () => T): T
+```
+
+Suspend layout reconciliation for the duration of `fn`, then run a single reconciliation pass after it returns. Ref-counted — nested `batch()` calls join the outer batch rather than triggering early reconciliation. Returns `fn`'s return value. Uses `try/finally` internally so a throwing `fn` still reconciles before the error propagates.
+
+Use `batch()` whenever a single logical operation adds, removes, or reparents multiple nodes that share a parent. Without it, each mutation triggers a layout pass; with it, exactly one pass runs per affected parent.
+
+```js
+// Without batch(): 100 addNodes calls → up to 100 layout passes per parent.
+// With batch(): one layout pass per parent after all nodes are added.
+$flow.batch(() => {
+    $flow.addNodes(allNodes);
+    $flow.addEdges(allEdges);
+});
+```
+
 ### getNode
 
 ```ts

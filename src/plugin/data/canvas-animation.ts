@@ -347,6 +347,9 @@ export function createAnimationMixin(ctx: CanvasContext) {
               }
             }
             if (target.dimensions.height !== undefined) {
+              // A2: height control requires fixedDimensions to prevent the Alpine effect
+              // from clearing inline height on leaf nodes. Animate is authoritative here.
+              node.fixedDimensions = true;
               if (isInstant) {
                 node.dimensions.height = target.dimensions.height;
               } else {

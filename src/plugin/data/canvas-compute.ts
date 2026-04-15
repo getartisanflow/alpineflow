@@ -37,6 +37,9 @@ export function createComputeMixin(ctx: CanvasContext) {
                 node.dimensions = { width: w, height: h };
                 changed.add(nodeId);
               }
+              // A2: height control requires fixedDimensions to prevent the Alpine effect
+              // from clearing inline height on leaf nodes. Compute is authoritative here.
+              node.fixedDimensions = true;
               // Re-apply so the effect doesn't fight us
               el.style.width = w + 'px';
               el.style.height = h + 'px';

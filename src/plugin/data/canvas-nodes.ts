@@ -106,6 +106,21 @@ export function createNodesMixin(ctx: CanvasContext) {
 
       ctx.nodes = sortNodesTopological(ctx.nodes);
       ctx._rebuildNodeMap();
+
+      // A3: Install childLayout watchers for any newly added container nodes so
+      // that mutations to their layout properties trigger re-layout automatically.
+      // Look up each node via _nodeMap to get the Alpine reactive proxy (not the
+      // original plain object) — Alpine.watch must receive the reactive version so
+      // mutations go through the proxy and trigger watchers correctly.
+      for (const node of arr) {
+        if (node.childLayout) {
+          const reactiveNode = ctx._nodeMap.get(node.id);
+          if (reactiveNode) {
+            ctx._installChildLayoutWatchers(reactiveNode);
+          }
+        }
+      }
+
       ctx._emit('nodes-change', { type: 'add', nodes: arr });
 
       const collab = ctx._container ? collabStore.get(ctx._container) : undefined;
@@ -165,7 +180,16 @@ export function createNodesMixin(ctx: CanvasContext) {
         }
         addRoots.add(topmost);
       }
-      for (const rid of addRoots) ctx.layoutChildren?.(rid);
+      // A4: route through dedup so multiple addNodes calls within the same
+      // batch/frame collapse to a single layout pass per parent (consistent
+      // with removeNodes behavior, which also calls layoutChildren per parent).
+      for (const rid of addRoots) {
+        if (ctx._layoutDedup) {
+          ctx._layoutDedup.safeLayoutChildren(rid);
+        } else {
+          ctx.layoutChildren?.(rid);
+        }
+      }
 
       ctx._scheduleAutoLayout();
     },
@@ -259,10 +283,11 @@ export function createNodesMixin(ctx: CanvasContext) {
       ctx._rebuildEdgeMap();
       ctx.nodes = ctx.nodes.filter((n: FlowNode) => !idSet.has(n.id));
       ctx._rebuildNodeMap();
-      // Clean up selection
+      // Clean up selection and childLayout watchers
       for (const id of idSet) {
         ctx.selectedNodes.delete(id);
         ctx._initialDimensions.delete(id);
+        ctx._uninstallChildLayoutWatchers(id);
       }
       if (removed.length) ctx._emit('nodes-change', { type: 'remove', nodes: removed });
       if (reconnected.length) ctx._emit('edges-change', { type: 'add', edges: reconnected });

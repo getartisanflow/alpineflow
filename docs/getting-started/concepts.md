@@ -87,6 +87,8 @@ Key points:
 - Edges are rendered automatically from the array — no edge templates or markup needed
 - Adding, removing, or modifying items in either array triggers a UI update
 
+For bulk additions or batched state changes, wrap them in [`$flow.batch(fn)`](../api/flow-magic/nodes.md#batch) so AlpineFlow runs a single reconciliation after your callback instead of one per mutation.
+
 ## The $flow magic
 
 AlpineFlow registers a `$flow` magic property (available via Alpine's magic system) that gives you programmatic access to the canvas from any expression inside the flow container:

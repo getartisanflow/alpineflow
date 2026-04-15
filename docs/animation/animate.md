@@ -97,6 +97,8 @@ interface AnimateTargets {
 | `position` | `{ x?, y? }` | Yes | Move node to position |
 | `dimensions` | `{ width?, height? }` | Yes | Resize node |
 | `style` | `string \| Record<string, string>` | Yes | CSS style interpolation |
+
+> **Note:** Animating `dimensions.height` auto-sets `fixedDimensions: true` on the target node at animation start — the explicit height persists after the animation completes. Reset `fixedDimensions` to `false` on the node to let it return to content-driven sizing.
 | `class` | `string` | Instant | CSS class replacement |
 | `data` | `Record<string, any>` | Instant | Merge into node data |
 | `selected` | `boolean` | Instant | Selection state |

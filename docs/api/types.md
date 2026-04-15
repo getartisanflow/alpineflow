@@ -35,10 +35,25 @@ interface FlowNode<T = Record<string, any>> {
   /** Width/height, populated after DOM measurement. */
   dimensions?: Dimensions;
 
-  /** Minimum width/height constraints. Applied during layout and resize. */
+  /**
+   * Opt-in to inline `style.height` on leaf nodes and opt out of ResizeObserver updates.
+   * Use for decorative or fixed-size nodes. Container nodes (those with `childLayout`
+   * or that are parents via `parentId`) receive inline height unconditionally —
+   * this flag is specifically for making a leaf node behave as fixed-size.
+   * Auto-set to `true` by the system on resize drag, compute output, and `dimensions.height` animations.
+   */
+  fixedDimensions?: boolean;
+
+  /**
+   * Include this node in the shared ResizeObserver. Default: `true`.
+   * Set `false` for annotation nodes or decorative overlays where measurement is noise.
+   */
+  resizeObserver?: boolean;
+
+  /** Lower bound for observed dimensions. Either axis may be omitted (no constraint on that axis). Applied by the ResizeObserver before updating `node.dimensions`. */
   minDimensions?: Partial<Dimensions>;
 
-  /** Maximum width/height constraints. Applied during layout and resize. */
+  /** Upper bound for observed dimensions. Use `Infinity` for unbounded on one axis. */
   maxDimensions?: Partial<Dimensions>;
 
   /** Anchor point: [0,0] = top-left (default), [0.5,0.5] = center, [1,1] = bottom-right. */
@@ -732,7 +747,7 @@ All exported types at a glance:
 
 | Type | Category | Description |
 |------|----------|-------------|
-| `FlowNode` | Core | Node with position, data, flags, dimensions, shape, rotation |
+| `FlowNode` | Core | Node with position, data, flags, dimensions (`fixedDimensions`, `resizeObserver`, `minDimensions`, `maxDimensions`), shape, rotation |
 | `FlowEdge` | Core | Edge with source/target, type, markers, labels, animation, color |
 | `Viewport` | Core | `{ x, y, zoom }` — viewport pan/zoom state |
 | `XYPosition` | Core | `{ x, y }` — coordinate pair |

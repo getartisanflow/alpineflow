@@ -1,0 +1,16 @@
+Benchmarking is an experimental feature.
+Breaking changes might not follow SemVer, please pin Vitest's version when using it.
+
+ RUN  v4.1.4 /Users/zachiler/projects/alpineflow
+
+
+ ✓ |chromium| tests/bench/500-node-baseline.bench.ts > 500-node canvas baseline 2928ms
+     name                               hz      min      max     mean      p75      p99     p995     p999     rme  samples
+   · initial mount                 14.0474  69.6000  75.6000  71.1875  70.8000  75.6000  75.6000  75.6000  ±2.28%        8
+   · add 50 nodes to existing 500  10.8128  89.8000  94.3000  92.4833  94.0000  94.3000  94.3000  94.3000  ±2.37%        6
+   · drag one node 100 steps       13.3410  74.8000  75.2000  74.9571  75.1000  75.2000  75.2000  75.2000  ±0.21%        7
+
+NOTE: 550 unhandled errors logged during the run. These are Alpine teardown
+races (x-flow-node ResizeObserver/mutation callbacks firing after
+unmountAll() destroys the tree) — they originate in teardown, not during
+measurement, and all three benchmarks completed successfully (✓).

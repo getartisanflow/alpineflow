@@ -1,7 +1,7 @@
 {
     "$schema": "https://www.schemastore.org/package.json",
     "name": "@getartisanflow/alpineflow",
-    "version": "0.2.0-alpha",
+    "version": "0.2.1-alpha",
     "description": "Interactive flowchart and node-graph engine for Alpine.js — drag-and-drop nodes, edges, animations, collaboration, and layout algorithms.",
     "keywords": [
         "alpinejs",
@@ -80,7 +80,8 @@
         "test": "vitest run",
         "test:watch": "vitest",
         "test:browser": "vitest run --config vitest.browser.config.ts",
-        "test:all": "npm run test && npm run test:browser"
+        "test:all": "npm run test && npm run test:browser",
+        "bench": "vitest bench --config vitest.bench.config.ts --run"
     },
     "dependencies": {
         "d3-drag": "^3.0.0",

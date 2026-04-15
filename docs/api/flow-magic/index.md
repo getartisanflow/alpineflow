@@ -65,6 +65,7 @@ All `$flow` methods and properties at a glance:
 |--------|-----------|------|
 | `addNodes` | `(nodes, options?) → void` | [Nodes](nodes.md) |
 | `removeNodes` | `(ids) → void` | [Nodes](nodes.md) |
+| `batch` | `(fn) → T` | [Nodes](nodes.md) |
 | `getNode` | `(id) → FlowNode?` | [Nodes](nodes.md) |
 | `getNodesBounds` | `(ids?) → Rect` | [Nodes](nodes.md) |
 | `getOutgoers` | `(nodeId) → FlowNode[]` | [Nodes](nodes.md) |
