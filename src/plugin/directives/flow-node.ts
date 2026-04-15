@@ -248,10 +248,23 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
         el.style.left = (absPos.x - nw * nodeOrig[0]) + 'px';
         el.style.top = (absPos.y - nh * nodeOrig[1]) + 'px';
 
-        // Auto-apply dimensions when explicitly set
+        // Auto-apply dimensions when explicitly set.
+        // Height is conditional: containers (childLayout) and fixed-dim nodes need
+        // inline height for child positioning or consumer-opted fixed sizing.
+        // Plain leaf nodes get NO inline height — content determines height, and the
+        // A1 ResizeObserver captures the natural post-render height back into
+        // node.dimensions.
         if (node.dimensions) {
+          // Access childLayout and fixedDimensions at the top of the effect block so
+          // Alpine tracks them reactively in case they change after mount.
+          const _childLayout = node.childLayout;
+          const _fixedDimensions = node.fixedDimensions;
           el.style.width = node.dimensions.width + 'px';
-          el.style.height = node.dimensions.height + 'px';
+          if (_childLayout || _fixedDimensions) {
+            el.style.height = node.dimensions.height + 'px';
+          } else {
+            el.style.height = ''; // leaf node: let content determine height
+          }
         }
 
         // Apply selected class reactively

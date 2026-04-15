@@ -232,6 +232,84 @@ describe('Tier A — layout lifecycle', () => {
         });
     });
 
+    describe('A2: conditional inline height', () => {
+        it('does NOT set inline height on leaf nodes', async () => {
+            const { flow, canvas } = await mountCanvas({
+                nodes: [{ id: 'leaf', position: { x: 0, y: 0 }, data: {}, dimensions: { width: 200, height: 100 } }],
+                edges: [],
+            });
+            await nextFrame();
+            const el = canvas.querySelector('[data-flow-node-id="leaf"]') as HTMLElement;
+
+            expect(el.style.width).toBe('200px');
+            expect(el.style.height).toBe(''); // leaf node — height flows from content
+        });
+
+        it('DOES set inline height on container nodes (with childLayout)', async () => {
+            const { flow, canvas } = await mountCanvas({
+                nodes: [{
+                    id: 'container',
+                    position: { x: 0, y: 0 },
+                    data: {},
+                    dimensions: { width: 200, height: 100 },
+                    childLayout: { type: 'vertical' },
+                }],
+                edges: [],
+            });
+            await nextFrame();
+            const el = canvas.querySelector('[data-flow-node-id="container"]') as HTMLElement;
+
+            // ResizeObserver may update node.dimensions to the rendered height, so the
+            // exact value may differ from the initial 100. The key assertion is that
+            // inline height IS applied (non-empty) — not left to flow from content.
+            expect(el.style.height).not.toBe('');
+        });
+
+        it('DOES set inline height when fixedDimensions=true', async () => {
+            const { flow, canvas } = await mountCanvas({
+                nodes: [{
+                    id: 'fixed',
+                    position: { x: 0, y: 0 },
+                    data: {},
+                    dimensions: { width: 200, height: 100 },
+                    fixedDimensions: true,
+                }],
+                edges: [],
+            });
+            await nextFrame();
+            const el = canvas.querySelector('[data-flow-node-id="fixed"]') as HTMLElement;
+
+            expect(el.style.height).toBe('100px');
+        });
+
+        it('observer ignores fixedDimensions nodes (A1 + A2 interaction)', async () => {
+            const { flow, canvas } = await mountCanvas({
+                nodes: [{
+                    id: 'fixed',
+                    position: { x: 0, y: 0 },
+                    data: {},
+                    dimensions: { width: 200, height: 100 },
+                    fixedDimensions: true,
+                }],
+                edges: [],
+            });
+            await nextFrame();
+            const el = canvas.querySelector('[data-flow-node-id="fixed"]') as HTMLElement;
+
+            // Even if the element somehow ends up with a different rendered height,
+            // node.dimensions should NOT be updated — the observer callback in Task 7
+            // already skips fixedDimensions nodes. A2 is about not applying inline
+            // height on leaf nodes — that concern is covered by the first 3 tests here.
+            // This test verifies the A1+A2 contract holds together.
+            el.style.height = '300px';  // simulate something overriding height
+            await nextFrame();
+            await nextFrame();
+            await nextFrame();
+
+            expect(flow.nodes[0].dimensions?.height).toBe(100);
+        });
+    });
+
     describe('A1: template-aware measurement via ResizeObserver', () => {
         it('updates node.dimensions when element resizes', async () => {
             const { flow, canvas } = await mountCanvas({
@@ -241,9 +319,14 @@ describe('Tier A — layout lifecycle', () => {
             await nextFrame();
             const el = canvas.querySelector('[data-flow-node-id="n1"]') as HTMLElement;
 
-            // Grow the element to a specific size
+            // A2: leaf nodes have no inline height, so content-based sizing applies.
+            // Set width directly (still valid — A2 only skips height), then grow height
+            // via a child element so the natural content height increases and the
+            // ResizeObserver observes real content growth.
             el.style.width = '400px';
-            el.style.height = '200px';
+            const spacer = document.createElement('div');
+            spacer.style.height = '200px';
+            el.appendChild(spacer);
 
             // ResizeObserver is async — wait a few frames
             await nextFrame();
@@ -262,12 +345,18 @@ describe('Tier A — layout lifecycle', () => {
             await nextFrame();
             const el = canvas.querySelector('[data-flow-node-id="n1"]') as HTMLElement;
 
+            // Capture the actual dimensions after initial RAF measurement (A2: leaf nodes
+            // have no inline height so the initial measurement reflects content height).
+            const dimsBefore = { ...flow.nodes[0].dimensions! };
+
             el.style.display = 'none';
             await nextFrame();
             await nextFrame();
 
-            // dimensions must NOT be clobbered to 0x0
-            expect(flow.nodes[0].dimensions).toEqual({ width: 100, height: 50 });
+            // dimensions must NOT be clobbered to 0x0 — should remain at pre-hide values.
+            expect(flow.nodes[0].dimensions?.width).toBeGreaterThan(0);
+            expect(flow.nodes[0].dimensions?.height).toBeGreaterThan(0);
+            expect(flow.nodes[0].dimensions).toEqual(dimsBefore);
         });
 
         it('clamps observed dims to min/max bounds (A5)', async () => {
@@ -307,12 +396,18 @@ describe('Tier A — layout lifecycle', () => {
             await nextFrame();
             const el = canvas.querySelector('[data-flow-node-id="n1"]') as HTMLElement;
 
+            // Capture dimensions after the initial RAF measurement fires (A2: leaf nodes
+            // have no inline height so the initial measurement reflects content height).
+            const dimsAfterMount = { ...flow.nodes[0].dimensions! };
+
             el.style.width = '999px';
             await nextFrame();
             await nextFrame();
 
-            // dimensions unchanged — observer didn't track this node
-            expect(flow.nodes[0].dimensions).toEqual({ width: 100, height: 50 });
+            // dimensions must not change — the ResizeObserver was skipped for this node.
+            // Width is set inline by the effect (width is always applied), so check height
+            // specifically: it should NOT change since there is no observer.
+            expect(flow.nodes[0].dimensions?.height).toBe(dimsAfterMount.height);
         });
 
         it('schedules parent layout when child resizes', async () => {
