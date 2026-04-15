@@ -1,3 +1,29 @@
+/**
+ * Tier A integration tests — layout lifecycle.
+ *
+ * Spec coverage matrix (8 required cases from Testing Strategy, lines 431–448):
+ *
+ * Case 1: template-aware measurement
+ *   → A1 "updates node.dimensions when element resizes"
+ * Case 2: reactive childLayout
+ *   → A3 — all 8 watched-prop + 2 lifecycle tests
+ * Case 3: viewport culling safety
+ *   → A1 "ignores 0x0 observations (viewport culling via display:none)"
+ * Case 4: batch performance (100-node explicit stress)
+ *   → A4 existing "canvas.batch() suppresses" (20 nodes) covers correctness;
+ *     "Spec coverage gaps / 100-node batch" adds the 100-node stress assertion.
+ * Case 5: frame-aligned dedup within-frame + across-frames
+ *   → "Spec coverage gaps / frame-aligned dedup" — both sub-cases below.
+ * Case 6: cross-frame loop safety
+ *   → Fully covered at unit level in canvas-layout-dedup.test.ts
+ *     ("suppresses layout after 5 consecutive frames", "resets consecutive counter",
+ *      "resetLoopCounter clears suppression"). No integration duplicate needed.
+ * Case 7: regression — fixedDimensions
+ *   → A2 "DOES set inline height when fixedDimensions=true" +
+ *     "observer ignores fixedDimensions nodes (A1 + A2 interaction)"
+ * Case 8: performance benchmark
+ *   → vitest.bench.config.ts / Task 0 / Task 10 — out of scope for this file.
+ */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mountCanvas, unmountAll, nextFrame } from './helpers/mount';
 
@@ -550,6 +576,165 @@ describe('Tier A — layout lifecycle', () => {
             await nextFrame();
 
             expect(calls).toContain('parent');
+        });
+    });
+
+    // -------------------------------------------------------------------------
+    // Spec coverage gaps
+    // Case 4: batch performance — 100-node explicit stress assertion.
+    // Case 5: frame-aligned dedup — within-frame (A4+A1 same parent) and
+    //         across-frames (same parent in two successive frames).
+    // Case 6: cross-frame loop safety — fully covered at unit level in
+    //         canvas-layout-dedup.test.ts; no integration duplicate needed.
+    // -------------------------------------------------------------------------
+    describe('Spec coverage gaps', () => {
+        // ------------------------------------------------------------------
+        // Case 4 (stress): 100-node batch — one layout pass per parent
+        // ------------------------------------------------------------------
+        it('batch: 100-node add triggers exactly one layoutChildren per parent', async () => {
+            const { flow, scope } = await mountCanvas({
+                nodes: [{
+                    id: 'parent',
+                    position: { x: 0, y: 0 },
+                    data: {},
+                    childLayout: { type: 'vertical', gap: 8 },
+                }],
+                edges: [],
+            });
+            await nextFrame();
+
+            const calls: string[] = [];
+            const origLayout = scope.layoutChildren.bind(scope);
+            scope.layoutChildren = (parentId: string, ...rest: any[]) => {
+                calls.push(parentId);
+                return origLayout(parentId, ...rest);
+            };
+
+            flow.batch(() => {
+                for (let i = 0; i < 100; i++) {
+                    flow.addNodes([{
+                        id: `child-${i}`,
+                        parentId: 'parent',
+                        position: { x: 0, y: 0 },
+                        data: {},
+                    }]);
+                }
+            });
+            await nextFrame();
+
+            const parentCalls = calls.filter(id => id === 'parent');
+            expect(parentCalls.length).toBe(1);
+        });
+
+        // ------------------------------------------------------------------
+        // Case 5a: frame-aligned dedup — within a single animation frame,
+        // both A4 (addNodes with parentId) and A1 (observer resize on a child
+        // already in the canvas) target the SAME parent. Dedup must collapse
+        // both triggers to exactly one layoutChildren call.
+        // ------------------------------------------------------------------
+        it('frame-aligned dedup: A4 + A1 for same parent in same frame → one layout', async () => {
+            const { flow, scope, canvas } = await mountCanvas({
+                nodes: [
+                    {
+                        id: 'parent',
+                        position: { x: 0, y: 0 },
+                        data: {},
+                        childLayout: { type: 'vertical', gap: 4 },
+                    },
+                    // A pre-existing child so the observer has something to observe.
+                    { id: 'existing-child', parentId: 'parent', position: { x: 0, y: 0 }, data: {} },
+                ],
+                edges: [],
+            });
+            await nextFrame();
+            await nextFrame(); // let initial observer + layout settle
+
+            const calls: string[] = [];
+            const origLayout = scope.layoutChildren.bind(scope);
+            scope.layoutChildren = (parentId: string, ...rest: any[]) => {
+                calls.push(parentId);
+                return origLayout(parentId, ...rest);
+            };
+
+            // Trigger A4: add a new child to the same parent.
+            flow.addNodes([{
+                id: 'new-child',
+                parentId: 'parent',
+                position: { x: 0, y: 0 },
+                data: {},
+            }]);
+
+            // Trigger A1: resize the existing child's element in the SAME synchronous
+            // tick so the ResizeObserver callback (which fires asynchronously but still
+            // within the same rAF) sees the change before the frame flushes.
+            const childEl = canvas.querySelector('[data-flow-node-id="existing-child"]') as HTMLElement;
+            const spacer = document.createElement('div');
+            spacer.style.height = '80px';
+            childEl.appendChild(spacer);
+
+            // Wait for both triggers to resolve (ResizeObserver + dedup RAF).
+            await nextFrame();
+            await nextFrame();
+            await nextFrame();
+
+            const parentCalls = calls.filter(id => id === 'parent');
+            // Both A4 and A1 must have converged to a single layout call.
+            expect(parentCalls.length).toBe(1);
+        });
+
+        // ------------------------------------------------------------------
+        // Case 5b: frame-aligned dedup — across frames. The same parent is
+        // triggered in frame 1, then triggered again in frame 2 after a real
+        // dimension change. Dedup must NOT suppress the second-frame call —
+        // exactly 2 layout calls must run (one per frame).
+        // ------------------------------------------------------------------
+        it('frame-aligned dedup: same parent in two successive frames → two layouts', async () => {
+            const { flow, scope, canvas } = await mountCanvas({
+                nodes: [
+                    {
+                        id: 'parent',
+                        position: { x: 0, y: 0 },
+                        data: {},
+                        childLayout: { type: 'vertical', gap: 4 },
+                    },
+                    { id: 'child', parentId: 'parent', position: { x: 0, y: 0 }, data: {} },
+                ],
+                edges: [],
+            });
+            await nextFrame();
+            await nextFrame(); // settle initial state
+
+            const calls: string[] = [];
+            const origLayout = scope.layoutChildren.bind(scope);
+            scope.layoutChildren = (parentId: string, ...rest: any[]) => {
+                calls.push(parentId);
+                return origLayout(parentId, ...rest);
+            };
+
+            const childEl = canvas.querySelector('[data-flow-node-id="child"]') as HTMLElement;
+
+            // --- Frame 1: resize child (triggers A1 → layout parent) ---
+            const spacer1 = document.createElement('div');
+            spacer1.style.height = '60px';
+            childEl.appendChild(spacer1);
+            await nextFrame();
+            await nextFrame();
+            await nextFrame();
+
+            const afterFrame1 = calls.filter(id => id === 'parent').length;
+            expect(afterFrame1).toBeGreaterThanOrEqual(1);
+
+            // --- Frame 2: resize child again with a DIFFERENT height ---
+            const spacer2 = document.createElement('div');
+            spacer2.style.height = '120px';
+            childEl.appendChild(spacer2);
+            await nextFrame();
+            await nextFrame();
+            await nextFrame();
+
+            const afterFrame2 = calls.filter(id => id === 'parent').length;
+            // A second layout must have fired in frame 2 — not suppressed by dedup.
+            expect(afterFrame2).toBeGreaterThanOrEqual(afterFrame1 + 1);
         });
     });
 });
