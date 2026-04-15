@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.2.1-alpha — 2026-04-14
+
+Tier A — measurement & layout lifecycle. Builder-focused improvements that eliminate the root cause of stale-measurement workarounds and make AlpineFlow reactive to real dimensional changes.
+
+### Added
+- Shared `ResizeObserver` on the canvas — `node.dimensions` stays in sync with rendered content (A1)
+- `canvas.batch(fn)` / `$flow.batch(fn)` suspends layout reconciliation during bulk mutations; ref-counted, throw-safe, forwards fn's return value (A6)
+- Reactive `childLayout` property watchers — mutating `columns` / `gap` / `padding` / `headerHeight` / `direction` / `stretch` triggers re-layout automatically (A3)
+- `addNodes` now lays out affected parent containers, consistent with `removeNodes` (A4)
+- Optional `FlowNode` properties: `fixedDimensions`, `resizeObserver`; clarified semantics for pre-existing `minDimensions` / `maxDimensions` as `Partial<Dimensions>` clamps applied by the observer (A2 + A5)
+- Cross-frame loop safety net — a parent laid out in >5 consecutive frames is suppressed with a `console.warn` until the next user mutation clears the counter
+
+### Changed (alpha-breaking)
+- Leaf nodes (no `childLayout`, no `fixedDimensions`) no longer receive inline `style.height` — content drives their height. Set `fixedDimensions: true` to restore the old behavior.
+- Layout dedup: at most one `layoutChildren` per parent per animation frame. Tests that counted duplicate layouts for the same mutation should expect lower counts.
+- Resize drag, `compute()` output, and animation of `dimensions.height` now auto-promote affected nodes to `fixedDimensions: true` (system-authoritative height writes).
+
+### Infrastructure
+- New `canvas-layout-dedup.ts` primitive with RAF-aligned `safeLayoutChildren`
+- New `canvas-batch.ts` — ref-counted suspend/resume wrapper
+- New `clamp-dimensions.ts` pure utility for min/max clamping
+
+### Benchmark
+500-node canvas, mean ms (baseline → post-Tier-A):
+- initial mount: 71.2 → ~75 (~+5%)
+- add 50 nodes: 92.5 → ~97 (~+5%)
+- drag 100 steps: 75.0 → ~76–85 (high variance, flat on average)
+
+All within the no-regression target. See [migration guide](docs/migration/v0.2.1-alpha.md) for full details.
+
 ## v0.1.2-alpha — 2026-04-03
 
 ### Fixed
