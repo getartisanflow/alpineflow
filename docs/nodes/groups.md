@@ -239,6 +239,13 @@ $flow.layoutChildren('group-1')
 $flow.reorderChild('child-2', 0) // Move to first position
 ```
 
+**Automatic re-layout (v0.2.1-alpha):** You rarely need to call `layoutChildren` manually. Two things trigger it automatically:
+
+- Mutating any `node.childLayout` property — `columns`, `gap`, `padding`, `headerHeight`, `direction`, or `stretch` — triggers `layoutChildren` on that parent immediately.
+- Calling `addNodes` with a `parentId` triggers `layoutChildren` on the affected parent, consistent with how `removeNodes` already behaves.
+
+Manual `$flow.layoutChildren(parentId)` calls remain useful when you reposition children by directly mutating `node.position` (rather than going through `addNodes`), or when you need `{ shallow: true }` to skip recursive sub-layout.
+
 Click "Layout" to auto-stack children within the group:
 
 ::demo

@@ -208,6 +208,8 @@ interface TimelineStep<TContext = Record<string, any>> {
 }
 ```
 
+> **Note:** Animating `dimensions.height` auto-sets `fixedDimensions: true` on the target node at animation start — the explicit height persists after the animation completes. Reset `fixedDimensions` to `false` on the node to let it return to content-driven sizing.
+
 Steps can also be **functions** of context — `tl.step((ctx) => ({ nodes: [ctx.current], position: { x: ctx.targetX } }))` — which lets one step shape depend on data computed earlier in the timeline. See *Context* below.
 
 ### Timeline State

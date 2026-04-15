@@ -46,6 +46,10 @@ See [Directives > flow-node](../nodes/basics.md) for template details.
     class: 'my-class',                    // Optional. CSS class(es) added to the node element.
     style: 'background: red',            // Optional. Inline styles or style object.
     dimensions: { width: 200, height: 80 }, // Optional. Explicit dimensions.
+    fixedDimensions: false,              // Optional. Opt-in to inline style.height; ResizeObserver skips node.
+    resizeObserver: true,                // Optional. false excludes node from the shared ResizeObserver.
+    minDimensions: { width: 100 },       // Optional. Lower bound applied by observer (Partial<Dimensions>).
+    maxDimensions: { width: 800 },       // Optional. Upper bound applied by observer (Partial<Dimensions>).
     selected: false,                      // Optional. Selection state.
     draggable: true,                      // Optional. Per-node drag override.
     connectable: true,                    // Optional. Per-node connection override.
