@@ -476,7 +476,8 @@ describe('createLayoutMixin — layout (dagre)', () => {
 
     await mixin.layout({ direction: 'LR', fitView: false, duration: 0 });
 
-    expect(computeDagreLayout).toHaveBeenCalledWith(ctx.nodes, ctx.edges, {
+    // After C2 filter: nodes without parentId — same content as ctx.nodes here
+    expect(computeDagreLayout).toHaveBeenCalledWith([n1], ctx.edges, {
       direction: 'LR',
       nodesep: undefined,
       ranksep: undefined,
@@ -497,7 +498,8 @@ describe('createLayoutMixin — forceLayout', () => {
 
     await mixin.forceLayout({ charge: -500, fitView: false, duration: 0 });
 
-    expect(computeForceLayout).toHaveBeenCalledWith(ctx.nodes, ctx.edges, {
+    // After C2 filter: nodes without parentId — same content as ctx.nodes here
+    expect(computeForceLayout).toHaveBeenCalledWith([n1], ctx.edges, {
       strength: undefined,
       distance: undefined,
       charge: -500,
@@ -519,7 +521,8 @@ describe('createLayoutMixin — treeLayout', () => {
 
     await mixin.treeLayout({ layoutType: 'tree', direction: 'TB', fitView: false, duration: 0 });
 
-    expect(computeHierarchyLayout).toHaveBeenCalledWith(ctx.nodes, ctx.edges, {
+    // After C2 filter: nodes without parentId — same content as ctx.nodes here
+    expect(computeHierarchyLayout).toHaveBeenCalledWith([n1], ctx.edges, {
       layoutType: 'tree',
       direction: 'TB',
       nodeWidth: undefined,
@@ -540,7 +543,8 @@ describe('createLayoutMixin — elkLayout', () => {
 
     await mixin.elkLayout({ algorithm: 'layered', direction: 'DOWN', fitView: false, duration: 0 });
 
-    expect(computeElkLayout).toHaveBeenCalledWith(ctx.nodes, ctx.edges, {
+    // After C2 filter: nodes without parentId — same content as ctx.nodes here
+    expect(computeElkLayout).toHaveBeenCalledWith([n1], ctx.edges, {
       algorithm: 'layered',
       direction: 'DOWN',
       nodeSpacing: undefined,
