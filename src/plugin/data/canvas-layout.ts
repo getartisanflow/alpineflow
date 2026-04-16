@@ -477,6 +477,10 @@ export function createLayoutMixin(ctx: CanvasContext) {
      * Apply Dagre (directed acyclic graph) layout.
      *
      * Requires the dagre addon to be registered via `Alpine.plugin(AlpineFlowDagre)`.
+     *
+     * Nodes with `parentId` are excluded by default — their positions are managed
+     * by `childLayout`, not top-level auto-layout. Pass `{ includeChildren: true }`
+     * to include them.
      */
     layout(options?: {
       direction?: 'TB' | 'LR' | 'BT' | 'RL';
@@ -485,13 +489,17 @@ export function createLayoutMixin(ctx: CanvasContext) {
       adjustHandles?: boolean;
       fitView?: boolean;
       duration?: number;
+      includeChildren?: boolean;
     }): void {
       const computeDagreLayout = getAddon<typeof import('../../core/layout/dagre').computeDagreLayout>('layout:dagre');
       if (!computeDagreLayout) {
         throw new Error('layout() requires the dagre plugin. Register it with: Alpine.plugin(AlpineFlowDagre)');
       }
       const direction = options?.direction ?? 'TB';
-      const positions = computeDagreLayout(ctx.nodes, ctx.edges, {
+      const layoutNodes = options?.includeChildren
+        ? ctx.nodes
+        : ctx.nodes.filter((n: FlowNode) => !n.parentId);
+      const positions = computeDagreLayout(layoutNodes, ctx.edges, {
         direction,
         nodesep: options?.nodesep,
         ranksep: options?.ranksep,
@@ -512,6 +520,10 @@ export function createLayoutMixin(ctx: CanvasContext) {
      * Apply force-directed layout.
      *
      * Requires the force addon to be registered via `Alpine.plugin(AlpineFlowForce)`.
+     *
+     * Nodes with `parentId` are excluded by default — their positions are managed
+     * by `childLayout`, not top-level auto-layout. Pass `{ includeChildren: true }`
+     * to include them.
      */
     forceLayout(options?: {
       strength?: number;
@@ -521,12 +533,16 @@ export function createLayoutMixin(ctx: CanvasContext) {
       center?: { x: number; y: number };
       fitView?: boolean;
       duration?: number;
+      includeChildren?: boolean;
     }): void {
       const computeForceLayout = getAddon<typeof import('../../core/layout/force').computeForceLayout>('layout:force');
       if (!computeForceLayout) {
         throw new Error('forceLayout() requires the force plugin. Register it with: Alpine.plugin(AlpineFlowForce)');
       }
-      const positions = computeForceLayout(ctx.nodes, ctx.edges, {
+      const layoutNodes = options?.includeChildren
+        ? ctx.nodes
+        : ctx.nodes.filter((n: FlowNode) => !n.parentId);
+      const positions = computeForceLayout(layoutNodes, ctx.edges, {
         strength: options?.strength,
         distance: options?.distance,
         charge: options?.charge,
@@ -547,6 +563,10 @@ export function createLayoutMixin(ctx: CanvasContext) {
      * Apply hierarchy/tree layout.
      *
      * Requires the hierarchy addon to be registered via `Alpine.plugin(AlpineFlowHierarchy)`.
+     *
+     * Nodes with `parentId` are excluded by default — their positions are managed
+     * by `childLayout`, not top-level auto-layout. Pass `{ includeChildren: true }`
+     * to include them.
      */
     treeLayout(options?: {
       layoutType?: HierarchyLayoutType;
@@ -556,13 +576,17 @@ export function createLayoutMixin(ctx: CanvasContext) {
       adjustHandles?: boolean;
       fitView?: boolean;
       duration?: number;
+      includeChildren?: boolean;
     }): void {
       const computeHierarchyLayout = getAddon<typeof import('../../core/layout/hierarchy').computeHierarchyLayout>('layout:hierarchy');
       if (!computeHierarchyLayout) {
         throw new Error('treeLayout() requires the hierarchy plugin. Register it with: Alpine.plugin(AlpineFlowHierarchy)');
       }
       const direction = options?.direction ?? 'TB';
-      const positions = computeHierarchyLayout(ctx.nodes, ctx.edges, {
+      const layoutNodes = options?.includeChildren
+        ? ctx.nodes
+        : ctx.nodes.filter((n: FlowNode) => !n.parentId);
+      const positions = computeHierarchyLayout(layoutNodes, ctx.edges, {
         layoutType: options?.layoutType,
         direction,
         nodeWidth: options?.nodeWidth,
@@ -585,6 +609,10 @@ export function createLayoutMixin(ctx: CanvasContext) {
      *
      * Requires the elk addon to be registered via `Alpine.plugin(AlpineFlowElk)`.
      * Note: elkLayout is async because ELK's layout() returns a Promise.
+     *
+     * Nodes with `parentId` are excluded by default — their positions are managed
+     * by `childLayout`, not top-level auto-layout. Pass `{ includeChildren: true }`
+     * to include them.
      */
     async elkLayout(options?: {
       algorithm?: ElkAlgorithm;
@@ -594,13 +622,17 @@ export function createLayoutMixin(ctx: CanvasContext) {
       adjustHandles?: boolean;
       fitView?: boolean;
       duration?: number;
+      includeChildren?: boolean;
     }): Promise<void> {
       const computeElkLayout = getAddon<typeof import('../../core/layout/elk').computeElkLayout>('layout:elk');
       if (!computeElkLayout) {
         throw new Error('elkLayout() requires the elk plugin. Register it with: Alpine.plugin(AlpineFlowElk)');
       }
       const direction = options?.direction ?? 'DOWN';
-      const positions = await computeElkLayout(ctx.nodes, ctx.edges, {
+      const layoutNodes = options?.includeChildren
+        ? ctx.nodes
+        : ctx.nodes.filter((n: FlowNode) => !n.parentId);
+      const positions = await computeElkLayout(layoutNodes, ctx.edges, {
         algorithm: options?.algorithm,
         direction,
         nodeSpacing: options?.nodeSpacing,
