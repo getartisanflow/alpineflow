@@ -286,6 +286,12 @@
     --flow-edge-row-highlight-color: var(--color-accent);
 }
 
+/* ── Node text alignment ────────────────────────────────────────── */
+.flow-node,
+.flow-ghost-node {
+    text-align: center;
+}
+
 /* ── Shape node defaults (clipped shapes use background-as-border) ── */
 .flow-node-diamond,
 .flow-node-hexagon,
