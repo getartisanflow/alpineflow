@@ -133,6 +133,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
 
     // === Drop zone ===
     _onDropZoneDragOver: null,
+    _onDropZoneDragleave: null,
     _onDropZoneDrop: null,
 
     // === Canvas focus state ===
@@ -387,6 +388,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     $reset: vi.fn(),
     $clear: vi.fn(),
     toImage: vi.fn(async () => ''),
+    getNodeAtPoint: vi.fn(() => null),
 
     // === Alpine magic properties ===
     $el: null as any,

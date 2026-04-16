@@ -293,6 +293,9 @@ export interface CanvasContext {
   /** Dragover handler for drop zone */
   _onDropZoneDragOver: ((e: DragEvent) => void) | null;
 
+  /** Dragleave handler for drop zone */
+  _onDropZoneDragleave: ((e: DragEvent) => void) | null;
+
   /** Drop handler for drop zone */
   _onDropZoneDrop: ((e: DragEvent) => void) | null;
 
@@ -815,6 +818,9 @@ export interface CanvasContext {
 
   /** Export as image */
   toImage(options?: ToImageOptions): Promise<string>;
+
+  /** Return the deepest FlowNode under the given client coordinates */
+  getNodeAtPoint(clientX: number, clientY: number): FlowNode | null;
 
   // === Alpine magic properties (available at runtime) ===
 
