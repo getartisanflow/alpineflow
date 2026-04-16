@@ -156,6 +156,7 @@ export function getEdgePath(
   obstacles?: Rect[],
   shapeRegistry?: Record<string, ShapeDefinition>,
   globalOrigin?: [number, number],
+  defaultEdgeType?: string,
 ) {
   const source = sourceCoords ?? getHandleCoords(sourceNode, sourcePosition, shapeRegistry, globalOrigin);
   const target = targetCoords ?? getHandleCoords(targetNode, targetPosition, shapeRegistry, globalOrigin);
@@ -165,7 +166,7 @@ export function getEdgePath(
     targetX: target.x, targetY: target.y, targetPosition: toCardinalPosition(targetPosition),
   };
 
-  const edgeType = edge.type ?? 'bezier';
+  const edgeType = edge.type ?? defaultEdgeType ?? 'bezier';
 
   // Check custom edge types first
   if (edgeTypes?.[edgeType]) {

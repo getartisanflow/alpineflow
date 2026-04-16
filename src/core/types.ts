@@ -865,6 +865,10 @@ export interface FlowCanvasConfig {
    *  Edge-specific properties override these defaults. Does not affect initial config edges. */
   defaultEdgeOptions?: Partial<FlowEdge>;
 
+  /** Default edge type applied to edges that don't specify their own `type`.
+   *  Resolution: edge.type ?? canvas.defaultEdgeType ?? 'bezier'. Applies to both initial config edges and runtime-created edges. */
+  defaultEdgeType?: EdgeType;
+
   /** Default invisible hit area width for edges. Default: 20 */
   defaultInteractionWidth?: number;
 

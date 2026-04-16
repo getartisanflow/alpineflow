@@ -367,10 +367,11 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         e.preventDefault();
 
         const edge = evaluate(expression) as FlowEdge;
-        if (!edge || edge.type !== 'editable') return;
-
         const canvas = Alpine.$data(el.closest('[x-data]') as HTMLElement);
-        if (!canvas) return;
+        if (!edge || !canvas) return;
+
+        const resolvedEdgeType = edge.type ?? canvas._config?.defaultEdgeType ?? 'bezier';
+        if (resolvedEdgeType !== 'editable') return;
 
         const target = e.target as SVGElement;
 
@@ -864,6 +865,9 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         const canvas = Alpine.$data(el.closest('[x-data]') as HTMLElement);
         if (!canvas?.nodes) return;
 
+        // Resolve edge type using fallback: edge.type ?? canvas.defaultEdgeType ?? 'bezier'
+        const resolvedEdgeType = edge.type ?? canvas._config?.defaultEdgeType ?? 'bezier';
+
         // Reactive dependency — bumped each frame during layout animation
         // so edges re-measure DOM handle positions while CSS transitions run.
         void canvas._layoutAnimTick;
@@ -888,7 +892,7 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         let srcMeasurement: HandleMeasurement | null;
         let tgtMeasurement: HandleMeasurement | null;
 
-        if (edge.type === 'floating') {
+        if (resolvedEdgeType === 'floating') {
           // ── Floating: compute endpoints from node geometry ──
           const floating = getFloatingEdgeParams(sourceNode, targetNode);
           sourcePos = floating.sourcePos;
@@ -939,7 +943,7 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
 
         // Compute obstacle rects for orthogonal routing (performance-gated)
         let obstacleRects: Rect[] | undefined;
-        if (edge.type === 'orthogonal' || edge.type === 'avoidant') {
+        if (resolvedEdgeType === 'orthogonal' || resolvedEdgeType === 'avoidant') {
           obstacleRects = canvas.nodes
             .filter((n: FlowNode) => n.id !== edge.source && n.id !== edge.target)
             .map((n: FlowNode) => {
@@ -953,12 +957,12 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
             });
         }
 
-        const { path, labelPosition } = getEdgePath(edge, sourceNode, targetNode, sourcePos, targetPos, adjustedSrc, adjustedTgt, canvas._config?.edgeTypes, obstacleRects, canvas._shapeRegistry, canvas._config?.nodeOrigin);
+        const { path, labelPosition } = getEdgePath(edge, sourceNode, targetNode, sourcePos, targetPos, adjustedSrc, adjustedTgt, canvas._config?.edgeTypes, obstacleRects, canvas._shapeRegistry, canvas._config?.nodeOrigin, canvas._config?.defaultEdgeType);
         pathEl.setAttribute('d', path);
         interactionPath.setAttribute('d', path);
 
         // ── Editable edge control points ──────────────────────────
-        const isEditable = edge.type === 'editable';
+        const isEditable = resolvedEdgeType === 'editable';
         const showPoints = isEditable && (edge.showControlPoints || edge.selected);
 
         // Clear previous control point elements
