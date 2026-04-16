@@ -8,7 +8,7 @@
 // Phase 4 implementation.
 // ============================================================================
 
-import type { XYPosition, HandlePosition, Connection, PendingConnection } from './types';
+import type { XYPosition, HandlePosition, Connection, ConnectionRules, FlowNode, PendingConnection } from './types';
 import { wouldCreateCycle } from './graph';
 
 export interface HandleBounds {
@@ -62,6 +62,48 @@ export function findClosestHandle(
   }
 
   return closest;
+}
+
+/**
+ * Check canvas-level `connectionRules` against a proposed connection.
+ *
+ * Evaluation:
+ *   1. `byType` map — if source type has an entry, target type must be listed.
+ *      Source types with no entry are unrestricted.
+ *   2. `validate` function — if present, must return true.
+ *
+ * Returns true when no rules are configured or all configured rules pass.
+ * Returns false as soon as any rule rejects.
+ */
+export function checkConnectionRules(
+  connection: Connection,
+  rules: ConnectionRules | undefined,
+  nodeMap: Map<string, FlowNode>,
+): boolean {
+  if (!rules) return true;
+
+  const source = nodeMap.get(connection.source);
+  const target = nodeMap.get(connection.target);
+
+  // If either node is unknown let downstream handle it
+  if (!source || !target) return true;
+
+  // Map-based type check
+  const { byType } = rules;
+  if (byType) {
+    const sourceType = source.type ?? '';
+    if (Object.prototype.hasOwnProperty.call(byType, sourceType)) {
+      const allowed = byType[sourceType];
+      if (!allowed.includes(target.type ?? '')) return false;
+    }
+  }
+
+  // Function-based check
+  if (typeof rules.validate === 'function') {
+    if (!rules.validate(connection, source, target)) return false;
+  }
+
+  return true;
 }
 
 /**

@@ -17,7 +17,7 @@
 import type { Alpine } from 'alpinejs';
 import type { HandleType, HandlePosition, FlowEdge, FlowNode, Connection, XYPosition } from '../../core/types';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
-import { isValidConnection } from '../../core/connections';
+import { isValidConnection, checkConnectionRules } from '../../core/connections';
 import { debug } from '../../core/debug';
 import { HANDLE_VALIDATE_KEY } from './flow-handle-validate';
 import { HANDLE_LIMIT_KEY } from './flow-handle-limit';
@@ -563,7 +563,8 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                   const builtInValid = targetNode?.connectable !== false
                     && entry.sourceNodeId !== targetNodeId
                     && isValidConnection(connection, canvas.edges, { preventCycles: canvas._config?.preventCycles });
-                  const limitValid = builtInValid && checkHandleLimits(containerEl!, connection, canvas.edges);
+                  const rulesValid = builtInValid && checkConnectionRules(connection, canvas._config?.connectionRules, canvas._nodeMap);
+                  const limitValid = rulesValid && checkHandleLimits(containerEl!, connection, canvas.edges);
                   const handleValid = limitValid && runHandleValidators(containerEl!, connection);
                   const globalValid = handleValid
                     && (!canvas._config?.isValidConnection || canvas._config.isValidConnection(connection));
@@ -668,7 +669,8 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                   const builtInValid = targetNode?.connectable !== false
                     && entry.sourceNodeId !== targetNodeId
                     && isValidConnection(connection, canvas.edges, { preventCycles: canvas._config?.preventCycles });
-                  const limitValid = builtInValid && checkHandleLimits(containerEl!, connection, canvas.edges);
+                  const rulesValid = builtInValid && checkConnectionRules(connection, canvas._config?.connectionRules, canvas._nodeMap);
+                  const limitValid = rulesValid && checkHandleLimits(containerEl!, connection, canvas.edges);
                   const handleValid = limitValid && runHandleValidators(containerEl!, connection);
                   const globalValid = handleValid
                     && (!canvas._config?.isValidConnection || canvas._config.isValidConnection(connection));
@@ -784,6 +786,12 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                 };
 
                 if (isValidConnection(connection, canvas.edges, { preventCycles: canvas._config?.preventCycles })) {
+                  if (!checkConnectionRules(connection, canvas._config?.connectionRules, canvas._nodeMap)) {
+                    debug('connection', 'Connection rejected (connection rules)', connection);
+                    canvas._emit('connect-end', { connection: null, ...connectEndBase });
+                    canvas.pendingConnection = null;
+                    return;
+                  }
                   if (!checkHandleLimits(containerEl, connection, canvas.edges)) {
                     debug('connection', 'Connection rejected (handle limit)', connection);
                     canvas._emit('connect-end', { connection: null, ...connectEndBase });
@@ -988,6 +996,14 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
 
           if (isValidConnection(connection, canvas.edges, { preventCycles: canvas._config?.preventCycles })) {
             const clickContainerEl = el.closest('.flow-container') as HTMLElement;
+            if (!checkConnectionRules(connection, canvas._config?.connectionRules, canvas._nodeMap)) {
+              debug('connection', 'Click-to-connect rejected (connection rules)', connection);
+              canvas._emit('connect-end', { connection: null, ...connectEndBase });
+              canvas.pendingConnection = null;
+              canvas._container?.classList.remove('flow-connecting');
+              if (clickContainerEl) clearValidationClasses(clickContainerEl);
+              return;
+            }
             if (clickContainerEl && !checkHandleLimits(clickContainerEl, connection, canvas.edges)) {
               debug('connection', 'Click-to-connect rejected (handle limit)', connection);
               canvas._emit('connect-end', { connection: null, ...connectEndBase });
@@ -1289,7 +1305,9 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                   );
 
                   if (isValidConnection(newConnection, otherEdges, { preventCycles: canvas._config?.preventCycles })) {
-                    if (!checkHandleLimits(containerEl, newConnection, otherEdges)) {
+                    if (!checkConnectionRules(newConnection, canvas._config?.connectionRules, canvas._nodeMap)) {
+                      debug('reconnect', 'Reconnection rejected (connection rules)', newConnection);
+                    } else if (!checkHandleLimits(containerEl, newConnection, otherEdges)) {
                       debug('reconnect', 'Reconnection rejected (handle limit)', newConnection);
                     } else if (!runHandleValidators(containerEl, newConnection)) {
                       debug('reconnect', 'Reconnection rejected (per-handle validator)', newConnection);

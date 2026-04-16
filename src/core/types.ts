@@ -450,6 +450,19 @@ export interface Connection {
   targetHandle?: string;
 }
 
+/**
+ * Canvas-level connection rules checked before per-handle validators.
+ * `byType` maps source node type → allowed target node types.
+ * `validate` is a function for complex cross-node logic.
+ * Both checks must pass; missing `byType` entry means unrestricted.
+ */
+export interface ConnectionRules {
+  /** Map of source type → allowed target types. Unlisted source types are unrestricted. */
+  byType?: Record<string, string[]>;
+  /** Function-based validator. Return false to reject. Receives connection, source node, target node. */
+  validate?: (connection: Connection, sourceNode: FlowNode, targetNode: FlowNode) => boolean;
+}
+
 export interface PendingConnection {
   source: string;
   sourceHandle?: string;
@@ -912,6 +925,23 @@ export interface FlowCanvasConfig {
 
   /** Custom connection validator. Return false to reject. Called after built-in checks. */
   isValidConnection?: (connection: Connection) => boolean;
+
+  /**
+   * Canvas-level connection rules based on node type.
+   * Runs BEFORE per-handle validators — both must pass for a connection to be accepted.
+   *
+   * `byType`     — Map of source type → allowed target types.
+   *                Source types not present in the map are unrestricted.
+   * `validate`   — Function-based rule for complex logic. Receives the connection,
+   *                source node, and target node. Return false to reject.
+   *
+   * @example
+   * connectionRules: {
+   *   byType: { page: ['page'] },
+   *   validate: (conn, src, tgt) => src.type !== 'leaf',
+   * }
+   */
+  connectionRules?: ConnectionRules;
 
   // ── Minimap ──────────────────────────────────────────────────────
   /** Show a minimap panel. Default: false */
