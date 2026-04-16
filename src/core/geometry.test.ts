@@ -204,6 +204,20 @@ describe('getViewportForBounds', () => {
     expect(Number.isFinite(vp.y)).toBe(true);
     expect(Number.isFinite(vp.zoom)).toBe(true);
   });
+
+  it('vertically centers bounds with varying-height nodes (C3 regression)', () => {
+    // Simulates: short node (h=40) and tall node (h=200), both at y=0.
+    // getNodesBounds produces: { x:0, y:0, width:300, height:200 }
+    // The viewport must center this within the container.
+    const bounds: Rect = { x: 0, y: 0, width: 300, height: 200 };
+    const containerWidth = 800;
+    const containerHeight = 600;
+    const vp = getViewportForBounds(bounds, containerWidth, containerHeight, 0.5, 2, 0.1);
+
+    // contentMidY in screen space = vp.y + (bounds.height / 2) * vp.zoom
+    const screenMidY = vp.y + (bounds.height / 2) * vp.zoom;
+    expect(screenMidY).toBeCloseTo(containerHeight / 2);
+  });
 });
 
 // ── getVisibleBounds ──────────────────────────────────────────────────────
