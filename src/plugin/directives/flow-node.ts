@@ -30,7 +30,7 @@ import { resolveChildValidation } from '../../core/child-validation';
 import { collabStore } from '../../collab/store';
 import { createConnectionLine, findSnapTarget, startConnectionAutoPan, type ConnectionLineInstance } from '../connection-utils';
 import { applyValidationClasses, clearValidationClasses, checkHandleLimits, runHandleValidators } from './flow-handle';
-import { isValidConnection } from '../../core/connections';
+import { isValidConnection, checkConnectionRules } from '../../core/connections';
 import { findProximityCandidate, type ProximityCandidate } from '../../core/proximity-connect';
 import { isDraggable, isConnectable, isSelectable } from '../../core/node-flags';
 
@@ -1363,11 +1363,12 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
 
                 // Run validation chain
                 if (isValidConnection(connection, canvas.edges, { preventCycles: canvas._config?.preventCycles })) {
-                  const isHandleOk = containerEl ? checkHandleLimits(containerEl, connection, canvas.edges) : true;
-                  const isValidatorOk = containerEl ? runHandleValidators(containerEl, connection) : true;
-                  const isCustomOk = !canvas._config.isValidConnection || canvas._config.isValidConnection(connection);
+                  const isRulesOk = checkConnectionRules(connection, canvas._config?.connectionRules, canvas._nodeMap);
+                  const isHandleOk = isRulesOk && (containerEl ? checkHandleLimits(containerEl, connection, canvas.edges) : true);
+                  const isValidatorOk = isHandleOk && (containerEl ? runHandleValidators(containerEl, connection) : true);
+                  const isCustomOk = isValidatorOk && (!canvas._config.isValidConnection || canvas._config.isValidConnection(connection));
 
-                  if (isHandleOk && isValidatorOk && isCustomOk) {
+                  if (isCustomOk) {
                     // Optional confirmation animation
                     if (canvas._config.proximityConnectConfirm) {
                       const srcEl = containerEl?.querySelector(`[data-flow-node-id="${CSS.escape(cand.source)}"]`);
@@ -1521,7 +1522,8 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                 if (targetNodeId) {
                   const connection = { source: node.id, sourceHandle: handleId, target: targetNodeId, targetHandle: targetHandleId };
                   if (isValidConnection(connection, currentCanvas.edges, { preventCycles: currentCanvas._config.preventCycles })) {
-                    if (checkHandleLimits(containerEl, connection, currentCanvas.edges) &&
+                    if (checkConnectionRules(connection, currentCanvas._config?.connectionRules, currentCanvas._nodeMap) &&
+                        checkHandleLimits(containerEl, connection, currentCanvas.edges) &&
                         runHandleValidators(containerEl, connection) &&
                         (!currentCanvas._config?.isValidConnection || currentCanvas._config.isValidConnection(connection))) {
                       const edgeId = `e-${node.id}-${targetNodeId}-${Date.now()}-${easyConnectEdgeCounter++}`;

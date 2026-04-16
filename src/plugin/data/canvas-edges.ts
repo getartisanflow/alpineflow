@@ -12,6 +12,7 @@ import type { CanvasContext } from './canvas-context';
 import type { FlowEdge } from '../../core/types';
 import { debug } from '../../core/debug';
 import { collabStore } from '../../collab/store';
+import { checkConnectionRules } from '../../core/connections';
 
 export function createEdgesMixin(ctx: CanvasContext) {
   return {
@@ -25,11 +26,17 @@ export function createEdgesMixin(ctx: CanvasContext) {
      * - Schedules auto-layout after the mutation.
      */
     addEdges(newEdges: FlowEdge | FlowEdge[]): void {
-      ctx._captureHistory();
       const defaults = ctx._config.defaultEdgeOptions;
-      const arr = (Array.isArray(newEdges) ? newEdges : [newEdges]).map((e) =>
-        defaults ? { ...defaults, ...e } : e,
-      );
+      const connectionRules = ctx._config.connectionRules;
+      const arr = (Array.isArray(newEdges) ? newEdges : [newEdges])
+        .map((e) => (defaults ? { ...defaults, ...e } : e))
+        .filter((e) => {
+          if (!connectionRules) return true;
+          const connection = { source: e.source, sourceHandle: e.sourceHandle, target: e.target, targetHandle: e.targetHandle };
+          return checkConnectionRules(connection, connectionRules, ctx._nodeMap);
+        });
+      if (arr.length === 0) return;
+      ctx._captureHistory();
       debug('edge', `Adding ${arr.length} edge(s)`, arr.map((e) => e.id));
       ctx.edges.push(...arr);
       ctx._rebuildEdgeMap();
