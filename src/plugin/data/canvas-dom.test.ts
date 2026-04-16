@@ -525,4 +525,56 @@ describe('createDomMixin', () => {
       expect(getEdgePath).not.toHaveBeenCalled();
     });
   });
+
+  // ── getNodeElement ──────────────────────────────────────────────────────────
+
+  describe('getNodeElement', () => {
+    it('returns the registered element for a known id', () => {
+      const el = document.createElement('div');
+      const ctx = mockCtx();
+      ctx._nodeElements.set('node-1', el);
+
+      const mixin = createDomMixin(ctx, Alpine);
+      expect(mixin.getNodeElement('node-1')).toBe(el);
+    });
+
+    it('returns undefined for an unknown id', () => {
+      const ctx = mockCtx();
+
+      const mixin = createDomMixin(ctx, Alpine);
+      expect(mixin.getNodeElement('nonexistent')).toBeUndefined();
+    });
+  });
+
+  // ── getNodeIdFromElement ────────────────────────────────────────────────────
+
+  describe('getNodeIdFromElement', () => {
+    it('returns the id when the element itself has the data-flow-node-id attribute', () => {
+      const outer = document.createElement('div');
+      outer.dataset.flowNodeId = 'node-1';
+
+      const ctx = mockCtx();
+      const mixin = createDomMixin(ctx, Alpine);
+      expect(mixin.getNodeIdFromElement(outer)).toBe('node-1');
+    });
+
+    it('walks up and returns the id from an ancestor with data-flow-node-id', () => {
+      const outer = document.createElement('div');
+      outer.dataset.flowNodeId = 'node-1';
+      const inner = document.createElement('span');
+      outer.appendChild(inner);
+
+      const ctx = mockCtx();
+      const mixin = createDomMixin(ctx, Alpine);
+      expect(mixin.getNodeIdFromElement(inner)).toBe('node-1');
+    });
+
+    it('returns null when no ancestor has the data-flow-node-id attribute', () => {
+      const isolated = document.createElement('div');
+
+      const ctx = mockCtx();
+      const mixin = createDomMixin(ctx, Alpine);
+      expect(mixin.getNodeIdFromElement(isolated)).toBeNull();
+    });
+  });
 });
