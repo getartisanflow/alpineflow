@@ -154,6 +154,11 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
         // Store the node ID on the DOM element so child directives (handles) can read it
         el.dataset.flowNodeId = node.id;
 
+        // Store the node type on the DOM element for CSS selectors
+        if (node.type) {
+            el.dataset.flowNodeType = node.type;
+        }
+
         // One-time template injection from nodeTypes registry
         if (!contentInjected) {
           const canvasForTypes = Alpine.$data(el.closest('[x-data]') as HTMLElement);
