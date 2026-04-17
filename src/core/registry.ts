@@ -13,7 +13,7 @@
 
 const REGISTRY_KEY = '__alpineflow_registry__';
 
-function getRegistry(): Map<string, any> {
+export function getRegistry(): Map<string, any> {
   if (typeof globalThis !== 'undefined') {
     if (!(globalThis as any)[REGISTRY_KEY]) {
       (globalThis as any)[REGISTRY_KEY] = new Map<string, any>();
@@ -30,6 +30,11 @@ export function registerAddon(name: string, value: any): void {
 
 export function getAddon<T = any>(name: string): T | undefined {
   return getRegistry().get(name);
+}
+
+/** Remove a single addon by name. */
+export function unregisterAddon(name: string): void {
+  getRegistry().delete(name);
 }
 
 /** Test-only: clear all registered addons. */

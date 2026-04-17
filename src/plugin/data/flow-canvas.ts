@@ -55,7 +55,7 @@ import { builtinShapes } from '../../core/shapes';
 import { createColorMode, type ColorModeHandle } from '../../core/color-mode';
 import type { CollabConfig } from '../../collab/types';
 import { collabStore } from '../../collab/store';
-import { getAddon } from '../../core/registry';
+import { getAddon, getRegistry } from '../../core/registry';
 import { FlowAnnouncer } from '../../core/announcer';
 import { ComputeEngine } from '../../core/compute';
 import { registerWireEvents, registerWireCommands, registerCustomWireCommands } from '../../core/wire-bridge';
@@ -1497,6 +1497,15 @@ export function registerFlowCanvas(Alpine: Alpine) {
       }
     },
 
+    /** Call setup(canvas) on any addon that provides it. */
+    _initAddons() {
+      for (const [, addon] of getRegistry().entries()) {
+        if (addon && typeof addon === 'object' && typeof addon.setup === 'function') {
+          addon.setup(this);
+        }
+      }
+    },
+
     /** Validate auto-layout dependency and start initial layout. */
     _initAutoLayout() {
       if (config.autoLayout) {
@@ -1603,6 +1612,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._initControls();
       this._initSelection();
       this._initChildLayout();
+      this._initAddons();
       this._initDropZone();
       this._initAutoLayout();
       this._initReady();

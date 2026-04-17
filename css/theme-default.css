@@ -486,6 +486,31 @@
     filter: grayscale(0.3);
 }
 
+/* ── Workflow edge states ──────────────────────────────────────────── */
+
+.flow-edge-entering path {
+    stroke: var(--flow-edge-entering-stroke, #8b5cf6);
+    stroke-dasharray: var(--flow-edge-animated-dasharray, 5 3);
+    animation: flow-edge-dash var(--flow-edge-animated-duration, 0.6s) linear infinite;
+}
+
+@keyframes flow-edge-dash {
+    to { stroke-dashoffset: -16; }
+}
+
+.flow-edge-completed path {
+    stroke: var(--flow-edge-completed-stroke, #14b8a6);
+}
+
+.flow-edge-taken path {
+    stroke: var(--flow-edge-taken-stroke, #14b8a6);
+}
+
+.flow-edge-untaken path {
+    opacity: var(--flow-edge-untaken-opacity, 0.35);
+    stroke-dasharray: 4 3;
+}
+
 /* ── Edge utility classes (for class-based edge styling) ─────── */
 .flow-edge-svg path.flow-edge-highlight {
     stroke: #64748b;

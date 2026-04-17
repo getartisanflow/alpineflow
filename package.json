@@ -66,6 +66,11 @@
             "import": "./dist/alpineflow-elk.esm.js",
             "default": "./dist/alpineflow-elk.js"
         },
+        "./workflow": {
+            "types": "./dist/types/lib/workflow.d.ts",
+            "import": "./dist/alpineflow-workflow.esm.js",
+            "default": "./dist/alpineflow-workflow.js"
+        },
         "./css": "./dist/alpineflow.css",
         "./theme": "./dist/alpineflow-theme.css"
     },
@@ -76,7 +81,7 @@
         "build": "vite build && tsc && npm run build:css && npm run build:bundle && npm run build:addons",
         "build:css": "cp css/structural.css dist/alpineflow.css && cp css/theme-default.css dist/alpineflow-theme.css",
         "build:bundle": "vite build --config vite.bundle.config.ts",
-        "build:addons": "ADDON_NAME=alpineflow-whiteboard.esm ADDON_ENTRY=lib/whiteboard.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-dagre.esm ADDON_ENTRY=lib/dagre.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-force.esm ADDON_ENTRY=lib/force.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-hierarchy.esm ADDON_ENTRY=lib/hierarchy.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-elk.esm ADDON_ENTRY=lib/elk.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-collab.esm ADDON_ENTRY=lib/collab.ts vite build --config vite.addons.config.ts",
+        "build:addons": "ADDON_NAME=alpineflow-whiteboard.esm ADDON_ENTRY=lib/whiteboard.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-dagre.esm ADDON_ENTRY=lib/dagre.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-force.esm ADDON_ENTRY=lib/force.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-hierarchy.esm ADDON_ENTRY=lib/hierarchy.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-elk.esm ADDON_ENTRY=lib/elk.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-collab.esm ADDON_ENTRY=lib/collab.ts vite build --config vite.addons.config.ts && ADDON_NAME=alpineflow-workflow.esm ADDON_ENTRY=lib/workflow.ts vite build --config vite.addons.config.ts",
         "test": "vitest run",
         "test:watch": "vitest",
         "test:browser": "vitest run --config vitest.browser.config.ts",
