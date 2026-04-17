@@ -12,6 +12,7 @@ function mockCanvas(nodes: any[], edges: any[]) {
                 .filter(Boolean);
         },
         getConnectedEdges: (id: string) => edges.filter(e => e.source === id || e.target === id),
+        edges,
         setNodeState: vi.fn(),
         toggleInteractive: vi.fn(),
         sendParticle: vi.fn(),
@@ -154,5 +155,70 @@ describe('workflow run helper', () => {
 
         expect(canvas.setNodeState).not.toHaveBeenCalledWith('b', 'running');
         expect(onComplete).not.toHaveBeenCalled();
+    });
+
+    it('evaluates flow-condition node and picks the correct branch', async () => {
+        const canvas = mockCanvas(
+            [
+                { id: 'trigger', data: {} },
+                { id: 'condition', type: 'flow-condition', data: { condition: { field: 'plan', op: 'equals', value: 'annual' } } },
+                { id: 'annual', data: {} },
+                { id: 'monthly', data: {} },
+            ],
+            [
+                { id: 'e1', source: 'trigger', target: 'condition' },
+                { id: 'e2', source: 'condition', target: 'annual', sourceHandle: 'true' },
+                { id: 'e3', source: 'condition', target: 'monthly', sourceHandle: 'false' },
+            ],
+        );
+        const run = createRunExecutor(canvas);
+        const handle = await run('trigger', {}, { payload: { plan: 'annual' } });
+        await handle.finished;
+
+        // Should visit: trigger → condition → annual (not monthly)
+        expect(canvas.setNodeState).toHaveBeenCalledWith('annual', 'completed');
+        expect(canvas.setNodeState).not.toHaveBeenCalledWith('monthly', 'running');
+    });
+
+    it('uses custom pickBranch handler when provided', async () => {
+        const canvas = mockCanvas(
+            [
+                { id: 'a', data: {} },
+                { id: 'b', data: {} },
+                { id: 'c', data: {} },
+            ],
+            [
+                { id: 'e1', source: 'a', target: 'b' },
+                { id: 'e2', source: 'a', target: 'c' },
+            ],
+        );
+        const run = createRunExecutor(canvas);
+        const handle = await run('a', {
+            pickBranch: async (_node, edges) => edges[1].id, // pick the second edge (→ c)
+        });
+        await handle.finished;
+
+        expect(canvas.setNodeState).toHaveBeenCalledWith('c', 'completed');
+        expect(canvas.setNodeState).not.toHaveBeenCalledWith('b', 'running');
+    });
+
+    it('uses node.data.evaluate function for complex conditions', async () => {
+        const canvas = mockCanvas(
+            [
+                { id: 'cond', type: 'flow-condition', data: { evaluate: (payload: any) => payload.amount > 1000 } },
+                { id: 'high', data: {} },
+                { id: 'low', data: {} },
+            ],
+            [
+                { id: 'e1', source: 'cond', target: 'high', sourceHandle: 'true' },
+                { id: 'e2', source: 'cond', target: 'low', sourceHandle: 'false' },
+            ],
+        );
+        const run = createRunExecutor(canvas);
+        const handle = await run('cond', {}, { payload: { amount: 5000 } });
+        await handle.finished;
+
+        expect(canvas.setNodeState).toHaveBeenCalledWith('high', 'completed');
+        expect(canvas.setNodeState).not.toHaveBeenCalledWith('low', 'running');
     });
 });

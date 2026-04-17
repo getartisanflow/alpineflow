@@ -7,6 +7,7 @@
 // ============================================================================
 
 import type { FlowRunHandlers, FlowRunOptions, FlowRunContext, FlowRunHandle } from './types';
+import { evaluateCondition } from './condition';
 
 export function createRunExecutor(canvas: any) {
     return async function run(
@@ -101,13 +102,22 @@ export function createRunExecutor(canvas: any) {
                         Object.assign(context.payload, exitResult);
                     }
 
-                    // Find next node — simple linear: first outgoing node.
-                    // Condition evaluation + pickBranch will be added in W3.
-                    const outgoers: any[] = canvas.getOutgoers(currentId);
-                    if (!outgoers || outgoers.length === 0) {
+                    // Find next node
+                    const outgoingEdges = (canvas.edges ?? []).filter((e: any) => e.source === currentId);
+
+                    if (outgoingEdges.length === 0) {
                         currentId = null;
+                    } else if (handlers.pickBranch) {
+                        // Custom pickBranch handler (async allowed)
+                        const chosenEdgeId = await handlers.pickBranch(node, outgoingEdges, context);
+                        const chosenEdge = chosenEdgeId ? outgoingEdges.find((e: any) => e.id === chosenEdgeId) : null;
+                        currentId = chosenEdge?.target ?? null;
+                    } else if (node.type === 'flow-condition') {
+                        // Declarative condition evaluation
+                        currentId = resolveConditionBranch(node, outgoingEdges, context.payload);
                     } else {
-                        currentId = outgoers[0].id;
+                        // Linear default: follow first outgoing edge
+                        currentId = outgoingEdges[0]?.target ?? null;
                     }
                 }
 
@@ -123,6 +133,30 @@ export function createRunExecutor(canvas: any) {
         (handle as any).finished = execution;
         return handle;
     };
+}
+
+function resolveConditionBranch(
+    node: any,
+    outgoingEdges: any[],
+    payload: Record<string, any>,
+): string | null {
+    let result: boolean;
+
+    if (typeof node.data?.evaluate === 'function') {
+        // Custom evaluate function
+        result = !!node.data.evaluate(payload);
+    } else if (node.data?.condition) {
+        // Declarative condition
+        result = evaluateCondition(node.data.condition, payload);
+    } else {
+        // No condition defined — follow first edge
+        return outgoingEdges[0]?.target ?? null;
+    }
+
+    // Pick the edge with sourceHandle matching the result
+    const handle = result ? 'true' : 'false';
+    const edge = outgoingEdges.find((e: any) => e.sourceHandle === handle);
+    return edge?.target ?? null;
 }
 
 function sleep(ms: number): Promise<void> {
