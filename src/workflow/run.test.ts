@@ -3,16 +3,20 @@ import { createRunExecutor } from './run';
 
 function mockCanvas(nodes: any[], edges: any[]) {
     const nodeMap = new Map(nodes.map(n => [n.id, { ...n }]));
+    // Use mutable edge objects so edge-state mutations are observable in tests
+    const mutableEdges = edges.map(e => ({ ...e }));
+    const edgeMap = new Map(mutableEdges.map(e => [e.id, e]));
     return {
         getNode: (id: string) => nodeMap.get(id),
+        getEdge: (id: string) => edgeMap.get(id),
         getOutgoers: (id: string) => {
-            return edges
+            return mutableEdges
                 .filter(e => e.source === id)
                 .map(e => nodeMap.get(e.target))
                 .filter(Boolean);
         },
-        getConnectedEdges: (id: string) => edges.filter(e => e.source === id || e.target === id),
-        edges,
+        getConnectedEdges: (id: string) => mutableEdges.filter(e => e.source === id || e.target === id),
+        edges: mutableEdges,
         setNodeState: vi.fn(),
         toggleInteractive: vi.fn(),
         sendParticle: vi.fn(),
@@ -220,5 +224,81 @@ describe('workflow run helper', () => {
 
         expect(canvas.setNodeState).toHaveBeenCalledWith('high', 'completed');
         expect(canvas.setNodeState).not.toHaveBeenCalledWith('low', 'running');
+    });
+
+    it('marks incoming edges as entering then completed during traversal', async () => {
+        const canvas = mockCanvas(
+            [{ id: 'a', data: {} }, { id: 'b', data: {} }],
+            [{ id: 'e1', source: 'a', target: 'b' }],
+        );
+        const run = createRunExecutor(canvas);
+        const handle = await run('a', {});
+        await handle.finished;
+
+        const e1 = canvas.edges.find((e: any) => e.id === 'e1');
+        expect(e1.class).toContain('flow-edge-completed');
+        expect(e1.class).not.toContain('flow-edge-entering');
+    });
+
+    it('marks taken/untaken edges on condition branch', async () => {
+        const canvas = mockCanvas(
+            [
+                { id: 'cond', type: 'flow-condition', data: { condition: { field: 'x', op: 'equals', value: 1 } } },
+                { id: 'yes', data: {} },
+                { id: 'no', data: {} },
+            ],
+            [
+                { id: 'e-yes', source: 'cond', target: 'yes', sourceHandle: 'true' },
+                { id: 'e-no', source: 'cond', target: 'no', sourceHandle: 'false' },
+            ],
+        );
+        const run = createRunExecutor(canvas);
+        const handle = await run('cond', {}, { payload: { x: 1 }, muteUntakenBranches: true });
+        await handle.finished;
+
+        const eYes = canvas.edges.find((e: any) => e.id === 'e-yes');
+        const eNo = canvas.edges.find((e: any) => e.id === 'e-no');
+        expect(eYes.class).toContain('flow-edge-taken');
+        expect(eNo.class).toContain('flow-edge-untaken');
+    });
+
+    it('fires particles on traversed edges when particleOnEdges is true', async () => {
+        const canvas = mockCanvas(
+            [{ id: 'a', data: {} }, { id: 'b', data: {} }],
+            [{ id: 'e1', source: 'a', target: 'b' }],
+        );
+        const run = createRunExecutor(canvas);
+        const handle = await run('a', {}, { particleOnEdges: true });
+        await handle.finished;
+
+        expect(canvas.sendParticle).toHaveBeenCalledWith('e1', expect.any(Object));
+    });
+
+    it('handles flow-wait nodes by sleeping without calling handlers', async () => {
+        const enterSpy = vi.fn();
+        const canvas = mockCanvas(
+            [
+                { id: 'a', data: {} },
+                { id: 'wait', type: 'flow-wait', data: { durationMs: 10 } },
+                { id: 'b', data: {} },
+            ],
+            [
+                { id: 'e1', source: 'a', target: 'wait' },
+                { id: 'e2', source: 'wait', target: 'b' },
+            ],
+        );
+        const run = createRunExecutor(canvas);
+        const handle = await run('a', { onEnter: enterSpy });
+        await handle.finished;
+
+        // onEnter should be called for a and b, but NOT for the wait node
+        const enterNodeIds = enterSpy.mock.calls.map((c: any) => c[0].id);
+        expect(enterNodeIds).toContain('a');
+        expect(enterNodeIds).toContain('b');
+        expect(enterNodeIds).not.toContain('wait');
+
+        // Wait node should still get running → completed
+        expect(canvas.setNodeState).toHaveBeenCalledWith('wait', 'running');
+        expect(canvas.setNodeState).toHaveBeenCalledWith('wait', 'completed');
     });
 });
