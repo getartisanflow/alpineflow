@@ -301,4 +301,82 @@ describe('workflow run helper', () => {
         expect(canvas.setNodeState).toHaveBeenCalledWith('wait', 'running');
         expect(canvas.setNodeState).toHaveBeenCalledWith('wait', 'completed');
     });
+
+    it('populates executionLog with events during run', async () => {
+        const canvas = mockCanvas(
+            [{ id: 'a', data: {} }, { id: 'b', data: {} }],
+            [{ id: 'e1', source: 'a', target: 'b' }],
+        );
+        const run = createRunExecutor(canvas);
+        const handle = await run('a', {});
+        await handle.finished;
+
+        const log = canvas.executionLog;
+        const types = log.map((e: any) => e.type);
+        expect(types[0]).toBe('run:started');
+        expect(types).toContain('node:enter');
+        expect(types).toContain('node:exit');
+        expect(types).toContain('edge:taken');
+        expect(types[types.length - 1]).toBe('run:complete');
+    });
+
+    it('node:exit entries include runtimeMs', async () => {
+        const canvas = mockCanvas(
+            [{ id: 'a', data: {} }],
+            [],
+        );
+        const run = createRunExecutor(canvas);
+        const handle = await run('a', {}, { defaultDurationMs: 10 });
+        await handle.finished;
+
+        const exitEntry = canvas.executionLog.find((e: any) => e.type === 'node:exit');
+        expect(exitEntry).toBeDefined();
+        expect(exitEntry.runtimeMs).toBeGreaterThanOrEqual(10);
+    });
+
+    it('logs run:error on handler failure', async () => {
+        const canvas = mockCanvas(
+            [{ id: 'a', data: {} }],
+            [],
+        );
+        const run = createRunExecutor(canvas);
+        const handle = await run('a', {
+            onEnter: async () => { throw new Error('boom'); },
+            onError: () => {},
+        });
+        try { await handle.finished; } catch {}
+
+        const errorEntry = canvas.executionLog.find((e: any) => e.type === 'run:error');
+        expect(errorEntry).toBeDefined();
+        expect(errorEntry.payload.error).toBe('boom');
+    });
+
+    it('respects logLimit with FIFO eviction', async () => {
+        // Create a long chain that would exceed a tiny limit
+        const nodes = Array.from({ length: 20 }, (_, i) => ({ id: `n${i}`, data: {} }));
+        const edges = Array.from({ length: 19 }, (_, i) => ({ id: `e${i}`, source: `n${i}`, target: `n${i + 1}` }));
+        const canvas = mockCanvas(nodes, edges);
+        const run = createRunExecutor(canvas);
+        const handle = await run('n0', {}, { logLimit: 10 });
+        await handle.finished;
+
+        expect(canvas.executionLog.length).toBeLessThanOrEqual(10);
+        // The last entry should be run:complete (most recent)
+        expect(canvas.executionLog[canvas.executionLog.length - 1].type).toBe('run:complete');
+    });
+
+    it('logs run:stopped when stop() is called', async () => {
+        const canvas = mockCanvas(
+            [{ id: 'a', data: {} }, { id: 'b', data: {} }],
+            [{ id: 'e1', source: 'a', target: 'b' }],
+        );
+        const run = createRunExecutor(canvas);
+        const handle = await run('a', {
+            onExit: (node) => { if (node.id === 'a') { handle.stop(); } },
+        });
+        await handle.finished;
+
+        const stoppedEntry = canvas.executionLog.find((e: any) => e.type === 'run:stopped');
+        expect(stoppedEntry).toBeDefined();
+    });
 });

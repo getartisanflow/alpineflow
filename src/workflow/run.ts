@@ -6,9 +6,23 @@
 // handlers, and returns a FlowRunHandle for pause/resume/stop control.
 // ============================================================================
 
-import type { FlowRunHandlers, FlowRunOptions, FlowRunContext, FlowRunHandle } from './types';
+import type { FlowRunHandlers, FlowRunOptions, FlowRunContext, FlowRunHandle, FlowRunLogEntry } from './types';
 import { evaluateCondition } from './condition';
 import { setEdgeEntering, setEdgeCompleted, setEdgeTaken, setEdgeUntaken } from './edge-state';
+
+function pushLog(
+    canvas: any,
+    entry: Omit<FlowRunLogEntry, 't'>,
+    logLimit: number,
+): void {
+    const log = canvas.executionLog as FlowRunLogEntry[];
+    const full: FlowRunLogEntry = { t: Date.now(), ...entry };
+    log.push(full);
+    // FIFO eviction
+    while (log.length > logLimit) {
+        log.shift();
+    }
+}
 
 export function createRunExecutor(canvas: any) {
     return async function run(
@@ -49,6 +63,8 @@ export function createRunExecutor(canvas: any) {
             finished: null as any,
         };
 
+        const logLimit = options.logLimit ?? 500;
+
         const execution = (async () => {
             // Yield one microtask tick so the caller always receives the handle
             // before execution begins. This prevents TDZ issues in patterns like:
@@ -57,16 +73,24 @@ export function createRunExecutor(canvas: any) {
 
             if (options.lock) { canvas.toggleInteractive?.(); }
 
+            pushLog(canvas, { type: 'run:started', payload: context.payload }, logLimit);
+
             let currentId: string | null = startId;
 
             try {
                 while (currentId) {
-                    if (isStopped) { break; }
+                    if (isStopped) {
+                        pushLog(canvas, { type: 'run:stopped', nodeId: context.currentNodeId ?? undefined }, logLimit);
+                        break;
+                    }
 
                     // Pause gate — await until resume() or stop() resolves the promise
                     if (isPaused) {
                         await new Promise<void>(r => { pauseResolve = r; });
-                        if (isStopped) { break; }
+                        if (isStopped) {
+                            pushLog(canvas, { type: 'run:stopped', nodeId: context.currentNodeId ?? undefined }, logLimit);
+                            break;
+                        }
                     }
 
                     const node = canvas.getNode(currentId);
@@ -84,16 +108,22 @@ export function createRunExecutor(canvas: any) {
                     if (node.type === 'flow-wait') {
                         canvas.setNodeState(currentId, 'running');
                         const waitMs = node.data?.durationMs ?? options.defaultDurationMs ?? 1000;
+                        pushLog(canvas, { type: 'wait:start', nodeId: currentId }, logLimit);
+                        const waitStart = Date.now();
                         await sleep(waitMs);
+                        pushLog(canvas, { type: 'wait:end', nodeId: currentId, runtimeMs: Date.now() - waitStart }, logLimit);
                         canvas.setNodeState(currentId, 'completed');
                         for (const edge of incomingEdges) {
                             setEdgeCompleted(canvas, edge.id);
                         }
-                        currentId = await resolveNextNode(canvas, node, currentId, handlers, options, context);
+                        currentId = await resolveNextNode(canvas, node, currentId, handlers, options, context, logLimit);
                         continue;
                     }
 
                     canvas.setNodeState(currentId, 'running');
+
+                    const nodeStartTime = Date.now();
+                    pushLog(canvas, { type: 'node:enter', nodeId: currentId }, logLimit);
 
                     // onEnter — result merged into payload and nodeResults (Option C)
                     try {
@@ -104,6 +134,7 @@ export function createRunExecutor(canvas: any) {
                         }
                     } catch (err) {
                         canvas.setNodeState(currentId, 'failed');
+                        pushLog(canvas, { type: 'run:error', nodeId: currentId, payload: { error: (err as Error).message } }, logLimit);
                         handlers.onError?.(err as Error, node, context);
                         throw err;
                     }
@@ -128,11 +159,16 @@ export function createRunExecutor(canvas: any) {
                         Object.assign(context.payload, exitResult);
                     }
 
-                    currentId = await resolveNextNode(canvas, node, currentId, handlers, options, context);
+                    pushLog(canvas, { type: 'node:exit', nodeId: currentId, runtimeMs: Date.now() - nodeStartTime, outputs: context.nodeResults[currentId] }, logLimit);
+
+                    currentId = await resolveNextNode(canvas, node, currentId, handlers, options, context, logLimit);
                 }
 
                 context.currentNodeId = null;
-                if (!isStopped) { handlers.onComplete?.(context); }
+                if (!isStopped) {
+                    pushLog(canvas, { type: 'run:complete', payload: context.payload }, logLimit);
+                    handlers.onComplete?.(context);
+                }
             } finally {
                 if (options.lock) { canvas.toggleInteractive?.(); }
             }
@@ -156,6 +192,7 @@ async function resolveNextNode(
     handlers: FlowRunHandlers,
     options: FlowRunOptions,
     context: FlowRunContext,
+    logLimit: number,
 ): Promise<string | null> {
     const outgoingEdges = (canvas.edges ?? []).filter((e: any) => e.source === currentId);
 
@@ -173,6 +210,9 @@ async function resolveNextNode(
         // Declarative condition evaluation
         const targetId = resolveConditionBranch(node, outgoingEdges, context.payload);
         chosenEdge = targetId ? outgoingEdges.find((e: any) => e.target === targetId) : null;
+        if (chosenEdge) {
+            pushLog(canvas, { type: 'branch:chosen', nodeId: currentId, edgeId: chosenEdge.id }, logLimit);
+        }
     } else {
         // Linear default: follow first outgoing edge
         chosenEdge = outgoingEdges[0] ?? null;
@@ -181,10 +221,12 @@ async function resolveNextNode(
     // Mark taken/untaken edges
     if (chosenEdge) {
         setEdgeTaken(canvas, chosenEdge.id);
+        pushLog(canvas, { type: 'edge:taken', edgeId: chosenEdge.id }, logLimit);
         if (options.muteUntakenBranches) {
             for (const siblingEdge of outgoingEdges) {
                 if (siblingEdge.id !== chosenEdge.id) {
                     setEdgeUntaken(canvas, siblingEdge.id);
+                    pushLog(canvas, { type: 'edge:untaken', edgeId: siblingEdge.id }, logLimit);
                 }
             }
         }
