@@ -9,7 +9,7 @@
 // ============================================================================
 
 import type { CanvasContext } from './canvas-context';
-import type { FlowNode, FlowEdge, XYPosition } from '../../core/types';
+import type { FlowNode, FlowEdge, FlowNodeRunState, XYPosition } from '../../core/types';
 import { debug } from '../../core/debug';
 import { sortNodesTopological, getDescendantIds } from '../../core/sub-flow';
 import {
@@ -425,6 +425,27 @@ export function createNodesMixin(ctx: CanvasContext) {
       const target = typeof targetOrId === 'string' ? ctx.nodes.find((n: FlowNode) => n.id === targetOrId) : targetOrId;
       if (!node || !target) return false;
       return coreIsNodeIntersecting(node, target, partially);
+    },
+
+    /**
+     * Set runState on one or more nodes by ID.
+     * The x-flow-node directive reactively applies .flow-node-{state} CSS classes.
+     */
+    setNodeState(ids: string | string[], state: FlowNodeRunState): void {
+      const idArr = Array.isArray(ids) ? ids : [ids];
+      for (const id of idArr) {
+        const node = ctx._nodeMap.get(id);
+        if (node) (node as any).runState = state;
+      }
+    },
+
+    /**
+     * Clear all runState values, removing state CSS classes from all nodes.
+     */
+    resetStates(): void {
+      for (const node of ctx.nodes as FlowNode[]) {
+        delete (node as any).runState;
+      }
     },
   };
 }

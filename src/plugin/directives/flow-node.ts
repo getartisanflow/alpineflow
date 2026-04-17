@@ -295,6 +295,16 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
           el.classList.remove('flow-node-invalid');
         }
 
+        // RunState CSS class toggle (D2)
+        const RUN_STATE_CLASSES = ['flow-node-running', 'flow-node-completed', 'flow-node-failed', 'flow-node-skipped'] as const;
+        const currentRunState = node.runState; // access for Alpine reactivity tracking
+        for (const cls of RUN_STATE_CLASSES) {
+          el.classList.remove(cls);
+        }
+        if (currentRunState && currentRunState !== 'pending') {
+          el.classList.add(`flow-node-${currentRunState}`);
+        }
+
         // Auto-apply node.class reactively (remove old, add new)
         for (const cls of prevNodeClasses) {
           el.classList.remove(cls);
