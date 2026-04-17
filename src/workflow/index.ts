@@ -6,13 +6,14 @@
 // ============================================================================
 
 import { registerAddon } from '../core/registry';
+import { createRunExecutor } from './run';
 
 export type { FlowRunHandlers, FlowRunOptions, FlowRunContext, FlowRunHandle, FlowRunLogEntry, FlowRunLogEntryType, FlowCondition } from './types';
 
 export default function AlpineFlowWorkflow(_Alpine: any): void {
     registerAddon('workflow', {
         setup(canvas: any) {
-            // Placeholder — real methods injected in Tasks W2–W5
+            canvas.run = createRunExecutor(canvas);
             canvas.executionLog = [];
             canvas.resetExecutionLog = function () { this.executionLog = []; };
         },
