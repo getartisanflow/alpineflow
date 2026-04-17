@@ -1086,20 +1086,23 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         }
 
         // ── Custom CSS class ─────────────────────────────────────
-        // Remove previous class from group if it changed
+        // Remove previous class from group if it changed.
+        // edge.class may be a space-separated string of multiple tokens
+        // (e.g. "flow-edge-entering flow-edge-taken") — spread into individual
+        // tokens for classList operations which do not accept space-separated strings.
         if (currentEdgeClass && currentEdgeClass !== edge.class) {
-          gEl.classList.remove(currentEdgeClass);
+          gEl.classList.remove(...currentEdgeClass.split(' ').filter(Boolean));
         }
         if (edge.class) {
           const animClass = mode === 'dash' ? ' flow-edge-animated' : mode === 'pulse' ? ' flow-edge-pulse' : '';
           pathEl.setAttribute('class', edge.class + animClass);
           // Also apply to the SVG group so edge styling can be driven at group level
-          gEl.classList.add(edge.class);
+          gEl.classList.add(...edge.class.split(' ').filter(Boolean));
           currentEdgeClass = edge.class;
         } else {
           // Remove edge.class from group if it was previously set but now cleared
           if (currentEdgeClass) {
-            gEl.classList.remove(currentEdgeClass);
+            gEl.classList.remove(...currentEdgeClass.split(' ').filter(Boolean));
             currentEdgeClass = null;
           }
         }
