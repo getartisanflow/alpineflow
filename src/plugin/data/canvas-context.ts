@@ -29,6 +29,7 @@ import type {
   ChildValidation,
   AutoLayoutConfig,
   RowFilter,
+  FlowNodeRunState,
   ShapeDefinition,
   ToImageOptions,
   StopOptions,
@@ -514,6 +515,12 @@ export interface CanvasContext {
 
   /** Remove nodes by ID */
   removeNodes(ids: string | string[]): void;
+
+  /** Set runState on one or more nodes by ID. */
+  setNodeState(ids: string | string[], state: FlowNodeRunState): void;
+
+  /** Clear all runState values (removes state CSS classes from all nodes). */
+  resetStates(): void;
 
   /** Add one or more edges */
   addEdges(newEdges: FlowEdge | FlowEdge[]): void;

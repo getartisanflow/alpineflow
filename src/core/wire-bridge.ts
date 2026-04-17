@@ -85,6 +85,9 @@ export const WIRE_COMMAND_MAP: Record<string, string> = {
   'flow:collapseNode':      'collapseNode',
   'flow:expandNode':        'expandNode',
   'flow:toggleNode':        'toggleNode',
+  // RunState (D2)
+  'flow:setNodeState':      'setNodeState',
+  'flow:resetStates':       'resetStates',
 };
 
 /**
@@ -130,6 +133,9 @@ const WIRE_COMMAND_ARGS: Record<string, (params: any) => any[]> = {
   'flow:collapseNode':      (p) => [p.id],
   'flow:expandNode':        (p) => [p.id],
   'flow:toggleNode':        (p) => [p.id],
+  // RunState (D2)
+  'flow:setNodeState':      (p) => [p.ids, p.state],
+  'flow:resetStates':       () => [],
 };
 
 // ── Highlight presets ────────────────────────────────────────────────────────

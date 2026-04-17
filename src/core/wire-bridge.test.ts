@@ -170,6 +170,8 @@ describe('WIRE_COMMAND_MAP', () => {
     expect(WIRE_COMMAND_MAP['flow:deselectAll']).toBe('deselectAll');
     expect(WIRE_COMMAND_MAP['flow:collapseNode']).toBe('collapseNode');
     expect(WIRE_COMMAND_MAP['flow:expandNode']).toBe('expandNode');
+    expect(WIRE_COMMAND_MAP['flow:setNodeState']).toBe('setNodeState');
+    expect(WIRE_COMMAND_MAP['flow:resetStates']).toBe('resetStates');
   });
 });
 
@@ -326,6 +328,28 @@ describe('registerWireCommands', () => {
 
     listeners['flow:resumeAll']({ filter: { tags: ['ambient', 'background'] } });
     expect(mockCanvas.resumeAll).toHaveBeenCalledWith({ tags: ['ambient', 'background'] });
+  });
+
+  it('routes flow:setNodeState to canvas.setNodeState', () => {
+    const listeners: Record<string, Function> = {};
+    const mockWire = { on: (event: string, cb: Function) => { listeners[event] = cb; } };
+    const canvas = { setNodeState: vi.fn() };
+
+    registerWireCommands(canvas as any, mockWire);
+
+    listeners['flow:setNodeState']({ ids: ['n1', 'n2'], state: 'running' });
+    expect(canvas.setNodeState).toHaveBeenCalledWith(['n1', 'n2'], 'running');
+  });
+
+  it('routes flow:resetStates to canvas.resetStates', () => {
+    const listeners: Record<string, Function> = {};
+    const mockWire = { on: (event: string, cb: Function) => { listeners[event] = cb; } };
+    const canvas = { resetStates: vi.fn() };
+
+    registerWireCommands(canvas as any, mockWire);
+
+    listeners['flow:resetStates']({});
+    expect(canvas.resetStates).toHaveBeenCalled();
   });
 
   it('defaults cancelAll/pauseAll/resumeAll filter to empty object when omitted', () => {

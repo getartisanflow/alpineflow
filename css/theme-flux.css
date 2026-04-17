@@ -337,6 +337,40 @@
     background: var(--flow-rotate-handle-line-color);
 }
 
+/* ── RunState visual defaults (D2) ────────────────────────────────── */
+
+.flow-node-running {
+    border-color: var(--flow-node-running-border-color, var(--color-accent, #8b5cf6));
+    animation: flow-node-pulse 1.4s ease-out infinite;
+}
+
+@keyframes flow-node-pulse {
+    0%   { box-shadow: 0 0 0 0 var(--flow-node-running-pulse-color, color-mix(in oklab, var(--color-accent, #8b5cf6) 55%, transparent)); }
+    70%  { box-shadow: 0 0 0 10px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.flow-node-completed {
+    border-color: var(--flow-node-completed-border-color, #14b8a6);
+    animation: flow-node-flash 0.8s ease-out 1;
+}
+
+@keyframes flow-node-flash {
+    0%   { background: var(--flow-node-completed-flash-color, rgba(20, 184, 166, 0.12)); }
+    100% { background: var(--flow-node-bg, transparent); }
+}
+
+.flow-node-failed {
+    border-color: var(--flow-node-failed-border-color, #ef4444);
+    animation: flow-node-pulse 1.4s ease-out infinite;
+    --flow-node-running-pulse-color: var(--flow-node-failed-pulse-color, rgba(239, 68, 68, 0.55));
+}
+
+.flow-node-skipped {
+    opacity: var(--flow-node-skipped-opacity, 0.45);
+    filter: grayscale(0.3);
+}
+
 /* ── Edge utility classes (for class-based edge styling) ─────── */
 .flow-edge-svg path.flow-edge-highlight {
     stroke: var(--color-accent);

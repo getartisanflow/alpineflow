@@ -49,6 +49,10 @@ export type CoordinateExtent = [[number, number], [number, number]];
 /** Row filter: preset name or custom predicate. */
 export type RowFilter = 'all' | 'connected' | 'unconnected' | ((row: any) => boolean);
 
+/** Execution state for workflow visualization.
+ *  Auto-applies a CSS class `.flow-node-{state}` (except 'pending' = no class). */
+export type FlowNodeRunState = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
+
 export interface FlowNode<T = Record<string, any>> {
   id: string;
   position: XYPosition;
@@ -192,6 +196,10 @@ export interface FlowNode<T = Record<string, any>> {
 
   /** Current child validation errors (populated by _recomputeChildValidation). */
   _validationErrors?: string[];
+
+  /** Execution state for workflow visualization. Auto-applies CSS class `.flow-node-{state}`.
+   *  'pending' means no class is applied (default visual). */
+  runState?: FlowNodeRunState;
 }
 
 // ─── Child Layout ────────────────────────────────────────────────────────────

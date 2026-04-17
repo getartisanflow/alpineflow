@@ -220,6 +220,8 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     getEdgeElement: vi.fn(() => null),
     addNodes: vi.fn(),
     removeNodes: vi.fn(),
+    setNodeState: vi.fn(),
+    resetStates: vi.fn(),
     addEdges: vi.fn(),
     removeEdges: vi.fn(),
     getOutgoers: vi.fn(() => []),
