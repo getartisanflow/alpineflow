@@ -45,3 +45,8 @@ export function setEdgeTaken(canvas: any, edgeId: string): void {
 export function setEdgeUntaken(canvas: any, edgeId: string): void {
     addEdgeClass(canvas, edgeId, 'flow-edge-untaken');
 }
+
+export function setEdgeFailed(canvas: any, edgeId: string): void {
+    removeEdgeClass(canvas, edgeId, 'flow-edge-entering');
+    addEdgeClass(canvas, edgeId, 'flow-edge-failed');
+}

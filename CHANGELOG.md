@@ -80,10 +80,17 @@ Workflow addon — `@getartisanflow/alpineflow/workflow` subpath.
 - `$flow.run(options)` execution helper: resolves the graph from a start node, invokes per-node handlers, supports configurable pacing (delay between steps), and exposes `pause()`, `resume()`, and `stop()` controls
 - `flow-condition` node type: 10 declarative comparison operators (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `contains`, `startsWith`, `endsWith`, `exists`) with dot-path traversal for nested data access
 - `flow-wait` node type for introducing configurable delays in execution
-- Edge state CSS classes: `.flow-edge-entering`, `.flow-edge-completed`, `.flow-edge-taken`, `.flow-edge-untaken` — applied automatically during `$flow.run()` execution
+- **Parallel branches** — when a node has multiple outgoing edges and no `pickBranch` handler selects a single one, all branches execute concurrently via `Promise.all`. A shared visited Set prevents fan-in nodes from running twice
+- **`$flow.replay(log, options)`** — replays a recorded execution log with scaled timing, re-applying node states, edge classes, and particles. Returns a `ReplayHandle` with `pause()`, `resume()`, `stop()`, and `finished` promise
+- **Auto-skip** — when a run completes, any unvisited node is automatically set to `runState: 'skipped'` for visual feedback
+- **Auto-reset** — `$flow.run()` clears all node states, edge classes, and the execution log before each run
+- **`$workflowRun` Alpine magic** — lets any Alpine scope invoke `$flow.run()` on the nearest canvas without DOM traversal. Searches up (ancestor), then down (descendant), then `document.querySelector`
+- `particleOptions` run option — passed through to `sendParticle()` for renderer/color/size/duration customization
+- Edge state CSS classes: `.flow-edge-entering`, `.flow-edge-completed`, `.flow-edge-taken`, `.flow-edge-untaken`, `.flow-edge-failed` — applied automatically during `$flow.run()` execution
 - `$flow.executionLog` reactive array — records each step's node ID, state, timestamp, and output as execution progresses
 - `$flow.resetExecutionLog()` helper — clears the execution log
 - Generic addon setup callback mechanism: `registerAddon({ setup(canvas) { … } })` for attaching custom behavior to any canvas instance
+- `pickBranch` returning `null` now falls through to default behavior (parallel if multiple edges, linear if one) instead of stopping traversal
 
 ---
 

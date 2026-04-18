@@ -19,6 +19,8 @@ export interface FlowRunOptions {
     payload?: Record<string, any>;
     defaultDurationMs?: number;
     particleOnEdges?: boolean;
+    /** Options passed to sendParticle for each traversed edge (renderer, color, size, duration, etc.) */
+    particleOptions?: Record<string, any>;
     lock?: boolean;
     muteUntakenBranches?: boolean;
     logLimit?: number;
@@ -45,7 +47,8 @@ export type FlowRunLogEntryType =
     | 'node:enter' | 'node:exit'
     | 'edge:taken' | 'edge:untaken'
     | 'branch:chosen'
-    | 'wait:start' | 'wait:end';
+    | 'wait:start' | 'wait:end'
+    | 'parallel:fork';
 
 export interface FlowRunLogEntry {
     t: number;
@@ -64,10 +67,25 @@ export interface FlowCondition {
     value?: any;
 }
 
+export interface ReplayOptions {
+    /** Playback speed multiplier (default 1). Use e.g. 10 to replay 10× faster. */
+    speed?: number;
+}
+
+export interface ReplayHandle {
+    pause(): void;
+    resume(): void;
+    stop(): void;
+    readonly finished: Promise<void>;
+    readonly isPaused: boolean;
+    readonly isStopped: boolean;
+}
+
 // Module augmentation — extends FlowInstance when the workflow addon is imported
 declare module '../core/types' {
     interface FlowInstance {
         run(startId: string, handlers: FlowRunHandlers, options?: FlowRunOptions): Promise<FlowRunHandle>;
+        replay(log: FlowRunLogEntry[], options?: ReplayOptions): Promise<ReplayHandle>;
         executionLog: FlowRunLogEntry[];
         resetExecutionLog(): void;
     }
