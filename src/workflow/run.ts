@@ -203,9 +203,17 @@ async function resolveNextNode(
     let chosenEdge: any = null;
 
     if (handlers.pickBranch) {
-        // Custom pickBranch handler (async allowed)
+        // Custom pickBranch handler (async allowed).
+        // Returns an edge ID to follow, or null to fall through to the default
+        // (follow first outgoing edge). Returning null does NOT stop traversal —
+        // it means "I don't have a preference for this node, use the default."
         const chosenEdgeId = await handlers.pickBranch(node, outgoingEdges, context);
-        chosenEdge = chosenEdgeId ? outgoingEdges.find((e: any) => e.id === chosenEdgeId) : null;
+        if (chosenEdgeId) {
+            chosenEdge = outgoingEdges.find((e: any) => e.id === chosenEdgeId) ?? null;
+        } else {
+            // null = no preference → fall through to default (first edge)
+            chosenEdge = outgoingEdges[0] ?? null;
+        }
     } else if (node.type === 'flow-condition') {
         // Declarative condition evaluation
         const targetId = resolveConditionBranch(node, outgoingEdges, context.payload);
