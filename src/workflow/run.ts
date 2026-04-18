@@ -115,6 +115,16 @@ export function createRunExecutor(canvas: any) {
 
                 context.currentNodeId = null;
                 if (!state.isStopped) {
+                    // Auto-skip: any node reachable from the graph that wasn't
+                    // visited (e.g., untaken branch terminals) gets 'skipped'.
+                    // This provides visual feedback without consumer boilerplate.
+                    if (Array.isArray(canvas.nodes)) {
+                        for (const node of canvas.nodes) {
+                            if (!visited.has(node.id) && !node.runState) {
+                                canvas.setNodeState(node.id, 'skipped');
+                            }
+                        }
+                    }
                     pushLog(canvas, { type: 'run:complete', payload: context.payload }, logLimit);
                     handlers.onComplete?.(context);
                 }
