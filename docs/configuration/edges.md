@@ -8,6 +8,7 @@ order: 4
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
+| `defaultEdgeType` | `string` | `'bezier'` | Default edge type for all runtime-created connections (drag-connect, click-to-connect, edge-drop). Overridden per-edge by `edge.type`. |
 | `defaultEdgeOptions` | `Partial<FlowEdge>` | — | Properties merged into edges created at runtime (drag-connect, click-to-connect, edge-drop). Does not affect initial edges. |
 | `defaultInteractionWidth` | `number` | `20` | Invisible hit area width for edge clicks. |
 | `edgesReconnectable` | `boolean` | `true` | Allow edge endpoints to be dragged to different handles. |
