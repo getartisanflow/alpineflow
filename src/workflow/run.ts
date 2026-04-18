@@ -71,6 +71,15 @@ export function createRunExecutor(canvas: any) {
             //   const handle = await run('a', { onExit: () => handle.pause() });
             await Promise.resolve();
 
+            // Auto-reset: clear all node states and edge classes from any previous
+            // run so the canvas starts clean. Consumers don't need to call
+            // resetStates() or manually clear edge.class before each run.
+            if (typeof canvas.resetStates === 'function') canvas.resetStates();
+            if (Array.isArray(canvas.edges)) {
+                for (const edge of canvas.edges) edge.class = undefined;
+            }
+            if (typeof canvas.resetExecutionLog === 'function') canvas.resetExecutionLog();
+
             if (options.lock) { canvas.toggleInteractive?.(); }
 
             pushLog(canvas, { type: 'run:started', payload: context.payload }, logLimit);
