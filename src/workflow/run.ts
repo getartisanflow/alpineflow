@@ -8,7 +8,7 @@
 
 import type { FlowRunHandlers, FlowRunOptions, FlowRunContext, FlowRunHandle, FlowRunLogEntry } from './types';
 import { evaluateCondition } from './condition';
-import { setEdgeEntering, setEdgeCompleted, setEdgeTaken, setEdgeUntaken } from './edge-state';
+import { setEdgeEntering, setEdgeCompleted, setEdgeTaken, setEdgeUntaken, setEdgeFailed } from './edge-state';
 
 function pushLog(
     canvas: any,
@@ -143,6 +143,10 @@ export function createRunExecutor(canvas: any) {
                         }
                     } catch (err) {
                         canvas.setNodeState(currentId, 'failed');
+                        // Mark incoming edges as failed (red)
+                        for (const edge of incomingEdges) {
+                            setEdgeFailed(canvas, edge.id);
+                        }
                         pushLog(canvas, { type: 'run:error', nodeId: currentId, payload: { error: (err as Error).message } }, logLimit);
                         handlers.onError?.(err as Error, node, context);
                         throw err;
