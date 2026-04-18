@@ -242,7 +242,7 @@ async function resolveNextNode(
 
     // Particle emission on traversed edge
     if (options.particleOnEdges && chosenEdge) {
-        canvas.sendParticle?.(chosenEdge.id, {});
+        canvas.sendParticle?.(chosenEdge.id, options.particleOptions ?? {});
     }
 
     return chosenEdge?.target ?? null;

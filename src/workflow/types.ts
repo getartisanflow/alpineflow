@@ -19,6 +19,8 @@ export interface FlowRunOptions {
     payload?: Record<string, any>;
     defaultDurationMs?: number;
     particleOnEdges?: boolean;
+    /** Options passed to sendParticle for each traversed edge (renderer, color, size, duration, etc.) */
+    particleOptions?: Record<string, any>;
     lock?: boolean;
     muteUntakenBranches?: boolean;
     logLimit?: number;
