@@ -11,13 +11,15 @@
 
 import { registerAddon } from '../core/registry';
 import { createRunExecutor } from './run';
+import { createReplayExecutor } from './replay';
 
-export type { FlowRunHandlers, FlowRunOptions, FlowRunContext, FlowRunHandle, FlowRunLogEntry, FlowRunLogEntryType, FlowCondition } from './types';
+export type { FlowRunHandlers, FlowRunOptions, FlowRunContext, FlowRunHandle, FlowRunLogEntry, FlowRunLogEntryType, FlowCondition, ReplayHandle, ReplayOptions } from './types';
 
 export default function AlpineFlowWorkflow(Alpine: any): void {
     registerAddon('workflow', {
         setup(canvas: any) {
             canvas.run = createRunExecutor(canvas);
+            canvas.replay = createReplayExecutor(canvas);
             canvas.executionLog = [];
             canvas.resetExecutionLog = function () { this.executionLog = []; };
         },

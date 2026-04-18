@@ -18,9 +18,11 @@ function mockCanvas(nodes: any[], edges: any[]) {
         getConnectedEdges: (id: string) => mutableEdges.filter(e => e.source === id || e.target === id),
         edges: mutableEdges,
         setNodeState: vi.fn(),
+        resetStates: vi.fn(),
         toggleInteractive: vi.fn(),
         sendParticle: vi.fn(),
         executionLog: [] as any[],
+        resetExecutionLog: vi.fn(function (this: any) { this.executionLog = []; }),
     };
 }
 
@@ -378,5 +380,73 @@ describe('workflow run helper', () => {
 
         const stoppedEntry = canvas.executionLog.find((e: any) => e.type === 'run:stopped');
         expect(stoppedEntry).toBeDefined();
+    });
+
+    it('forks into parallel branches when multiple outgoing edges exist', async () => {
+        const canvas = mockCanvas(
+            [{ id: 'start', data: {} }, { id: 'a', data: {} }, { id: 'b', data: {} }],
+            [{ id: 'e1', source: 'start', target: 'a' }, { id: 'e2', source: 'start', target: 'b' }],
+        );
+        const run = createRunExecutor(canvas);
+        const handle = await run('start', {});
+        await handle.finished;
+
+        // Both branches should complete
+        expect(canvas.setNodeState).toHaveBeenCalledWith('a', 'completed');
+        expect(canvas.setNodeState).toHaveBeenCalledWith('b', 'completed');
+    });
+
+    it('fan-in: convergence node runs only once', async () => {
+        const canvas = mockCanvas(
+            [{ id: 'start', data: {} }, { id: 'a', data: {} }, { id: 'b', data: {} }, { id: 'end', data: {} }],
+            [
+                { id: 'e1', source: 'start', target: 'a' },
+                { id: 'e2', source: 'start', target: 'b' },
+                { id: 'e3', source: 'a', target: 'end' },
+                { id: 'e4', source: 'b', target: 'end' },
+            ],
+        );
+        const enterCalls: string[] = [];
+        const run = createRunExecutor(canvas);
+        const handle = await run('start', {
+            onEnter: (node) => { enterCalls.push(node.id); },
+        });
+        await handle.finished;
+
+        // 'end' should only appear once despite two incoming branches
+        expect(enterCalls.filter(id => id === 'end').length).toBe(1);
+    });
+
+    it('pickBranch returning an edge ID still follows single branch (no parallel)', async () => {
+        const canvas = mockCanvas(
+            [{ id: 'start', data: {} }, { id: 'a', data: {} }, { id: 'b', data: {} }],
+            [{ id: 'e1', source: 'start', target: 'a' }, { id: 'e2', source: 'start', target: 'b' }],
+        );
+        const run = createRunExecutor(canvas);
+        const handle = await run('start', {
+            pickBranch: (_node, edges) => edges[0].id, // explicitly pick first
+        });
+        await handle.finished;
+
+        expect(canvas.setNodeState).toHaveBeenCalledWith('a', 'completed');
+        expect(canvas.setNodeState).not.toHaveBeenCalledWith('b', 'running');
+    });
+
+    it('parallel branch error cancels other branches', async () => {
+        const canvas = mockCanvas(
+            [{ id: 'start', data: {} }, { id: 'a', data: {} }, { id: 'b', data: {} }],
+            [{ id: 'e1', source: 'start', target: 'a' }, { id: 'e2', source: 'start', target: 'b' }],
+        );
+        const onError = vi.fn();
+        const run = createRunExecutor(canvas);
+        const handle = await run('start', {
+            onEnter: async (node) => {
+                if (node.id === 'a') { throw new Error('branch A failed'); }
+            },
+            onError,
+        }, { defaultDurationMs: 50 });
+
+        await expect(handle.finished).rejects.toThrow('branch A failed');
+        expect(canvas.setNodeState).toHaveBeenCalledWith('a', 'failed');
     });
 });
