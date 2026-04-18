@@ -49,7 +49,7 @@ function T(e, d, t) {
   const o = (i.class ?? "").split(" ").filter((s) => s !== t).join(" ");
   i.class = o || void 0;
 }
-function O(e, d) {
+function A(e, d) {
   h(e, d, "flow-edge-entering");
 }
 function b(e, d) {
@@ -61,7 +61,7 @@ function k(e, d) {
 function P(e, d) {
   h(e, d, "flow-edge-untaken");
 }
-function A(e, d) {
+function O(e, d) {
   T(e, d, "flow-edge-entering"), h(e, d, "flow-edge-failed");
 }
 function g(e, d, t) {
@@ -105,7 +105,12 @@ function q(e) {
         for (const l of e.edges) l.class = void 0;
       typeof e.resetExecutionLog == "function" && e.resetExecutionLog(), o.lock && e.toggleInteractive?.(), g(e, { type: "run:started", payload: s.payload }, r);
       try {
-        await m(e, t, s, i, o, n, a, r), s.currentNodeId = null, n.isStopped || (g(e, { type: "run:complete", payload: s.payload }, r), i.onComplete?.(s));
+        if (await m(e, t, s, i, o, n, a, r), s.currentNodeId = null, !n.isStopped) {
+          if (Array.isArray(e.nodes))
+            for (const l of e.nodes)
+              !a.has(l.id) && !l.runState && e.setNodeState(l.id, "skipped");
+          g(e, { type: "run:complete", payload: s.payload }, r), i.onComplete?.(s);
+        }
       } catch (l) {
         throw n.isStopped = !0, n.pauseResolve?.(), l;
       } finally {
@@ -135,7 +140,7 @@ async function m(e, d, t, i, o, s, n, u) {
     t.currentNodeId = r;
     const p = (e.edges ?? []).filter((f) => f.target === r);
     for (const f of p)
-      O(e, f.id);
+      A(e, f.id);
     if (a.type === "flow-wait") {
       e.setNodeState(r, "running");
       const f = a.data?.durationMs ?? o.defaultDurationMs ?? 1e3;
@@ -166,7 +171,7 @@ async function m(e, d, t, i, o, s, n, u) {
     } catch (f) {
       e.setNodeState(r, "failed");
       for (const I of p)
-        A(e, I.id);
+        O(e, I.id);
       throw g(e, { type: "run:error", nodeId: r, payload: { error: f.message } }, u), i.onError?.(f, a, t), f;
     }
     o.defaultDurationMs && await N(o.defaultDurationMs), e.setNodeState(r, "completed");
@@ -273,7 +278,7 @@ function _(e) {
               e.setNodeState(l.nodeId, "running");
               const c = (e.edges ?? []).filter((f) => f.target === l.nodeId);
               for (const f of c)
-                O(e, f.id);
+                A(e, f.id);
             }
             break;
           case "node:exit":
@@ -289,7 +294,7 @@ function _(e) {
               e.setNodeState(l.nodeId, "failed");
               const c = (e.edges ?? []).filter((f) => f.target === l.nodeId);
               for (const f of c)
-                A(e, f.id);
+                O(e, f.id);
             }
             break;
           case "edge:taken":
