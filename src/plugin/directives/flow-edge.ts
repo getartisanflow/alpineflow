@@ -1278,11 +1278,13 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           lbl.classList.toggle('flow-edge-label-hover', labelVis === 'hover');
           lbl.classList.toggle('flow-edge-label-on-select', labelVis === 'selected');
           lbl.classList.toggle('flow-edge-label-selected', !!edge.selected);
-          // Forward edge.class to label so label styling can track edge state
+          // Forward edge.class to label so label styling can track edge state.
+          // edge.class may be space-separated ("flow-edge-taken flow-edge-entering")
+          // — split into individual tokens for classList operations.
           if (edge.class) {
-            lbl.classList.add(edge.class);
+            lbl.classList.add(...edge.class.split(' ').filter(Boolean));
           } else if (currentEdgeClass) {
-            lbl.classList.remove(currentEdgeClass);
+            lbl.classList.remove(...currentEdgeClass.split(' ').filter(Boolean));
           }
         }
       });
