@@ -2,7 +2,8 @@
 // alpinejs-flow/workflow — Workflow Execution Addon
 //
 // Registers via the W0 setup callback mechanism. Extends every flowCanvas
-// with $flow.run(), $flow.executionLog, and $flow.resetExecutionLog().
+// with $flow.run(), $flow.replayExecution(), $flow.executionLog, and
+// $flow.resetExecutionLog().
 //
 // Also registers the $workflowRun Alpine magic so parent scopes can invoke
 // $flow.run() without DOM traversal — it finds the nearest canvas (ancestor
@@ -19,7 +20,7 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
     registerAddon('workflow', {
         setup(canvas: any) {
             canvas.run = createRunExecutor(canvas);
-            canvas.replay = createReplayExecutor(canvas);
+            canvas.replayExecution = createReplayExecutor(canvas);
             canvas.executionLog = [];
             canvas.resetExecutionLog = function () { this.executionLog = []; };
         },

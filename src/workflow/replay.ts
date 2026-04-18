@@ -1,7 +1,7 @@
 // ============================================================================
 // alpinejs-flow/workflow — Execution Replay
 //
-// createReplayExecutor(canvas) returns a $flow.replay() function that plays
+// createReplayExecutor(canvas) returns a $flow.replayExecution() function that plays
 // back a recorded FlowRunLogEntry[] as a visual animation. It reads the
 // timestamps in the log, applies state changes with scaled delays, and
 // returns a ReplayHandle for pause/resume/stop control.

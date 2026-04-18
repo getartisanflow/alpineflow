@@ -364,7 +364,7 @@ Viewport culling skips rendering nodes and edges that are outside the visible ar
 })">
 ```
 
-- `viewportCulling` -- Enable culling (default `true`).
+- `viewportCulling` -- Enable culling (default `false`). Opt-in for large diagrams.
 - `cullingBuffer` -- Extra pixels beyond the viewport edge before an element is culled (default `100`). A larger buffer prevents pop-in when panning quickly.
 
 ## Auto-pan

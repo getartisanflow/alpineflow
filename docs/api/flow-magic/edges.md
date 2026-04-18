@@ -45,3 +45,11 @@ $flow.getEdgeElement(id: string): SVGElement | HTMLElement | null
 ```
 
 Get the container element (SVG group) for an edge.
+
+### getEdgeSvgElement
+
+```ts
+$flow.getEdgeSvgElement(): SVGSVGElement | null
+```
+
+Get the root SVG element that contains all edges. Useful for whiteboard tools and custom annotation layers.

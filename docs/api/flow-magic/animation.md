@@ -69,6 +69,65 @@ $flow.playAnimation(name: string): Promise<void>
 
 Play a named animation registered via `x-flow-animate`. Builds a timeline from the registered steps and plays it.
 
+### group
+
+```ts
+$flow.group(name: string): FlowGroup
+```
+
+Get or create a named animation group. Groups let you animate multiple nodes as a unit:
+
+```js
+const g = $flow.group('sidebar');
+g.animate({ position: { x: 300 } }, { duration: 500 });
+g.set({ class: 'highlighted' });
+```
+
+### transaction
+
+```ts
+$flow.transaction(fn: () => void | Promise<void>): Transaction
+```
+
+Run a function as an atomic state change. If anything inside throws (or you call `tx.rollback()`), all node/edge positions revert to their snapshot before the function ran:
+
+```js
+const tx = await $flow.transaction(async () => {
+    await $flow.animate({ nodes: { a: { position: { x: 500 } } } }, { duration: 300 }).finished;
+    await $flow.animate({ nodes: { b: { position: { x: 500 } } } }, { duration: 300 }).finished;
+});
+// If something went wrong:
+tx.rollback();
+```
+
+### getHandles
+
+```ts
+$flow.getHandles(filter?: { tag?: string; tags?: string[] }): FlowAnimationHandle[]
+```
+
+Retrieve all active animation handles, optionally filtered by tag. Useful for inspecting running animations.
+
+### cancelAll / pauseAll / resumeAll
+
+```ts
+$flow.cancelAll(filter: { tag?: string; tags?: string[] }, options?: StopOptions): void
+$flow.pauseAll(filter: { tag?: string; tags?: string[] }): void
+$flow.resumeAll(filter: { tag?: string; tags?: string[] }): void
+```
+
+Bulk control for tagged animations. `cancelAll` accepts a `StopOptions` with `mode: 'jump-end' | 'rollback' | 'freeze'`:
+
+```js
+// Tag animations when creating them
+$flow.animate({ nodes: { a: { position: { x: 300 } } } }, { tag: 'ambient', loop: true });
+
+// Later, control all 'ambient' animations
+$flow.pauseAll({ tag: 'ambient' });
+$flow.resumeAll({ tag: 'ambient' });
+$flow.cancelAll({ tag: 'ambient' }, { mode: 'rollback' });
+```
+
 ### follow
 
 ```ts

@@ -58,7 +58,8 @@ Apply `x-flow-node` to any element inside a flow canvas. The expression must eva
 - Positions the element absolutely using `node.position`
 - Makes the node draggable via pointer events (d3-drag)
 - Selects on click (Shift+click for multi-select — on touch devices, two-finger tap enters selection mode — see [Touch & Mobile](../interaction/touch.md))
-- Applies CSS classes reactively: `.flow-node`, `.flow-node-selected`, `.flow-node-locked`, custom `node.class`
+- Applies CSS classes reactively: `.flow-node`, `.flow-node-selected`, `.flow-node-locked`, `.flow-node-dragging` (during drag), `.flow-node-{runState}` (when `runState` is set), custom `node.class`
+- Applies `data-flow-node-type` attribute reflecting `node.type` (or `'default'`), useful for CSS selectors like `[data-flow-node-type="condition"]`
 - Applies inline styles from `node.style`
 - Applies dimensions from `node.dimensions` — inline `style.height` is only set when the node is a container (has `childLayout`), is a parent of other nodes (some other node references it via `parentId`), or has `fixedDimensions: true`; plain leaf nodes let content determine height and the ResizeObserver captures the natural height back into `node.dimensions`
 - Respects per-node flags: `draggable`, `selectable`, `deletable`, `connectable`, `locked`, `hidden`

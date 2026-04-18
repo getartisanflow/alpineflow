@@ -59,7 +59,37 @@ Drag from a source handle to connect — the snap radius highlights valid target
 | `proximityConnectConfirm` | `boolean` | `false` | Show visual confirmation before proximity edge creation. |
 | `onProximityConnect` | `(detail) => boolean \| void` | — | Validate or reject a proximity connection. |
 | `preventCycles` | `boolean` | `false` | Reject connections that would create directed cycles. |
-| `connectionRules` | `ConnectionRule[]` | — | Declarative type-based connection filtering. Each rule specifies allowed source and target node type pairs. Connections that do not match any rule are rejected before `isValidConnection` is called. |
+| `connectionRules` | `ConnectionRules` | — | Declarative type-based connection filtering. See [Connection rules](#connection-rules) below. |
+
+## Connection rules
+
+`connectionRules` provides declarative type-based connection filtering. It accepts a `ConnectionRules` object with two optional properties:
+
+```ts
+interface ConnectionRules {
+  /** Map of source type → allowed target types. Unlisted source types are unrestricted. */
+  byType?: Record<string, string[]>;
+  /** Function-based validator. Return false to reject. */
+  validate?: (connection: Connection, sourceNode: FlowNode, targetNode: FlowNode) => boolean;
+}
+```
+
+```js
+flowCanvas({
+    connectionRules: {
+        byType: {
+            trigger: ['action', 'condition'],   // trigger nodes can only connect to action or condition
+            condition: ['action'],               // condition nodes can only connect to action nodes
+        },
+        validate: (conn, source, target) => {
+            // Custom logic — e.g., prevent connecting to self
+            return source.id !== target.id;
+        },
+    },
+})
+```
+
+Rules are checked before `isValidConnection`. If `byType` is set and the source node's type is listed, only the specified target types are allowed. Types not listed in `byType` are unrestricted. `validate` runs after `byType` and receives the full connection, source node, and target node.
 
 ## Connection mode
 

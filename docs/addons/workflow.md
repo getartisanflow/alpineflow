@@ -116,7 +116,7 @@ For complex logic, use `node.data.evaluate`:
 
 ```js
 data: {
-    evaluate: (payload, ctx) => payload.amount > 1000 && payload.region === 'US',
+    evaluate: (payload) => payload.amount > 1000 && payload.region === 'US',
 }
 ```
 
@@ -228,6 +228,20 @@ $flow.executionLog
 $flow.resetExecutionLog(); // clear
 ```
 
+### Log entry schema
+
+Each entry has a `t` (timestamp) and `type`, plus optional fields depending on the event:
+
+| Field | Type | Present on |
+|-------|------|------------|
+| `t` | `number` | All entries (Unix ms timestamp) |
+| `type` | `string` | All entries |
+| `nodeId` | `string` | `node:enter`, `node:exit`, `run:error`, `run:stopped`, `parallel:fork`, `wait:start`, `wait:end` |
+| `edgeId` | `string` | `edge:taken`, `edge:untaken` |
+| `payload` | `object` | `run:started`, `run:complete`, `run:error` (contains `{ error }`) , `parallel:fork` (contains `{ branches }`) |
+| `runtimeMs` | `number` | `node:exit`, `wait:end` — elapsed time for that node |
+| `outputs` | `object` | `node:exit` — the value returned from `onEnter` |
+
 Capped at `options.logLimit` (default 500) with FIFO eviction.
 
 ## Run handle
@@ -249,11 +263,11 @@ const ctx = await handle.finished; // resolves when run completes
 
 ## Execution replay
 
-`$flow.replay()` replays a recorded execution log, re-applying state transitions and edge classes with scaled timing:
+`$flow.replayExecution()` replays a recorded execution log, re-applying state transitions and edge classes with scaled timing:
 
 ```js
 // Replay at 2× speed
-const replay = $flow.replay(executionLog, { speed: 2 });
+const replay = $flow.replayExecution(executionLog, { speed: 2 });
 
 // Control playback
 replay.pause();

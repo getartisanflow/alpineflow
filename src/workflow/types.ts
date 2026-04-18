@@ -85,7 +85,7 @@ export interface ReplayHandle {
 declare module '../core/types' {
     interface FlowInstance {
         run(startId: string, handlers: FlowRunHandlers, options?: FlowRunOptions): Promise<FlowRunHandle>;
-        replay(log: FlowRunLogEntry[], options?: ReplayOptions): Promise<ReplayHandle>;
+        replayExecution(log: FlowRunLogEntry[], options?: ReplayOptions): Promise<ReplayHandle>;
         executionLog: FlowRunLogEntry[];
         resetExecutionLog(): void;
     }
