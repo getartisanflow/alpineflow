@@ -75,6 +75,7 @@ See [x-flow-loading](../canvas/loading.md).
 | `onDrop` | `(detail) => FlowNode \| null` | — | Handle drops from `x-flow-draggable` elements. Return a `FlowNode` to add it, or falsy to cancel. |
 | `onEdgeDrop` | `(detail) => FlowNode \| null` | — | Handle connection drops on empty canvas. Return a `FlowNode` to auto-create and connect it. |
 | `edgeDropPreview` | `(detail) => string \| HTMLElement \| null` | — | Customize the ghost node shown during edge-drop drag. |
+| `dropMimeTypes` | `string[]` | — | MIME types accepted by the canvas drop zone (e.g. `['text/plain', 'application/json']`). When set, only drags carrying at least one of these types trigger `onDrop`. |
 
 ## Custom Shapes
 

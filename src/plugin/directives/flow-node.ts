@@ -1694,6 +1694,8 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
       // Measure node dimensions after first paint so edge paths can
       // connect to the correct handle positions (center-bottom / center-top).
       requestAnimationFrame(() => {
+        if (!el.isConnected) return;
+
         const node = evaluate(expression) as FlowNode;
         if (!node) return;
 

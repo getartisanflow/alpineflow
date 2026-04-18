@@ -59,6 +59,7 @@ Drag from a source handle to connect — the snap radius highlights valid target
 | `proximityConnectConfirm` | `boolean` | `false` | Show visual confirmation before proximity edge creation. |
 | `onProximityConnect` | `(detail) => boolean \| void` | — | Validate or reject a proximity connection. |
 | `preventCycles` | `boolean` | `false` | Reject connections that would create directed cycles. |
+| `connectionRules` | `ConnectionRule[]` | — | Declarative type-based connection filtering. Each rule specifies allowed source and target node type pairs. Connections that do not match any rule are rejected before `isValidConnection` is called. |
 
 ## Connection mode
 

@@ -67,6 +67,9 @@ All `$flow` methods and properties at a glance:
 | `removeNodes` | `(ids) → void` | [Nodes](nodes.md) |
 | `batch` | `(fn) → T` | [Nodes](nodes.md) |
 | `getNode` | `(id) → FlowNode?` | [Nodes](nodes.md) |
+| `getNodeElement` | `(id) → HTMLElement?` | [Nodes](nodes.md) |
+| `getNodeIdFromElement` | `(el) → string?` | [Nodes](nodes.md) |
+| `getNodeAtPoint` | `(x, y) → FlowNode?` | [Nodes](nodes.md) |
 | `getNodesBounds` | `(ids?) → Rect` | [Nodes](nodes.md) |
 | `getOutgoers` | `(nodeId) → FlowNode[]` | [Nodes](nodes.md) |
 | `getIncomers` | `(nodeId) → FlowNode[]` | [Nodes](nodes.md) |
@@ -74,6 +77,8 @@ All `$flow` methods and properties at a glance:
 | `areNodesConnected` | `(a, b, directed?) → boolean` | [Nodes](nodes.md) |
 | `getIntersectingNodes` | `(node, partially?) → FlowNode[]` | [Nodes](nodes.md) |
 | `isNodeIntersecting` | `(node, target, partially?) → boolean` | [Nodes](nodes.md) |
+| `setNodeState` | `(id, state) → void` | [Nodes](nodes.md) |
+| `resetStates` | `(ids?) → void` | [Nodes](nodes.md) |
 | `addEdges` | `(edges) → void` | [Edges](edges.md) |
 | `removeEdges` | `(ids) → void` | [Edges](edges.md) |
 | `getEdge` | `(id) → FlowEdge?` | [Edges](edges.md) |
@@ -139,3 +144,5 @@ All `$flow` methods and properties at a glance:
 | `patchConfig` | `(changes) → void` | [State](state-management.md) |
 | `closeContextMenu` | `() → void` | [State](state-management.md) |
 | `resetPanels` | `() → void` | [State](state-management.md) |
+| `run` | `(options) → RunHandle` | Workflow addon |
+| `resetExecutionLog` | `() → void` | Workflow addon |
