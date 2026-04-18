@@ -301,6 +301,20 @@ export function registerCustomWireCommands(canvas: any, $wire: any): () => void 
     }
   }));
 
+  // flow:run — invoke $flow.run() with server-provided startId + options.
+  // Handlers (onEnter, pickBranch, etc.) must be pre-registered on the canvas
+  // via x-init or the workflowHandlers config key, since JS callbacks can't
+  // be serialized from PHP. The server provides startId, options (payload,
+  // defaultDurationMs, particleOnEdges, particleOptions, muteUntakenBranches, etc.).
+  cleanups.push($wire.on('flow:run', (p: any) => {
+    if (typeof canvas.run !== 'function') {
+      console.warn('[wire-bridge] flow:run: canvas.run not available — is the workflow addon registered?');
+      return;
+    }
+    const handlers = canvas._workflowHandlers ?? {};
+    canvas.run(p.startId, handlers, p.options ?? {});
+  }));
+
   // flow:selectEdges — select specific edges
   cleanups.push($wire.on('flow:selectEdges', (p: any) => {
     canvas.deselectAll();
