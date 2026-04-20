@@ -1186,7 +1186,7 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         // When `_renderDualMarker` is set (bidirectional-edge collapse has
         // picked this edge as the primary of a reciprocal pair), mirror the
         // end marker onto the start so one path carries arrows at both ends.
-        if (edge.markerStart) {
+        if (edge.markerStart != null) {
           const cfg = normalizeMarker(edge.markerStart);
           const id = getMarkerId(cfg, canvas._id);
           pathEl.setAttribute('marker-start', `url(#${id})`);

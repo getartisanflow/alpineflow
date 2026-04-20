@@ -55,6 +55,12 @@ export function detectBidirectionalPairs<E extends { id: string; source: string;
  * Decorate edges with collapse flags. Primary edges in a reciprocal pair get
  * `_renderDualMarker`; mirror edges get `_hiddenByCollapse`. Non-paired edges
  * are returned unchanged (flag fields are `undefined`).
+ *
+ * Returns fresh spread copies — does NOT mutate the input array. The live
+ * canvas wiring in `flow-viewport.ts` writes flags directly onto the reactive
+ * edge objects instead so Alpine's reactivity picks them up; this helper
+ * exists for pure-function testing and external consumers. Do not wire it
+ * into the directive layer without understanding the reactivity trade-off.
  */
 export function collapseBidirectionalPairs<E extends { id: string; source: string; target: string }>(
   edges: E[],
