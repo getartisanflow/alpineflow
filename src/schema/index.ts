@@ -16,11 +16,24 @@ import { registerAddon } from '../core/registry';
 import { addField, renameField, removeField, reorderFields } from './field-ops';
 import { inferReferences } from './references';
 import { schemaToJSON, schemaFromJSON } from './serialization';
+import { registerNodeInspectorDirective } from './inspector/node-inspector';
+import { registerRowInspectorDirective } from './inspector/row-inspector';
+import { registerEdgeInspectorDirective } from './inspector/edge-inspector';
 
 export * from './types';
 export { addField, renameField, removeField, reorderFields, inferReferences, schemaToJSON, schemaFromJSON };
+export { registerNodeInspectorDirective, registerRowInspectorDirective, registerEdgeInspectorDirective };
 
-export default function registerSchemaAddon(_Alpine: Alpine): void {
+export default function registerSchemaAddon(Alpine: Alpine): void {
+    // Register the three-scope inspector directives. Guarded so stub calls in
+    // tests (passing `{}` as Alpine) don't throw — only wire up when a real
+    // Alpine.directive hook is available.
+    if (Alpine && typeof Alpine.directive === 'function') {
+        registerNodeInspectorDirective(Alpine);
+        registerRowInspectorDirective(Alpine);
+        registerEdgeInspectorDirective(Alpine);
+    }
+
     registerAddon('schema', {
         setup(canvas: any) {
             // Use the canvas container as the DOM event target so listeners
