@@ -403,6 +403,92 @@ export async function applyReconnectValidation(params: {
 }
 
 /**
+ * Validate + apply a new connection (drag-to-connect / keyboard-connect).
+ *
+ * Runs the same validator chain used by pointer drag-to-connect (sync
+ * `isValidConnection`, `connectionRules`, handle limits, per-handle validators,
+ * global `isValidConnection`, then the async `connectValidator`). On success,
+ * creates the edge via `canvas.addEdges`, emits `connect`, and returns
+ * `{ applied: true, edge }`. On rejection, dispatches `flow-connect-rejected`
+ * on `containerEl` (single chokepoint) and returns `{ applied: false, reason }`.
+ *
+ * Used by the keyboard drag-to-connect path; the pointer drag-to-connect
+ * handler keeps its inline chain for now (drag lifecycle + ghost-node + multi-
+ * connect logic is tightly coupled to the pointer event loop). Both paths end
+ * up firing the same events and dispatching the same rejection shape so
+ * consumers see a consistent API.
+ */
+export async function applyConnectValidation(params: {
+  connection: Connection;
+  canvas: any;
+  containerEl: HTMLElement;
+}): Promise<{ applied: boolean; reason?: string; edge?: FlowEdge }> {
+  const { connection, canvas, containerEl } = params;
+  const edges = canvas.edges as FlowEdge[];
+
+  const reject = (reason?: string): { applied: false; reason?: string } => {
+    dispatchConnectRejected(containerEl, {
+      source: connection.source,
+      target: connection.target,
+      sourceHandle: connection.sourceHandle,
+      targetHandle: connection.targetHandle,
+      reason,
+    });
+    return { applied: false, reason };
+  };
+
+  // Target connectability guard
+  const targetNode = canvas.getNode?.(connection.target);
+  if (targetNode && !isConnectable(targetNode)) {
+    return reject();
+  }
+
+  // ── Sync chain ─────────────────────────────────────────────────────────
+  if (!isValidConnection(connection, edges, { preventCycles: canvas._config?.preventCycles })) {
+    return reject();
+  }
+  if (!checkConnectionRules(connection, canvas._config?.connectionRules, canvas._nodeMap)) {
+    return reject();
+  }
+  if (!checkHandleLimits(containerEl, connection, edges)) {
+    return reject();
+  }
+  if (!runHandleValidators(containerEl, connection)) {
+    return reject();
+  }
+  if (canvas._config?.isValidConnection && !canvas._config.isValidConnection(connection)) {
+    return reject();
+  }
+
+  // ── Async validator gate ───────────────────────────────────────────────
+  const asyncValidator = canvas._config?.connectValidator;
+  if (asyncValidator) {
+    const validatingClass = canvas._config?.validatingHandleClass ?? 'flow-handle-validating';
+    const { sourceEl, targetEl } = findHandleElements(containerEl, connection);
+    canvas._connectValidating = true;
+    let asyncResult: { allowed: boolean; reason?: string };
+    try {
+      asyncResult = await runConnectValidator(
+        asyncValidator, connection, sourceEl, targetEl, containerEl, validatingClass,
+      );
+    } finally {
+      canvas._connectValidating = false;
+    }
+    if (!asyncResult.allowed) {
+      return reject(asyncResult.reason);
+    }
+  }
+
+  // ── Apply — create the edge ───────────────────────────────────────────
+  const edgeId = `e-${connection.source}-${connection.target}-${Date.now()}-${edgeIdCounter++}`;
+  const edge = { id: edgeId, ...connection } as FlowEdge;
+  canvas.addEdges(edge);
+  canvas._emit?.('connect', { connection });
+
+  return { applied: true, edge };
+}
+
+/**
  * Resolve the source + target handle DOM elements for a connection within a
  * container. Returns null for any handle it cannot locate. Used by the
  * drag-to-connect + reconnect paths so the async validator can pulse both
@@ -550,6 +636,130 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
         const canvasEl = el.closest('[x-data]') as HTMLElement | null;
         return canvasEl ? Alpine.$data(canvasEl) : null;
       };
+
+      // ── Keyboard drag-to-connect (a11y, opt-in) ───────────────────────
+      // When canvas._config.keyboardConnect is true, make this handle focusable
+      // and wire Enter/Space/Escape to drive a connection flow equivalent to
+      // pointer drag-to-connect. Source handles arm a pending connection;
+      // target handles complete it; Escape cancels. Attributes are only set
+      // when the feature is enabled so existing tab order is preserved on apps
+      // that haven't opted in.
+      let keyboardBindingsCleanup: (() => void) | null = null;
+      {
+        const initCanvas = getCanvas();
+        if (initCanvas?._config?.keyboardConnect) {
+          el.setAttribute('tabindex', '0');
+          el.setAttribute('role', 'button');
+          el.setAttribute('aria-label', `${type} handle ${handleId}`);
+
+          const clearPending = (canvas: any) => {
+            const prev = canvas?._pendingKeyboardConnect;
+            if (!prev) return;
+            const containerEl = el.closest('.flow-container') as HTMLElement | null;
+            if (containerEl) {
+              const prevEl = containerEl.querySelector(
+                `[data-flow-node-id="${CSS.escape(prev.sourceNodeId)}"] [data-flow-handle-id="${CSS.escape(prev.sourceHandleId)}"][data-flow-handle-type="source"]`,
+              );
+              (prevEl as HTMLElement | null)?.classList.remove('flow-handle-connect-pending');
+            }
+            canvas._pendingKeyboardConnect = null;
+          };
+
+          const onKeyDown = (e: KeyboardEvent) => {
+            const isActivate = e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar';
+            if (!isActivate) return;
+
+            const canvas = getCanvas();
+            if (!canvas) return;
+            if (canvas._animationLocked) return;
+
+            const nodeId = getNodeId();
+            if (!nodeId) return;
+
+            if (type === 'source') {
+              // Guard: node / handle must be connectable as start
+              const sourceNode = canvas.getNode?.(nodeId);
+              if (sourceNode && !isConnectable(sourceNode)) return;
+              if (el[HANDLE_CONNECTABLE_START_KEY] === false) return;
+
+              e.preventDefault();
+              e.stopPropagation();
+
+              // Re-arming: clear previous pending first
+              clearPending(canvas);
+
+              canvas._pendingKeyboardConnect = {
+                sourceNodeId: nodeId,
+                sourceHandleId: handleId,
+              };
+              el.classList.add('flow-handle-connect-pending');
+
+              // Route to the existing aria-live announcer when present.
+              // If no announcer is configured on this canvas, skip silently —
+              // we don't invent a new live region here.
+              canvas._announcer?.announce?.(`Connecting from ${type} handle ${handleId}. Focus a target handle and press Enter to connect.`);
+            } else {
+              // target handle: complete pending connection (if any)
+              if (!canvas._pendingKeyboardConnect) return;
+
+              const targetNode = canvas.getNode?.(nodeId);
+              if (targetNode && !isConnectable(targetNode)) return;
+              if (el[HANDLE_CONNECTABLE_END_KEY] === false) return;
+
+              e.preventDefault();
+              e.stopPropagation();
+
+              const { sourceNodeId, sourceHandleId } = canvas._pendingKeyboardConnect;
+              const connection: Connection = {
+                source: sourceNodeId,
+                sourceHandle: sourceHandleId,
+                target: nodeId,
+                targetHandle: handleId,
+              };
+
+              const containerEl = el.closest('.flow-container') as HTMLElement | null;
+              // Clear pending state + class before running the pipeline — the
+              // validator is async, and we don't want the pending affordance
+              // stuck on a no-longer-armed source if the user re-focuses mid-
+              // validation.
+              clearPending(canvas);
+
+              if (!containerEl) return;
+
+              // Fire-and-forget the async validator pipeline. Rejections
+              // dispatch flow-connect-rejected via the shared helper; success
+              // emits `connect` + adds the edge.
+              void applyConnectValidation({ connection, canvas, containerEl }).then((result) => {
+                if (result.applied) {
+                  canvas._announcer?.announce?.(`Connected ${sourceNodeId} to ${nodeId}.`);
+                }
+              });
+            }
+          };
+
+          el.addEventListener('keydown', onKeyDown);
+
+          // Global Escape listener on the canvas container (not document) so
+          // we don't hijack keys on other focusable apps on the page.
+          const containerEl = el.closest('.flow-container') as HTMLElement | null;
+          const onContainerEscape = (e: KeyboardEvent) => {
+            if (e.key !== 'Escape') return;
+            const canvas = getCanvas();
+            if (!canvas?._pendingKeyboardConnect) return;
+            clearPending(canvas);
+          };
+          containerEl?.addEventListener('keydown', onContainerEscape);
+
+          keyboardBindingsCleanup = () => {
+            el.removeEventListener('keydown', onKeyDown);
+            containerEl?.removeEventListener('keydown', onContainerEscape);
+            el.removeAttribute('tabindex');
+            el.removeAttribute('role');
+            el.removeAttribute('aria-label');
+            el.classList.remove('flow-handle-connect-pending');
+          };
+        }
+      }
 
       if (type === 'source') {
         // ── Source handle: initiate drag-to-connect ──────────────────
@@ -1224,6 +1434,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
 
         cleanup(() => {
           activeConnectionCleanup?.();
+          keyboardBindingsCleanup?.();
           el.removeEventListener('pointerdown', onPointerDown);
           el.removeEventListener('pointerenter', onReconnectPointerEnter);
           el.removeEventListener('pointerleave', onReconnectPointerLeave);
@@ -1680,6 +1891,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
 
         cleanup(() => {
           activeReconnectCleanup?.();
+          keyboardBindingsCleanup?.();
           el.removeEventListener('pointerdown', onTargetPointerDown);
           el.removeEventListener('pointerenter', onPointerEnter);
           el.removeEventListener('pointerleave', onPointerLeave);

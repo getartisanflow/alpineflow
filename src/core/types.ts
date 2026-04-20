@@ -1115,6 +1115,15 @@ export interface FlowCanvasConfig {
   /** Enable click-to-connect: click source handle, then click target handle. Default: true */
   connectOnClick?: boolean;
 
+  /**
+   * Enable keyboard-driven drag-to-connect (a11y).
+   * When true, source and target handles become focusable (`tabindex="0"`,
+   * `role="button"`, `aria-label`). Enter/Space on a focused source handle
+   * arms a pending connection; Enter/Space on a target handle completes it;
+   * Escape cancels. Defaults to false to preserve existing tab order.
+   */
+  keyboardConnect?: boolean;
+
   // ── Connection Line Customization ──────────────────────────────────
   /** Type of path used for the temporary connection drag line.
    *  Default: 'straight' */

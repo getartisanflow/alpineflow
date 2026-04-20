@@ -380,6 +380,14 @@
     50%      { box-shadow: 0 0 0 6px color-mix(in srgb, var(--flow-handle-bg, #8B5CF6) 0%, transparent); }
 }
 
+/* Keyboard drag-to-connect (a11y): source handle is "armed" — user pressed
+   Enter/Space and we're waiting for them to focus a target and press Enter
+   again. Visual-only; theme can override. */
+.flow-handle-connect-pending {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+}
+
 /* Drag line (temporary SVG rendered from source handle to pointer) shows this
    while an async connectValidator is awaiting. The marching-ants dash gives a
    visual "pending" affordance on the line itself so a dropped-but-not-yet-
