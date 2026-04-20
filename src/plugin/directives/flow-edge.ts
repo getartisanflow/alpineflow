@@ -14,7 +14,7 @@ import type { MarkerType, MarkerConfig } from '../../core/markers';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { normalizeMarker, getMarkerId } from '../../core/markers';
 import { isConnectable } from '../../core/node-flags';
-import { applyValidationClasses, clearValidationClasses, applyReconnectValidation } from './flow-handle';
+import { applyValidationClasses, clearValidationClasses, applyReconnectValidation, setDragLineValidating } from './flow-handle';
 import {
   createConnectionLine,
   findSnapTarget,
@@ -850,14 +850,25 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           const dropNodeId = nodeEl?.dataset.flowNodeId;
           const dropHandleId = handleEl?.dataset.flowHandleId;
 
-          const result = await resolveEdgeBodyReconnect({
-            dropNodeId,
-            dropHandleId,
-            draggedEnd: draggedEnd!,
-            edge,
-            canvas,
-            containerEl,
-          });
+          // Pulse the drag line while the async connectValidator (if any) awaits.
+          // The class is a no-op on sync paths — setDragLineValidating only
+          // adds/removes; the validator lifecycle inside applyReconnectValidation
+          // is synchronous when no validator is configured.
+          const dragLineEl = reconnectLineInstance?.svg ?? null;
+          setDragLineValidating(dragLineEl, true);
+          let result: Awaited<ReturnType<typeof resolveEdgeBodyReconnect>>;
+          try {
+            result = await resolveEdgeBodyReconnect({
+              dropNodeId,
+              dropHandleId,
+              draggedEnd: draggedEnd!,
+              edge,
+              canvas,
+              containerEl,
+            });
+          } finally {
+            setDragLineValidating(dragLineEl, false);
+          }
 
           if (result.applied) {
             debug('reconnect', `Edge "${edge.id}" reconnected (${draggedEnd})`, result.newConnection);

@@ -195,6 +195,27 @@ export function clearValidationClasses(containerEl: HTMLElement): void {
 }
 
 /**
+ * Toggle `.flow-connect-line--validating` on the temporary drag-line SVG while
+ * an async `connectValidator` is awaiting. Call sites wrap the validator await
+ * with `setDragLineValidating(svg, true)` … `finally { setDragLineValidating(svg, false) }`
+ * so the pending affordance is guaranteed to clear even if the validator throws.
+ *
+ * Safe to call with `null`/`undefined` — the drag line may not exist on all
+ * paths (e.g. click-to-connect) and the helper is a no-op in that case.
+ */
+export function setDragLineValidating(
+  el: Element | null | undefined,
+  on: boolean,
+): void {
+  if (!el) return;
+  if (on) {
+    el.classList.add('flow-connect-line--validating');
+  } else {
+    el.classList.remove('flow-connect-line--validating');
+  }
+}
+
+/**
  * Run the optional async `connectValidator` gate.
  *
  * Returns { allowed: true } when no validator is configured. Otherwise:
@@ -931,9 +952,13 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
               return;
             }
 
-            // Drag completed: existing drag-to-connect logic
-            connectionLineInstance?.destroy();
-            connectionLineInstance = null;
+            // Drag completed: existing drag-to-connect logic.
+            //
+            // NB: the drag-line SVG is intentionally kept alive past this point so
+            // the async connectValidator (if any) can pulse it via
+            // `.flow-connect-line--validating`. It is destroyed in the `finally`
+            // at the bottom of this block so every return path still cleans up.
+            const dragLineEl = connectionLineInstance?.svg ?? null;
             ghostEl?.remove();
             ghostEl = null;
             snappedHandle?.classList.remove('flow-handle-active');
@@ -941,6 +966,8 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
 
             const dropPosition = canvas.screenToFlowPosition(upEvent.clientX, upEvent.clientY);
             const connectEndBase = { source: sourceNodeId, sourceHandle: handleId, position: dropPosition };
+
+            try {
 
             let targetHandle: HTMLElement | null = snappedHandle;
             if (!targetHandle) {
@@ -1008,6 +1035,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                     const validatingClass = canvas._config?.validatingHandleClass ?? 'flow-handle-validating';
                     const { sourceEl, targetEl } = findHandleElements(containerEl, connection);
                     canvas._connectValidating = true;
+                    setDragLineValidating(dragLineEl, true);
                     let asyncResult: { allowed: boolean; reason?: string };
                     try {
                       asyncResult = await runConnectValidator(
@@ -1015,6 +1043,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                       );
                     } finally {
                       canvas._connectValidating = false;
+                      setDragLineValidating(dragLineEl, false);
                     }
                     if (!asyncResult.allowed) {
                       debug('connection', 'Connection rejected (async connectValidator)', { connection, reason: asyncResult.reason });
@@ -1080,6 +1109,13 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                 debug('connection', 'Connection cancelled (no target)');
                 canvas._emit('connect-end', { connection: null, ...connectEndBase });
               }
+            }
+            } finally {
+              // Tear down the drag-line SVG regardless of which path produced the
+              // outcome (success, sync rejection, async rejection, or early return).
+              setDragLineValidating(dragLineEl, false);
+              connectionLineInstance?.destroy();
+              connectionLineInstance = null;
             }
 
             canvas.pendingConnection = null;
@@ -1541,13 +1577,20 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                   };
 
                   const oldEdge = { ...connectedEdge };
-                  const result = await applyReconnectValidation({
-                    edge: connectedEdge,
-                    newConnection,
-                    canvas,
-                    containerEl,
-                    endpoint: 'target',
-                  });
+                  const reconnectDragLineEl = reconnectLineInstance?.svg ?? null;
+                  setDragLineValidating(reconnectDragLineEl, true);
+                  let result: { applied: boolean; reason?: string };
+                  try {
+                    result = await applyReconnectValidation({
+                      edge: connectedEdge,
+                      newConnection,
+                      canvas,
+                      containerEl,
+                      endpoint: 'target',
+                    });
+                  } finally {
+                    setDragLineValidating(reconnectDragLineEl, false);
+                  }
 
                   if (result.applied) {
                     successful = true;

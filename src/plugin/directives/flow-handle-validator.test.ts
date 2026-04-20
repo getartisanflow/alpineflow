@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeAll, afterEach } from 'vitest';
-import { runConnectValidator, applyReconnectValidation } from './flow-handle';
+import { runConnectValidator, applyReconnectValidation, setDragLineValidating } from './flow-handle';
 import { resolveEdgeBodyReconnect } from './flow-edge';
 import type { Connection, FlowEdge } from '../../core/types';
 
@@ -235,6 +235,73 @@ describe('runConnectValidator', () => {
     );
     expect(starts).toHaveLength(1);
     expect(ends).toHaveLength(1);
+  });
+});
+
+// ─── Drag-line pending class lifecycle ────────────────────────────────────
+//
+// While the async connectValidator awaits, the drag line (the temporary SVG
+// rendered from the source handle to the pointer) should show a pending
+// affordance so drops aren't silently swallowed. Call sites wrap the
+// runConnectValidator await with setDragLineValidating(svg, true/false) so
+// both class lifecycle and validator lifecycle share the same guaranteed
+// add/remove semantics.
+
+describe('setDragLineValidating', () => {
+  it('adds .flow-connect-line--validating to drag line while validator awaits, removes after', async () => {
+    const dragLine = document.createElement('div');
+    dragLine.classList.add('flow-connect-line');
+
+    let sawClassDuringAwait = false;
+    const validator = async () => {
+      sawClassDuringAwait = dragLine.classList.contains('flow-connect-line--validating');
+      // Simulate a slow validator so the class has to survive the await.
+      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+      return true;
+    };
+
+    // Mirror the call-site pattern: toggle on before the await, toggle off
+    // in finally (so the class is cleared even if the validator throws).
+    setDragLineValidating(dragLine, true);
+    try {
+      await runConnectValidator(
+        validator,
+        conn(),
+        null,
+        null,
+        document.body,
+        'flow-handle-validating',
+      );
+    } finally {
+      setDragLineValidating(dragLine, false);
+    }
+
+    expect(sawClassDuringAwait).toBe(true);
+    expect(dragLine.classList.contains('flow-connect-line--validating')).toBe(false);
+  });
+
+  it('tolerates null/undefined drag-line elements without throwing', () => {
+    expect(() => setDragLineValidating(null, true)).not.toThrow();
+    expect(() => setDragLineValidating(undefined, false)).not.toThrow();
+  });
+
+  it('removes the class even when the validator throws', async () => {
+    const dragLine = document.createElement('div');
+    dragLine.classList.add('flow-connect-line');
+    setDragLineValidating(dragLine, true);
+    try {
+      await runConnectValidator(
+        async () => { throw new Error('boom'); },
+        conn(),
+        null,
+        null,
+        document.body,
+        'flow-handle-validating',
+      );
+    } finally {
+      setDragLineValidating(dragLine, false);
+    }
+    expect(dragLine.classList.contains('flow-connect-line--validating')).toBe(false);
   });
 });
 
