@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import Alpine from 'alpinejs';
 import { registerFlowSchemaDirective } from './flow-schema';
+import { registerFlowHandleDirective } from './flow-handle';
 
 /**
  * Clear a DOM node without using innerHTML (XSS-safe pattern).
@@ -12,6 +13,9 @@ function clearChildren(el: HTMLElement): void {
 
 describe('x-flow-schema directive', () => {
   beforeEach(() => {
+    // flow-schema stamps x-flow-handle attributes onto each row; in production
+    // both directives are always registered together.
+    registerFlowHandleDirective(Alpine);
     registerFlowSchemaDirective(Alpine);
   });
 

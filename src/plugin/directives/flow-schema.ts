@@ -64,6 +64,11 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
         body.appendChild(renderRow(field));
       }
       host.appendChild(body);
+
+      // Activate x-flow-handle directives on the newly-stamped handles.
+      // Without this call, the handles have the right classes + attributes
+      // but no pointer listeners — drag-to-connect would be dead.
+      Alpine.initTree(body);
     };
 
     const renderRow = (field: FlowSchemaField): HTMLElement => {
@@ -74,12 +79,14 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       if (field.key === 'foreign') row.classList.add('flow-schema-row--fk');
       if (field.required) row.classList.add('flow-schema-row--required');
 
-      // Target handle (left)
+      // Target handle (left). We set the x-flow-handle directive attribute
+      // so that after Alpine.initTree(host) runs below, the handle's
+      // pointerdown → drag-to-connect pipeline activates on this element.
+      // Without the directive, the div has the right classes + data-attrs
+      // but no pointer handlers — clicks fall through to the node drag.
       const target = document.createElement('div');
-      target.className = 'flow-handle flow-handle-target flow-schema-handle flow-schema-handle--target';
-      target.setAttribute('data-flow-handle-id', field.name);
-      target.setAttribute('data-flow-handle-type', 'target');
-      target.setAttribute('data-flow-handle-position', 'left');
+      target.className = 'flow-schema-handle flow-schema-handle--target';
+      target.setAttribute('x-flow-handle:target.left', JSON.stringify(field.name));
       row.appendChild(target);
 
       if (field.icon) {
@@ -99,12 +106,10 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       type.textContent = field.type;
       row.appendChild(type);
 
-      // Source handle (right)
+      // Source handle (right) — same directive pattern as target.
       const source = document.createElement('div');
-      source.className = 'flow-handle flow-handle-source flow-schema-handle flow-schema-handle--source';
-      source.setAttribute('data-flow-handle-id', field.name);
-      source.setAttribute('data-flow-handle-type', 'source');
-      source.setAttribute('data-flow-handle-position', 'right');
+      source.className = 'flow-schema-handle flow-schema-handle--source';
+      source.setAttribute('x-flow-handle:source.right', JSON.stringify(field.name));
       row.appendChild(source);
 
       return row;
