@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
-import { runConnectValidator, applyReconnectValidation, setDragLineValidating } from './flow-handle';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
+import { runConnectValidator, applyReconnectValidation, setDragLineValidating, dispatchConnectRejected } from './flow-handle';
 import { resolveEdgeBodyReconnect } from './flow-edge';
 import type { Connection, FlowEdge } from '../../core/types';
 
@@ -666,5 +666,187 @@ describe('resolveEdgeBodyReconnect', () => {
     expect(result.applied).toBe(false);
     expect(validatorCalls).toBe(0);
     expect(edge.target).toBe('n-original');
+  });
+});
+
+// ─── dispatchConnectRejected helper ────────────────────────────────────────
+//
+// Single chokepoint for every connect rejection path (drag-to-connect,
+// click-to-connect, handle-pip reconnect, edge-body reconnect). Guarantees a
+// consistent DOM event shape + discoverable console.warn so consumers can
+// render their own UI without wiring anything.
+
+describe('dispatchConnectRejected', () => {
+  it('fires flow-connect-rejected on the container with {reason, source, target, sourceHandle, targetHandle}', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const containerEl = document.createElement('div');
+    document.body.appendChild(containerEl);
+    reconnectDomContainers.push(containerEl);
+
+    const rejected: any[] = [];
+    containerEl.addEventListener('flow-connect-rejected', (e: any) => rejected.push(e.detail));
+
+    dispatchConnectRejected(containerEl, {
+      source: 'n1',
+      sourceHandle: 'source',
+      target: 'n2',
+      targetHandle: 'id',
+      reason: 'FK cycle',
+    });
+
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]).toEqual({
+      source: 'n1',
+      sourceHandle: 'source',
+      target: 'n2',
+      targetHandle: 'id',
+      reason: 'FK cycle',
+    });
+
+    warnSpy.mockRestore();
+  });
+
+  it('writes a [alpineflow] prefixed console.warn with the reason', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const containerEl = document.createElement('div');
+    document.body.appendChild(containerEl);
+    reconnectDomContainers.push(containerEl);
+
+    dispatchConnectRejected(containerEl, {
+      source: 'n1',
+      sourceHandle: 'source',
+      target: 'n2',
+      targetHandle: 'target',
+      reason: 'not allowed',
+    });
+
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const args = warnSpy.mock.calls[0];
+    expect(args[0]).toContain('[alpineflow]');
+    expect(args[0]).toContain('connection rejected');
+    expect(args.join(' ')).toContain('not allowed');
+
+    warnSpy.mockRestore();
+  });
+
+  it('still dispatches the event and warns when reason is undefined (sync rejections)', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const containerEl = document.createElement('div');
+    document.body.appendChild(containerEl);
+    reconnectDomContainers.push(containerEl);
+
+    const rejected: any[] = [];
+    containerEl.addEventListener('flow-connect-rejected', (e: any) => rejected.push(e.detail));
+
+    dispatchConnectRejected(containerEl, {
+      source: 'n1',
+      sourceHandle: 'source',
+      target: 'n2',
+      targetHandle: 'target',
+      // reason intentionally omitted
+    });
+
+    expect(rejected).toHaveLength(1);
+    expect('reason' in rejected[0]).toBe(true);
+    expect(rejected[0].reason).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+
+    warnSpy.mockRestore();
+  });
+
+  it('is a no-op when containerEl is nullish (guard against early teardown)', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect(() => {
+      dispatchConnectRejected(null as any, {
+        source: 'a',
+        target: 'b',
+        sourceHandle: 'source',
+        targetHandle: 'target',
+        reason: 'oops',
+      });
+    }).not.toThrow();
+
+    warnSpy.mockRestore();
+  });
+});
+
+// ─── applyReconnectValidation regression guard on dispatch shape ──────────
+//
+// The reconnect paths already dispatched flow-connect-rejected before this
+// refactor. After extracting dispatchConnectRejected, assert they still fire
+// AND that console.warn is now emitted through the shared helper.
+
+describe('applyReconnectValidation uses dispatchConnectRejected for rejections', () => {
+  it('console.warn is called with [alpineflow] prefix when reconnect is rejected', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const containerEl = buildReconnectDom(['n1', 'n-original', 'n2']);
+    const edge: FlowEdge = {
+      id: 'e1',
+      source: 'n1',
+      sourceHandle: 'source',
+      target: 'n-original',
+      targetHandle: 'target',
+    };
+    const canvas = makeCanvasWithValidator(
+      async () => ({ allowed: false, reason: 'bad reconnect' }),
+      [edge],
+    );
+
+    await applyReconnectValidation({
+      edge,
+      newConnection: {
+        source: 'n1',
+        sourceHandle: 'source',
+        target: 'n2',
+        targetHandle: 'id',
+      },
+      canvas,
+      containerEl,
+    });
+
+    const warnMessages = warnSpy.mock.calls.map((args) => args.map(String).join(' '));
+    expect(warnMessages.some((m) => m.includes('[alpineflow]') && m.includes('bad reconnect'))).toBe(true);
+
+    warnSpy.mockRestore();
+  });
+
+  it('sync rejection (isValidConnection returns false) still fires flow-connect-rejected', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const containerEl = buildReconnectDom(['n1', 'n2']);
+    const edge: FlowEdge = {
+      id: 'e1',
+      source: 'n1',
+      sourceHandle: 'source',
+      target: 'n2',
+      targetHandle: 'target',
+    };
+    // No validator needed — isValidConnection rejects self-connections synchronously
+    const canvas = makeCanvasWithValidator(undefined, [edge]);
+
+    const rejected: any[] = [];
+    containerEl.addEventListener('flow-connect-rejected', (e: any) => rejected.push(e.detail));
+
+    const result = await applyReconnectValidation({
+      edge,
+      // Self-connection: source === target, rejected by isValidConnection
+      newConnection: {
+        source: 'n1',
+        sourceHandle: 'source',
+        target: 'n1',
+        targetHandle: 'target',
+      },
+      canvas,
+      containerEl,
+    });
+
+    expect(result.applied).toBe(false);
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].source).toBe('n1');
+    expect(rejected[0].target).toBe('n1');
+    expect('reason' in rejected[0]).toBe(true);
+    expect(rejected[0].reason).toBeUndefined();
+
+    warnSpy.mockRestore();
   });
 });

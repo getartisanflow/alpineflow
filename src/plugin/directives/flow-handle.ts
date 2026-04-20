@@ -216,6 +216,55 @@ export function setDragLineValidating(
 }
 
 /**
+ * Single chokepoint for every "connection rejected" path (drag-to-connect,
+ * click-to-connect, handle-pip reconnect, edge-body reconnect). Guarantees:
+ *
+ *   1. A consistent `flow-connect-rejected` CustomEvent on `containerEl` with
+ *      detail `{reason, source, target, sourceHandle, targetHandle}`. `reason`
+ *      is always present as a key, even when undefined (sync rejections don't
+ *      carry a reason).
+ *   2. A discoverable `console.warn('[alpineflow] connection rejected: ...')`
+ *      so devs see the rejection in the console without wiring any listener.
+ *
+ * Extracted so future rejection paths can't diverge on detail shape or forget
+ * to warn. Safe to call with a nullish container (no-op) — the drag-line
+ * lifecycle sometimes tears down the container before rejection dispatches.
+ */
+export function dispatchConnectRejected(
+  containerEl: Element | null | undefined,
+  detail: {
+    source: string;
+    target: string;
+    sourceHandle?: string;
+    targetHandle?: string;
+    reason?: string;
+  },
+): void {
+  // Keep `reason` in the detail shape even when undefined so consumers can
+  // destructure without existence checks.
+  const eventDetail = {
+    source: detail.source,
+    target: detail.target,
+    sourceHandle: detail.sourceHandle,
+    targetHandle: detail.targetHandle,
+    reason: detail.reason,
+  };
+
+  // Discoverable log — always fires, even on sync rejections without a reason.
+  if (detail.reason !== undefined) {
+    console.warn('[alpineflow] connection rejected:', detail.reason);
+  } else {
+    console.warn('[alpineflow] connection rejected');
+  }
+
+  if (!containerEl) return;
+  containerEl.dispatchEvent(new CustomEvent('flow-connect-rejected', {
+    detail: eventDetail,
+    bubbles: true,
+  }));
+}
+
+/**
  * Run the optional async `connectValidator` gate.
  *
  * Returns { allowed: true } when no validator is configured. Otherwise:
@@ -294,16 +343,13 @@ export async function applyReconnectValidation(params: {
   );
 
   const reject = (reason?: string): { applied: false; reason?: string } => {
-    containerEl.dispatchEvent(new CustomEvent('flow-connect-rejected', {
-      detail: {
-        source: newConnection.source,
-        target: newConnection.target,
-        sourceHandle: newConnection.sourceHandle,
-        targetHandle: newConnection.targetHandle,
-        reason,
-      },
-      bubbles: true,
-    }));
+    dispatchConnectRejected(containerEl, {
+      source: newConnection.source,
+      target: newConnection.target,
+      sourceHandle: newConnection.sourceHandle,
+      targetHandle: newConnection.targetHandle,
+      reason,
+    });
     return { applied: false, reason };
   };
 
@@ -1006,24 +1052,28 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                 if (isValidConnection(connection, canvas.edges, { preventCycles: canvas._config?.preventCycles })) {
                   if (!checkConnectionRules(connection, canvas._config?.connectionRules, canvas._nodeMap)) {
                     debug('connection', 'Connection rejected (connection rules)', connection);
+                    dispatchConnectRejected(containerEl, connection);
                     canvas._emit('connect-end', { connection: null, ...connectEndBase });
                     canvas.pendingConnection = null;
                     return;
                   }
                   if (!checkHandleLimits(containerEl, connection, canvas.edges)) {
                     debug('connection', 'Connection rejected (handle limit)', connection);
+                    dispatchConnectRejected(containerEl, connection);
                     canvas._emit('connect-end', { connection: null, ...connectEndBase });
                     canvas.pendingConnection = null;
                     return;
                   }
                   if (!runHandleValidators(containerEl, connection)) {
                     debug('connection', 'Connection rejected (per-handle validator)', connection);
+                    dispatchConnectRejected(containerEl, connection);
                     canvas._emit('connect-end', { connection: null, ...connectEndBase });
                     canvas.pendingConnection = null;
                     return;
                   }
                   if (canvas._config?.isValidConnection && !canvas._config.isValidConnection(connection)) {
                     debug('connection', 'Connection rejected (custom validator)', connection);
+                    dispatchConnectRejected(containerEl, connection);
                     canvas._emit('connect-end', { connection: null, ...connectEndBase });
                     canvas.pendingConnection = null;
                     return;
@@ -1047,6 +1097,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                     }
                     if (!asyncResult.allowed) {
                       debug('connection', 'Connection rejected (async connectValidator)', { connection, reason: asyncResult.reason });
+                      dispatchConnectRejected(containerEl, { ...connection, reason: asyncResult.reason });
                       canvas._emit('connect-end', { connection: null, ...connectEndBase });
                       canvas.pendingConnection = null;
                       return;
@@ -1060,6 +1111,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                   canvas._emit('connect-end', { connection, ...connectEndBase });
                 } else {
                   debug('connection', 'Connection rejected (invalid)', connection);
+                  dispatchConnectRejected(containerEl, connection);
                   canvas._emit('connect-end', { connection: null, ...connectEndBase });
                 }
               } else {
@@ -1248,6 +1300,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             const clickContainerEl = el.closest('.flow-container') as HTMLElement;
             if (!checkConnectionRules(connection, canvas._config?.connectionRules, canvas._nodeMap)) {
               debug('connection', 'Click-to-connect rejected (connection rules)', connection);
+              dispatchConnectRejected(clickContainerEl, connection);
               canvas._emit('connect-end', { connection: null, ...connectEndBase });
               canvas.pendingConnection = null;
               canvas._container?.classList.remove('flow-connecting');
@@ -1256,6 +1309,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             }
             if (clickContainerEl && !checkHandleLimits(clickContainerEl, connection, canvas.edges)) {
               debug('connection', 'Click-to-connect rejected (handle limit)', connection);
+              dispatchConnectRejected(clickContainerEl, connection);
               canvas._emit('connect-end', { connection: null, ...connectEndBase });
               canvas.pendingConnection = null;
               canvas._container?.classList.remove('flow-connecting');
@@ -1264,6 +1318,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             }
             if (clickContainerEl && !runHandleValidators(clickContainerEl, connection)) {
               debug('connection', 'Click-to-connect rejected (per-handle validator)', connection);
+              dispatchConnectRejected(clickContainerEl, connection);
               canvas._emit('connect-end', { connection: null, ...connectEndBase });
               canvas.pendingConnection = null;
               canvas._container?.classList.remove('flow-connecting');
@@ -1272,6 +1327,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             }
             if (canvas._config?.isValidConnection && !canvas._config.isValidConnection(connection)) {
               debug('connection', 'Click-to-connect rejected (custom validator)', connection);
+              dispatchConnectRejected(clickContainerEl, connection);
               canvas._emit('connect-end', { connection: null, ...connectEndBase });
               canvas.pendingConnection = null;
               canvas._container?.classList.remove('flow-connecting');
@@ -1295,6 +1351,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
               }
               if (!asyncResult.allowed) {
                 debug('connection', 'Click-to-connect rejected (async connectValidator)', { connection, reason: asyncResult.reason });
+                dispatchConnectRejected(clickContainerEl, { ...connection, reason: asyncResult.reason });
                 canvas._emit('connect-end', { connection: null, ...connectEndBase });
                 canvas.pendingConnection = null;
                 canvas._container?.classList.remove('flow-connecting');
@@ -1310,6 +1367,8 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             canvas._emit('connect-end', { connection, ...connectEndBase });
           } else {
             debug('connection', 'Click-to-connect rejected (invalid)', connection);
+            const invalidContainerEl = el.closest('.flow-container') as HTMLElement;
+            dispatchConnectRejected(invalidContainerEl, connection);
             canvas._emit('connect-end', { connection: null, ...connectEndBase });
           }
 

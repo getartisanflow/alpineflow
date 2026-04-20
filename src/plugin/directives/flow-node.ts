@@ -29,7 +29,7 @@ import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { resolveChildValidation } from '../../core/child-validation';
 import { collabStore } from '../../collab/store';
 import { createConnectionLine, findSnapTarget, startConnectionAutoPan, type ConnectionLineInstance } from '../connection-utils';
-import { applyValidationClasses, clearValidationClasses, checkHandleLimits, runHandleValidators } from './flow-handle';
+import { applyValidationClasses, clearValidationClasses, checkHandleLimits, runHandleValidators, dispatchConnectRejected } from './flow-handle';
 import { isValidConnection, checkConnectionRules } from '../../core/connections';
 import { findProximityCandidate, type ProximityCandidate } from '../../core/proximity-connect';
 import { isDraggable, isConnectable, isSelectable } from '../../core/node-flags';
@@ -1372,6 +1372,14 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                 };
 
                 // Run validation chain
+                //
+                // NB: proximity-connect is user-passive — the system auto-suggests
+                // edges as nodes drift near each other. Rejections here are not
+                // user-initiated connection attempts, so we intentionally do NOT
+                // dispatch flow-connect-rejected or console.warn. Surfacing those
+                // signals would be noisy (fires on every tick the validation
+                // fails) and would confuse consumers who expect that event to
+                // mean "the user tried to connect and was rejected."
                 if (isValidConnection(connection, canvas.edges, { preventCycles: canvas._config?.preventCycles })) {
                   const isRulesOk = checkConnectionRules(connection, canvas._config?.connectionRules, canvas._nodeMap);
                   const isHandleOk = isRulesOk && (containerEl ? checkHandleLimits(containerEl, connection, canvas.edges) : true);
@@ -1541,9 +1549,11 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                       currentCanvas._emit('connect', { connection });
                       currentCanvas._emit('connect-end', { connection, ...connectEndBase });
                     } else {
+                      dispatchConnectRejected(containerEl, connection);
                       currentCanvas._emit('connect-end', { connection: null, ...connectEndBase });
                     }
                   } else {
+                    dispatchConnectRejected(containerEl, connection);
                     currentCanvas._emit('connect-end', { connection: null, ...connectEndBase });
                   }
                 } else {
