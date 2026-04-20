@@ -57,18 +57,32 @@ describe('x-flow-schema directive', () => {
     expect(el.querySelectorAll('.flow-schema-row').length).toBe(3);
   });
 
-  it('each row has target (left) + source (right) handles with matching ids', () => {
+  it('each row renders real target+source handles plus opposite-side mirrors', () => {
     const el = mount({
       label: 'User',
       fields: [{ name: 'id', type: 'uuid' }],
     });
     const row = el.querySelector('.flow-schema-row')!;
-    const target = row.querySelector('[data-flow-handle-type="target"]');
-    const source = row.querySelector('[data-flow-handle-type="source"]');
-    expect(target?.getAttribute('data-flow-handle-id')).toBe('id');
-    expect(target?.getAttribute('data-flow-handle-position')).toBe('left');
-    expect(source?.getAttribute('data-flow-handle-id')).toBe('id');
-    expect(source?.getAttribute('data-flow-handle-position')).toBe('right');
+    // Count handles — should be 4: target-left (real), source-right (real),
+    // target-right (mirror), source-left (mirror).
+    const allHandles = row.querySelectorAll('[data-flow-handle-id]');
+    expect(allHandles.length).toBe(4);
+
+    // Real primary handles keep their positions
+    const realTarget = row.querySelector('.flow-schema-handle--target:not(.flow-schema-handle--mirror)');
+    const realSource = row.querySelector('.flow-schema-handle--source:not(.flow-schema-handle--mirror)');
+    expect(realTarget?.getAttribute('data-flow-handle-position')).toBe('left');
+    expect(realSource?.getAttribute('data-flow-handle-position')).toBe('right');
+    expect(realTarget?.getAttribute('data-flow-handle-id')).toBe('id');
+    expect(realSource?.getAttribute('data-flow-handle-id')).toBe('id');
+
+    // Mirrors are on the opposite sides with matching ids
+    const mirrorTarget = row.querySelector('.flow-schema-handle--target.flow-schema-handle--mirror');
+    const mirrorSource = row.querySelector('.flow-schema-handle--source.flow-schema-handle--mirror');
+    expect(mirrorTarget?.getAttribute('data-flow-handle-position')).toBe('right');
+    expect(mirrorTarget?.getAttribute('data-flow-handle-id')).toBe('id');
+    expect(mirrorSource?.getAttribute('data-flow-handle-position')).toBe('left');
+    expect(mirrorSource?.getAttribute('data-flow-handle-id')).toBe('id');
   });
 
   it('renders the field name and type pill per row', () => {

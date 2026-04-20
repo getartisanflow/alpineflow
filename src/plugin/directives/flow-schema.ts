@@ -112,6 +112,25 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       source.setAttribute('x-flow-handle:source.right', JSON.stringify(field.name));
       row.appendChild(source);
 
+      // Mirror handles — invisible, non-interactive copies of the real
+      // target/source on the OPPOSITE side of the row. They share the same
+      // (id, type) with their real counterparts so the edge-geometry picker
+      // (see flow-edge.ts `pickClosestHandle`) can route an edge to whichever
+      // side is physically closer to the other endpoint. CSS gives them
+      // `visibility: hidden; pointer-events: none`, but they remain in the
+      // layout so `getBoundingClientRect` returns a measurable position.
+      const mirrorTarget = document.createElement('div');
+      mirrorTarget.className =
+        'flow-schema-handle flow-schema-handle--target flow-schema-handle--mirror';
+      mirrorTarget.setAttribute('x-flow-handle:target.right', JSON.stringify(field.name));
+      row.appendChild(mirrorTarget);
+
+      const mirrorSource = document.createElement('div');
+      mirrorSource.className =
+        'flow-schema-handle flow-schema-handle--source flow-schema-handle--mirror';
+      mirrorSource.setAttribute('x-flow-handle:source.left', JSON.stringify(field.name));
+      row.appendChild(mirrorSource);
+
       return row;
     };
 

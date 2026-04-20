@@ -112,11 +112,32 @@ export function createDomMixin(ctx: CanvasContext, Alpine: any) {
           labelPos = result.labelPosition;
         } else {
           const container = ctx._container as Element;
+          // Compute screen-space centers of each endpoint node ONCE so the
+          // handle-geometry picker (schema-node mirrors etc.) can pick the
+          // side closer to the opposing endpoint.
+          let sourceCenter: { x: number; y: number } | undefined;
+          let targetCenter: { x: number; y: number } | undefined;
+          if (container) {
+            const srcEl = container.querySelector(
+              `[data-flow-node-id="${CSS.escape(edge.source)}"]`,
+            ) as HTMLElement | null;
+            const tgtEl = container.querySelector(
+              `[data-flow-node-id="${CSS.escape(edge.target)}"]`,
+            ) as HTMLElement | null;
+            if (srcEl) {
+              const r = srcEl.getBoundingClientRect();
+              sourceCenter = { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
+            }
+            if (tgtEl) {
+              const r = tgtEl.getBoundingClientRect();
+              targetCenter = { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
+            }
+          }
           const srcPos = container
-            ? resolveHandlePosition(container, edge.source, edge.sourceHandle, 'source', rawSource)
+            ? resolveHandlePosition(container, edge.source, edge.sourceHandle, 'source', rawSource, targetCenter)
             : (rawSource?.sourcePosition ?? 'bottom');
           const tgtPos = container
-            ? resolveHandlePosition(container, edge.target, edge.targetHandle, 'target', rawTarget)
+            ? resolveHandlePosition(container, edge.target, edge.targetHandle, 'target', rawTarget, sourceCenter)
             : (rawTarget?.targetPosition ?? 'top');
           srcCoords = getHandleCoords(sourceNode, srcPos, ctx._shapeRegistry, ctx._config.nodeOrigin);
           tgtCoords = getHandleCoords(targetNode, tgtPos, ctx._shapeRegistry, ctx._config.nodeOrigin);

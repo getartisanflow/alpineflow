@@ -9,7 +9,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
-import type { FlowEdge, FlowNode, HandlePosition, HandleType, Rect, Connection } from '../../core/types';
+import type { FlowEdge, FlowNode, HandlePosition, HandleType, Rect, Connection, XYPosition } from '../../core/types';
 import type { MarkerType, MarkerConfig } from '../../core/markers';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { normalizeMarker, getMarkerId } from '../../core/markers';
@@ -80,7 +80,58 @@ function rotateHandlePos(position: HandlePosition, rotation: number | undefined)
 }
 
 /**
+ * Return the center point of a DOMRect in screen coordinates.
+ * Used with `pickClosestHandle` to disambiguate same-(id,type) handles.
+ */
+function rectCenter(r: DOMRect): XYPosition {
+  return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
+}
+
+/**
+ * Pick the handle element whose center is geometrically closest to
+ * `opposingCenter` (the OTHER endpoint's screen-space rect center).
+ *
+ * Used when a node has multiple handles sharing the same (id, type) — for
+ * example schema nodes, which stamp a real left-side target plus an
+ * invisible right-side mirror per row. The picker lets the edge route to
+ * whichever side is physically closer, avoiding edges that jump to the
+ * far side of the node when the source is repositioned.
+ *
+ * NOTE: `opposingCenter` is expected in SCREEN coordinates (from a
+ * `getBoundingClientRect` center), matching the space the handle rects
+ * live in here. When it's not available, falls back to the first match.
+ */
+function pickClosestHandle(
+  handles: NodeListOf<Element> | Element[],
+  opposingCenter: XYPosition | undefined,
+): Element | null {
+  const list = Array.from(handles);
+  if (list.length === 0) return null;
+  if (list.length === 1 || !opposingCenter) return list[0];
+  let best: Element | null = null;
+  let bestDist = Infinity;
+  for (const h of list) {
+    const r = (h as HTMLElement).getBoundingClientRect();
+    const cx = (r.left + r.right) / 2;
+    const cy = (r.top + r.bottom) / 2;
+    const dx = cx - opposingCenter.x;
+    const dy = cy - opposingCenter.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < bestDist) {
+      bestDist = d2;
+      best = h;
+    }
+  }
+  return best;
+}
+
+/**
  * Look up a handle's declared position from the DOM.
+ *
+ * When multiple handles share the same (id, type) — e.g. schema-node rows
+ * with mirror handles on the opposite side — `opposingCenter` (the other
+ * endpoint's screen-space rect center) is used to pick the one closest to
+ * that endpoint. Without `opposingCenter`, the first match wins.
  */
 export function resolveHandlePosition(
   container: Element,
@@ -88,6 +139,7 @@ export function resolveHandlePosition(
   handleId: string | undefined,
   handleType: 'source' | 'target',
   node?: FlowNode,
+  opposingCenter?: XYPosition,
 ): HandlePosition {
   const nodeEl = container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`);
   if (nodeEl) {
@@ -96,10 +148,16 @@ export function resolveHandlePosition(
     // handle id — without the type filter, querySelector grabs whichever
     // appears first in the DOM and the edge lands on the wrong side.
     if (handleId) {
-      const handleEl =
-        nodeEl.querySelector(
-          `[data-flow-handle-id="${CSS.escape(handleId)}"][data-flow-handle-type="${handleType}"]`,
-        ) ?? nodeEl.querySelector(`[data-flow-handle-id="${CSS.escape(handleId)}"]`);
+      const typed = nodeEl.querySelectorAll(
+        `[data-flow-handle-id="${CSS.escape(handleId)}"][data-flow-handle-type="${handleType}"]`,
+      );
+      let handleEl = pickClosestHandle(typed, opposingCenter);
+      if (!handleEl) {
+        const untyped = nodeEl.querySelectorAll(
+          `[data-flow-handle-id="${CSS.escape(handleId)}"]`,
+        );
+        handleEl = pickClosestHandle(untyped, opposingCenter);
+      }
       if (handleEl) {
         return (handleEl.getAttribute('data-flow-handle-position') as HandlePosition)
           ?? (handleType === 'source' ? 'bottom' : 'top');
@@ -143,6 +201,11 @@ interface HandleMeasurement {
  * Converts the handle's screen position directly via the container rect
  * and viewport, so CSS transforms (e.g. rotation) are correctly accounted for.
  * Returns null if the handle element cannot be found.
+ *
+ * When a node has multiple handles sharing the same (id, type) — e.g.
+ * schema-node rows with opposite-side mirror handles — `opposingCenter`
+ * (the OTHER endpoint's screen-space rect center) is used to pick the
+ * geometrically closest match. Without it, the first match wins.
  */
 function measureHandleCoords(
   container: Element,
@@ -152,6 +215,7 @@ function measureHandleCoords(
   handleType: 'source' | 'target',
   zoom: number,
   viewport: { x: number; y: number },
+  opposingCenter?: XYPosition,
 ): HandleMeasurement | null {
   const nodeEl = container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`) as HTMLElement | null;
   if (!nodeEl) return null;
@@ -160,13 +224,20 @@ function measureHandleCoords(
 
   if (handleId) {
     // 1. Try exact handle ID scoped to the correct type (schema-style nodes
-    //    have same-id target + source per row; type disambiguates). Fall back
-    //    to id-only for backward compat with nodes that only have one handle
-    //    per id.
-    handleEl =
-      nodeEl.querySelector(
-        `[data-flow-handle-id="${CSS.escape(handleId)}"][data-flow-handle-type="${handleType}"]`,
-      ) ?? nodeEl.querySelector(`[data-flow-handle-id="${CSS.escape(handleId)}"]`);
+    //    have same-id target + source per row; type disambiguates). When
+    //    multiple match (e.g. real + mirror), pick the geometrically closest
+    //    to the opposing endpoint. Fall back to id-only for backward compat
+    //    with nodes that only have one handle per id.
+    const typed = nodeEl.querySelectorAll(
+      `[data-flow-handle-id="${CSS.escape(handleId)}"][data-flow-handle-type="${handleType}"]`,
+    );
+    handleEl = pickClosestHandle(typed, opposingCenter) as HTMLElement | null;
+    if (!handleEl) {
+      const untyped = nodeEl.querySelectorAll(
+        `[data-flow-handle-id="${CSS.escape(handleId)}"]`,
+      );
+      handleEl = pickClosestHandle(untyped, opposingCenter) as HTMLElement | null;
+    }
     // 2. If not found, try a handle on the same side (for condensed nodes)
     if (!handleEl) {
       const side = inferSideFromHandleId(handleId);
@@ -919,8 +990,21 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           lastTgtCoords = { x: floating.tx, y: floating.ty };
         } else {
           // ── Standard: resolve from handle elements ──
-          sourcePos = resolveHandlePosition(container, edge.source, edge.sourceHandle, 'source', rawSource);
-          targetPos = resolveHandlePosition(container, edge.target, edge.targetHandle, 'target', rawTarget);
+          // Compute screen-space centers of each endpoint node ONCE so the
+          // handle-geometry picker (for nodes with same-(id,type) mirrors,
+          // e.g. schema rows) can choose whichever side of the node is
+          // physically closer to the OPPOSING endpoint.
+          const sourceNodeEl = container.querySelector(
+            `[data-flow-node-id="${CSS.escape(edge.source)}"]`,
+          ) as HTMLElement | null;
+          const targetNodeEl = container.querySelector(
+            `[data-flow-node-id="${CSS.escape(edge.target)}"]`,
+          ) as HTMLElement | null;
+          const sourceCenter = sourceNodeEl ? rectCenter(sourceNodeEl.getBoundingClientRect()) : undefined;
+          const targetCenter = targetNodeEl ? rectCenter(targetNodeEl.getBoundingClientRect()) : undefined;
+
+          sourcePos = resolveHandlePosition(container, edge.source, edge.sourceHandle, 'source', rawSource, targetCenter);
+          targetPos = resolveHandlePosition(container, edge.target, edge.targetHandle, 'target', rawTarget, sourceCenter);
 
           // Read zoom/viewport from the raw object to avoid creating a reactive
           // dependency on viewport.zoom.  Edge paths are in flow-space and
@@ -936,8 +1020,8 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           sourcePos = rotateHandlePos(sourcePos, srcRotation);
           targetPos = rotateHandlePos(targetPos, tgtRotation);
 
-          srcMeasurement = measureHandleCoords(container, edge.source, sourceNode, edge.sourceHandle, 'source', zoom, rawViewport);
-          tgtMeasurement = measureHandleCoords(container, edge.target, targetNode, edge.targetHandle, 'target', zoom, rawViewport);
+          srcMeasurement = measureHandleCoords(container, edge.source, sourceNode, edge.sourceHandle, 'source', zoom, rawViewport, targetCenter);
+          tgtMeasurement = measureHandleCoords(container, edge.target, targetNode, edge.targetHandle, 'target', zoom, rawViewport, sourceCenter);
 
           // Cache handle center coords for reconnection hit-detection
           const fallbackSrc = getHandleCoords(sourceNode, sourcePos, canvas._shapeRegistry, canvas._config?.nodeOrigin);
