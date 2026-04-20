@@ -166,3 +166,7 @@ When a connection is rejected because of a limit, the target handle receives the
     background: orange;
 }
 ```
+
+## See also
+
+For async server-gated validation — checking a server for duplicates, policy, or rate limits before committing an edge — see the [Connect Validator](../guides/connect-validator.md) guide.

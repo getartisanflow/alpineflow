@@ -295,7 +295,7 @@ The `isValidConnection` callback provides a final custom check after all built-i
 }">
 ```
 
-This runs as the last step in the validation chain, after connectable flags, cycle prevention, duplicate checks, handle limits, and handle validators.
+This runs as the last synchronous step in the validation chain, after connectable flags, cycle prevention, duplicate checks, handle limits, and handle validators. For async server-gated validation, see the [Connect Validator](../guides/connect-validator.md) guide.
 
 Try connecting to the "Blocked" node — the connection will be rejected:
 
