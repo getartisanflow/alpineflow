@@ -27,7 +27,36 @@ function dispatchSchema(canvas: any, type: string, detail: Record<string, any>):
     if (!el || typeof (el as any).dispatchEvent !== 'function') {
         return;
     }
-    el.dispatchEvent(new CustomEvent(type, { detail, bubbles: true }));
+    // Listener atomicity: a throwing listener must not abort this function
+    // mid-mutation. State has already been updated; we intentionally do NOT
+    // roll back, because a partial rollback would leave a different half-state.
+    //
+    // Per DOM spec, most environments catch listener exceptions inside
+    // dispatchEvent and surface them via `window.onerror` (or ErrorEvent). We
+    // install a one-shot capturing error listener so we see the throw, log it,
+    // and prevent it from bubbling to a noisy default handler. We also wrap
+    // dispatchEvent itself in try/catch for engines that propagate directly.
+    const captured: unknown[] = [];
+    const win: any = typeof window !== 'undefined' ? window : undefined;
+    const onError = (event: ErrorEvent) => {
+        captured.push(event.error ?? event.message);
+        event.preventDefault();
+    };
+    if (win && typeof win.addEventListener === 'function') {
+        win.addEventListener('error', onError, true);
+    }
+    try {
+        el.dispatchEvent(new CustomEvent(type, { detail, bubbles: true }));
+    } catch (err) {
+        captured.push(err);
+    } finally {
+        if (win && typeof win.removeEventListener === 'function') {
+            win.removeEventListener('error', onError, true);
+        }
+    }
+    for (const err of captured) {
+        console.error('[alpineflow/schema] listener threw while handling', type, err);
+    }
 }
 
 function findNode(canvas: any, nodeId: string): any | null {
@@ -132,7 +161,8 @@ export function renameField(canvas: any, nodeId: string, oldName: string, newNam
         dispatchSchema(canvas, 'schema:edges-cascaded', {
             nodeId,
             fieldName: newName,
-            cascadedEdgeIds: cascadedIds,
+            edgeIds: cascadedIds,
+            operation: 'rename',
         });
     }
 
@@ -173,7 +203,8 @@ export function removeField(canvas: any, nodeId: string, fieldName: string): Rem
         dispatchSchema(canvas, 'schema:edges-cascaded', {
             nodeId,
             fieldName,
-            droppedEdgeIds: droppedIds,
+            edgeIds: droppedIds,
+            operation: 'remove',
         });
     }
 
@@ -185,13 +216,23 @@ export function removeField(canvas: any, nodeId: string, fieldName: string): Rem
  * be a permutation of the existing field names — otherwise `mismatch`.
  */
 export function reorderFields(canvas: any, nodeId: string, order: string[]): ReorderFieldsOpResult {
+    if (!Array.isArray(order)) {
+        return { applied: false, reason: 'mismatch' };
+    }
+    // Reject duplicate names in the supplied order explicitly — don't rely on
+    // set-size comparison below, which fails open if node.data.fields somehow
+    // already contains duplicates.
+    if (new Set(order).size !== order.length) {
+        return { applied: false, reason: 'mismatch' };
+    }
+
     const node = findNode(canvas, nodeId);
     if (!node) {
         return { applied: false, reason: 'no-node' };
     }
     const fields: any[] = node.data?.fields ?? [];
 
-    if (!Array.isArray(order) || order.length !== fields.length) {
+    if (order.length !== fields.length) {
         return { applied: false, reason: 'mismatch' };
     }
     const existingNames = new Set(fields.map((f: any) => f.name));
