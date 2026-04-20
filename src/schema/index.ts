@@ -15,9 +15,10 @@ import type { Alpine } from 'alpinejs';
 import { registerAddon } from '../core/registry';
 import { addField, renameField, removeField, reorderFields } from './field-ops';
 import { inferReferences } from './references';
+import { schemaToJSON, schemaFromJSON } from './serialization';
 
 export * from './types';
-export { addField, renameField, removeField, reorderFields, inferReferences };
+export { addField, renameField, removeField, reorderFields, inferReferences, schemaToJSON, schemaFromJSON };
 
 export default function registerSchemaAddon(_Alpine: Alpine): void {
     registerAddon('schema', {
@@ -42,6 +43,12 @@ export default function registerSchemaAddon(_Alpine: Alpine): void {
             };
             canvas.inferReferences = function () {
                 return inferReferences(this.nodes ?? []);
+            };
+            canvas.schemaToJSON = function () {
+                return schemaToJSON(this);
+            };
+            canvas.schemaFromJSON = function (json: any) {
+                return schemaFromJSON(this, json);
             };
         },
     });
