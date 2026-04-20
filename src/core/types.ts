@@ -1763,3 +1763,37 @@ export interface FlowInstance {
    *  Useful beyond drops: context menus, tooltips, custom pointer interactions. */
   getNodeAtPoint(clientX: number, clientY: number): FlowNode | null;
 }
+
+/**
+ * A single field (row) in a schema node. Each field renders as one row with
+ * a labelled target handle on the left and a labelled source handle on the right.
+ * Handle ids equal `field.name` — edges between schema nodes carry
+ * sourceHandle + targetHandle values that match field names.
+ */
+export interface FlowSchemaField {
+  /** Field name. Used as the handle id so edges can reference it. */
+  name: string;
+
+  /** Display type, e.g. 'uuid', 'text', 'int4', 'timestamp'. Rendered as a pill. */
+  type: string;
+
+  /** Optional key role — renders with .flow-schema-row--pk or --fk. */
+  key?: 'primary' | 'foreign';
+
+  /** Optional required flag — renders with .flow-schema-row--required. */
+  required?: boolean;
+
+  /** Optional icon — an emoji or CSS class name rendered before the field name. */
+  icon?: string;
+}
+
+/**
+ * Shape the x-flow-schema directive expects on `node.data`. Your node data
+ * doesn't have to implement this type — any shape with `label: string` and
+ * `fields: FlowSchemaField[]` works.
+ */
+export interface SchemaNodeData {
+  label: string;
+  fields: FlowSchemaField[];
+  [key: string]: unknown;
+}
