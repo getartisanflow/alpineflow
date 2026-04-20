@@ -1183,8 +1183,15 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         );
 
         // ── Markers ──────────────────────────────────────────────
+        // When `_renderDualMarker` is set (bidirectional-edge collapse has
+        // picked this edge as the primary of a reciprocal pair), mirror the
+        // end marker onto the start so one path carries arrows at both ends.
         if (edge.markerStart) {
           const cfg = normalizeMarker(edge.markerStart);
+          const id = getMarkerId(cfg, canvas._id);
+          pathEl.setAttribute('marker-start', `url(#${id})`);
+        } else if (edge._renderDualMarker && edge.markerEnd) {
+          const cfg = normalizeMarker(edge.markerEnd);
           const id = getMarkerId(cfg, canvas._id);
           pathEl.setAttribute('marker-start', `url(#${id})`);
         } else {

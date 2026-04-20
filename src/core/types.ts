@@ -416,6 +416,22 @@ export interface FlowEdge<T = Record<string, any>> {
 
   /** Whether to always show control point handles (vs only when selected). Default: false */
   showControlPoints?: boolean;
+
+  /**
+   * @internal Set by the bidirectional-edge collapse pass when this edge is
+   * the primary side of a reciprocal pair. Causes the renderer to apply
+   * `marker-start` (mirroring `marker-end`) so a single path carries arrows
+   * at both ends. Not intended for user consumption.
+   */
+  _renderDualMarker?: boolean;
+
+  /**
+   * @internal Set by the bidirectional-edge collapse pass when this edge is
+   * the mirror side of a reciprocal pair. Causes the renderer to hide the
+   * edge's SVG (its partner draws the dual-marker pair). Not intended for
+   * user consumption.
+   */
+  _hiddenByCollapse?: boolean;
 }
 
 /** Runtime check: does `obj` look like a FlowNode? */
@@ -889,6 +905,12 @@ export interface FlowCanvasConfig {
   /** Default edge type applied to edges that don't specify their own `type`.
    *  Resolution: edge.type ?? canvas.defaultEdgeType ?? 'bezier'. Applies to both initial config edges and runtime-created edges. */
   defaultEdgeType?: EdgeType;
+
+  /** When true, pairs of reciprocal edges (A→B + B→A) render as a single
+   *  dual-marker path. The mirror edge is hidden from rendering; the primary
+   *  edge gains a `marker-start` attribute mirroring its `marker-end`.
+   *  Both edges still exist in `canvas.edges` — only rendering changes. Default: false */
+  collapseBidirectionalEdges?: boolean;
 
   /** Default invisible hit area width for edges. Default: 20 */
   defaultInteractionWidth?: number;
