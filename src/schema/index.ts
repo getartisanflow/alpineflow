@@ -14,9 +14,10 @@
 import type { Alpine } from 'alpinejs';
 import { registerAddon } from '../core/registry';
 import { addField, renameField, removeField, reorderFields } from './field-ops';
+import { inferReferences } from './references';
 
 export * from './types';
-export { addField, renameField, removeField, reorderFields };
+export { addField, renameField, removeField, reorderFields, inferReferences };
 
 export default function registerSchemaAddon(_Alpine: Alpine): void {
     registerAddon('schema', {
@@ -38,6 +39,9 @@ export default function registerSchemaAddon(_Alpine: Alpine): void {
             };
             canvas.reorderFields = function (nodeId: string, order: string[]) {
                 return reorderFields(this, nodeId, order);
+            };
+            canvas.inferReferences = function () {
+                return inferReferences(this.nodes ?? []);
             };
         },
     });
