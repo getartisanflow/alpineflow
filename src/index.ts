@@ -32,6 +32,7 @@ import { registerFlowAnimateDirective } from './plugin/directives/flow-animate';
 import { registerFlowTimelineDirective } from './plugin/directives/flow-timeline';
 import { registerFlowCollapseDirective } from './plugin/directives/flow-collapse';
 import { registerFlowCondenseDirective } from './plugin/directives/flow-condense';
+import { registerFlowSchemaDirective } from './plugin/directives/flow-schema';
 import { registerFlowRowSelectDirective } from './plugin/directives/flow-row-select';
 import { registerFlowDetailDirective } from './plugin/directives/flow-detail';
 import { registerFlowDevtoolsDirective } from './plugin/directives/flow-devtools';
@@ -97,6 +98,7 @@ export default function AlpineFlow(Alpine: Alpine) {
   registerFlowSnapshotDirective(Alpine);
   registerFlowLoadingDirective(Alpine);
   registerFlowEdgeToolbarDirective(Alpine);
+  registerFlowSchemaDirective(Alpine);
 
   // Magics
   registerFlowMagic(Alpine);
