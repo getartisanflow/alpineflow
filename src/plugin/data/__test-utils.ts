@@ -32,6 +32,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     isInteractive: true,
     pendingConnection: null,
     _pendingReconnection: null,
+    _pendingKeyboardConnect: null,
 
     // === Selection state ===
     selectedNodes: new Set<string>(),

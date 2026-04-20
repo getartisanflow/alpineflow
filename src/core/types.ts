@@ -501,6 +501,16 @@ export interface PendingReconnection {
   position: XYPosition;
 }
 
+/**
+ * Keyboard-armed pending connection — set when a source handle is
+ * activated via Enter/Space while `keyboardConnect` is enabled, and
+ * cleared when Escape fires or a target handle completes the connection.
+ */
+export interface PendingKeyboardConnect {
+  sourceNodeId: string;
+  sourceHandleId: string;
+}
+
 /** Props passed to the custom connection line renderer. */
 export interface ConnectionLineProps {
   fromX: number;

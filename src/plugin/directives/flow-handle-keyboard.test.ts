@@ -253,6 +253,70 @@ describe('keyboard drag-to-connect: Escape cancels pending state', () => {
     expect(sourceA.classList.contains('flow-handle-connect-pending')).toBe(false);
     expect(capturedEdges.length).toBe(0);
   });
+
+  it('attaches only ONE Escape listener per container, regardless of handle count', () => {
+    // Count 'keydown' listener attachments on the container element. With N
+    // handles in a single .flow-container we should still only ever get ONE
+    // shared Escape listener — not one per handle — otherwise Escape would
+    // trigger clearPending N times (and bigger canvases accumulate listeners
+    // on Alpine re-init / Livewire morphing).
+    clearChildren(document.body);
+    const host = document.createElement('div');
+    host.classList.add('flow-container');
+
+    let keydownListenerCount = 0;
+    const origAdd = host.addEventListener.bind(host);
+    host.addEventListener = ((type: string, ...rest: any[]) => {
+      if (type === 'keydown') keydownListenerCount += 1;
+      return origAdd(type, ...(rest as [any, any?]));
+    }) as any;
+
+    const canvas = {
+      edges: [] as FlowEdge[],
+      _edgeMap: new Map(),
+      _nodeMap: new Map(),
+      selectedNodes: new Set<string>(),
+      pendingConnection: null as any,
+      _pendingReconnection: null as any,
+      _connectValidating: false,
+      _animationLocked: false,
+      _config: { keyboardConnect: true },
+      _container: host,
+      _announcer: null,
+      viewport: { x: 0, y: 0, zoom: 1 },
+      getNode(id: string) { return { id, connectable: true }; },
+      addEdges() {},
+      _emit() {},
+      _captureHistory() {},
+      screenToFlowPosition() { return { x: 0, y: 0 }; },
+    };
+    (window as any).canvasScope = () => canvas;
+    host.setAttribute('x-data', 'canvasScope()');
+
+    // Mount 4 handles (2 nodes × source+target) inside the same container
+    for (const id of ['a', 'b']) {
+      const nodeEl = document.createElement('div');
+      nodeEl.setAttribute('x-flow-node', '');
+      nodeEl.dataset.flowNodeId = id;
+      nodeEl.setAttribute('data-flow-node-id', id);
+      const src = document.createElement('div');
+      src.setAttribute('x-flow-handle:source', '');
+      src.dataset.flowHandleId = 'source';
+      nodeEl.appendChild(src);
+      const tgt = document.createElement('div');
+      tgt.setAttribute('x-flow-handle:target', '');
+      tgt.dataset.flowHandleId = 'target';
+      nodeEl.appendChild(tgt);
+      host.appendChild(nodeEl);
+    }
+
+    document.body.appendChild(host);
+    mountedHosts.push(host);
+    Alpine.initTree(host);
+
+    // Exactly one keydown listener on the container (the shared Escape handler)
+    expect(keydownListenerCount).toBe(1);
+  });
 });
 
 describe('keyboard drag-to-connect: validator pipeline respected', () => {

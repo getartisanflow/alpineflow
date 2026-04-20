@@ -15,7 +15,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
-import type { HandleType, HandlePosition, FlowEdge, FlowNode, Connection, XYPosition } from '../../core/types';
+import type { HandleType, HandlePosition, FlowEdge, FlowNode, Connection, XYPosition, PendingKeyboardConnect } from '../../core/types';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { isValidConnection, checkConnectionRules } from '../../core/connections';
 import { debug } from '../../core/debug';
@@ -27,6 +27,23 @@ import { createConnectionLine, findSnapTarget, startConnectionAutoPan, type Conn
 import { isConnectable } from '../../core/node-flags';
 
 let edgeIdCounter = 0;
+
+/**
+ * Per-container Escape listener registry for keyboard drag-to-connect.
+ *
+ * A canvas may contain N handles (N nodes × 2), and each handle's init used
+ * to attach its own keydown listener to the shared `.flow-container`. On a
+ * 10-node canvas that's 20 duplicate listeners — plus accumulation each time
+ * a handle re-inits (x-if toggles, Livewire morphing, etc.).
+ *
+ * Instead we share ONE keydown listener per container, refcounted by the
+ * number of keyboard-enabled handles currently bound. The first handle to
+ * init attaches; subsequent handles bump the count; the last to clean up
+ * removes the listener. Kept module-local so it lives alongside the
+ * directive it serves and does not leak into the public canvas surface.
+ */
+type ContainerEscEntry = { count: number; handler: (e: KeyboardEvent) => void };
+const containerEscListeners = new WeakMap<HTMLElement, ContainerEscEntry>();
 
 /**
  * Run per-handle validators for a connection.
@@ -652,7 +669,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
           el.setAttribute('role', 'button');
           el.setAttribute('aria-label', `${type} handle ${handleId}`);
 
-          const clearPending = (canvas: any) => {
+          const clearPending = (canvas: { _pendingKeyboardConnect?: PendingKeyboardConnect | null } | null | undefined) => {
             const prev = canvas?._pendingKeyboardConnect;
             if (!prev) return;
             const containerEl = el.closest('.flow-container') as HTMLElement | null;
@@ -662,7 +679,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
               );
               (prevEl as HTMLElement | null)?.classList.remove('flow-handle-connect-pending');
             }
-            canvas._pendingKeyboardConnect = null;
+            if (canvas) canvas._pendingKeyboardConnect = null;
           };
 
           const onKeyDown = (e: KeyboardEvent) => {
@@ -739,20 +756,50 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
 
           el.addEventListener('keydown', onKeyDown);
 
-          // Global Escape listener on the canvas container (not document) so
-          // we don't hijack keys on other focusable apps on the page.
+          // Shared Escape listener on the canvas container (not document) so
+          // we don't hijack keys on other focusable apps on the page. Only one
+          // listener is attached per container regardless of how many handles
+          // init — see `containerEscListeners` at the top of this module.
           const containerEl = el.closest('.flow-container') as HTMLElement | null;
-          const onContainerEscape = (e: KeyboardEvent) => {
-            if (e.key !== 'Escape') return;
-            const canvas = getCanvas();
-            if (!canvas?._pendingKeyboardConnect) return;
-            clearPending(canvas);
-          };
-          containerEl?.addEventListener('keydown', onContainerEscape);
+          if (containerEl) {
+            const existing = containerEscListeners.get(containerEl);
+            if (existing) {
+              existing.count += 1;
+            } else {
+              const handler = (e: KeyboardEvent) => {
+                if (e.key !== 'Escape') return;
+                // Look up the canvas fresh each fire — the container outlives
+                // any individual handle, so closing over `getCanvas()` (which
+                // closes over `el`) would leak if that handle is torn down.
+                const canvasEl =
+                  containerEl.matches('[x-data]')
+                    ? containerEl
+                    : (containerEl.closest('[x-data]') as HTMLElement | null)
+                      ?? (containerEl.querySelector('[x-data]') as HTMLElement | null);
+                if (!canvasEl) return;
+                const canvas = Alpine.$data(canvasEl) as
+                  | { _pendingKeyboardConnect?: PendingKeyboardConnect | null }
+                  | null;
+                if (!canvas?._pendingKeyboardConnect) return;
+                clearPending(canvas);
+              };
+              containerEl.addEventListener('keydown', handler);
+              containerEscListeners.set(containerEl, { count: 1, handler });
+            }
+          }
 
           keyboardBindingsCleanup = () => {
             el.removeEventListener('keydown', onKeyDown);
-            containerEl?.removeEventListener('keydown', onContainerEscape);
+            if (containerEl) {
+              const entry = containerEscListeners.get(containerEl);
+              if (entry) {
+                entry.count -= 1;
+                if (entry.count <= 0) {
+                  containerEl.removeEventListener('keydown', entry.handler);
+                  containerEscListeners.delete(containerEl);
+                }
+              }
+            }
             el.removeAttribute('tabindex');
             el.removeAttribute('role');
             el.removeAttribute('aria-label');
