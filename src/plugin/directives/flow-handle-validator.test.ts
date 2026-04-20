@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach } from 'vitest';
 import { runConnectValidator, applyReconnectValidation } from './flow-handle';
+import { resolveEdgeBodyReconnect } from './flow-edge';
 import type { Connection, FlowEdge } from '../../core/types';
 
 // jsdom doesn't implement CSS.escape — minimal polyfill for simple IDs
@@ -10,6 +11,17 @@ beforeAll(() => {
   }
   if (typeof CSS.escape !== 'function') {
     CSS.escape = (value: string) => String(value);
+  }
+});
+
+// Track any container appended to document.body by buildReconnectDom so tests
+// don't leak stale node DOM into sibling tests (previous handles/edges would
+// still be queryable otherwise).
+const reconnectDomContainers: HTMLElement[] = [];
+afterEach(() => {
+  while (reconnectDomContainers.length > 0) {
+    const el = reconnectDomContainers.pop();
+    el?.remove();
   }
 });
 
@@ -259,6 +271,7 @@ function buildReconnectDom(nodeIds: string[]): HTMLElement {
     container.appendChild(nodeEl);
   }
   document.body.appendChild(container);
+  reconnectDomContainers.push(container);
   return container;
 }
 
@@ -391,5 +404,200 @@ describe('applyReconnectValidation', () => {
     expect(result.applied).toBe(true);
     expect(edge.target).toBe('n2');
     expect(edge.targetHandle).toBe('id');
+  });
+});
+
+// ─── Edge-body reconnect wiring ────────────────────────────────────────────
+//
+// The second reconnect path: user grabs the edge LINE (not the handle pip) and
+// drags either end to a new handle. flow-edge.ts's onPointerUp extracts this
+// drop resolution into `resolveEdgeBodyReconnect`, which must route through
+// `applyReconnectValidation` so the async connectValidator always gates both
+// the source-end and target-end reconnects.
+
+describe('resolveEdgeBodyReconnect', () => {
+  it('rejects a target-end edge-body reconnect when connectValidator resolves allowed:false and leaves the edge unchanged', async () => {
+    const containerEl = buildReconnectDom(['n1', 'n-original', 'n2']);
+    const edge: FlowEdge = {
+      id: 'e1',
+      source: 'n1',
+      sourceHandle: 'source',
+      target: 'n-original',
+      targetHandle: 'target',
+    };
+    const canvas = makeCanvasWithValidator(
+      async () => ({ allowed: false, reason: 'not-allowed' }),
+      [edge],
+    );
+
+    const rejected: any[] = [];
+    containerEl.addEventListener('flow-connect-rejected', (e: any) => rejected.push(e.detail));
+
+    const result = await resolveEdgeBodyReconnect({
+      dropNodeId: 'n2',
+      dropHandleId: 'id',
+      draggedEnd: 'target',
+      edge,
+      canvas,
+      containerEl,
+    });
+
+    expect(result.applied).toBe(false);
+    expect(result.reason).toBe('not-allowed');
+
+    // Edge endpoint is unchanged
+    expect(edge.target).toBe('n-original');
+    expect(edge.targetHandle).toBe('target');
+
+    // Rejection event fires with the would-be connection
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reason).toBe('not-allowed');
+    expect(rejected[0].target).toBe('n2');
+    expect(rejected[0].targetHandle).toBe('id');
+  });
+
+  it('rejects a source-end edge-body reconnect when connectValidator resolves allowed:false and leaves the edge unchanged', async () => {
+    const containerEl = buildReconnectDom(['n-original-source', 'n-target', 'n-new-source']);
+    const edge: FlowEdge = {
+      id: 'e1',
+      source: 'n-original-source',
+      sourceHandle: 'source',
+      target: 'n-target',
+      targetHandle: 'target',
+    };
+    const canvas = makeCanvasWithValidator(
+      async () => ({ allowed: false, reason: 'source-rejected' }),
+      [edge],
+    );
+
+    const rejected: any[] = [];
+    containerEl.addEventListener('flow-connect-rejected', (e: any) => rejected.push(e.detail));
+
+    const result = await resolveEdgeBodyReconnect({
+      dropNodeId: 'n-new-source',
+      dropHandleId: 'source',
+      draggedEnd: 'source',
+      edge,
+      canvas,
+      containerEl,
+    });
+
+    expect(result.applied).toBe(false);
+    expect(result.reason).toBe('source-rejected');
+
+    // Source endpoint is unchanged
+    expect(edge.source).toBe('n-original-source');
+    expect(edge.sourceHandle).toBe('source');
+
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reason).toBe('source-rejected');
+    expect(rejected[0].source).toBe('n-new-source');
+  });
+
+  it('applies a target-end edge-body reconnect when connectValidator resolves allowed:true', async () => {
+    const containerEl = buildReconnectDom(['n1', 'n-original', 'n2']);
+    const edge: FlowEdge = {
+      id: 'e1',
+      source: 'n1',
+      sourceHandle: 'source',
+      target: 'n-original',
+      targetHandle: 'target',
+    };
+    const canvas = makeCanvasWithValidator(async () => true, [edge]);
+
+    const emitted: Array<{ name: string; payload: any }> = [];
+    canvas._emit = (name: string, payload: any) => emitted.push({ name, payload });
+
+    const result = await resolveEdgeBodyReconnect({
+      dropNodeId: 'n2',
+      dropHandleId: 'id',
+      draggedEnd: 'target',
+      edge,
+      canvas,
+      containerEl,
+    });
+
+    expect(result.applied).toBe(true);
+    expect(edge.target).toBe('n2');
+    expect(edge.targetHandle).toBe('id');
+
+    // Emits `reconnect` with oldEdge + newConnection so consumers can react
+    const reconnectEmit = emitted.find((e) => e.name === 'reconnect');
+    expect(reconnectEmit).toBeDefined();
+    expect(reconnectEmit?.payload.oldEdge.target).toBe('n-original');
+    expect(reconnectEmit?.payload.newConnection.target).toBe('n2');
+  });
+
+  it('returns { applied: false } without invoking the validator when there is no drop node', async () => {
+    const containerEl = buildReconnectDom(['n1', 'n2']);
+    const edge: FlowEdge = {
+      id: 'e1',
+      source: 'n1',
+      sourceHandle: 'source',
+      target: 'n2',
+      targetHandle: 'target',
+    };
+    let validatorCalls = 0;
+    const canvas = makeCanvasWithValidator(async () => {
+      validatorCalls++;
+      return true;
+    }, [edge]);
+
+    const result = await resolveEdgeBodyReconnect({
+      dropNodeId: undefined,
+      dropHandleId: undefined,
+      draggedEnd: 'target',
+      edge,
+      canvas,
+      containerEl,
+    });
+
+    expect(result.applied).toBe(false);
+    expect(validatorCalls).toBe(0);
+    // Edge is untouched
+    expect(edge.target).toBe('n2');
+    expect(edge.targetHandle).toBe('target');
+  });
+
+  it('returns { applied: false } without invoking the validator when the drop node is not connectable', async () => {
+    const containerEl = buildReconnectDom(['n1', 'n-original', 'n-unconnectable']);
+    const edge: FlowEdge = {
+      id: 'e1',
+      source: 'n1',
+      sourceHandle: 'source',
+      target: 'n-original',
+      targetHandle: 'target',
+    };
+    let validatorCalls = 0;
+    const canvas: any = {
+      edges: [edge],
+      getNode: (id: string) => ({
+        id,
+        connectable: id !== 'n-unconnectable',
+      }),
+      _nodeMap: new Map(),
+      _config: {
+        connectValidator: async () => {
+          validatorCalls++;
+          return true;
+        },
+      },
+      _connectValidating: false,
+      _captureHistory: () => {},
+      _emit: () => {},
+    };
+
+    const result = await resolveEdgeBodyReconnect({
+      dropNodeId: 'n-unconnectable',
+      dropHandleId: 'id',
+      draggedEnd: 'target',
+      edge,
+      canvas,
+      containerEl,
+    });
+
+    expect(result.applied).toBe(false);
+    expect(validatorCalls).toBe(0);
+    expect(edge.target).toBe('n-original');
   });
 });
