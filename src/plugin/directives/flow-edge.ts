@@ -91,9 +91,15 @@ export function resolveHandlePosition(
 ): HandlePosition {
   const nodeEl = container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`);
   if (nodeEl) {
-    // Try exact handle ID first
+    // Try exact handle ID scoped to the correct type. Schema nodes and other
+    // "row-per-field" layouts have a source + target on each row with the same
+    // handle id — without the type filter, querySelector grabs whichever
+    // appears first in the DOM and the edge lands on the wrong side.
     if (handleId) {
-      const handleEl = nodeEl.querySelector(`[data-flow-handle-id="${CSS.escape(handleId)}"]`);
+      const handleEl =
+        nodeEl.querySelector(
+          `[data-flow-handle-id="${CSS.escape(handleId)}"][data-flow-handle-type="${handleType}"]`,
+        ) ?? nodeEl.querySelector(`[data-flow-handle-id="${CSS.escape(handleId)}"]`);
       if (handleEl) {
         return (handleEl.getAttribute('data-flow-handle-position') as HandlePosition)
           ?? (handleType === 'source' ? 'bottom' : 'top');
@@ -153,8 +159,14 @@ function measureHandleCoords(
   let handleEl: HTMLElement | null = null;
 
   if (handleId) {
-    // 1. Try exact handle ID
-    handleEl = nodeEl.querySelector(`[data-flow-handle-id="${CSS.escape(handleId)}"]`);
+    // 1. Try exact handle ID scoped to the correct type (schema-style nodes
+    //    have same-id target + source per row; type disambiguates). Fall back
+    //    to id-only for backward compat with nodes that only have one handle
+    //    per id.
+    handleEl =
+      nodeEl.querySelector(
+        `[data-flow-handle-id="${CSS.escape(handleId)}"][data-flow-handle-type="${handleType}"]`,
+      ) ?? nodeEl.querySelector(`[data-flow-handle-id="${CSS.escape(handleId)}"]`);
     // 2. If not found, try a handle on the same side (for condensed nodes)
     if (!handleEl) {
       const side = inferSideFromHandleId(handleId);

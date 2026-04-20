@@ -42,8 +42,11 @@ export function runHandleValidators(
     `[data-flow-node-id="${CSS.escape(connection.source)}"]`,
   );
   if (sourceNodeEl) {
-    const sourceHandleEl = sourceNodeEl.querySelector(
-      `[data-flow-handle-id="${CSS.escape(connection.sourceHandle ?? 'source')}"]`,
+    const sh = connection.sourceHandle ?? 'source';
+    const sourceHandleEl = (
+      sourceNodeEl.querySelector(
+        `[data-flow-handle-id="${CSS.escape(sh)}"][data-flow-handle-type="source"]`,
+      ) ?? sourceNodeEl.querySelector(`[data-flow-handle-id="${CSS.escape(sh)}"]`)
     ) as HTMLElement | null;
     if (sourceHandleEl?.[HANDLE_VALIDATE_KEY]) {
       if (!sourceHandleEl[HANDLE_VALIDATE_KEY]!(connection)) return false;
@@ -55,8 +58,11 @@ export function runHandleValidators(
     `[data-flow-node-id="${CSS.escape(connection.target)}"]`,
   );
   if (targetNodeEl) {
-    const targetHandleEl = targetNodeEl.querySelector(
-      `[data-flow-handle-id="${CSS.escape(connection.targetHandle ?? 'target')}"]`,
+    const th = connection.targetHandle ?? 'target';
+    const targetHandleEl = (
+      targetNodeEl.querySelector(
+        `[data-flow-handle-id="${CSS.escape(th)}"][data-flow-handle-type="target"]`,
+      ) ?? targetNodeEl.querySelector(`[data-flow-handle-id="${CSS.escape(th)}"]`)
     ) as HTMLElement | null;
     if (targetHandleEl?.[HANDLE_VALIDATE_KEY]) {
       if (!targetHandleEl[HANDLE_VALIDATE_KEY]!(connection)) return false;
@@ -80,8 +86,11 @@ export function checkHandleLimits(
     `[data-flow-node-id="${CSS.escape(connection.source)}"]`,
   );
   if (sourceNodeEl) {
-    const sourceHandleEl = sourceNodeEl.querySelector(
-      `[data-flow-handle-id="${CSS.escape(connection.sourceHandle ?? 'source')}"]`,
+    const sh = connection.sourceHandle ?? 'source';
+    const sourceHandleEl = (
+      sourceNodeEl.querySelector(
+        `[data-flow-handle-id="${CSS.escape(sh)}"][data-flow-handle-type="source"]`,
+      ) ?? sourceNodeEl.querySelector(`[data-flow-handle-id="${CSS.escape(sh)}"]`)
     ) as HTMLElement | null;
     if (sourceHandleEl?.[HANDLE_LIMIT_KEY]) {
       const count = edges.filter(
@@ -96,8 +105,11 @@ export function checkHandleLimits(
     `[data-flow-node-id="${CSS.escape(connection.target)}"]`,
   );
   if (targetNodeEl) {
-    const targetHandleEl = targetNodeEl.querySelector(
-      `[data-flow-handle-id="${CSS.escape(connection.targetHandle ?? 'target')}"]`,
+    const th = connection.targetHandle ?? 'target';
+    const targetHandleEl = (
+      targetNodeEl.querySelector(
+        `[data-flow-handle-id="${CSS.escape(th)}"][data-flow-handle-type="target"]`,
+      ) ?? targetNodeEl.querySelector(`[data-flow-handle-id="${CSS.escape(th)}"]`)
     ) as HTMLElement | null;
     if (targetHandleEl?.[HANDLE_LIMIT_KEY]) {
       const count = edges.filter(
