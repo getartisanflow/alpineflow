@@ -5,16 +5,40 @@
 // Register: `Alpine.plugin(Schema)`
 //
 // Capabilities are added in Tasks 9–12:
-//   - Field CRUD with edge cascade   (Task 9)
+//   - Field CRUD with edge cascade   (Task 9)   ← landed
 //   - inferReferences()              (Task 10)
 //   - schemaToJSON / schemaFromJSON  (Task 11)
 //   - Three-scope inspector scaffold (Task 12)
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
+import { registerAddon } from '../core/registry';
+import { addField, renameField, removeField, reorderFields } from './field-ops';
 
 export * from './types';
+export { addField, renameField, removeField, reorderFields };
 
 export default function registerSchemaAddon(_Alpine: Alpine): void {
-    // Populated by Tasks 9–12.
+    registerAddon('schema', {
+        setup(canvas: any) {
+            // Use the canvas container as the DOM event target so listeners
+            // bound via @schema-* attributes on the container fire naturally.
+            if (!canvas.el && canvas._container) {
+                canvas.el = canvas._container;
+            }
+
+            canvas.addField = function (nodeId: string, field: any) {
+                return addField(this, nodeId, field);
+            };
+            canvas.renameField = function (nodeId: string, oldName: string, newName: string) {
+                return renameField(this, nodeId, oldName, newName);
+            };
+            canvas.removeField = function (nodeId: string, fieldName: string) {
+                return removeField(this, nodeId, fieldName);
+            };
+            canvas.reorderFields = function (nodeId: string, order: string[]) {
+                return reorderFields(this, nodeId, order);
+            };
+        },
+    });
 }
