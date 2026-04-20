@@ -1,7 +1,17 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
-import { runConnectValidator } from './flow-handle';
-import type { Connection } from '../../core/types';
+import { describe, it, expect, beforeAll } from 'vitest';
+import { runConnectValidator, applyReconnectValidation } from './flow-handle';
+import type { Connection, FlowEdge } from '../../core/types';
+
+// jsdom doesn't implement CSS.escape — minimal polyfill for simple IDs
+beforeAll(() => {
+  if (typeof globalThis.CSS === 'undefined') {
+    (globalThis as any).CSS = {};
+  }
+  if (typeof CSS.escape !== 'function') {
+    CSS.escape = (value: string) => String(value);
+  }
+});
 
 const conn = (overrides: Partial<Connection> = {}): Connection => ({
   source: 'a',
@@ -213,5 +223,173 @@ describe('runConnectValidator', () => {
     );
     expect(starts).toHaveLength(1);
     expect(ends).toHaveLength(1);
+  });
+});
+
+// ─── Reconnect validator wiring ───────────────────────────────────────────
+//
+// Reconnect = user drags the endpoint of an existing edge to a new handle.
+// The async connectValidator has to run in this path, same as initial connect.
+
+/**
+ * Build a minimal container + nodes + handles DOM scaffold for reconnect tests.
+ */
+function buildReconnectDom(nodeIds: string[]): HTMLElement {
+  const container = document.createElement('div');
+  container.classList.add('flow-container');
+  for (const id of nodeIds) {
+    const nodeEl = document.createElement('div');
+    nodeEl.setAttribute('x-flow-node', '');
+    nodeEl.dataset.flowNodeId = id;
+    // Source handle
+    const src = document.createElement('div');
+    src.dataset.flowHandleId = 'source';
+    src.dataset.flowHandleType = 'source';
+    nodeEl.appendChild(src);
+    // Target handle
+    const tgt = document.createElement('div');
+    tgt.dataset.flowHandleId = 'target';
+    tgt.dataset.flowHandleType = 'target';
+    nodeEl.appendChild(tgt);
+    // Extra named target handle used for specific reconnect drops
+    const idHandle = document.createElement('div');
+    idHandle.dataset.flowHandleId = 'id';
+    idHandle.dataset.flowHandleType = 'target';
+    nodeEl.appendChild(idHandle);
+    container.appendChild(nodeEl);
+  }
+  document.body.appendChild(container);
+  return container;
+}
+
+/**
+ * Build a minimal canvas-like object matching what applyReconnectValidation reads.
+ */
+function makeCanvasWithValidator(
+  validator: ((c: Connection) => any) | undefined,
+  edges: FlowEdge[] = [],
+) {
+  const canvas: any = {
+    edges,
+    getNode: (id: string) => ({ id, connectable: true }),
+    _nodeMap: new Map(),
+    _config: {
+      connectValidator: validator,
+    },
+    _connectValidating: false,
+    _captureHistory: () => {},
+    _emit: () => {},
+  };
+  return canvas;
+}
+
+describe('applyReconnectValidation', () => {
+  it('runs connectValidator when reconnecting an edge endpoint and leaves the edge unchanged on rejection', async () => {
+    const containerEl = buildReconnectDom(['n1', 'n-original', 'n2']);
+    const edge: FlowEdge = {
+      id: 'e1',
+      source: 'n1',
+      sourceHandle: 'source',
+      target: 'n-original',
+      targetHandle: 'target',
+    };
+    const canvas = makeCanvasWithValidator(
+      async () => ({ allowed: false, reason: 'nope' }),
+      [edge],
+    );
+
+    const rejected: any[] = [];
+    const validated: any[] = [];
+    containerEl.addEventListener('flow-connect-validated', (e: any) => validated.push(e.detail));
+    containerEl.addEventListener('flow-connect-rejected', (e: any) => rejected.push(e.detail));
+
+    const result = await applyReconnectValidation({
+      edge,
+      newConnection: {
+        source: 'n1',
+        sourceHandle: 'source',
+        target: 'n2',
+        targetHandle: 'id',
+      },
+      canvas,
+      containerEl,
+    });
+
+    expect(result.applied).toBe(false);
+    expect(result.reason).toBe('nope');
+
+    // Edge target is still the original target
+    const lookup = canvas.edges.find((e: FlowEdge) => e.id === 'e1');
+    expect(lookup.target).toBe('n-original');
+    expect(lookup.targetHandle).toBe('target');
+
+    // Validator lifecycle event fired
+    expect(validated).toHaveLength(1);
+    expect(validated[0].allowed).toBe(false);
+    expect(validated[0].reason).toBe('nope');
+
+    // Rejected event fires with the rejected connection + reason
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reason).toBe('nope');
+    expect(rejected[0].source).toBe('n1');
+    expect(rejected[0].target).toBe('n2');
+    expect(rejected[0].sourceHandle).toBe('source');
+    expect(rejected[0].targetHandle).toBe('id');
+  });
+
+  it('applies the reconnect and mutates the edge when connectValidator resolves allowed:true', async () => {
+    const containerEl = buildReconnectDom(['n1', 'n-original', 'n2']);
+    const edge: FlowEdge = {
+      id: 'e1',
+      source: 'n1',
+      sourceHandle: 'source',
+      target: 'n-original',
+      targetHandle: 'target',
+    };
+    const canvas = makeCanvasWithValidator(async () => true, [edge]);
+
+    const result = await applyReconnectValidation({
+      edge,
+      newConnection: {
+        source: 'n1',
+        sourceHandle: 'source',
+        target: 'n2',
+        targetHandle: 'id',
+      },
+      canvas,
+      containerEl,
+    });
+
+    expect(result.applied).toBe(true);
+    expect(edge.target).toBe('n2');
+    expect(edge.targetHandle).toBe('id');
+  });
+
+  it('applies the reconnect when no connectValidator is configured (unchanged behavior)', async () => {
+    const containerEl = buildReconnectDom(['n1', 'n-original', 'n2']);
+    const edge: FlowEdge = {
+      id: 'e1',
+      source: 'n1',
+      sourceHandle: 'source',
+      target: 'n-original',
+      targetHandle: 'target',
+    };
+    const canvas = makeCanvasWithValidator(undefined, [edge]);
+
+    const result = await applyReconnectValidation({
+      edge,
+      newConnection: {
+        source: 'n1',
+        sourceHandle: 'source',
+        target: 'n2',
+        targetHandle: 'id',
+      },
+      canvas,
+      containerEl,
+    });
+
+    expect(result.applied).toBe(true);
+    expect(edge.target).toBe('n2');
+    expect(edge.targetHandle).toBe('id');
   });
 });

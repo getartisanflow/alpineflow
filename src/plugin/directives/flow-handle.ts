@@ -245,6 +245,97 @@ export async function runConnectValidator(
 }
 
 /**
+ * Validate + apply an edge-endpoint reconnect.
+ *
+ * Runs the same validator chain as drag-to-connect (sync `isValidConnection`,
+ * `connectionRules`, handle limits, per-handle validators, global
+ * `isValidConnection`, then the async `connectValidator`). On success mutates
+ * the edge in place (`edge.target`, `edge.targetHandle` — or the source pair
+ * when `endpoint === 'source'`) and captures history. On rejection leaves the
+ * edge unchanged and dispatches a `flow-connect-rejected` CustomEvent on
+ * `containerEl` with the offending `{source, target, sourceHandle, targetHandle,
+ * reason}` so consumers can show their own UI.
+ *
+ * Extracted so it can be unit-tested without simulating pointer drags.
+ */
+export async function applyReconnectValidation(params: {
+  edge: FlowEdge;
+  newConnection: Connection;
+  canvas: any;
+  containerEl: HTMLElement;
+  endpoint?: HandleType;
+}): Promise<{ applied: boolean; reason?: string }> {
+  const { edge, newConnection, canvas, containerEl } = params;
+  const endpoint: HandleType = params.endpoint ?? 'target';
+
+  const otherEdges = (canvas.edges as FlowEdge[]).filter(
+    (e: FlowEdge) => e.id !== edge.id,
+  );
+
+  const reject = (reason?: string): { applied: false; reason?: string } => {
+    containerEl.dispatchEvent(new CustomEvent('flow-connect-rejected', {
+      detail: {
+        source: newConnection.source,
+        target: newConnection.target,
+        sourceHandle: newConnection.sourceHandle,
+        targetHandle: newConnection.targetHandle,
+        reason,
+      },
+      bubbles: true,
+    }));
+    return { applied: false, reason };
+  };
+
+  // ── Sync chain ─────────────────────────────────────────────────────────
+  if (!isValidConnection(newConnection, otherEdges, { preventCycles: canvas._config?.preventCycles })) {
+    return reject();
+  }
+  if (!checkConnectionRules(newConnection, canvas._config?.connectionRules, canvas._nodeMap)) {
+    return reject();
+  }
+  if (!checkHandleLimits(containerEl, newConnection, otherEdges)) {
+    return reject();
+  }
+  if (!runHandleValidators(containerEl, newConnection)) {
+    return reject();
+  }
+  if (canvas._config?.isValidConnection && !canvas._config.isValidConnection(newConnection)) {
+    return reject();
+  }
+
+  // ── Async validator gate ───────────────────────────────────────────────
+  const asyncValidator = canvas._config?.connectValidator;
+  if (asyncValidator) {
+    const validatingClass = canvas._config?.validatingHandleClass ?? 'flow-handle-validating';
+    const { sourceEl, targetEl } = findHandleElements(containerEl, newConnection);
+    canvas._connectValidating = true;
+    let asyncResult: { allowed: boolean; reason?: string };
+    try {
+      asyncResult = await runConnectValidator(
+        asyncValidator, newConnection, sourceEl, targetEl, containerEl, validatingClass,
+      );
+    } finally {
+      canvas._connectValidating = false;
+    }
+    if (!asyncResult.allowed) {
+      return reject(asyncResult.reason);
+    }
+  }
+
+  // ── Apply — mutate the edge in place so Alpine reactivity picks up ────
+  canvas._captureHistory?.();
+  if (endpoint === 'source') {
+    edge.source = newConnection.source;
+    edge.sourceHandle = newConnection.sourceHandle;
+  } else {
+    edge.target = newConnection.target;
+    edge.targetHandle = newConnection.targetHandle;
+  }
+
+  return { applied: true };
+}
+
+/**
  * Resolve the source + target handle DOM elements for a connection within a
  * container. Returns null for any handle it cannot locate. Used by the
  * drag-to-connect + reconnect paths so the async validator can pulse both
@@ -1416,11 +1507,14 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             canvas._pendingReconnection = null;
           };
 
-          const onPointerUp = (upE: PointerEvent) => {
+          const onPointerUp = async (upE: PointerEvent) => {
             if (!dragging) {
               cleanupReconnection();
               return;
             }
+
+            // Guard against overlapping drops while an async connectValidator is pending.
+            if (canvas._connectValidating) return;
 
             // Use snapped handle if available, otherwise fall back to elementFromPoint
             let targetHandleEl: HTMLElement | null = snappedHandle;
@@ -1446,32 +1540,21 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                     targetHandle: dropHandleId,
                   };
 
-                  // Filter out current edge from duplicate check
-                  const otherEdges = canvas.edges.filter(
-                    (e: FlowEdge) => e.id !== connectedEdge.id,
-                  );
+                  const oldEdge = { ...connectedEdge };
+                  const result = await applyReconnectValidation({
+                    edge: connectedEdge,
+                    newConnection,
+                    canvas,
+                    containerEl,
+                    endpoint: 'target',
+                  });
 
-                  if (isValidConnection(newConnection, otherEdges, { preventCycles: canvas._config?.preventCycles })) {
-                    if (!checkConnectionRules(newConnection, canvas._config?.connectionRules, canvas._nodeMap)) {
-                      debug('reconnect', 'Reconnection rejected (connection rules)', newConnection);
-                    } else if (!checkHandleLimits(containerEl, newConnection, otherEdges)) {
-                      debug('reconnect', 'Reconnection rejected (handle limit)', newConnection);
-                    } else if (!runHandleValidators(containerEl, newConnection)) {
-                      debug('reconnect', 'Reconnection rejected (per-handle validator)', newConnection);
-                    } else if (!canvas._config?.isValidConnection || canvas._config.isValidConnection(newConnection)) {
-                      const oldEdge = { ...connectedEdge };
-
-                      // Capture history before mutation
-                      canvas._captureHistory?.();
-
-                      // Mutate in place (Alpine reactivity picks up changes)
-                      connectedEdge.target = newConnection.target;
-                      connectedEdge.targetHandle = newConnection.targetHandle;
-
-                      successful = true;
-                      debug('reconnect', `Edge "${connectedEdge.id}" reconnected (target)`, newConnection);
-                      canvas._emit('reconnect', { oldEdge, newConnection });
-                    }
+                  if (result.applied) {
+                    successful = true;
+                    debug('reconnect', `Edge "${connectedEdge.id}" reconnected (target)`, newConnection);
+                    canvas._emit('reconnect', { oldEdge, newConnection });
+                  } else {
+                    debug('reconnect', 'Reconnection rejected', { connection: newConnection, reason: result.reason });
                   }
                 }
               }
