@@ -250,14 +250,14 @@ export function dispatchConnectRejected(
     reason: detail.reason,
   };
 
-  // Discoverable log — always fires, even on sync rejections without a reason.
+  if (!containerEl) return;
+
   if (detail.reason !== undefined) {
     console.warn('[alpineflow] connection rejected:', detail.reason);
   } else {
     console.warn('[alpineflow] connection rejected');
   }
 
-  if (!containerEl) return;
   containerEl.dispatchEvent(new CustomEvent('flow-connect-rejected', {
     detail: eventDetail,
     bubbles: true,
