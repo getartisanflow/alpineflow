@@ -935,6 +935,28 @@ export interface FlowCanvasConfig {
   isValidConnection?: (connection: Connection) => boolean;
 
   /**
+   * Optional async validator run BEFORE an edge is committed on drop.
+   * Return true to allow, false to silently reject, or
+   * { allowed: false, reason: string } to reject with a toast-worthy reason.
+   *
+   * While the returned promise is pending, AlpineFlow adds
+   * .flow-handle-validating to both the source and target handle elements and
+   * dispatches a `flow-connect-validating` DOM event on the canvas container.
+   * When the promise resolves, a `flow-connect-validated` event fires with
+   * detail: { connection, allowed, reason }.
+   *
+   * Run ordering: synchronous `isValidConnection` runs first (cheap reject).
+   * Only if it passes does `connectValidator` run.
+   */
+  connectValidator?: (connection: Connection) => Promise<boolean | { allowed: boolean; reason?: string }>;
+
+  /**
+   * CSS class added to source + target handles during `connectValidator`
+   * execution. Default: 'flow-handle-validating'.
+   */
+  validatingHandleClass?: string;
+
+  /**
    * Canvas-level connection rules based on node type.
    * Runs BEFORE per-handle validators — both must pass for a connection to be accepted.
    *

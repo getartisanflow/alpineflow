@@ -194,6 +194,91 @@ export function clearValidationClasses(containerEl: HTMLElement): void {
   }
 }
 
+/**
+ * Run the optional async `connectValidator` gate.
+ *
+ * Returns { allowed: true } when no validator is configured. Otherwise:
+ *   - Adds `validatingClass` to the source + target handle elements.
+ *   - Dispatches a `flow-connect-validating` CustomEvent on `containerEl`.
+ *   - Awaits the validator (thrown errors become `{ allowed: false }`).
+ *   - Removes the class and dispatches `flow-connect-validated` with detail
+ *     `{ connection, allowed, reason }`.
+ *
+ * Extracted so it can be unit-tested without simulating pointer drags.
+ */
+export async function runConnectValidator(
+  validator: ((conn: Connection) => Promise<boolean | { allowed: boolean; reason?: string }>) | undefined,
+  connection: Connection,
+  sourceEl: Element | null,
+  targetEl: Element | null,
+  containerEl: Element,
+  validatingClass: string,
+): Promise<{ allowed: boolean; reason?: string }> {
+  if (!validator) return { allowed: true };
+
+  sourceEl?.classList.add(validatingClass);
+  targetEl?.classList.add(validatingClass);
+  containerEl.dispatchEvent(new CustomEvent('flow-connect-validating', {
+    detail: { connection },
+    bubbles: true,
+  }));
+
+  let result: boolean | { allowed: boolean; reason?: string };
+  try {
+    result = await validator(connection);
+  } catch (err) {
+    debug('connection', 'connectValidator threw', err);
+    result = false;
+  } finally {
+    sourceEl?.classList.remove(validatingClass);
+    targetEl?.classList.remove(validatingClass);
+  }
+
+  const allowed = typeof result === 'boolean' ? result : !!result?.allowed;
+  const reason = typeof result === 'object' && result && 'reason' in result ? result.reason : undefined;
+  containerEl.dispatchEvent(new CustomEvent('flow-connect-validated', {
+    detail: { connection, allowed, reason },
+    bubbles: true,
+  }));
+
+  return { allowed, reason };
+}
+
+/**
+ * Resolve the source + target handle DOM elements for a connection within a
+ * container. Returns null for any handle it cannot locate. Used by the
+ * drag-to-connect + reconnect paths so the async validator can pulse both
+ * sides of the pending edge.
+ */
+function findHandleElements(
+  containerEl: HTMLElement,
+  connection: Connection,
+): { sourceEl: HTMLElement | null; targetEl: HTMLElement | null } {
+  const sourceNodeEl = containerEl.querySelector(
+    `[data-flow-node-id="${CSS.escape(connection.source)}"]`,
+  );
+  const sh = connection.sourceHandle ?? 'source';
+  const sourceEl = (
+    sourceNodeEl?.querySelector(
+      `[data-flow-handle-id="${CSS.escape(sh)}"][data-flow-handle-type="source"]`,
+    ) ?? sourceNodeEl?.querySelector(`[data-flow-handle-id="${CSS.escape(sh)}"]`)
+    ?? null
+  ) as HTMLElement | null;
+
+  const targetNodeEl = containerEl.querySelector(
+    `[data-flow-node-id="${CSS.escape(connection.target)}"]`,
+  );
+  const th = connection.targetHandle ?? 'target';
+  const targetEl = (
+    targetNodeEl?.querySelector(
+      `[data-flow-handle-id="${CSS.escape(th)}"][data-flow-handle-type="target"]`,
+    ) ?? targetNodeEl?.querySelector(`[data-flow-handle-id="${CSS.escape(th)}"]`)
+    ?? null
+  ) as HTMLElement | null;
+
+  return { sourceEl, targetEl };
+}
+
 export function registerFlowHandleDirective(Alpine: Alpine) {
   Alpine.directive(
     'flow-handle',
@@ -641,12 +726,15 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             connectAutoPan?.updatePointer(moveEvent.clientX, moveEvent.clientY);
           };
 
-          const onPointerUp = (upEvent: PointerEvent) => {
+          const onPointerUp = async (upEvent: PointerEvent) => {
             connectAutoPan?.stop();
             connectAutoPan = null;
             document.removeEventListener('pointermove', onPointerMove);
             document.removeEventListener('pointerup', onPointerUp);
             activeConnectionCleanup = null;
+
+            // Guard against overlapping drops while an async connectValidator is pending.
+            if (canvas._connectValidating) return;
 
             if (multiConnectMode) {
               const dropPosition = canvas.screenToFlowPosition(upEvent.clientX, upEvent.clientY);
@@ -823,6 +911,28 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                     return;
                   }
 
+                  // Async validator gate
+                  const asyncValidator = canvas._config?.connectValidator;
+                  if (asyncValidator) {
+                    const validatingClass = canvas._config?.validatingHandleClass ?? 'flow-handle-validating';
+                    const { sourceEl, targetEl } = findHandleElements(containerEl, connection);
+                    canvas._connectValidating = true;
+                    let asyncResult: { allowed: boolean; reason?: string };
+                    try {
+                      asyncResult = await runConnectValidator(
+                        asyncValidator, connection, sourceEl, targetEl, containerEl, validatingClass,
+                      );
+                    } finally {
+                      canvas._connectValidating = false;
+                    }
+                    if (!asyncResult.allowed) {
+                      debug('connection', 'Connection rejected (async connectValidator)', { connection, reason: asyncResult.reason });
+                      canvas._emit('connect-end', { connection: null, ...connectEndBase });
+                      canvas.pendingConnection = null;
+                      return;
+                    }
+                  }
+
                   const edgeId = `e-${sourceNodeId}-${targetNodeId}-${Date.now()}-${edgeIdCounter++}`;
                   canvas.addEdges({ id: edgeId, ...connection });
                   debug('connection', `Connection created: ${sourceNodeId} → ${targetNodeId}`, connection);
@@ -965,10 +1075,11 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
         el.addEventListener('pointerleave', onPointerLeave);
 
         // ── Target handle: click to complete click-to-connect ──────
-        const onTargetClick = (e: MouseEvent) => {
+        const onTargetClick = async (e: MouseEvent) => {
           const canvas = getCanvas();
           if (!canvas?.pendingConnection) return;
           if (canvas._config?.connectOnClick === false) return;
+          if (canvas._connectValidating) return;
 
           e.preventDefault();
           e.stopPropagation();
@@ -1039,6 +1150,30 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
               canvas._container?.classList.remove('flow-connecting');
               if (clickContainerEl) clearValidationClasses(clickContainerEl);
               return;
+            }
+
+            // Async validator gate
+            const asyncValidator = canvas._config?.connectValidator;
+            if (asyncValidator && clickContainerEl) {
+              const validatingClass = canvas._config?.validatingHandleClass ?? 'flow-handle-validating';
+              const { sourceEl, targetEl } = findHandleElements(clickContainerEl, connection);
+              canvas._connectValidating = true;
+              let asyncResult: { allowed: boolean; reason?: string };
+              try {
+                asyncResult = await runConnectValidator(
+                  asyncValidator, connection, sourceEl, targetEl, clickContainerEl, validatingClass,
+                );
+              } finally {
+                canvas._connectValidating = false;
+              }
+              if (!asyncResult.allowed) {
+                debug('connection', 'Click-to-connect rejected (async connectValidator)', { connection, reason: asyncResult.reason });
+                canvas._emit('connect-end', { connection: null, ...connectEndBase });
+                canvas.pendingConnection = null;
+                canvas._container?.classList.remove('flow-connecting');
+                clearValidationClasses(clickContainerEl);
+                return;
+              }
             }
 
             const edgeId = `e-${connection.source}-${connection.target}-${Date.now()}-${edgeIdCounter++}`;
