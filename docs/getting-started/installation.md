@@ -83,6 +83,7 @@ AlpineFlow's core is lightweight. Layout engines, collaboration, and whiteboard 
 | Tree layout | `@getartisanflow/alpineflow/hierarchy` | `d3-hierarchy` |
 | ELK layout | `@getartisanflow/alpineflow/elk` | `elkjs` |
 | Whiteboard | `@getartisanflow/alpineflow/whiteboard` | — |
+| Schema designer | `@getartisanflow/alpineflow/schema` | — |
 | Collaboration | `@getartisanflow/alpineflow/collab` | `yjs`, `y-websocket`, `y-protocols` |
 
 Example — adding dagre layout:

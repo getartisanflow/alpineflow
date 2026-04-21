@@ -22,6 +22,7 @@ import type {
   Dimensions,
   FlowCanvasConfig,
   PendingReconnection,
+  PendingKeyboardConnect,
   PatchableConfig,
 } from '../../core/types';
 import { createPanZoom, type PanZoomInstance } from '../../core/pan-zoom';
@@ -142,6 +143,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
     /** Currently active edge reconnection drag, or null */
     _pendingReconnection: null as PendingReconnection | null,
+
+    /** Keyboard-armed pending connection (source handle activated via Enter/Space), or null */
+    _pendingKeyboardConnect: null as PendingKeyboardConnect | null,
 
     /** Set of selected node IDs */
     selectedNodes: new Set<string>(),

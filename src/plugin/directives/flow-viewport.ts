@@ -14,6 +14,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
+import { detectBidirectionalPairs } from '../../core/bidirectional-edges';
 
 export function registerFlowViewportDirective(Alpine: Alpine) {
   Alpine.directive(
@@ -88,14 +89,47 @@ export function registerFlowViewportDirective(Alpine: Alpine) {
         const staticEdges = containerEl.querySelector('.flow-edges-static');
         if (staticEdges) staticEdges.remove();
 
+        // ── Bidirectional edge collapse ─────────────────────────────
+        // When enabled, reciprocal pairs (A→B + B→A) render as one path
+        // with markers at both ends. The mirror edge is hidden; the primary
+        // edge is tagged with `_renderDualMarker` so flow-edge.ts adds
+        // `marker-start`. Both edges remain in `canvas.edges`.
+        //
+        // Flags are written onto the live edge objects (guarded against
+        // no-op writes to avoid reactivity loops). When the option is off,
+        // existing flags are cleared so toggling behaves correctly.
+        const collapseOn = !!canvas._config?.collapseBidirectionalEdges;
+        const primaryIds = new Set<string>();
+        const mirrorIds = new Set<string>();
+        if (collapseOn) {
+          const pairs = detectBidirectionalPairs(
+            edges as { id: string; source: string; target: string }[],
+          );
+          for (const p of pairs) {
+            primaryIds.add(p.primaryId);
+            mirrorIds.add(p.mirrorId);
+          }
+        }
+
+        for (const edge of edges as { id: string; _renderDualMarker?: boolean; _hiddenByCollapse?: boolean }[]) {
+          const wantPrimary = primaryIds.has(edge.id);
+          const wantMirror = mirrorIds.has(edge.id);
+          if (!!edge._renderDualMarker !== wantPrimary) {
+            edge._renderDualMarker = wantPrimary ? true : undefined;
+          }
+          if (!!edge._hiddenByCollapse !== wantMirror) {
+            edge._hiddenByCollapse = wantMirror ? true : undefined;
+          }
+        }
+
         // Update edge visibility based on hidden flags
-        for (const edge of edges as { id: string; hidden?: boolean; source?: string; target?: string }[]) {
+        for (const edge of edges as { id: string; hidden?: boolean; source?: string; target?: string; _hiddenByCollapse?: boolean }[]) {
           const svg = edgeSvgMap.get(edge.id);
           if (!svg) continue;
 
           const sourceNode = canvas.getNode?.(edge.source);
           const targetNode = canvas.getNode?.(edge.target);
-          const isHidden = edge.hidden || sourceNode?.hidden || targetNode?.hidden;
+          const isHidden = edge.hidden || edge._hiddenByCollapse || sourceNode?.hidden || targetNode?.hidden;
 
           svg.style.display = isHidden ? 'none' : '';
         }

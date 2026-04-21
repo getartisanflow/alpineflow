@@ -60,6 +60,7 @@ export function createConnectionLine(config: {
   };
 
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'flow-connect-line');
   svg.style.cssText = 'position:absolute;top:0;left:0;width:1px;height:1px;overflow:visible;pointer-events:none;z-index:1000;';
 
   let currentChild: SVGElement | null = null;

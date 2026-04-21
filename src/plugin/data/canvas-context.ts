@@ -14,6 +14,7 @@ import type {
   Dimensions,
   FlowCanvasConfig,
   PendingReconnection,
+  PendingKeyboardConnect,
   AnimateTargets,
   AnimateOptions,
   FlowAnimationHandle,
@@ -117,6 +118,9 @@ export interface CanvasContext {
 
   /** Currently active edge reconnection drag, or null */
   _pendingReconnection: PendingReconnection | null;
+
+  /** Keyboard-armed pending connection (source handle activated via Enter/Space), or null */
+  _pendingKeyboardConnect: PendingKeyboardConnect | null;
 
   // === Selection state ===
 

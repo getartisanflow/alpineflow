@@ -102,3 +102,7 @@ The directive fully owns the node element's contents. For custom rendering, skip
 ```
 
 The handle ids + positions + per-row structure are the only things edge wiring cares about — everything else is yours.
+
+## See Also
+
+- [Schema Addon](../addons/schema.md) — field CRUD with edge cascade, reference inference, JSON serialization, and inspector directives built on top of this primitive

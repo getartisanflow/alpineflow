@@ -1,0 +1,130 @@
+// @vitest-environment jsdom
+// ============================================================================
+// x-schema-edge-inspector — Selected-edge scope exposure + default UI
+// ============================================================================
+
+import { describe, it, expect, beforeEach } from 'vitest';
+import Alpine from 'alpinejs';
+import registerSchemaAddon from '../index';
+import { registerEdgeInspectorDirective } from './edge-inspector';
+import { _resetRegistry } from '../../core/registry';
+
+function clearChildren(el: HTMLElement): void {
+    while (el.firstChild) {
+        el.removeChild(el.firstChild);
+    }
+}
+
+interface MountOptions {
+    withDefaultUi?: boolean;
+    children?: Array<Node>;
+    selectedEdgeId?: string | null;
+}
+
+function mount(options: MountOptions = {}) {
+    clearChildren(document.body);
+
+    const host = document.createElement('div');
+    host.setAttribute('x-data', 'canvas');
+
+    const inspector = document.createElement('aside');
+    inspector.setAttribute('x-schema-edge-inspector', '');
+    if (options.withDefaultUi) {
+        const tpl = document.createElement('template');
+        tpl.setAttribute('x-schema-default-ui', '');
+        inspector.appendChild(tpl);
+    }
+    if (options.children) {
+        for (const child of options.children) {
+            inspector.appendChild(child);
+        }
+    }
+    host.appendChild(inspector);
+
+    const selectedEdgeId = options.selectedEdgeId ?? null;
+
+    Alpine.data('canvas', () => ({
+        nodes: [
+            { id: 'user', position: { x: 0, y: 0 }, data: { label: 'User', fields: [] } },
+            { id: 'team', position: { x: 200, y: 0 }, data: { label: 'Team', fields: [] } },
+        ] as any[],
+        edges: [
+            { id: 'e1', source: 'user', target: 'team', label: 'belongs to' },
+            { id: 'e2', source: 'team', target: 'user' },
+        ] as any[],
+        selectedNodes: new Set<string>(),
+        selectedEdges: new Set<string>(selectedEdgeId ? [selectedEdgeId] : []),
+        selectedRows: new Set<string>(),
+        init() {
+            this.el = this.$el;
+            const addon = (globalThis as any).__alpineflow_registry__?.get('schema');
+            addon?.setup(this);
+        },
+    }));
+
+    document.body.appendChild(host);
+    Alpine.initTree(host);
+    return { host, inspector };
+}
+
+function makeEl(tag: string, attrs: Record<string, string> = {}): HTMLElement {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+        el.setAttribute(k, v);
+    }
+    return el;
+}
+
+beforeEach(() => {
+    _resetRegistry();
+    registerSchemaAddon({} as any);
+    registerEdgeInspectorDirective(Alpine);
+    if (!(Alpine as any).__started) {
+        Alpine.start();
+        (Alpine as any).__started = true;
+    }
+});
+
+describe('x-schema-edge-inspector directive', () => {
+    it('registers without throwing', () => {
+        expect(() => mount()).not.toThrow();
+    });
+
+    it('leaves host children untouched when no default-ui template is present', () => {
+        const custom = makeEl('p', { 'data-custom': '' });
+        custom.textContent = 'my edge ui';
+        const { inspector } = mount({ children: [custom] });
+        expect(inspector.querySelector('[data-custom]')!.textContent).toBe('my edge ui');
+    });
+
+    it('exposes inspector scope with the selected edge', () => {
+        const { inspector } = mount({ selectedEdgeId: 'e1' });
+        const scope = Alpine.$data(inspector) as any;
+        expect(scope.selectedEdge).toBeTruthy();
+        expect(scope.selectedEdge.id).toBe('e1');
+        expect(scope.selectedEdge.label).toBe('belongs to');
+    });
+
+    it('stamps minimal default UI with label + delete button when an edge is selected', () => {
+        const { inspector } = mount({ withDefaultUi: true, selectedEdgeId: 'e1' });
+        const text = inspector.textContent ?? '';
+        // The default UI includes a label input (or label display) and a delete control
+        expect(text.toLowerCase()).toContain('label');
+        expect(text.toLowerCase()).toMatch(/delete|remove/);
+    });
+
+    it('reactively updates selectedEdge when canvas.selectedEdges changes', async () => {
+        const { host, inspector } = mount({ withDefaultUi: true });
+        const canvas = Alpine.$data(host) as any;
+        canvas.selectedEdges.add('e2');
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        const scope = Alpine.$data(inspector) as any;
+        expect(scope.selectedEdge).toBeTruthy();
+        expect(scope.selectedEdge.id).toBe('e2');
+    });
+
+    it('renders an empty state message when no edge is selected (default-ui path)', () => {
+        const { inspector } = mount({ withDefaultUi: true });
+        expect((inspector.textContent ?? '').trim().length).toBeGreaterThan(0);
+    });
+});

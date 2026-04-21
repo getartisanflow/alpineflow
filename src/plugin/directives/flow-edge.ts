@@ -13,9 +13,8 @@ import type { FlowEdge, FlowNode, HandlePosition, HandleType, Rect, Connection, 
 import type { MarkerType, MarkerConfig } from '../../core/markers';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { normalizeMarker, getMarkerId } from '../../core/markers';
-import { isValidConnection } from '../../core/connections';
 import { isConnectable } from '../../core/node-flags';
-import { runHandleValidators, applyValidationClasses, clearValidationClasses, checkHandleLimits } from './flow-handle';
+import { applyValidationClasses, clearValidationClasses, applyReconnectValidation, setDragLineValidating } from './flow-handle';
 import {
   createConnectionLine,
   findSnapTarget,
@@ -37,6 +36,67 @@ import {
 import { matchesModifier } from '../../core/keyboard-shortcuts';
 
 const BLOCKED_ATTRS = new Set(['x-data', 'x-init', 'x-bind', 'href', 'src', 'action', 'formaction', 'srcdoc']);
+
+/**
+ * Resolve a drop target for an edge-body reconnect drag and route it through
+ * `applyReconnectValidation` so the async `connectValidator` gates the mutation
+ * exactly like the handle-pip reconnect path does.
+ *
+ * The caller (flow-edge's onPointerUp) computes `dropNodeId` + `dropHandleId`
+ * from the pointer event (snapped handle or elementFromPoint fallback); this
+ * function:
+ *
+ *   - short-circuits `applied: false` if there is no drop node, or the drop
+ *     node is not connectable (no validator call, no event emission — matches
+ *     the prior inline chain's "snap back silently" behavior)
+ *   - otherwise builds the `newConnection` based on `draggedEnd` and delegates
+ *     to `applyReconnectValidation` which owns the sync + async validator chain
+ *     plus mutation + `flow-connect-rejected` dispatch
+ *   - on success, emits `reconnect` with `{ oldEdge, newConnection }` so
+ *     listeners see the same payload they saw before the refactor
+ *
+ * Extracted so the edge-body reconnect path is unit-testable without
+ * simulating full pointer drags through SVG.
+ */
+export async function resolveEdgeBodyReconnect(params: {
+  dropNodeId: string | undefined;
+  dropHandleId: string | undefined;
+  draggedEnd: HandleType;
+  edge: FlowEdge;
+  canvas: any;
+  containerEl: HTMLElement;
+}): Promise<{ applied: boolean; reason?: string; newConnection?: Connection }> {
+  const { dropNodeId, dropHandleId, draggedEnd, edge, canvas, containerEl } = params;
+
+  if (!dropNodeId) {
+    return { applied: false };
+  }
+
+  const dropNode = canvas.getNode(dropNodeId);
+  if (dropNode && !isConnectable(dropNode)) {
+    return { applied: false };
+  }
+
+  const newConnection: Connection = draggedEnd === 'target'
+    ? { source: edge.source, sourceHandle: edge.sourceHandle, target: dropNodeId, targetHandle: dropHandleId }
+    : { source: dropNodeId, sourceHandle: dropHandleId, target: edge.target, targetHandle: edge.targetHandle };
+
+  const oldEdge = { ...edge };
+  const result = await applyReconnectValidation({
+    edge,
+    newConnection,
+    canvas,
+    containerEl,
+    endpoint: draggedEnd,
+  });
+
+  if (result.applied) {
+    canvas._emit?.('reconnect', { oldEdge, newConnection });
+    return { applied: true, newConnection };
+  }
+
+  return { applied: false, reason: result.reason, newConnection };
+}
 
 function resolveAnimationMode(animated: boolean | string | undefined): 'none' | 'dash' | 'pulse' | 'dot' {
   if (animated === true || animated === 'dash') return 'dash';
@@ -760,13 +820,16 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           canvas._pendingReconnection = null;
         };
 
-        const onPointerUp = (upE: PointerEvent) => {
+        const onPointerUp = async (upE: PointerEvent) => {
           if (!dragging) {
             // Below threshold — treat as click
             cleanupReconnection();
             handleEdgeClick(upE as unknown as MouseEvent);
             return;
           }
+
+          // Guard against overlapping drops while an async connectValidator is pending.
+          if (canvas._connectValidating) return;
 
           // Use snapped handle if available, otherwise fall back to elementFromPoint
           let handleEl: HTMLElement | null = snappedHandle;
@@ -786,51 +849,34 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
 
           const dropNodeId = nodeEl?.dataset.flowNodeId;
           const dropHandleId = handleEl?.dataset.flowHandleId;
-          let successful = false;
 
-          // Guard-clause chain: each condition must pass to proceed with reconnection
-          if (!dropNodeId) {
-            // No drop target — snap back
-          } else if ((() => { const dn = canvas.getNode(dropNodeId); return dn && !isConnectable(dn); })()) {
-            // Target node is not connectable
+          // Pulse the drag line while the async connectValidator (if any) awaits.
+          // The class is a no-op on sync paths — setDragLineValidating only
+          // adds/removes; the validator lifecycle inside applyReconnectValidation
+          // is synchronous when no validator is configured.
+          const dragLineEl = reconnectLineInstance?.svg ?? null;
+          setDragLineValidating(dragLineEl, true);
+          let result: Awaited<ReturnType<typeof resolveEdgeBodyReconnect>>;
+          try {
+            result = await resolveEdgeBodyReconnect({
+              dropNodeId,
+              dropHandleId,
+              draggedEnd: draggedEnd!,
+              edge,
+              canvas,
+              containerEl,
+            });
+          } finally {
+            setDragLineValidating(dragLineEl, false);
+          }
+
+          if (result.applied) {
+            debug('reconnect', `Edge "${edge.id}" reconnected (${draggedEnd})`, result.newConnection);
           } else {
-            const newConnection: Connection = draggedEnd === 'target'
-              ? { source: edge.source, sourceHandle: edge.sourceHandle, target: dropNodeId, targetHandle: dropHandleId }
-              : { source: dropNodeId, sourceHandle: dropHandleId, target: edge.target, targetHandle: edge.targetHandle };
-
-            const otherEdges = canvas.edges.filter((e: FlowEdge) => e.id !== edge.id);
-
-            if (!isValidConnection(newConnection, otherEdges, { preventCycles: canvas._config?.preventCycles })) {
-              debug('reconnect', 'Reconnection rejected (invalid connection)');
-            } else if (!checkHandleLimits(containerEl, newConnection, otherEdges)) {
-              debug('reconnect', 'Reconnection rejected (handle limit)');
-            } else if (!runHandleValidators(containerEl, newConnection)) {
-              debug('reconnect', 'Reconnection rejected (per-handle validator)');
-            } else if (canvas._config?.isValidConnection && !canvas._config.isValidConnection(newConnection)) {
-              debug('reconnect', 'Reconnection rejected (custom validator)');
-            } else {
-              const oldEdge = { ...edge };
-              canvas._captureHistory?.();
-
-              if (draggedEnd === 'target') {
-                edge.target = newConnection.target;
-                edge.targetHandle = newConnection.targetHandle;
-              } else {
-                edge.source = newConnection.source;
-                edge.sourceHandle = newConnection.sourceHandle;
-              }
-
-              successful = true;
-              debug('reconnect', `Edge "${edge.id}" reconnected (${draggedEnd})`, newConnection);
-              canvas._emit('reconnect', { oldEdge, newConnection });
-            }
+            debug('reconnect', `Edge "${edge.id}" reconnection cancelled — snapping back`, { reason: result.reason });
           }
 
-          if (!successful) {
-            debug('reconnect', `Edge "${edge.id}" reconnection cancelled — snapping back`);
-          }
-
-          canvas._emit('reconnect-end', { edge, successful });
+          canvas._emit('reconnect-end', { edge, successful: result.applied });
           cleanupReconnection();
         };
 
@@ -1137,8 +1183,15 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         );
 
         // ── Markers ──────────────────────────────────────────────
-        if (edge.markerStart) {
+        // When `_renderDualMarker` is set (bidirectional-edge collapse has
+        // picked this edge as the primary of a reciprocal pair), mirror the
+        // end marker onto the start so one path carries arrows at both ends.
+        if (edge.markerStart != null) {
           const cfg = normalizeMarker(edge.markerStart);
+          const id = getMarkerId(cfg, canvas._id);
+          pathEl.setAttribute('marker-start', `url(#${id})`);
+        } else if (edge._renderDualMarker && edge.markerEnd) {
+          const cfg = normalizeMarker(edge.markerEnd);
           const id = getMarkerId(cfg, canvas._id);
           pathEl.setAttribute('marker-start', `url(#${id})`);
         } else {
