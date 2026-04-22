@@ -1258,6 +1258,13 @@ export interface FlowCanvasConfig {
    */
   fieldTypeRegistry?: string[];
 
+  /**
+   * When true, `x-flow-schema` auto-stamps `x-schema-reorderable` on each
+   * row, enabling drag-to-reorder. The directive can also be stamped
+   * manually by consumers writing custom node templates. Defaults to false.
+   */
+  rowsReorderable?: boolean;
+
   // ── History (Undo/Redo) ─────────────────────────────────────────
   /** Enable undo/redo history tracking. Default: false */
   history?: boolean;

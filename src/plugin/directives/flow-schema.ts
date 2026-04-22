@@ -37,6 +37,23 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       }
     };
 
+    /**
+     * Resolve whether this canvas has opted into drag-to-reorder on rows.
+     * Read once per directive bind — the flag is not expected to change
+     * between mounts. Walks to the closest `.flow-container` and reads
+     * `canvas._config.rowsReorderable`.
+     */
+    const readRowsReorderable = (): boolean => {
+      try {
+        const canvasEl = host.closest('.flow-container') as HTMLElement | null;
+        if (!canvasEl) return false;
+        const canvas = (Alpine as any).$data?.(canvasEl);
+        return !!canvas?._config?.rowsReorderable;
+      } catch {
+        return false;
+      }
+    };
+
     host.classList.add('flow-schema-node');
 
     const render = (): void => {
@@ -59,6 +76,8 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
 
       clearChildren(host);
 
+      const rowsReorderable = readRowsReorderable();
+
       // Header
       const header = document.createElement('div');
       header.className = 'flow-schema-header';
@@ -69,7 +88,7 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       const body = document.createElement('div');
       body.className = 'flow-schema-body';
       for (const field of fields) {
-        body.appendChild(renderRow(field, nodeId));
+        body.appendChild(renderRow(field, nodeId, rowsReorderable));
       }
       host.appendChild(body);
 
@@ -80,7 +99,11 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       Alpine.initTree(body);
     };
 
-    const renderRow = (field: FlowSchemaField, nodeId: string): HTMLElement => {
+    const renderRow = (
+      field: FlowSchemaField,
+      nodeId: string,
+      rowsReorderable: boolean,
+    ): HTMLElement => {
       const row = document.createElement('div');
       row.className = 'flow-schema-row';
       row.dataset.flowSchemaField = field.name;
@@ -97,6 +120,14 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
           'x-flow-row-select',
           JSON.stringify(`${nodeId}.${field.name}`),
         );
+      }
+
+      // Drag-to-reorder opt-in. When `canvas._config.rowsReorderable` is
+      // truthy, stamp `x-schema-reorderable` on each row — the directive is
+      // registered by the schema addon and activated via Alpine.initTree(body)
+      // below.
+      if (rowsReorderable) {
+        row.setAttribute('x-schema-reorderable', '');
       }
 
       // Target handle (left). We set the x-flow-handle directive attribute

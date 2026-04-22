@@ -24,6 +24,7 @@ import { attachSchemaHistory } from './history';
 import { registerNodeInspectorDirective } from './inspector/node-inspector';
 import { registerRowInspectorDirective } from './inspector/row-inspector';
 import { registerEdgeInspectorDirective } from './inspector/edge-inspector';
+import { registerSchemaReorderableDirective } from './reorderable';
 import type { DotExportOptions, SchemaLayoutOptions } from './types';
 
 export * from './types';
@@ -33,7 +34,7 @@ export * from './dot';
 export * from './layout';
 export * from './history';
 export { addField, renameField, removeField, reorderFields, inferReferences, schemaToJSON, schemaFromJSON, validateSchema, diffSchemas, toDot, schemaLayout, attachSchemaHistory };
-export { registerNodeInspectorDirective, registerRowInspectorDirective, registerEdgeInspectorDirective };
+export { registerNodeInspectorDirective, registerRowInspectorDirective, registerEdgeInspectorDirective, registerSchemaReorderableDirective };
 
 export default function registerSchemaAddon(Alpine: Alpine): void {
     // Register the three-scope inspector directives. Guarded so stub calls in
@@ -43,6 +44,7 @@ export default function registerSchemaAddon(Alpine: Alpine): void {
         registerNodeInspectorDirective(Alpine);
         registerRowInspectorDirective(Alpine);
         registerEdgeInspectorDirective(Alpine);
+        registerSchemaReorderableDirective(Alpine);
     }
 
     registerAddon('schema', {
