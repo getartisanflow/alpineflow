@@ -19,16 +19,18 @@ import { schemaToJSON, schemaFromJSON } from './serialization';
 import { validateSchema } from './validate';
 import { diffSchemas } from './diff';
 import { toDot } from './dot';
+import { schemaLayout } from './layout';
 import { registerNodeInspectorDirective } from './inspector/node-inspector';
 import { registerRowInspectorDirective } from './inspector/row-inspector';
 import { registerEdgeInspectorDirective } from './inspector/edge-inspector';
-import type { DotExportOptions } from './types';
+import type { DotExportOptions, SchemaLayoutOptions } from './types';
 
 export * from './types';
 export * from './validate';
 export * from './diff';
 export * from './dot';
-export { addField, renameField, removeField, reorderFields, inferReferences, schemaToJSON, schemaFromJSON, validateSchema, diffSchemas, toDot };
+export * from './layout';
+export { addField, renameField, removeField, reorderFields, inferReferences, schemaToJSON, schemaFromJSON, validateSchema, diffSchemas, toDot, schemaLayout };
 export { registerNodeInspectorDirective, registerRowInspectorDirective, registerEdgeInspectorDirective };
 
 export default function registerSchemaAddon(Alpine: Alpine): void {
@@ -78,6 +80,9 @@ export default function registerSchemaAddon(Alpine: Alpine): void {
             };
             canvas.toDot = function (opts?: DotExportOptions) {
                 return toDot(this, opts);
+            };
+            canvas.schemaLayout = function (opts?: SchemaLayoutOptions) {
+                return schemaLayout(this, opts);
             };
         },
     });

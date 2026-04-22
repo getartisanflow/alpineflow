@@ -110,3 +110,16 @@ export interface DotExportOptions {
     /** Graph name. Default 'schema'. */
     graphName?: string;
 }
+
+export interface SchemaLayoutOptions {
+    /** 'LR' (default) — referenced nodes flow right; 'TB' — flow down. */
+    direction?: 'LR' | 'TB' | 'BT' | 'RL';
+    /** Horizontal spacing between nodes at the same rank. Default 80. */
+    nodeSpacing?: number;
+    /** Distance between ranks (referencing → referenced). Default 160. */
+    rankSpacing?: number;
+    /** When true, use inferReferences() output as the graph instead of canvas.edges. Default false. */
+    deriveFromReferences?: boolean;
+    /** Prefer a specific algorithm. Defaults to trying 'dagre' → 'tree' → 'grid'. */
+    algorithm?: 'dagre' | 'tree' | 'grid';
+}
