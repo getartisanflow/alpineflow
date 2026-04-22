@@ -20,6 +20,13 @@ Alpine.plugin(Schema);
 
 The subpath import mirrors every other AlpineFlow addon. The CDN entry (`alpineflow-schema.cdn.js`) auto-registers on `alpine:init`, so you can drop it in a `<script>` tag without wiring `Alpine.plugin` yourself.
 
+### What's in the addon
+
+- Core primitives: [Field CRUD](#field-crud-api), [`inferReferences`](#inferreferencesnodes-helper), [`schemaToJSON` / `schemaFromJSON`](#serialization), [inspector scaffolding](#inspector-scaffolding)
+- Field metadata: [extended optional props](#field-metadata-extended), [node `kind` discriminator](#node-kinds)
+- Inspection + transforms: [`validateSchema`](#validateschema), [`diffSchemas`](#diffschemasbefore-after-opts), [DOT export](#dot-export), [field type registry](#field-type-registry), [`schemaLayout`](#schemalayoutopts), [history](#history)
+- Interaction: [row reordering](#row-reordering), [keyboard field navigation](#keyboard-field-navigation)
+
 ## With WireFlow
 
 If you're using [WireFlow](https://artisanflow.dev/docs/wireflow), the core is loaded from the WireFlow vendor bundle. Addons share a global registry with the core regardless of how each was loaded.
@@ -373,9 +380,259 @@ Use `inspector.renameField(newName)` when changing the name so edges cascade. `i
 
 `inspector.removeEdge()` delegates to `canvas.removeEdges` if available, otherwise splices out of `canvas.edges` directly.
 
+## Field metadata (extended)
+
+Every field carries `name` + `type` plus four optional decoration flags (`key`, `required`, `icon`, and the metadata fields below). These are type-only — the default `x-flow-schema` row renders just the icon / name / type. Consumer templates (or the WireFlow [`<x-schema-field>`](https://artisanflow.dev/docs/wireflow/components/schema-field) primitive with a slot override) can read any of them.
+
+| Key           | Type       | Purpose                                                               |
+| ------------- | ---------- | --------------------------------------------------------------------- |
+| `description` | `string`   | Longer-form doc string — render in a tooltip or hover popover.        |
+| `deprecated`  | `boolean`  | Flag the field as stale — typically strikethrough + dim.              |
+| `tags`        | `string[]` | Free-form labels (e.g., `['pii']`, `['indexed']`) — render as pills.  |
+| `defaultValue`| `unknown`  | Display-only default, rendered after the type if your template opts in.|
+
+The type additions are purely informational — they don't change the default render, serialize through `schemaToJSON` / `schemaFromJSON`, and survive `renameField` / `removeField` / `reorderFields`.
+
+## Node kinds
+
+`SchemaNodeData.kind: string` stamps `data-flow-schema-kind="..."` on the node root element. Use it to theme entities, queries, enums, and aggregates differently without touching the component:
+
+```css
+.flow-node[data-flow-schema-kind="entity"] .flow-schema-header { background: var(--color-sky-100); }
+.flow-node[data-flow-schema-kind="query"]  .flow-schema-header { background: var(--color-violet-100); }
+.flow-node[data-flow-schema-kind="enum"]   .flow-schema-header { background: var(--color-amber-100); }
+```
+
+No enum is enforced — pick any discriminator set that matches your domain.
+
+## `validateSchema()`
+
+Returns a structured, human-readable issue list — a snapshot of what's broken in the graph right now. Purely a read; no mutation, no events.
+
+```js
+const issues = canvas.validateSchema();
+```
+
+**Issue shape:**
+
+```ts
+interface SchemaIssue {
+    severity: 'error' | 'warning';
+    code: 'dangling-edge' | 'missing-primary-key' | 'duplicate-field'
+        | 'duplicate-node-id' | 'disconnected-node' | 'cycle';
+    nodeId?: string;
+    fieldName?: string;
+    edgeId?: string;
+    message: string;
+}
+```
+
+| Code                    | Severity  | When                                                                                |
+| ----------------------- | --------- | ----------------------------------------------------------------------------------- |
+| `dangling-edge`         | `error`   | Edge references a node / handle that no longer exists.                              |
+| `duplicate-field`       | `error`   | Two fields on the same node share a name.                                           |
+| `duplicate-node-id`     | `error`   | Two nodes share the same id.                                                        |
+| `missing-primary-key`   | `warning` | Node has fields but none is flagged `key: 'primary'`.                               |
+| `disconnected-node`     | `warning` | Node has no incoming or outgoing edges.                                             |
+| `cycle`                 | `warning` | Reference cycle detected in the edge graph (e.g., A → B → A).                       |
+
+Wire it into a save flow, CI export, or a live inspector panel — the return is plain data, so diff/display logic is entirely up to the consumer.
+
+## `diffSchemas(before, after, opts?)`
+
+Computes structured deltas between two `SchemaGraphJSON` snapshots. Useful for migration scripts, review UIs, and undo-visualizers.
+
+```js
+const before = canvas.schemaToJSON();
+// … user edits …
+const after = canvas.schemaToJSON();
+
+const diff = canvas.diffSchemas(before, after, {
+    fieldRenames: [{ nodeId: 'user', from: 'team_id', to: 'organization_id' }],
+    detectRenames: true,
+});
+```
+
+**Options:**
+
+| Option           | Type                                                         | Default | Purpose                                                                                                                                    |
+| ---------------- | ------------------------------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `fieldRenames`   | `{ nodeId: string, from: string, to: string }[]`             | `[]`    | Authoritative hints — fields in this list are recorded as renames, not add+remove pairs.                                                   |
+| `detectRenames`  | `boolean`                                                    | `false` | Best-effort node rename heuristic — a simultaneously-added + removed node with identical field shapes is treated as a rename.              |
+
+**Returns:**
+
+```ts
+interface SchemaDiff {
+    nodes: { added: Node[]; removed: Node[]; renamed: { from: string; to: string }[] };
+    fields: {
+        added: { nodeId: string; field: FlowSchemaField }[];
+        removed: { nodeId: string; fieldName: string }[];
+        renamed: { nodeId: string; from: string; to: string }[];
+        changedTypes: { nodeId: string; fieldName: string; from: string; to: string }[];
+    };
+    edges: { added: Edge[]; removed: Edge[] };
+}
+```
+
+All deltas are plain arrays — feed them into a review UI, a changelog generator, or a migration codemod without further parsing.
+
+## DOT export
+
+`canvas.toDot(opts?)` emits a graphviz DOT string using HTML-like table node rendering — pipe it to `dot -Tsvg` for print-ready schema diagrams, commit into docs, or embed in a README.
+
+```js
+const dot = canvas.toDot({
+    rankdir: 'LR',
+    showTypes: true,
+    showKeys: true,
+});
+// → 'digraph schema {\n  rankdir=LR;\n  node [shape=plain];\n  user [label=<…>];\n  …'
+```
+
+**Options:**
+
+| Option       | Type                    | Default | Purpose                                                                     |
+| ------------ | ----------------------- | ------- | --------------------------------------------------------------------------- |
+| `rankdir`    | `'LR' \| 'TB' \| 'RL' \| 'BT'` | `'LR'`  | Graph layout direction passed straight to DOT.                              |
+| `showTypes`  | `boolean`               | `true`  | Include the type column in the HTML-like label.                             |
+| `showKeys`   | `boolean`               | `true`  | Prefix primary / foreign fields with `[PK]` / `[FK]`.                       |
+
+Output is deterministic for the same canvas state, so DOT diffs cleanly in code review.
+
+## Field type registry
+
+`fieldTypeRegistry: string[]` on `flowCanvas({...})` swaps the inspector default-UI "Add field" free-text type input for a `<select>` populated from the registry, preserving declaration order. Empty / missing registry keeps the text input.
+
+```js
+flowCanvas({
+    fieldTypeRegistry: ['uuid', 'text', 'bigint', 'timestamp', 'jsonb', 'bool'],
+    // …
+});
+```
+
+Common presets:
+
+- **Database types:** `['uuid', 'bigint', 'int', 'text', 'varchar', 'bool', 'timestamp', 'jsonb']`
+- **GraphQL types:** `['ID', 'String', 'Int', 'Float', 'Boolean', '[String]', 'Date']`
+- **TypeScript types:** `['string', 'number', 'boolean', 'Date', 'string[]', 'Record<string, unknown>']`
+
+Consumer inspectors with custom UI read the same registry via `canvas.fieldTypeRegistry` to drive their own `<select>` controls.
+
+## `schemaLayout(opts?)`
+
+Reference-aware wrapper around the core auto-layout APIs. Tries `canvas.layout()` (dagre, when registered) first, falls back to `canvas.treeLayout()`, then to a simple grid if neither is present. Handy when the addon is loaded standalone without committing to a layout addon.
+
+```js
+canvas.schemaLayout({
+    direction: 'LR',
+    deriveFromReferences: true,
+});
+```
+
+**Options:**
+
+| Option                 | Type                           | Default | Purpose                                                                                              |
+| ---------------------- | ------------------------------ | ------- | ---------------------------------------------------------------------------------------------------- |
+| `direction`            | `'LR' \| 'TB' \| 'RL' \| 'BT'` | `'LR'`  | Passed to the underlying layout call.                                                                |
+| `deriveFromReferences` | `boolean`                      | `false` | Temporarily compute edges from `inferReferences()` and lay out by that FK graph, then restore edges. |
+
+The fallback chain means `schemaLayout` always does something — pick it over a raw `canvas.layout()` call when you want "arrange nicely" without caring which layout is registered.
+
+## History
+
+`attachSchemaHistory(canvas, opts?)` returns a handle for bounded undo/redo. Opt-in — not auto-attached — so the addon stays inert until you need it.
+
+```js
+import { attachSchemaHistory } from '@getartisanflow/alpineflow/schema';
+
+const history = attachSchemaHistory(canvas, { limit: 100 });
+history.batch(() => {
+    canvas.addField('user', { name: 'avatar_url', type: 'text' });
+    canvas.renameField('user', 'team_id', 'organization_id');
+});
+history.undo();  // rolls back both in one step
+history.redo();
+```
+
+**Handle shape:**
+
+```ts
+interface SchemaHistoryHandle {
+    undo(): boolean;
+    redo(): boolean;
+    canUndo: boolean;   // reactive
+    canRedo: boolean;   // reactive
+    clear(): void;
+    batch<T>(fn: () => T): T;   // rolls back on throw
+    dispose(): void;
+}
+```
+
+**Options:**
+
+| Option   | Type     | Default | Purpose                                                   |
+| -------- | -------- | ------- | --------------------------------------------------------- |
+| `limit`  | `number` | `50`    | Max snapshots retained. Oldest is dropped past the limit. |
+
+Internally the handle subscribes to `schema:*` events and snapshots via `schemaToJSON`. Undo / redo re-apply with `schemaFromJSON`. The handle sets a feedback-loop guard during apply so the resulting `schema:*` events don't re-enter the undo stack. `batch(fn)` suspends snapshotting and records one snapshot at close; throwing inside rolls back to the pre-batch state without recording.
+
+## Row reordering
+
+Set `rowsReorderable: true` on the canvas to stamp `x-schema-reorderable` on every row the `x-flow-schema` directive produces:
+
+```js
+flowCanvas({ rowsReorderable: true, /* … */ });
+```
+
+Or stamp manually on specific rows if you want to scope it:
+
+```html
+<div x-flow-node="node" x-flow-schema>
+    <template x-for="field in node.data.fields" :key="field.name">
+        <div class="flow-schema-row" x-schema-reorderable>…</div>
+    </template>
+</div>
+```
+
+On commit the directive calls `canvas.reorderFields(nodeId, orderedNames)` — so the same mismatch guards apply, and the event surface fires normally.
+
+**UX details:**
+
+- 4px movement threshold before the drag starts — a simple click stays a click.
+- Capture-phase click suppression on the dragged row prevents row-select from firing after drop.
+- Drop between any two rows on the same node; cross-node drags are rejected (silent fail).
+
+## Keyboard field navigation
+
+When `keyboardConnect: true` is set on the canvas, schema rows become focusable for keyboard-only field navigation:
+
+```js
+flowCanvas({ keyboardConnect: true, /* … */ });
+```
+
+Each row gets:
+
+- `tabindex="0"`
+- `role="row"`
+- `aria-label="<nodeLabel>: <fieldName> — <fieldType>"` (recomputed live as data changes)
+
+**Key map (on a focused row):**
+
+| Key             | Action                                                             |
+| --------------- | ------------------------------------------------------------------ |
+| `ArrowDown`     | Focus next row in the same node.                                   |
+| `ArrowUp`       | Focus previous row in the same node.                               |
+| `Tab`           | Focus first row of the next node. Natural tab-out at the last one. |
+| `Shift+Tab`     | Focus last row of the previous node. Natural tab-out at the first.|
+| `Enter` / Space | Select the focused row (populates `canvas.selectedRows`).          |
+| `Escape`        | Blur the row — restores default tab order.                         |
+
+Keyboard selection fires the same `row-select` path as a click, so an `<x-schema-row-inspector>` on the page picks up the selection immediately.
+
 ## WireFlow integration
 
-WireFlow ships a companion preset (`<x-schema-designer>`) and three slot-overridable inspector Blade components that wrap the directives above with richer styling and server-side cascade via the `WithSchemaDesigner` trait. It's the same addon — WireFlow just bundles everything with Blade. See the WireFlow docs for the components.
+WireFlow ships a companion preset (`<x-schema-designer>`) and three slot-overridable inspector Blade components that wrap the directives above with richer styling and server-side cascade via the `WithSchemaDesigner` trait. The `<x-schema-field>` Blade primitive surfaces the full handle + class wiring as a single composable row — use it inside an `<x-slot:node>` override to build custom schema templates. It's the same addon — WireFlow just bundles everything with Blade. See the WireFlow docs for the components.
 
 ## Type reference
 
