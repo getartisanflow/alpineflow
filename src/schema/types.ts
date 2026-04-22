@@ -97,3 +97,16 @@ export interface DiffOptions {
     /** When true, apply a basic node-rename heuristic (same field shape, different id). Default false. */
     detectRenames?: boolean;
 }
+
+export interface DotExportOptions {
+    /** Graph layout direction. Default 'LR'. */
+    rankdir?: 'TB' | 'LR' | 'BT' | 'RL';
+    /** Node shape when HTML-like labels aren't used. Default 'plaintext' (enables HTML-like tables). */
+    nodeShape?: string;
+    /** Include field types in the rendered output. Default true. */
+    includeFieldTypes?: boolean;
+    /** Include field `key` (PK/FK) markers in the rendered output. Default true. */
+    includeFieldKeys?: boolean;
+    /** Graph name. Default 'schema'. */
+    graphName?: string;
+}

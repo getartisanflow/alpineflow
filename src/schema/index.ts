@@ -18,14 +18,17 @@ import { inferReferences } from './references';
 import { schemaToJSON, schemaFromJSON } from './serialization';
 import { validateSchema } from './validate';
 import { diffSchemas } from './diff';
+import { toDot } from './dot';
 import { registerNodeInspectorDirective } from './inspector/node-inspector';
 import { registerRowInspectorDirective } from './inspector/row-inspector';
 import { registerEdgeInspectorDirective } from './inspector/edge-inspector';
+import type { DotExportOptions } from './types';
 
 export * from './types';
 export * from './validate';
 export * from './diff';
-export { addField, renameField, removeField, reorderFields, inferReferences, schemaToJSON, schemaFromJSON, validateSchema, diffSchemas };
+export * from './dot';
+export { addField, renameField, removeField, reorderFields, inferReferences, schemaToJSON, schemaFromJSON, validateSchema, diffSchemas, toDot };
 export { registerNodeInspectorDirective, registerRowInspectorDirective, registerEdgeInspectorDirective };
 
 export default function registerSchemaAddon(Alpine: Alpine): void {
@@ -72,6 +75,9 @@ export default function registerSchemaAddon(Alpine: Alpine): void {
             };
             canvas.diffSchemas = function (before: any, after: any, opts?: any) {
                 return diffSchemas(before, after, opts);
+            };
+            canvas.toDot = function (opts?: DotExportOptions) {
+                return toDot(this, opts);
             };
         },
     });
