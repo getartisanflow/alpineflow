@@ -40,7 +40,8 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
     host.classList.add('flow-schema-node');
 
     const render = (): void => {
-      const data = readNode()?.data;
+      const node = readNode() as (NodeRef & { id?: unknown }) | null;
+      const data = node?.data;
       if (!data) {
         clearChildren(host);
         return;
@@ -48,6 +49,7 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
 
       const label = typeof data.label === 'string' ? data.label : '';
       const fields = Array.isArray(data.fields) ? data.fields : [];
+      const nodeId = typeof node?.id === 'string' ? node.id : '';
 
       clearChildren(host);
 
@@ -61,23 +63,35 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       const body = document.createElement('div');
       body.className = 'flow-schema-body';
       for (const field of fields) {
-        body.appendChild(renderRow(field));
+        body.appendChild(renderRow(field, nodeId));
       }
       host.appendChild(body);
 
-      // Activate x-flow-handle directives on the newly-stamped handles.
-      // Without this call, the handles have the right classes + attributes
-      // but no pointer listeners — drag-to-connect would be dead.
+      // Activate x-flow-handle + x-flow-row-select directives on the newly
+      // stamped rows. Without this call, rows have the right classes +
+      // attributes but no pointer listeners — drag-to-connect and
+      // row-click selection would be dead.
       Alpine.initTree(body);
     };
 
-    const renderRow = (field: FlowSchemaField): HTMLElement => {
+    const renderRow = (field: FlowSchemaField, nodeId: string): HTMLElement => {
       const row = document.createElement('div');
       row.className = 'flow-schema-row';
       row.dataset.flowSchemaField = field.name;
       if (field.key === 'primary') row.classList.add('flow-schema-row--pk');
       if (field.key === 'foreign') row.classList.add('flow-schema-row--fk');
       if (field.required) row.classList.add('flow-schema-row--required');
+
+      // Row-select wiring. Stamps the x-flow-row-select directive with
+      // the `nodeId.fieldName` convention the schema inspector scaffolding
+      // expects. Without this, clicking a row would never populate
+      // canvas.selectedRows and the row-scope inspector slot stays empty.
+      if (nodeId) {
+        row.setAttribute(
+          'x-flow-row-select',
+          JSON.stringify(`${nodeId}.${field.name}`),
+        );
+      }
 
       // Target handle (left). We set the x-flow-handle directive attribute
       // so that after Alpine.initTree(host) runs below, the handle's

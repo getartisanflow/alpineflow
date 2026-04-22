@@ -127,6 +127,20 @@ describe('x-flow-schema directive', () => {
     expect(el.querySelector('.flow-schema-row-icon')?.textContent).toBe('✉️');
   });
 
+  it('stamps x-flow-row-select on each row with the nodeId.fieldName convention', () => {
+    const el = mount({
+      label: 'User',
+      fields: [
+        { name: 'id', type: 'uuid' },
+        { name: 'email', type: 'text' },
+      ],
+    });
+    const rows = Array.from(el.querySelectorAll('.flow-schema-row'));
+    expect(rows).toHaveLength(2);
+    expect(rows[0].getAttribute('x-flow-row-select')).toBe(JSON.stringify('t.id'));
+    expect(rows[1].getAttribute('x-flow-row-select')).toBe(JSON.stringify('t.email'));
+  });
+
   it('re-renders when node.data.fields mutates reactively', async () => {
     clearChildren(document.body);
     const host = document.createElement('div');
