@@ -1049,6 +1049,15 @@ export interface FlowCanvasConfig {
   /** CSS selector for external container. When set, panel renders there instead of inside the canvas. */
   controlsContainer?: string;
 
+  /**
+   * Element to enter fullscreen mode, instead of the canvas container.
+   * Useful when the page wraps the canvas + ancillary UI (inspectors,
+   * toolbars) that should stay visible in fullscreen. Accepts a CSS
+   * selector (resolved via `closest()` then `querySelector()` fallback),
+   * an HTMLElement, or a resolver function. Defaults to the canvas container.
+   */
+  fullscreenTarget?: string | HTMLElement | ((container: HTMLElement) => HTMLElement | null);
+
   // ── Auto-Pan ───────────────────────────────────────────────────────
   /** Auto-pan when dragging nodes near canvas edge. Default: true */
   autoPanOnNodeDrag?: boolean;

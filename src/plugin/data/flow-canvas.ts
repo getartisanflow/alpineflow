@@ -144,6 +144,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
     /** Fullscreen change handler (bound to document for cleanup) */
     _onFullscreenChange: null as (() => void) | null,
 
+    /** Resolved target element while a fullscreen session is active. */
+    _fullscreenTarget: null as HTMLElement | null,
+
     /** Currently active connection drag, or null */
     pendingConnection: null as { source: string; sourceHandle?: string; position: XYPosition } | null,
 
@@ -1112,7 +1115,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
         return;
       }
       this._onFullscreenChange = () => {
-        const nowFullscreen = document.fullscreenElement === this._container;
+        // The expected target is either the resolved custom target (while a
+        // session is active) or the canvas container (default behavior).
+        const expected = this._fullscreenTarget ?? this._container;
+        const nowFullscreen = document.fullscreenElement === expected;
         if (nowFullscreen !== this.isFullscreen) {
           this.isFullscreen = nowFullscreen;
           this._container?.dispatchEvent(new CustomEvent('flow-fullscreen-change', {
@@ -1120,29 +1126,69 @@ export function registerFlowCanvas(Alpine: Alpine) {
             detail: { isFullscreen: nowFullscreen },
           }));
         }
+        // Clear resolved target when leaving fullscreen so the next request
+        // resolves fresh (important if the config is patched at runtime).
+        if (!nowFullscreen) {
+          this._fullscreenTarget = null;
+        }
       };
       document.addEventListener('fullscreenchange', this._onFullscreenChange);
     },
 
     /**
-     * Toggle fullscreen on the canvas container. Requests fullscreen when
-     * not active, exits when active. Warns and no-ops if the browser
-     * doesn't expose `requestFullscreen` (e.g., restricted iframes).
+     * Resolve which element should enter fullscreen. Honors the optional
+     * `fullscreenTarget` config (string selector / HTMLElement / function)
+     * and falls back to the canvas container.
+     */
+    _resolveFullscreenTarget(): HTMLElement | null {
+      if (!this._container) return null;
+      const cfg = this._config?.fullscreenTarget;
+      if (!cfg) return this._container;
+      if (typeof cfg === 'string') {
+        const ancestor = this._container.closest(cfg) as HTMLElement | null;
+        if (ancestor) return ancestor;
+        const first = document.querySelector(cfg) as HTMLElement | null;
+        if (first) return first;
+        console.warn(`[AlpineFlow] fullscreenTarget selector "${cfg}" did not match; falling back to canvas container.`);
+        return this._container;
+      }
+      if (cfg instanceof HTMLElement) return cfg;
+      if (typeof cfg === 'function') {
+        try {
+          const resolved = cfg(this._container);
+          if (resolved instanceof HTMLElement) return resolved;
+        } catch (err) {
+          console.warn('[AlpineFlow] fullscreenTarget resolver threw:', err);
+        }
+      }
+      return this._container;
+    },
+
+    /**
+     * Toggle fullscreen on the canvas container (or the configured
+     * `fullscreenTarget`). Requests fullscreen when not active, exits when
+     * active. Warns and no-ops if the browser doesn't expose
+     * `requestFullscreen` (e.g., restricted iframes).
      */
     toggleFullscreen(): void {
       if (!this._container) return;
       if (typeof document === 'undefined') return;
-      if (document.fullscreenElement === this._container) {
+      const target = this._resolveFullscreenTarget();
+      if (!target) return;
+      if (document.fullscreenElement) {
+        // Any fullscreen session — exit it. Works whether it's ours or not.
         document.exitFullscreen?.();
         return;
       }
-      const req = this._container.requestFullscreen;
+      const req = target.requestFullscreen;
       if (typeof req !== 'function') {
         console.warn('[AlpineFlow] requestFullscreen is not available in this context');
         return;
       }
-      Promise.resolve(req.call(this._container)).catch((err: unknown) => {
+      this._fullscreenTarget = target;
+      Promise.resolve(req.call(target)).catch((err: unknown) => {
         console.warn('[AlpineFlow] fullscreen request rejected:', err);
+        this._fullscreenTarget = null;
       });
     },
 
@@ -1771,10 +1817,15 @@ export function registerFlowCanvas(Alpine: Alpine) {
         document.removeEventListener('fullscreenchange', this._onFullscreenChange);
       }
       this._onFullscreenChange = null;
-      // Exit fullscreen if this canvas was holding it
-      if (typeof document !== 'undefined' && document.fullscreenElement === this._container) {
-        document.exitFullscreen?.().catch(() => {});
+      // Exit fullscreen if this canvas was holding it (either the container
+      // or a configured fullscreenTarget wrapper).
+      if (typeof document !== 'undefined') {
+        const held = document.fullscreenElement;
+        if (held && (held === this._container || held === this._fullscreenTarget)) {
+          document.exitFullscreen?.().catch(() => {});
+        }
       }
+      this._fullscreenTarget = null;
       if (this._onSelectionPointerDown && this._container) {
         this._container.removeEventListener('pointerdown', this._onSelectionPointerDown);
       }

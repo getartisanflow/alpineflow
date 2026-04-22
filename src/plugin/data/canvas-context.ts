@@ -116,6 +116,14 @@ export interface CanvasContext {
   /** Whether the canvas container is currently in fullscreen mode */
   isFullscreen: boolean;
 
+  /**
+   * Resolved fullscreen target element while a fullscreen session is active
+   * (null otherwise). Stored during `toggleFullscreen()` so the
+   * `fullscreenchange` listener can compare the current `document.fullscreenElement`
+   * against the right target when a custom `fullscreenTarget` config is set.
+   */
+  _fullscreenTarget: HTMLElement | null;
+
   /** Currently active connection drag, or null */
   pendingConnection: { source: string; sourceHandle?: string; position: XYPosition } | null;
 
@@ -473,6 +481,9 @@ export interface CanvasContext {
 
   /** Get effective background gap (from config, CSS variable, or default) */
   _getBackgroundGap(): number;
+
+  /** Resolve the element to request fullscreen on (config.fullscreenTarget ?? container). */
+  _resolveFullscreenTarget(): HTMLElement | null;
 
   /** Resolve background config to array of layer definitions */
   _resolveBackgroundLayers(): Array<{ variant: 'dots' | 'lines' | 'cross'; gap: number; color: string }>;
