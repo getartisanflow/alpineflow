@@ -22,6 +22,8 @@ interface MountOptions {
     children?: Array<Node>;
     /** Seed canvas.selectedNodes with this id. */
     selectedNodeId?: string | null;
+    /** Seed canvas._config.fieldTypeRegistry on the mounted canvas scope. */
+    fieldTypeRegistry?: string[];
 }
 
 /**
@@ -50,8 +52,10 @@ function mount(options: MountOptions = {}) {
     host.appendChild(inspector);
 
     const selectedNodeId = options.selectedNodeId ?? null;
+    const fieldTypeRegistry = options.fieldTypeRegistry;
 
     Alpine.data('canvas', () => ({
+        _config: fieldTypeRegistry !== undefined ? { fieldTypeRegistry } : {},
         nodes: [
             {
                 id: 'user',
@@ -164,5 +168,76 @@ describe('x-schema-node-inspector directive', () => {
     it('renders an empty state message when nothing is selected (default-ui path)', () => {
         const { inspector } = mount({ withDefaultUi: true });
         expect((inspector.textContent ?? '').trim().length).toBeGreaterThan(0);
+    });
+
+    it('renders free-text type input when fieldTypeRegistry is unset', () => {
+        const { inspector } = mount({ withDefaultUi: true, selectedNodeId: 'user' });
+        const typeControl = inspector.querySelector(
+            '[data-schema-inspector-add-field] [data-field="type"]',
+        );
+        expect(typeControl).not.toBeNull();
+        expect(typeControl!.tagName).toBe('INPUT');
+        expect((typeControl as HTMLInputElement).type).toBe('text');
+    });
+
+    it('renders a <select> of registry values when fieldTypeRegistry is set', () => {
+        const { inspector } = mount({
+            withDefaultUi: true,
+            selectedNodeId: 'user',
+            fieldTypeRegistry: ['text', 'uuid', 'int4'],
+        });
+        const typeControl = inspector.querySelector(
+            '[data-schema-inspector-add-field] [data-field="type"]',
+        );
+        expect(typeControl).not.toBeNull();
+        expect(typeControl!.tagName).toBe('SELECT');
+
+        const options = (typeControl as HTMLSelectElement).querySelectorAll('option');
+        expect(options.length).toBe(3);
+        expect(options[0].value).toBe('text');
+        expect(options[1].value).toBe('uuid');
+        expect(options[2].value).toBe('int4');
+
+        expect((typeControl as HTMLSelectElement).value).toBe('text');
+    });
+
+    it('renders free-text input when fieldTypeRegistry is an empty array', () => {
+        const { inspector } = mount({
+            withDefaultUi: true,
+            selectedNodeId: 'user',
+            fieldTypeRegistry: [],
+        });
+        const typeControl = inspector.querySelector(
+            '[data-schema-inspector-add-field] [data-field="type"]',
+        );
+        expect(typeControl).not.toBeNull();
+        expect(typeControl!.tagName).toBe('INPUT');
+    });
+
+    it('uses registry value on Add field submission', () => {
+        const { host, inspector } = mount({
+            withDefaultUi: true,
+            selectedNodeId: 'user',
+            fieldTypeRegistry: ['text', 'uuid'],
+        });
+        const form = inspector.querySelector(
+            '[data-schema-inspector-add-field]',
+        ) as HTMLFormElement;
+        const nameInput = form.querySelector(
+            '[data-field="name"]',
+        ) as HTMLInputElement;
+        const typeSelect = form.querySelector(
+            '[data-field="type"]',
+        ) as HTMLSelectElement;
+
+        nameInput.value = 'org_id';
+        typeSelect.value = 'uuid';
+        form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+
+        const canvas = Alpine.$data(host) as any;
+        const user = canvas.nodes.find((n: any) => n.id === 'user');
+        const added = user.data.fields.find((f: any) => f.name === 'org_id');
+        expect(added).toBeTruthy();
+        expect(added.type).toBe('uuid');
     });
 });

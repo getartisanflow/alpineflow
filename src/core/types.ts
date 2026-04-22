@@ -1243,6 +1243,21 @@ export interface FlowCanvasConfig {
     targetX: number; targetY: number; targetPosition: string;
   }) => { path: string; labelPosition: { x: number; y: number } }>;
 
+  /**
+   * Optional vocabulary of field types for the schema addon's default-UI
+   * inspector. When set, the "Add field" dropdown lists these options
+   * instead of a free-text input. Order is preserved.
+   *
+   * Consumer examples:
+   *   ['text', 'uuid', 'int4', 'date', 'timestamp']           // DB
+   *   ['String!', 'Int!', 'ID', 'Boolean!']                   // GraphQL
+   *   ['string', 'number', 'boolean', 'Date']                 // TypeScript
+   *
+   * Consumers writing their own inspector UI (custom slot content) can
+   * read `canvas.fieldTypeRegistry` directly and render however they like.
+   */
+  fieldTypeRegistry?: string[];
+
   // ── History (Undo/Redo) ─────────────────────────────────────────
   /** Enable undo/redo history tracking. Default: false */
   history?: boolean;

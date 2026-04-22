@@ -194,10 +194,29 @@ function stampNodeDefaultUi(host: HTMLElement, canvas: any): void {
     nameInput.placeholder = 'field name';
     form.appendChild(nameInput);
 
-    const typeInput = document.createElement('input');
-    typeInput.setAttribute('data-field', 'type');
-    typeInput.placeholder = 'type';
-    typeInput.value = 'text';
+    const registry = Array.isArray(canvas._config?.fieldTypeRegistry)
+        ? (canvas._config.fieldTypeRegistry as string[])
+        : null;
+
+    let typeInput: HTMLInputElement | HTMLSelectElement;
+    if (registry && registry.length > 0) {
+        const select = document.createElement('select');
+        select.setAttribute('data-field', 'type');
+        for (const type of registry) {
+            const option = document.createElement('option');
+            option.value = type;
+            option.textContent = type;
+            select.appendChild(option);
+        }
+        select.value = registry[0];
+        typeInput = select;
+    } else {
+        const input = document.createElement('input');
+        input.setAttribute('data-field', 'type');
+        input.placeholder = 'type';
+        input.value = 'text';
+        typeInput = input;
+    }
     form.appendChild(typeInput);
 
     const addBtn = document.createElement('button');
@@ -211,7 +230,8 @@ function stampNodeDefaultUi(host: HTMLElement, canvas: any): void {
         if (!fieldName) {
             return;
         }
-        const type = typeInput.value.trim() || 'text';
+        const rawType = typeInput.value;
+        const type = (typeof rawType === 'string' ? rawType.trim() : '') || 'text';
         const result = canvas.addField?.(node.id, { name: fieldName, type });
         if (result?.applied) {
             nameInput.value = '';
