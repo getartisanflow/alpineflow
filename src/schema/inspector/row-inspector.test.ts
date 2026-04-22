@@ -26,6 +26,7 @@ function mount(options: MountOptions = {}) {
     clearChildren(document.body);
 
     const host = document.createElement('div');
+    host.classList.add('flow-container');
     host.setAttribute('x-data', 'canvas');
 
     const inspector = document.createElement('aside');

@@ -44,20 +44,57 @@ export function parseRowId(
     return { nodeId: rowId.slice(0, dot), fieldName: rowId.slice(dot + 1) };
 }
 
-/** Walk up from the directive element to the nearest Alpine x-data scope. */
+/**
+ * Resolve the flow canvas Alpine scope associated with an inspector element.
+ *
+ * Three-step lookup:
+ *   1. Nearest ancestor `.flow-container` — inspector nested inside the canvas
+ *      viewport (preset side-panel pattern).
+ *   2. If none, and exactly one `.flow-container` exists on the page, use it —
+ *      supports outside-canvas placements (e.g. a page-level right sidebar
+ *      that's a sibling of the canvas). Single canvas = unambiguous.
+ *   3. Multiple canvases without an ancestor match — log a one-shot warning
+ *      and bail out; the caller must nest the inspector inside the target
+ *      canvas (an explicit selector prop is on the v0.2.2 roadmap).
+ */
 export function findCanvasScope(
     Alpine: Alpine,
     el: HTMLElement,
 ): any | null {
-    const canvasEl = el.closest('[x-data]') as HTMLElement | null;
-    if (!canvasEl) {
-        return null;
+    // 1. Closest ancestor .flow-container — inside-canvas placement.
+    const ancestor = el.closest('.flow-container') as HTMLElement | null;
+    if (ancestor) {
+        try {
+            return Alpine.$data(ancestor) ?? null;
+        } catch {
+            /* fall through to page-level fallbacks */
+        }
     }
-    try {
-        return Alpine.$data(canvasEl) ?? null;
-    } catch {
-        return null;
+
+    // 2. Single .flow-container on the page — outside-canvas placement.
+    const containers = document.querySelectorAll('.flow-container');
+    if (containers.length === 1) {
+        try {
+            return Alpine.$data(containers[0] as HTMLElement) ?? null;
+        } catch {
+            /* fall through to warning / null */
+        }
     }
+
+    // 3. Multiple canvases and no ancestor — warn once, return null.
+    if (
+        containers.length > 1
+        && !(window as any).__alpineflowSchemaMultiCanvasWarned
+    ) {
+        (window as any).__alpineflowSchemaMultiCanvasWarned = true;
+        console.warn(
+            '[alpineflow/schema] inspector directive found multiple .flow-container elements on the page; '
+            + 'place inspector inside the canvas OR scope the directive expression to a specific canvas '
+            + '(multi-canvas scope selector is on the v0.2.2 roadmap).',
+        );
+    }
+
+    return null;
 }
 
 /**
