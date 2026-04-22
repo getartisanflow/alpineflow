@@ -569,6 +569,24 @@ export function registerFlowCanvas(Alpine: Alpine) {
         this._container.style.setProperty('--flow-bg-pattern-gap', String(config.backgroundGap));
       }
 
+      // Apply containerHeight config as inline --flow-container-height override.
+      // The CSS rule `.flow-container { height: var(--flow-container-height, 400px); }`
+      // reads this inline value first, winning over the default with specificity (0,0,0).
+      const ch = config.containerHeight;
+      if (ch !== undefined && ch !== 'auto') {
+        let value: string | null = null;
+        if (ch === 'fill') {
+          value = '100%';
+        } else if (typeof ch === 'number' && Number.isFinite(ch)) {
+          value = `${ch}px`;
+        } else if (typeof ch === 'string' && ch.trim()) {
+          value = ch.trim();
+        }
+        if (value !== null) {
+          this._container.style.setProperty('--flow-container-height', value);
+        }
+      }
+
       // Set initial zoom level attribute
       this._applyZoomLevel(this.viewport.zoom);
     },

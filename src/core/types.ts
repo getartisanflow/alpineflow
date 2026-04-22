@@ -886,6 +886,20 @@ export interface FlowCanvasConfig {
   /** ARIA label for the flow container. Default: 'Flow diagram' */
   ariaLabel?: string;
 
+  /**
+   * Controls the canvas container's height. Non-breaking override for
+   * `--flow-container-height` (default `400px`).
+   *
+   * - `undefined` / `'auto'` — default 400px fallback (current behavior)
+   * - `'fill'` — fills parent via `--flow-container-height: 100%`
+   * - `number` — pixel height
+   * - `string` — passed through as a CSS length (`'80vh'`, `'calc(100vh - 60px)'`)
+   *
+   * See also `--flow-container-height` CSS variable — you can also override
+   * via consumer CSS: `.my-wrapper .flow-container { --flow-container-height: 100%; }`
+   */
+  containerHeight?: 'auto' | 'fill' | number | string;
+
   /** Minimum zoom level. Default: 0.5 */
   minZoom?: number;
 
