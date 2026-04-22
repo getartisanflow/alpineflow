@@ -182,6 +182,17 @@ Schema addon Phase A+B — validation, diff, layout, history, reorder, keyboard 
 ### Dist
 - Rebuilt `dist/alpineflow-schema.esm.js` with all Phase A+B additions.
 
+---
+
+Follow-up fixes — easy-connect validator, containerHeight config, inspector focus preservation.
+
+### Added
+- **`canvas.containerHeight` config** — non-breaking opt-in to override the default 400px container height. Accepts `'auto'` (default), `'fill'` (100% of parent), a number (pixels), or any CSS length string (`'80vh'`, `'calc(100vh - 60px)'`). Sets `--flow-container-height` inline on the canvas element, so it wins over the `:where(.flow-container)` fallback without fighting CSS specificity. (`113c409`)
+
+### Fixed
+- **Easy-connect now awaits `connectValidator`** — the alt-drag easy-connect path was bypassing the async validator gate. Refactored to fully delegate to `applyConnectValidation` (same helper used by drag-to-connect, click-to-connect, and both reconnect paths), eliminating ~20 LOC of duplicated sync-chain code. Consumers with `connectValidator` configured now get consistent server-side gating across every connection path. (`0f6dbf9`)
+- **Schema inspector preserves input focus across reactive re-stamps** — the default-UI stamping destroyed the focused element on any reactive tick, which could cause rename inputs to blur mid-type. The three inspector directives now capture the focused element's identity (`data-field` + tag + selection range) before teardown and restore it on the rebuilt subtree. (`63ff511`)
+
 ## v0.1.2-alpha — 2026-04-03
 
 ### Fixed
