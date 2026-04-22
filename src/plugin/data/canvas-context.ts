@@ -113,6 +113,9 @@ export interface CanvasContext {
   /** Whether interactivity (pan/zoom/drag) is enabled */
   isInteractive: boolean;
 
+  /** Whether the canvas container is currently in fullscreen mode */
+  isFullscreen: boolean;
+
   /** Currently active connection drag, or null */
   pendingConnection: { source: string; sourceHandle?: string; position: XYPosition } | null;
 
@@ -697,6 +700,9 @@ export interface CanvasContext {
 
   /** Toggle interactivity */
   toggleInteractive(): void;
+
+  /** Toggle fullscreen on the canvas container */
+  toggleFullscreen(): void;
 
   /** Close the context menu */
   closeContextMenu(): void;

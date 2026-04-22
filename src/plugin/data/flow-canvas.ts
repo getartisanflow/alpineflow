@@ -138,6 +138,12 @@ export function registerFlowCanvas(Alpine: Alpine) {
     /** Whether interactivity (pan/zoom/drag) is enabled */
     isInteractive: true,
 
+    /** Whether the canvas container is currently in fullscreen mode */
+    isFullscreen: false,
+
+    /** Fullscreen change handler (bound to document for cleanup) */
+    _onFullscreenChange: null as (() => void) | null,
+
     /** Currently active connection drag, or null */
     pendingConnection: null as { source: string; sourceHandle?: string; position: XYPosition } | null,
 
@@ -1082,12 +1088,62 @@ export function registerFlowCanvas(Alpine: Alpine) {
           onFitView: () => this.fitView({ padding: DEFAULT_FIT_PADDING }),
           onToggleInteractive: () => this.toggleInteractive(),
           onResetPanels: () => this.resetPanels(),
+          onToggleFullscreen: () => this.toggleFullscreen(),
         });
 
         this.$watch('isInteractive', (val: boolean) => {
           this._controls?.update({ isInteractive: val });
         });
+
+        this.$watch('isFullscreen', (val: boolean) => {
+          this._controls?.update({ isFullscreen: val });
+        });
       }
+    },
+
+    /**
+     * Wire a document-level `fullscreenchange` listener so the reactive
+     * `isFullscreen` flag stays accurate when the user exits via Escape
+     * or any out-of-band means. Safe no-op when the Fullscreen API is
+     * unavailable (e.g., restricted iframes).
+     */
+    _initFullscreen() {
+      if (typeof document === 'undefined' || !('fullscreenEnabled' in document)) {
+        return;
+      }
+      this._onFullscreenChange = () => {
+        const nowFullscreen = document.fullscreenElement === this._container;
+        if (nowFullscreen !== this.isFullscreen) {
+          this.isFullscreen = nowFullscreen;
+          this._container?.dispatchEvent(new CustomEvent('flow-fullscreen-change', {
+            bubbles: true,
+            detail: { isFullscreen: nowFullscreen },
+          }));
+        }
+      };
+      document.addEventListener('fullscreenchange', this._onFullscreenChange);
+    },
+
+    /**
+     * Toggle fullscreen on the canvas container. Requests fullscreen when
+     * not active, exits when active. Warns and no-ops if the browser
+     * doesn't expose `requestFullscreen` (e.g., restricted iframes).
+     */
+    toggleFullscreen(): void {
+      if (!this._container) return;
+      if (typeof document === 'undefined') return;
+      if (document.fullscreenElement === this._container) {
+        document.exitFullscreen?.();
+        return;
+      }
+      const req = this._container.requestFullscreen;
+      if (typeof req !== 'function') {
+        console.warn('[AlpineFlow] requestFullscreen is not available in this context');
+        return;
+      }
+      Promise.resolve(req.call(this._container)).catch((err: unknown) => {
+        console.warn('[AlpineFlow] fullscreen request rejected:', err);
+      });
     },
 
     /** Selection box/lasso setup (pointerdown/pointermove/pointerup handlers). */
@@ -1613,6 +1669,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._initClickHandlers();
       this._initKeyboard();
       this._initMinimap();
+      this._initFullscreen();
       this._initControls();
       this._initSelection();
       this._initChildLayout();
@@ -1710,6 +1767,14 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._minimap = null;
       this._controls?.destroy();
       this._controls = null;
+      if (this._onFullscreenChange && typeof document !== 'undefined') {
+        document.removeEventListener('fullscreenchange', this._onFullscreenChange);
+      }
+      this._onFullscreenChange = null;
+      // Exit fullscreen if this canvas was holding it
+      if (typeof document !== 'undefined' && document.fullscreenElement === this._container) {
+        document.exitFullscreen?.().catch(() => {});
+      }
       if (this._onSelectionPointerDown && this._container) {
         this._container.removeEventListener('pointerdown', this._onSelectionPointerDown);
       }
