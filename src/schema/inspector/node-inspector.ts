@@ -39,6 +39,8 @@ import {
     findDefaultUiTemplate,
     clearStampedUi,
     createStampRoot,
+    captureStampFocus,
+    restoreStampFocus,
 } from './shared';
 
 export function registerNodeInspectorDirective(Alpine: Alpine): void {
@@ -135,6 +137,14 @@ export function registerNodeInspectorDirective(Alpine: Alpine): void {
 }
 
 function stampNodeDefaultUi(host: HTMLElement, canvas: any): void {
+    // Capture focus on the previous managed root BEFORE tearing it down, so a
+    // reactive re-stamp triggered while the user is typing doesn't blur the
+    // focused input.
+    const previousRoot = host.querySelector<HTMLElement>(
+        ':scope > [data-schema-default-ui-root]',
+    );
+    const captured = captureStampFocus(previousRoot);
+
     clearStampedUi(host);
     const root = createStampRoot(host);
 
@@ -146,6 +156,7 @@ function stampNodeDefaultUi(host: HTMLElement, canvas: any): void {
         empty.setAttribute('data-schema-inspector-empty', '');
         empty.textContent = 'No node selected.';
         root.appendChild(empty);
+        restoreStampFocus(root, captured);
         return;
     }
 
@@ -239,4 +250,6 @@ function stampNodeDefaultUi(host: HTMLElement, canvas: any): void {
     });
 
     root.appendChild(form);
+
+    restoreStampFocus(root, captured);
 }

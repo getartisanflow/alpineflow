@@ -132,3 +132,100 @@ export function createStampRoot(el: HTMLElement): HTMLElement {
     el.appendChild(root);
     return root;
 }
+
+/**
+ * Snapshot of a focused input inside a stamp root so we can re-focus the
+ * equivalent element after a re-stamp. Identity is resolved via `data-field`
+ * (our own marker on inspector inputs) and a tag-name match.
+ */
+export interface StampFocusSnapshot {
+    field: string;
+    tagName: string;
+    selectionStart: number | null;
+    selectionEnd: number | null;
+}
+
+/**
+ * Capture the currently-focused element within a stamp root so re-stamps can
+ * restore focus. Returns `null` when focus isn't within the root, or the
+ * focused element has no `data-field` identity marker.
+ */
+export function captureStampFocus(
+    root: HTMLElement | null | undefined,
+): StampFocusSnapshot | null {
+    if (!root) {
+        return null;
+    }
+    const active = document.activeElement;
+    if (!active || !(active instanceof HTMLElement) || !root.contains(active)) {
+        return null;
+    }
+    const field = active.getAttribute('data-field');
+    if (!field) {
+        return null;
+    }
+    let selectionStart: number | null = null;
+    let selectionEnd: number | null = null;
+    if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+        try {
+            selectionStart = active.selectionStart;
+            selectionEnd = active.selectionEnd;
+        } catch {
+            /* Some input types (e.g. checkbox, number) throw on selection access. */
+        }
+    }
+    return {
+        field,
+        tagName: active.tagName.toLowerCase(),
+        selectionStart,
+        selectionEnd,
+    };
+}
+
+/**
+ * Escape an attribute value for safe embedding in a CSS selector. Prefers
+ * the native `CSS.escape` when available (all modern browsers) and falls
+ * back to a minimal escaper for environments without it (e.g. older jsdom).
+ */
+function escapeAttrValue(value: string): string {
+    if (typeof (globalThis as any).CSS !== 'undefined' && typeof (globalThis as any).CSS.escape === 'function') {
+        return (globalThis as any).CSS.escape(value);
+    }
+    return value.replace(/["\\]/g, '\\$&');
+}
+
+/**
+ * Restore focus after a re-stamp. Looks up the element by `data-field` within
+ * the new root (requiring a matching tag name) and re-focuses it, restoring
+ * the selection range when possible. Silent on failure — focus preservation
+ * is best-effort and must never crash the re-stamp cycle.
+ */
+export function restoreStampFocus(
+    root: HTMLElement | null | undefined,
+    captured: StampFocusSnapshot | null,
+): void {
+    if (!root || !captured) {
+        return;
+    }
+    const candidate = root.querySelector<HTMLElement>(
+        `[data-field="${escapeAttrValue(captured.field)}"]`,
+    );
+    if (!candidate) {
+        return;
+    }
+    if (candidate.tagName.toLowerCase() !== captured.tagName) {
+        return;
+    }
+    try {
+        candidate.focus({ preventScroll: true });
+        if (
+            (candidate instanceof HTMLInputElement || candidate instanceof HTMLTextAreaElement)
+            && captured.selectionStart !== null
+            && captured.selectionEnd !== null
+        ) {
+            candidate.setSelectionRange(captured.selectionStart, captured.selectionEnd);
+        }
+    } catch {
+        /* silent — focus failures shouldn't crash the re-stamp */
+    }
+}

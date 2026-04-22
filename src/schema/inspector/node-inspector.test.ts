@@ -214,6 +214,34 @@ describe('x-schema-node-inspector directive', () => {
         expect(typeControl!.tagName).toBe('INPUT');
     });
 
+    it('preserves focus on the add-field name input across a reactive re-stamp', async () => {
+        const { host, inspector } = mount({ withDefaultUi: true, selectedNodeId: 'user' });
+
+        const nameInput = inspector.querySelector(
+            '[data-schema-inspector-add-field] [data-field="name"]',
+        ) as HTMLInputElement;
+        expect(nameInput).not.toBeNull();
+
+        nameInput.focus();
+        expect(document.activeElement).toBe(nameInput);
+
+        // Trigger a reactive re-stamp: mutate the selected node's label. The
+        // stamp reads node.data.label, so the effect re-runs and the whole
+        // managed root gets rebuilt.
+        const canvas = Alpine.$data(host) as any;
+        const user = canvas.nodes.find((n: any) => n.id === 'user');
+        user.data.label = 'User (edited)';
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const newNameInput = inspector.querySelector(
+            '[data-schema-inspector-add-field] [data-field="name"]',
+        ) as HTMLInputElement;
+        // Different DOM node than before (re-stamp really did rebuild).
+        expect(newNameInput).not.toBe(nameInput);
+        // But focus is restored onto the fresh input.
+        expect(document.activeElement).toBe(newNameInput);
+    });
+
     it('uses registry value on Add field submission', () => {
         const { host, inspector } = mount({
             withDefaultUi: true,

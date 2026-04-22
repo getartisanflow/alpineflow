@@ -146,4 +146,28 @@ describe('x-schema-row-inspector directive', () => {
         const { inspector } = mount({ withDefaultUi: true });
         expect((inspector.textContent ?? '').trim().length).toBeGreaterThan(0);
     });
+
+    it('preserves focus and selection on the rename input across a reactive re-stamp', async () => {
+        const { host, inspector } = mount({ withDefaultUi: true, selectedRowId: 'user.email' });
+
+        const nameInput = inspector.querySelector('[data-field="name"]') as HTMLInputElement;
+        expect(nameInput).not.toBeNull();
+
+        nameInput.focus();
+        nameInput.setSelectionRange(2, 5);
+        expect(document.activeElement).toBe(nameInput);
+
+        // Trigger a reactive re-stamp by mutating a field property read during stamping.
+        const canvas = Alpine.$data(host) as any;
+        const user = canvas.nodes.find((n: any) => n.id === 'user');
+        const email = user.data.fields.find((f: any) => f.name === 'email');
+        email.type = 'citext';
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const newNameInput = inspector.querySelector('[data-field="name"]') as HTMLInputElement;
+        expect(newNameInput).not.toBe(nameInput);
+        expect(document.activeElement).toBe(newNameInput);
+        expect(newNameInput.selectionStart).toBe(2);
+        expect(newNameInput.selectionEnd).toBe(5);
+    });
 });

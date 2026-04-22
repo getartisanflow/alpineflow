@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import Alpine from 'alpinejs';
-import { findCanvasScope } from './shared';
+import { findCanvasScope, captureStampFocus, restoreStampFocus } from './shared';
 
 function clearBody(): void {
     while (document.body.firstChild) {
@@ -45,6 +45,86 @@ describe('findCanvasScope', () => {
 
         const scope = findCanvasScope(Alpine as any, inspector);
         expect(scope?.marker).toBe('outside');
+    });
+
+    it('captureStampFocus returns null when focus is outside the root', () => {
+        const root = document.createElement('div');
+        const input = document.createElement('input');
+        input.setAttribute('data-field', 'name');
+        document.body.appendChild(root);
+        document.body.appendChild(input);
+        input.focus();
+
+        expect(captureStampFocus(root)).toBeNull();
+    });
+
+    it('captureStampFocus returns null when the focused element has no data-field', () => {
+        const root = document.createElement('div');
+        const input = document.createElement('input');
+        root.appendChild(input);
+        document.body.appendChild(root);
+        input.focus();
+
+        expect(captureStampFocus(root)).toBeNull();
+    });
+
+    it('captureStampFocus captures field + selection range for a focused input', () => {
+        const root = document.createElement('div');
+        const input = document.createElement('input');
+        input.setAttribute('data-field', 'name');
+        input.value = 'abcdef';
+        root.appendChild(input);
+        document.body.appendChild(root);
+        input.focus();
+        input.setSelectionRange(2, 4);
+
+        const captured = captureStampFocus(root);
+        expect(captured).toEqual({
+            field: 'name',
+            tagName: 'input',
+            selectionStart: 2,
+            selectionEnd: 4,
+        });
+    });
+
+    it('restoreStampFocus refocuses by data-field and restores selection', () => {
+        const root = document.createElement('div');
+        const input = document.createElement('input');
+        input.setAttribute('data-field', 'name');
+        input.value = 'abcdef';
+        root.appendChild(input);
+        document.body.appendChild(root);
+
+        restoreStampFocus(root, {
+            field: 'name',
+            tagName: 'input',
+            selectionStart: 1,
+            selectionEnd: 3,
+        });
+
+        expect(document.activeElement).toBe(input);
+        expect(input.selectionStart).toBe(1);
+        expect(input.selectionEnd).toBe(3);
+    });
+
+    it('restoreStampFocus is a no-op when candidate is missing or tag mismatches', () => {
+        const root = document.createElement('div');
+        const ta = document.createElement('textarea');
+        ta.setAttribute('data-field', 'name');
+        root.appendChild(ta);
+        document.body.appendChild(root);
+
+        // Tag mismatch: captured as input, new element is textarea — no focus.
+        restoreStampFocus(root, {
+            field: 'name',
+            tagName: 'input',
+            selectionStart: 0,
+            selectionEnd: 0,
+        });
+        expect(document.activeElement).not.toBe(ta);
+
+        // Null captured is a no-op.
+        expect(() => restoreStampFocus(root, null)).not.toThrow();
     });
 
     it('returns null and warns once when multiple canvases exist and element is outside', () => {

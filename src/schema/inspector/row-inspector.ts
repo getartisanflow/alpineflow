@@ -32,6 +32,8 @@ import {
     findDefaultUiTemplate,
     clearStampedUi,
     createStampRoot,
+    captureStampFocus,
+    restoreStampFocus,
 } from './shared';
 
 export function registerRowInspectorDirective(Alpine: Alpine): void {
@@ -134,6 +136,14 @@ function stampRowDefaultUi(
     canvas: any,
     row: { nodeId: string; fieldName: string } | null,
 ): void {
+    // Capture focus on the previous managed root BEFORE tearing it down, so a
+    // reactive re-stamp triggered while the user is typing doesn't blur the
+    // focused input.
+    const previousRoot = host.querySelector<HTMLElement>(
+        ':scope > [data-schema-default-ui-root]',
+    );
+    const captured = captureStampFocus(previousRoot);
+
     clearStampedUi(host);
     const root = createStampRoot(host);
 
@@ -142,6 +152,7 @@ function stampRowDefaultUi(
         empty.setAttribute('data-schema-inspector-empty', '');
         empty.textContent = 'No row selected.';
         root.appendChild(empty);
+        restoreStampFocus(root, captured);
         return;
     }
 
@@ -153,6 +164,7 @@ function stampRowDefaultUi(
         missing.setAttribute('data-schema-inspector-empty', '');
         missing.textContent = 'Selected row no longer exists.';
         root.appendChild(missing);
+        restoreStampFocus(root, captured);
         return;
     }
 
@@ -206,4 +218,6 @@ function stampRowDefaultUi(
         canvas.removeField?.(row.nodeId, row.fieldName);
     });
     root.appendChild(removeBtn);
+
+    restoreStampFocus(root, captured);
 }

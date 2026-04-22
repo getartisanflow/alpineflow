@@ -128,4 +128,32 @@ describe('x-schema-edge-inspector directive', () => {
         const { inspector } = mount({ withDefaultUi: true });
         expect((inspector.textContent ?? '').trim().length).toBeGreaterThan(0);
     });
+
+    it('preserves focus and selection on the label input across a reactive re-stamp', async () => {
+        const { host, inspector } = mount({ withDefaultUi: true, selectedEdgeId: 'e1' });
+
+        const labelInput = inspector.querySelector('[data-field="label"]') as HTMLInputElement;
+        expect(labelInput).not.toBeNull();
+        // 'belongs to' — 10 chars; caret in the middle so selection is non-trivial.
+        expect(labelInput.value).toBe('belongs to');
+
+        labelInput.focus();
+        labelInput.setSelectionRange(4, 7);
+        expect(document.activeElement).toBe(labelInput);
+
+        // Trigger a reactive re-stamp on the SAME edge by mutating a property
+        // the stamp reads. The new input is rebuilt with the updated value, so
+        // we can still assert selection restoration across the re-stamp.
+        const canvas = Alpine.$data(host) as any;
+        const edge = canvas.edges.find((e: any) => e.id === 'e1');
+        edge.label = 'belongs to (edited)';
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        const newLabelInput = inspector.querySelector('[data-field="label"]') as HTMLInputElement;
+        expect(newLabelInput).not.toBe(labelInput);
+        expect(newLabelInput.value).toBe('belongs to (edited)');
+        expect(document.activeElement).toBe(newLabelInput);
+        expect(newLabelInput.selectionStart).toBe(4);
+        expect(newLabelInput.selectionEnd).toBe(7);
+    });
 });
