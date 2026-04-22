@@ -20,6 +20,7 @@ import { validateSchema } from './validate';
 import { diffSchemas } from './diff';
 import { toDot } from './dot';
 import { schemaLayout } from './layout';
+import { attachSchemaHistory } from './history';
 import { registerNodeInspectorDirective } from './inspector/node-inspector';
 import { registerRowInspectorDirective } from './inspector/row-inspector';
 import { registerEdgeInspectorDirective } from './inspector/edge-inspector';
@@ -30,7 +31,8 @@ export * from './validate';
 export * from './diff';
 export * from './dot';
 export * from './layout';
-export { addField, renameField, removeField, reorderFields, inferReferences, schemaToJSON, schemaFromJSON, validateSchema, diffSchemas, toDot, schemaLayout };
+export * from './history';
+export { addField, renameField, removeField, reorderFields, inferReferences, schemaToJSON, schemaFromJSON, validateSchema, diffSchemas, toDot, schemaLayout, attachSchemaHistory };
 export { registerNodeInspectorDirective, registerRowInspectorDirective, registerEdgeInspectorDirective };
 
 export default function registerSchemaAddon(Alpine: Alpine): void {

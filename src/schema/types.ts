@@ -123,3 +123,28 @@ export interface SchemaLayoutOptions {
     /** Prefer a specific algorithm. Defaults to trying 'dagre' → 'tree' → 'grid'. */
     algorithm?: 'dagre' | 'tree' | 'grid';
 }
+
+export interface SchemaHistoryOptions {
+    /** Max snapshots to retain. Default 50. Oldest evicted first. */
+    limit?: number;
+}
+
+export interface SchemaHistoryHandle {
+    /** Apply previous snapshot. Returns true if an undo occurred; false if empty. */
+    undo(): boolean;
+    /** Reapply the most recently undone snapshot. Returns true if redo occurred. */
+    redo(): boolean;
+    readonly canUndo: boolean;
+    readonly canRedo: boolean;
+    /** Clear the entire history stack. */
+    clear(): void;
+    /**
+     * Group multiple schema mutations into a single undo step. Snapshot at entry
+     * is preserved; snapshot at exit replaces any intermediate ones. Nested
+     * batches collapse to the outermost. If `fn` throws, roll back to the
+     * pre-batch state.
+     */
+    batch<T>(fn: () => T): T;
+    /** Detach event listeners — call when tearing down the consumer. */
+    dispose(): void;
+}
