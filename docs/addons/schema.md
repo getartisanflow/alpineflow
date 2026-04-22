@@ -335,6 +335,10 @@ If you omit the template you own the content completely; the scope (`inspector`,
 </aside>
 ```
 
+### Row selection
+
+Schema rows are automatically row-selectable. The `x-flow-schema` directive stamps `x-flow-row-select="'<nodeId>.<fieldName>'"` on every field row it renders, so clicking a row populates `canvas.selectedRows` with a `"nodeId.fieldName"` id in the same dot-separated format the row inspector expects. No extra directive or wiring is required on the consumer side — drop an `<aside x-schema-row-inspector>` on the page and row clicks flow through to it.
+
 ### Row inspector
 
 The row inspector's `selectedRow` resolves from `canvas.selectedRows` — each entry is a dot-separated `"nodeId.fieldName"` string (first dot only; field names can contain further dots). The helper parses the id into `{ nodeId, fieldName }`:
