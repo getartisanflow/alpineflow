@@ -51,6 +51,12 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       const fields = Array.isArray(data.fields) ? data.fields : [];
       const nodeId = typeof node?.id === 'string' ? node.id : '';
 
+      if (typeof data.kind === 'string' && data.kind) {
+        host.setAttribute('data-flow-schema-kind', data.kind);
+      } else {
+        host.removeAttribute('data-flow-schema-kind');
+      }
+
       clearChildren(host);
 
       // Header
@@ -153,6 +159,7 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       // Touch label + field properties so Alpine subscribes to mutations.
       const data = readNode()?.data;
       void data?.label;
+      void data?.kind;
       const fields = data?.fields;
       if (Array.isArray(fields)) {
         for (const f of fields) {

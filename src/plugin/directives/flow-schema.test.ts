@@ -24,7 +24,7 @@ describe('x-flow-schema directive', () => {
    * Doesn't require the full flowCanvas scope — the directive only reads
    * node.data from its bound element's parent.
    */
-  function mount(data: { label: string; fields: Array<Record<string, unknown>> }) {
+  function mount(data: { label: string; fields: Array<Record<string, unknown>>; kind?: string }) {
     clearChildren(document.body);
     const host = document.createElement('div');
     host.setAttribute('x-data', `{ node: { id: 't', data: ${JSON.stringify(data)} } }`);
@@ -174,5 +174,20 @@ describe('x-flow-schema directive', () => {
     document.body.appendChild(host);
     expect(() => Alpine.initTree(host)).not.toThrow();
     expect(target.querySelector('.flow-schema-header')).toBeNull();
+  });
+
+  it('stamps data-flow-schema-kind on the host when node.data.kind is set', () => {
+    const el = mount({ label: 'User', kind: 'entity', fields: [{ name: 'id', type: 'uuid', key: 'primary' }] });
+    expect(el.getAttribute('data-flow-schema-kind')).toBe('entity');
+  });
+
+  it('omits data-flow-schema-kind when node.data.kind is absent', () => {
+    const el = mount({ label: 'User', fields: [] });
+    expect(el.hasAttribute('data-flow-schema-kind')).toBe(false);
+  });
+
+  it('clears data-flow-schema-kind when node.data.kind is set to empty string', () => {
+    const el = mount({ label: 'User', kind: '', fields: [] });
+    expect(el.hasAttribute('data-flow-schema-kind')).toBe(false);
   });
 });

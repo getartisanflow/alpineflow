@@ -1857,6 +1857,18 @@ export interface FlowSchemaField {
 
   /** Optional icon — an emoji or CSS class name rendered before the field name. */
   icon?: string;
+
+  /** Free-form description; consumer templates (inspector, hovercards, docs) render this. */
+  description?: string;
+
+  /** Mark a field deprecated — consumer CSS can style via `.flow-schema-row--deprecated`. */
+  deprecated?: boolean;
+
+  /** Free-form tags array — consumer-defined vocabulary (e.g., ['indexed', 'immutable', 'pii']). */
+  tags?: string[];
+
+  /** Default value hint for the field — consumer renders in the inspector / hovercard. Unknown type. */
+  defaultValue?: unknown;
 }
 
 /**
@@ -1867,5 +1879,9 @@ export interface FlowSchemaField {
 export interface SchemaNodeData {
   label: string;
   fields: FlowSchemaField[];
+  /** Optional consumer-defined discriminator (e.g., 'entity' | 'enum' | 'query' | 'view'). Stamps `data-flow-schema-kind="<value>"` on the node element for CSS theming. */
+  kind?: string;
+  _hiddenFields?: string[];
+  _collapsed?: boolean;
   [key: string]: unknown;
 }
