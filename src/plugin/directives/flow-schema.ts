@@ -54,6 +54,23 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       }
     };
 
+    /**
+     * Resolve whether this canvas has opted into keyboard field navigation
+     * on rows. Reuses the existing `keyboardConnect` flag — consumers who
+     * opt into keyboard-driven connect almost always also want keyboard row
+     * focus, so we bundle the two.
+     */
+    const readKeyboardNav = (): boolean => {
+      try {
+        const canvasEl = host.closest('.flow-container') as HTMLElement | null;
+        if (!canvasEl) return false;
+        const canvas = (Alpine as any).$data?.(canvasEl);
+        return !!canvas?._config?.keyboardConnect;
+      } catch {
+        return false;
+      }
+    };
+
     host.classList.add('flow-schema-node');
 
     const render = (): void => {
@@ -77,6 +94,7 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       clearChildren(host);
 
       const rowsReorderable = readRowsReorderable();
+      const keyboardNav = readKeyboardNav();
 
       // Header
       const header = document.createElement('div');
@@ -88,7 +106,7 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       const body = document.createElement('div');
       body.className = 'flow-schema-body';
       for (const field of fields) {
-        body.appendChild(renderRow(field, nodeId, rowsReorderable));
+        body.appendChild(renderRow(field, nodeId, rowsReorderable, keyboardNav));
       }
       host.appendChild(body);
 
@@ -103,6 +121,7 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       field: FlowSchemaField,
       nodeId: string,
       rowsReorderable: boolean,
+      keyboardNav: boolean,
     ): HTMLElement => {
       const row = document.createElement('div');
       row.className = 'flow-schema-row';
@@ -128,6 +147,18 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       // below.
       if (rowsReorderable) {
         row.setAttribute('x-schema-reorderable', '');
+      }
+
+      // Keyboard field navigation opt-in. When `canvas._config.keyboardConnect`
+      // is truthy, stamp `x-schema-keyboard-nav` on each row so the directive
+      // can attach tabindex/role/aria + key handlers. Directive is registered
+      // by the schema addon; activation happens via Alpine.initTree(body)
+      // below.
+      if (keyboardNav && nodeId) {
+        row.setAttribute(
+          'x-schema-keyboard-nav',
+          JSON.stringify(`${nodeId}.${field.name}`),
+        );
       }
 
       // Target handle (left). We set the x-flow-handle directive attribute
