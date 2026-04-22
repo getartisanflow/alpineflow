@@ -17,13 +17,15 @@ import { addField, renameField, removeField, reorderFields } from './field-ops';
 import { inferReferences } from './references';
 import { schemaToJSON, schemaFromJSON } from './serialization';
 import { validateSchema } from './validate';
+import { diffSchemas } from './diff';
 import { registerNodeInspectorDirective } from './inspector/node-inspector';
 import { registerRowInspectorDirective } from './inspector/row-inspector';
 import { registerEdgeInspectorDirective } from './inspector/edge-inspector';
 
 export * from './types';
 export * from './validate';
-export { addField, renameField, removeField, reorderFields, inferReferences, schemaToJSON, schemaFromJSON, validateSchema };
+export * from './diff';
+export { addField, renameField, removeField, reorderFields, inferReferences, schemaToJSON, schemaFromJSON, validateSchema, diffSchemas };
 export { registerNodeInspectorDirective, registerRowInspectorDirective, registerEdgeInspectorDirective };
 
 export default function registerSchemaAddon(Alpine: Alpine): void {
@@ -67,6 +69,9 @@ export default function registerSchemaAddon(Alpine: Alpine): void {
             };
             canvas.validateSchema = function () {
                 return validateSchema(this);
+            };
+            canvas.diffSchemas = function (before: any, after: any, opts?: any) {
+                return diffSchemas(before, after, opts);
             };
         },
     });

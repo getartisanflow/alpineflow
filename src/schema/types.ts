@@ -75,3 +75,25 @@ export interface SchemaValidationResult {
     valid: boolean;
     issues: SchemaValidationIssue[];
 }
+
+export interface SchemaDiff {
+    addedNodes: string[];
+    removedNodes: string[];
+    /** Heuristic: same fields shape + different id. Only detected if opts.detectRenames is true. */
+    renamedNodes: Array<{ from: string; to: string }>;
+    addedFields: Array<{ nodeId: string; fieldName: string }>;
+    removedFields: Array<{ nodeId: string; fieldName: string }>;
+    /** Consumer-supplied hints via opts.fieldRenames — walked and applied BEFORE added/removed detection. */
+    renamedFields: Array<{ nodeId: string; from: string; to: string }>;
+    /** Detected for fields that exist in both snapshots (by name, or by rename hint) with different `type` strings. */
+    changedFieldTypes: Array<{ nodeId: string; fieldName: string; from: string; to: string }>;
+    addedEdges: string[];
+    removedEdges: string[];
+}
+
+export interface DiffOptions {
+    /** Consumer hints for field renames — applied before added/removed detection. */
+    fieldRenames?: Array<{ nodeId: string; from: string; to: string }>;
+    /** When true, apply a basic node-rename heuristic (same field shape, different id). Default false. */
+    detectRenames?: boolean;
+}
