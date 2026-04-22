@@ -16,12 +16,14 @@ import { registerAddon } from '../core/registry';
 import { addField, renameField, removeField, reorderFields } from './field-ops';
 import { inferReferences } from './references';
 import { schemaToJSON, schemaFromJSON } from './serialization';
+import { validateSchema } from './validate';
 import { registerNodeInspectorDirective } from './inspector/node-inspector';
 import { registerRowInspectorDirective } from './inspector/row-inspector';
 import { registerEdgeInspectorDirective } from './inspector/edge-inspector';
 
 export * from './types';
-export { addField, renameField, removeField, reorderFields, inferReferences, schemaToJSON, schemaFromJSON };
+export * from './validate';
+export { addField, renameField, removeField, reorderFields, inferReferences, schemaToJSON, schemaFromJSON, validateSchema };
 export { registerNodeInspectorDirective, registerRowInspectorDirective, registerEdgeInspectorDirective };
 
 export default function registerSchemaAddon(Alpine: Alpine): void {
@@ -62,6 +64,9 @@ export default function registerSchemaAddon(Alpine: Alpine): void {
             };
             canvas.schemaFromJSON = function (json: any) {
                 return schemaFromJSON(this, json);
+            };
+            canvas.validateSchema = function () {
+                return validateSchema(this);
             };
         },
     });

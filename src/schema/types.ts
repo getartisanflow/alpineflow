@@ -52,3 +52,26 @@ export interface SchemaGraphJSON {
         label?: string;
     }>;
 }
+
+export type SchemaValidationIssueCode =
+    | 'dangling-edge'
+    | 'missing-primary-key'
+    | 'duplicate-field'
+    | 'duplicate-node-id'
+    | 'disconnected-node'
+    | 'cycle';
+
+export interface SchemaValidationIssue {
+    severity: 'error' | 'warning';
+    code: SchemaValidationIssueCode;
+    nodeId?: string;
+    fieldName?: string;
+    edgeId?: string;
+    message: string;
+}
+
+export interface SchemaValidationResult {
+    /** true when no 'error' severity issues exist. Warnings don't invalidate. */
+    valid: boolean;
+    issues: SchemaValidationIssue[];
+}
