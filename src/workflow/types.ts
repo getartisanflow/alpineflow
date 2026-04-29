@@ -88,5 +88,6 @@ declare module '../core/types' {
         replayExecution(log: FlowRunLogEntry[], options?: ReplayOptions): Promise<ReplayHandle>;
         executionLog: FlowRunLogEntry[];
         resetExecutionLog(): void;
+        validateWorkflow(): import('./validate').WorkflowValidationResult;
     }
 }
