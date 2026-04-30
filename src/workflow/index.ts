@@ -141,7 +141,7 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
             return Math.min(100, (this.currentTimeMs / this.durationMs) * 100);
         },
         init() {
-            const { canvas } = resolveCanvas(this.$el as HTMLElement, config.target);
+            const { canvas } = resolveCanvas((this as any).$el as HTMLElement, config.target);
             this._canvas = canvas;
             if (config.handleExpr && this._canvas) {
                 this._handle = this._canvas[config.handleExpr] ?? null;
@@ -248,7 +248,7 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
             this._applyScrub(ev);
         },
         _applyScrub(ev: PointerEvent) {
-            const target = (this.$el as HTMLElement).querySelector('.flow-replay-scrubber') as HTMLElement | null;
+            const target = ((this as any).$el as HTMLElement).querySelector('.flow-replay-scrubber') as HTMLElement | null;
             if (!target || !this._handle?.scrubTo) return;
             const rect = target.getBoundingClientRect();
             const ratio = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
@@ -269,7 +269,8 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
         filter: config.initialFilter || 'all',
         baseTime: 0,
         init() {
-            const { canvas } = resolveCanvas(this.$el as HTMLElement, config.target);
+            const self = this as any;
+            const { canvas } = resolveCanvas(self.$el as HTMLElement, config.target);
             this._canvas = canvas;
             if (config.sourceExpr && this._canvas) {
                 this._source = this._canvas[config.sourceExpr] ?? [];
@@ -279,8 +280,8 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
             // Auto-scroll to the bottom whenever the visible event list grows
             // — but only when the user hasn't manually scrolled away from the
             // tail. onUserScroll() resets the flag based on scroll position.
-            this.$watch('filteredEvents', () => {
-                if (this._autoScroll) this.$nextTick(() => this._scrollToBottom());
+            self.$watch('filteredEvents', () => {
+                if (this._autoScroll) self.$nextTick(() => this._scrollToBottom());
             });
         },
         get filteredEvents(): any[] {
@@ -329,20 +330,20 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
         },
         onRowClick(event: any) {
             if (event?.nodeId) {
-                (this.$el as HTMLElement).dispatchEvent(new CustomEvent('flow:highlight-node', {
+                ((this as any).$el as HTMLElement).dispatchEvent(new CustomEvent('flow:highlight-node', {
                     detail: { nodeId: event.nodeId },
                     bubbles: true,
                 }));
             }
         },
         onUserScroll() {
-            const body = this.$refs.body as HTMLElement | undefined;
+            const body = (this as any).$refs?.body as HTMLElement | undefined;
             if (!body) return;
             const atBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 5;
             this._autoScroll = atBottom;
         },
         _scrollToBottom() {
-            const body = this.$refs.body as HTMLElement | undefined;
+            const body = (this as any).$refs?.body as HTMLElement | undefined;
             if (body) body.scrollTop = body.scrollHeight;
         },
     }));
@@ -356,7 +357,7 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
         _canvas: null as any,
         _canvasEl: null as HTMLElement | null,
         init() {
-            const { canvas, el } = resolveCanvas(this.$el as HTMLElement, config.target);
+            const { canvas, el } = resolveCanvas((this as any).$el as HTMLElement, config.target);
             this._canvas = canvas;
             this._canvasEl = el;
         },
@@ -379,7 +380,7 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
         _canvas: null as any,
         alwaysVisible: !!config.alwaysVisible,
         init() {
-            const { canvas } = resolveCanvas(this.$el as HTMLElement, config.target);
+            const { canvas } = resolveCanvas((this as any).$el as HTMLElement, config.target);
             this._canvas = canvas;
         },
         get isRunning(): boolean {
@@ -394,7 +395,7 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
     Alpine.data('flowResetButton', (config: { target: string | null }) => ({
         _canvas: null as any,
         init() {
-            const { canvas } = resolveCanvas(this.$el as HTMLElement, config.target);
+            const { canvas } = resolveCanvas((this as any).$el as HTMLElement, config.target);
             this._canvas = canvas;
         },
         onClick() {
