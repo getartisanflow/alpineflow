@@ -1789,3 +1789,53 @@
   font: inherit;
   font-size: 11px;
 }
+
+/* ----------------------------------------------------------------------------
+   Execution log — structural rules (layout only; colors live in the theme)
+   Rendered by the <x-flow-execution-log> component (Alpine factory
+   `flowExecutionLog`).
+   ---------------------------------------------------------------------------- */
+
+.flow-execution-log {
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.flow-execution-log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+}
+
+.flow-execution-log-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.flow-execution-log-row {
+  display: block;
+}
+
+.flow-execution-log-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.flow-execution-log-row-default {
+  display: grid;
+  grid-template-columns: 56px 16px 1fr;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: 11px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.flow-execution-log-empty {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 12px;
+}

@@ -256,4 +256,94 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
             this.currentTimeMs = ratio * this.durationMs;
         },
     }));
+
+    Alpine.data('flowExecutionLog', (config: {
+        sourceExpr: string | null;
+        target: string | null;
+        initialFilter: string;
+        maxEvents: number;
+    }) => ({
+        _canvas: null as any,
+        _source: [] as any[],
+        _autoScroll: true,
+        filter: config.initialFilter || 'all',
+        baseTime: 0,
+        init() {
+            const { canvas } = resolveCanvas(this.$el as HTMLElement, config.target);
+            this._canvas = canvas;
+            if (config.sourceExpr && this._canvas) {
+                this._source = this._canvas[config.sourceExpr] ?? [];
+            } else {
+                this._source = this._canvas?.executionLog ?? [];
+            }
+            // Auto-scroll to the bottom whenever the visible event list grows
+            // — but only when the user hasn't manually scrolled away from the
+            // tail. onUserScroll() resets the flag based on scroll position.
+            this.$watch('filteredEvents', () => {
+                if (this._autoScroll) this.$nextTick(() => this._scrollToBottom());
+            });
+        },
+        get filteredEvents(): any[] {
+            const events = this._source ?? [];
+            if (events.length === 0) return [];
+            this.baseTime = events[0]?.t ?? 0;
+            let filtered: any[] = events;
+            if (this.filter === 'errors') {
+                filtered = events.filter((e: any) => e.type === 'run:error' || e.type === 'edge:failed');
+            } else if (this.filter === 'lifecycle') {
+                const types = new Set(['run:started', 'run:complete', 'run:stopped', 'node:enter', 'node:exit']);
+                filtered = events.filter((e: any) => types.has(e.type));
+            }
+            return filtered.slice(-config.maxEvents);
+        },
+        formatTime(deltaMs: number): string {
+            if (!Number.isFinite(deltaMs) || deltaMs < 0) deltaMs = 0;
+            if (deltaMs < 1000) return `+${Math.round(deltaMs)}ms`;
+            if (deltaMs < 60_000) return `+${(deltaMs / 1000).toFixed(1)}s`;
+            const m = Math.floor(deltaMs / 60_000);
+            const s = Math.floor((deltaMs % 60_000) / 1000);
+            return `+${m}m${s ? ` ${s}s` : ''}`;
+        },
+        iconFor(type: string): string {
+            const map: Record<string, string> = {
+                'run:started': '▶', 'run:complete': '✓', 'run:stopped': '◼', 'run:error': '!',
+                'node:enter': '→', 'node:exit': '←', 'edge:taken': '─', 'edge:failed': '×',
+                'edge:untaken': '·', 'parallel:fork': '⊥', 'wait:start': '⏱', 'wait:end': '⏱',
+                'branch:chosen': '?',
+            };
+            return map[type] ?? '·';
+        },
+        iconClassFor(type: string): string {
+            const map: Record<string, string> = {
+                'run:started': 'flow-execution-log-icon--start',
+                'run:complete': 'flow-execution-log-icon--complete',
+                'run:stopped': 'flow-execution-log-icon--start',
+                'run:error': 'flow-execution-log-icon--error',
+                'edge:failed': 'flow-execution-log-icon--error',
+                'node:enter': 'flow-execution-log-icon--enter',
+                'node:exit': 'flow-execution-log-icon--exit',
+                'edge:taken': 'flow-execution-log-icon--edge-taken',
+                'parallel:fork': 'flow-execution-log-icon--fork',
+            };
+            return map[type] ?? '';
+        },
+        onRowClick(event: any) {
+            if (event?.nodeId) {
+                (this.$el as HTMLElement).dispatchEvent(new CustomEvent('flow:highlight-node', {
+                    detail: { nodeId: event.nodeId },
+                    bubbles: true,
+                }));
+            }
+        },
+        onUserScroll() {
+            const body = this.$refs.body as HTMLElement | undefined;
+            if (!body) return;
+            const atBottom = body.scrollTop + body.clientHeight >= body.scrollHeight - 5;
+            this._autoScroll = atBottom;
+        },
+        _scrollToBottom() {
+            const body = this.$refs.body as HTMLElement | undefined;
+            if (body) body.scrollTop = body.scrollHeight;
+        },
+    }));
 }
