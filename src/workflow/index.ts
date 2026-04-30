@@ -346,4 +346,60 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
             if (body) body.scrollTop = body.scrollHeight;
         },
     }));
+
+    Alpine.data('flowRunButton', (config: {
+        startId: string;
+        options: any;
+        handlersKey: string;
+        target: string | null;
+    }) => ({
+        _canvas: null as any,
+        _canvasEl: null as HTMLElement | null,
+        init() {
+            const { canvas, el } = resolveCanvas(this.$el as HTMLElement, config.target);
+            this._canvas = canvas;
+            this._canvasEl = el;
+        },
+        get isRunning(): boolean {
+            const state = this._canvas?.runState;
+            return state === 'running' || state === 'paused';
+        },
+        async onClick() {
+            if (this.isRunning) return;
+            if (!this._canvas) {
+                console.warn('[wireflow] <x-flow-run-button>: no canvas found');
+                return;
+            }
+            const handlers = (this._canvasEl as any)?.[config.handlersKey] ?? {};
+            await this._canvas.run(config.startId, handlers, config.options ?? {});
+        },
+    }));
+
+    Alpine.data('flowStopButton', (config: { target: string | null; alwaysVisible: boolean }) => ({
+        _canvas: null as any,
+        alwaysVisible: !!config.alwaysVisible,
+        init() {
+            const { canvas } = resolveCanvas(this.$el as HTMLElement, config.target);
+            this._canvas = canvas;
+        },
+        get isRunning(): boolean {
+            const state = this._canvas?.runState;
+            return state === 'running' || state === 'paused';
+        },
+        onClick() {
+            this._canvas?.stopRun?.();
+        },
+    }));
+
+    Alpine.data('flowResetButton', (config: { target: string | null }) => ({
+        _canvas: null as any,
+        init() {
+            const { canvas } = resolveCanvas(this.$el as HTMLElement, config.target);
+            this._canvas = canvas;
+        },
+        onClick() {
+            this._canvas?.resetStates?.();
+            this._canvas?.resetExecutionLog?.();
+        },
+    }));
 }

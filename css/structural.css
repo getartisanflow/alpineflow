@@ -1839,3 +1839,33 @@
   text-align: center;
   font-size: 12px;
 }
+
+/* ----------------------------------------------------------------------------
+   Run / Stop / Reset trio — structural rules.
+   ---------------------------------------------------------------------------- */
+
+.flow-run-button,
+.flow-stop-button,
+.flow-reset-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+}
+
+.flow-run-button:disabled,
+.flow-stop-button:disabled,
+.flow-reset-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.flow-run-button-label--running {
+  font-style: italic;
+}

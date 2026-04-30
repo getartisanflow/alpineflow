@@ -823,3 +823,38 @@
   color: var(--flow-text-body, #e4e5ea);
   font-weight: 500;
 }
+
+/* ----------------------------------------------------------------------------
+   Run / Stop / Reset trio — default theme.
+   Reuses existing tokens — no new CSS variables introduced.
+   ---------------------------------------------------------------------------- */
+
+.flow-run-button {
+  background: var(--flow-edge-taken-stroke, #14b8a6);
+  color: #fff;
+}
+
+.flow-run-button:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
+.flow-stop-button {
+  background: transparent;
+  border: 1px solid var(--flow-border-subtle, #2d3039);
+  color: var(--flow-text-body, #e4e5ea);
+}
+
+.flow-stop-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.flow-reset-button {
+  background: transparent;
+  border: 1px solid var(--flow-border-subtle, #2d3039);
+  color: var(--flow-text-muted, #9598a5);
+}
+
+.flow-reset-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--flow-text-body, #e4e5ea);
+}
