@@ -221,6 +221,14 @@ Workflow addon UI primitives — condition directive + canvas runState + Alpine.
 ### Docs
 - `docs/addons/workflow.md` extended with condition directive + canvas runState + UI primitive factory reference.
 
+---
+
+Workflow addon — lazy canvas resolution.
+
+### Fixed
+- `flowRunButton`, `flowStopButton`, `flowResetButton`, `flowReplayControls`, and `flowExecutionLog` Alpine.data factories now lazy re-resolve their cached `_canvas` reference if a required canvas method is missing at click/getter time. Previously, when a button was rendered as a sibling/ancestor of the `.flow-container` (DOM-order: button before canvas), the button's `init()` cached a stale empty proxy from `Alpine.$data()` and click-time method calls threw `TypeError: this._canvas.run is not a function`. The factories are now tolerant of arbitrary DOM order.
+- `flowExecutionLog.filteredEvents` reads from the canvas at getter time instead of caching the source array reference at init — the visible log now stays in sync with the canvas's `executionLog`/sourceExpr regardless of mount order.
+
 ## v0.1.2-alpha — 2026-04-03
 
 ### Fixed
