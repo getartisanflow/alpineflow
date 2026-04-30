@@ -14,8 +14,9 @@ import { registerAddon } from '../core/registry';
 import { createRunExecutor } from './run';
 import { createReplayExecutor } from './replay';
 import { validateWorkflow } from './validate';
+import type { WorkflowRunState } from './types';
 
-export type { FlowRunHandlers, FlowRunOptions, FlowRunContext, FlowRunHandle, FlowRunLogEntry, FlowRunLogEntryType, FlowCondition, ReplayHandle, ReplayOptions } from './types';
+export type { FlowRunHandlers, FlowRunOptions, FlowRunContext, FlowRunHandle, FlowRunLogEntry, FlowRunLogEntryType, FlowCondition, ReplayHandle, ReplayOptions, WorkflowRunState } from './types';
 export { validateWorkflow } from './validate';
 export type { WorkflowIssueCode, WorkflowValidationIssue, WorkflowValidationResult } from './validate';
 
@@ -28,6 +29,42 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
             canvas.resetExecutionLog = function () { this.executionLog = []; };
             canvas.validateWorkflow = function () {
                 return validateWorkflow(this);
+            };
+
+            // Canvas-level run tracking — populated by createRunExecutor when a
+            // run is in flight. Drives the workflow UI primitives (run/stop
+            // buttons, replay controls) without forcing consumers to track the
+            // handle themselves.
+            canvas._currentRunHandle = null;
+            Object.defineProperty(canvas, 'runState', {
+                get(): WorkflowRunState {
+                    const h = this._currentRunHandle;
+                    if (!h) return 'idle';
+                    if (h.isStopped) return 'stopped';
+                    if (h.isPaused) return 'paused';
+                    return 'running';
+                },
+                configurable: true,
+            });
+            canvas.stopRun = function (): void {
+                this._currentRunHandle?.stop?.();
+            };
+
+            // Wrap any pre-existing resetStates() so workflow-condition nodes
+            // also have their `_branchTaken` cleared. Defensive — if core
+            // doesn't expose resetStates, define a minimal one.
+            const originalReset = typeof canvas.resetStates === 'function'
+                ? canvas.resetStates.bind(canvas)
+                : null;
+            canvas.resetStates = function (...args: any[]) {
+                if (originalReset) originalReset(...args);
+                if (Array.isArray(this.nodes)) {
+                    for (const node of this.nodes) {
+                        if (node && node.type === 'flow-condition' && node.data) {
+                            delete node.data._branchTaken;
+                        }
+                    }
+                }
             };
         },
     });

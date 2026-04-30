@@ -1,5 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createRunExecutor } from './run';
+import AlpineFlowWorkflow from './index';
+import { getAddon } from '../core/registry';
+
+/**
+ * Apply the workflow addon's `setup(canvas)` callback to a mock canvas so
+ * tests can exercise canvas-level run tracking (`_currentRunHandle`,
+ * `runState`, `stopRun`). The plugin entry registers the addon synchronously,
+ * so calling it once per test suite is enough.
+ */
+function applyWorkflowSetup(canvas: any): any {
+    AlpineFlowWorkflow({ magic: () => {} } as any);
+    const addon = getAddon<{ setup(c: any): void }>('workflow');
+    addon!.setup(canvas);
+    return canvas;
+}
 
 function mockCanvas(nodes: any[], edges: any[]) {
     const nodeMap = new Map(nodes.map(n => [n.id, { ...n }]));
@@ -448,5 +463,86 @@ describe('workflow run helper', () => {
 
         await expect(handle.finished).rejects.toThrow('branch A failed');
         expect(canvas.setNodeState).toHaveBeenCalledWith('a', 'failed');
+    });
+});
+
+describe('canvas runState + stopRun (addon setup)', () => {
+    it('reports runState "idle" before any run starts', () => {
+        const canvas = applyWorkflowSetup(mockCanvas([], []));
+        expect(canvas.runState).toBe('idle');
+    });
+
+    it('reports runState "running" while a run is in flight, then "idle" after', async () => {
+        const canvas = applyWorkflowSetup(mockCanvas(
+            [{ id: 'a', data: {} }, { id: 'b', data: {} }],
+            [{ id: 'e1', source: 'a', target: 'b' }],
+        ));
+        canvas.run = createRunExecutor(canvas);
+
+        let observed: string | undefined;
+        const handle = await canvas.run('a', {
+            onEnter: () => { observed = canvas.runState; },
+        });
+        await handle.finished;
+
+        expect(observed).toBe('running');
+        expect(canvas.runState).toBe('idle');
+    });
+
+    it('stopRun() forwards to the active handle and reflects "stopped"', async () => {
+        const canvas = applyWorkflowSetup(mockCanvas(
+            [{ id: 'a', data: {} }, { id: 'b', data: {} }],
+            [{ id: 'e1', source: 'a', target: 'b' }],
+        ));
+        canvas.run = createRunExecutor(canvas);
+
+        let stoppedDuringRun = false;
+        const handle = await canvas.run('a', {
+            onEnter: (node: any) => {
+                if (node.id === 'a') {
+                    canvas.stopRun();
+                    stoppedDuringRun = canvas.runState === 'stopped';
+                }
+            },
+        });
+        await handle.finished;
+
+        expect(stoppedDuringRun).toBe(true);
+        expect(canvas.runState).toBe('idle');
+    });
+
+    it('reports "paused" when the active handle is paused', async () => {
+        const canvas = applyWorkflowSetup(mockCanvas(
+            [{ id: 'a', data: {} }, { id: 'b', data: {} }],
+            [{ id: 'e1', source: 'a', target: 'b' }],
+        ));
+        canvas.run = createRunExecutor(canvas);
+
+        let pausedSeen = false;
+        const handle = await canvas.run('a', {
+            onEnter: (node: any) => {
+                if (node.id === 'a') {
+                    canvas._currentRunHandle.pause();
+                    pausedSeen = canvas.runState === 'paused';
+                    canvas._currentRunHandle.resume();
+                }
+            },
+        });
+        await handle.finished;
+
+        expect(pausedSeen).toBe(true);
+    });
+
+    it('clears _currentRunHandle in the run cleanup path', async () => {
+        const canvas = applyWorkflowSetup(mockCanvas(
+            [{ id: 'a', data: {} }],
+            [],
+        ));
+        canvas.run = createRunExecutor(canvas);
+
+        const handle = await canvas.run('a', {});
+        expect(canvas._currentRunHandle).toBe(handle);
+        await handle.finished;
+        expect(canvas._currentRunHandle).toBeNull();
     });
 });

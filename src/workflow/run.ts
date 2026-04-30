@@ -135,12 +135,16 @@ export function createRunExecutor(canvas: any) {
                 throw err;
             } finally {
                 if (options.lock) { canvas.toggleInteractive?.(); }
+                if (canvas._currentRunHandle === handle) {
+                    canvas._currentRunHandle = null;
+                }
             }
 
             return context;
         })();
 
         (handle as any).finished = execution;
+        canvas._currentRunHandle = handle;
         return handle;
     };
 }
