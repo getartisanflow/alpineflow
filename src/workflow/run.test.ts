@@ -1,5 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createRunExecutor } from './run';
+import AlpineFlowWorkflow from './index';
+import { getAddon } from '../core/registry';
+
+/**
+ * Apply the workflow addon's `setup(canvas)` callback to a mock canvas so
+ * tests can exercise canvas-level run tracking (`_currentRunHandle`,
+ * `runState`, `stopRun`). The plugin entry registers the addon synchronously,
+ * so calling it once per test suite is enough.
+ */
+function applyWorkflowSetup(canvas: any): any {
+    AlpineFlowWorkflow({ magic: () => {}, data: () => {}, $data: () => null } as any);
+    const addon = getAddon<{ setup(c: any): void }>('workflow');
+    addon!.setup(canvas);
+    return canvas;
+}
 
 function mockCanvas(nodes: any[], edges: any[]) {
     const nodeMap = new Map(nodes.map(n => [n.id, { ...n }]));
@@ -448,5 +463,181 @@ describe('workflow run helper', () => {
 
         await expect(handle.finished).rejects.toThrow('branch A failed');
         expect(canvas.setNodeState).toHaveBeenCalledWith('a', 'failed');
+    });
+});
+
+describe('canvas runState + stopRun (addon setup)', () => {
+    it('reports runState "idle" before any run starts', () => {
+        const canvas = applyWorkflowSetup(mockCanvas([], []));
+        expect(canvas.runState).toBe('idle');
+    });
+
+    it('reports runState "running" while a run is in flight, then "idle" after', async () => {
+        const canvas = applyWorkflowSetup(mockCanvas(
+            [{ id: 'a', data: {} }, { id: 'b', data: {} }],
+            [{ id: 'e1', source: 'a', target: 'b' }],
+        ));
+        canvas.run = createRunExecutor(canvas);
+
+        let observed: string | undefined;
+        const handle = await canvas.run('a', {
+            onEnter: () => { observed = canvas.runState; },
+        });
+        await handle.finished;
+
+        expect(observed).toBe('running');
+        expect(canvas.runState).toBe('idle');
+    });
+
+    it('stopRun() forwards to the active handle and reflects "stopped"', async () => {
+        const canvas = applyWorkflowSetup(mockCanvas(
+            [{ id: 'a', data: {} }, { id: 'b', data: {} }],
+            [{ id: 'e1', source: 'a', target: 'b' }],
+        ));
+        canvas.run = createRunExecutor(canvas);
+
+        let stoppedDuringRun = false;
+        const handle = await canvas.run('a', {
+            onEnter: (node: any) => {
+                if (node.id === 'a') {
+                    canvas.stopRun();
+                    stoppedDuringRun = canvas.runState === 'stopped';
+                }
+            },
+        });
+        await handle.finished;
+
+        expect(stoppedDuringRun).toBe(true);
+        expect(canvas.runState).toBe('idle');
+    });
+
+    it('reports "paused" when the active handle is paused', async () => {
+        const canvas = applyWorkflowSetup(mockCanvas(
+            [{ id: 'a', data: {} }, { id: 'b', data: {} }],
+            [{ id: 'e1', source: 'a', target: 'b' }],
+        ));
+        canvas.run = createRunExecutor(canvas);
+
+        let pausedSeen = false;
+        const handle = await canvas.run('a', {
+            onEnter: (node: any) => {
+                if (node.id === 'a') {
+                    canvas._currentRunHandle.pause();
+                    pausedSeen = canvas.runState === 'paused';
+                    canvas._currentRunHandle.resume();
+                }
+            },
+        });
+        await handle.finished;
+
+        expect(pausedSeen).toBe(true);
+    });
+
+    it('clears _currentRunHandle in the run cleanup path', async () => {
+        const canvas = applyWorkflowSetup(mockCanvas(
+            [{ id: 'a', data: {} }],
+            [],
+        ));
+        canvas.run = createRunExecutor(canvas);
+
+        const handle = await canvas.run('a', {});
+        expect(canvas._currentRunHandle).toBe(handle);
+        await handle.finished;
+        expect(canvas._currentRunHandle).toBeNull();
+    });
+});
+
+describe('flow-condition _branchTaken (run)', () => {
+    it('sets data._branchTaken="true" when condition evaluates true', async () => {
+        const canvas = applyWorkflowSetup(mockCanvas(
+            [
+                { id: 'cond', type: 'flow-condition', data: { condition: { field: 'x', op: 'equals', value: 1 } } },
+                { id: 'yes', data: {} },
+                { id: 'no', data: {} },
+            ],
+            [
+                { id: 'e-yes', source: 'cond', target: 'yes', sourceHandle: 'true' },
+                { id: 'e-no', source: 'cond', target: 'no', sourceHandle: 'false' },
+            ],
+        ));
+        canvas.run = createRunExecutor(canvas);
+
+        const handle = await canvas.run('cond', {}, { payload: { x: 1 } });
+        await handle.finished;
+
+        const cond = canvas.getNode('cond');
+        expect(cond.data._branchTaken).toBe('true');
+    });
+
+    it('sets data._branchTaken="false" when condition evaluates false', async () => {
+        const canvas = applyWorkflowSetup(mockCanvas(
+            [
+                { id: 'cond', type: 'flow-condition', data: { condition: { field: 'x', op: 'equals', value: 1 } } },
+                { id: 'yes', data: {} },
+                { id: 'no', data: {} },
+            ],
+            [
+                { id: 'e-yes', source: 'cond', target: 'yes', sourceHandle: 'true' },
+                { id: 'e-no', source: 'cond', target: 'no', sourceHandle: 'false' },
+            ],
+        ));
+        canvas.run = createRunExecutor(canvas);
+
+        const handle = await canvas.run('cond', {}, { payload: { x: 99 } });
+        await handle.finished;
+
+        const cond = canvas.getNode('cond');
+        expect(cond.data._branchTaken).toBe('false');
+    });
+
+    it('does not set _branchTaken on non-condition nodes', async () => {
+        const canvas = applyWorkflowSetup(mockCanvas(
+            [{ id: 'a', data: {} }, { id: 'b', data: {} }],
+            [{ id: 'e', source: 'a', target: 'b' }],
+        ));
+        canvas.run = createRunExecutor(canvas);
+
+        const handle = await canvas.run('a', {});
+        await handle.finished;
+
+        const a = canvas.getNode('a');
+        expect(a.data?._branchTaken).toBeUndefined();
+    });
+
+    it('sets _branchTaken when pickBranch override resolves a sourceHandle on a flow-condition', async () => {
+        const canvas = applyWorkflowSetup(mockCanvas(
+            [
+                { id: 'cond', type: 'flow-condition', data: {} },
+                { id: 'yes', data: {} },
+                { id: 'no', data: {} },
+            ],
+            [
+                { id: 'e-yes', source: 'cond', target: 'yes', sourceHandle: 'true' },
+                { id: 'e-no', source: 'cond', target: 'no', sourceHandle: 'false' },
+            ],
+        ));
+        canvas.run = createRunExecutor(canvas);
+
+        const handle = await canvas.run('cond', {
+            pickBranch: (_node: any, edges: any[]) => edges.find((e) => e.sourceHandle === 'true')?.id ?? null,
+        });
+        await handle.finished;
+
+        const cond = canvas.getNode('cond');
+        expect(cond.data._branchTaken).toBe('true');
+    });
+
+    it('resetStates() clears _branchTaken on flow-condition nodes', () => {
+        const nodes: any[] = [
+            { id: 'cond', type: 'flow-condition', data: { condition: { field: 'x', op: 'equals', value: 1 }, _branchTaken: 'true' } },
+        ];
+        const canvas = applyWorkflowSetup({
+            nodes,
+            edges: [],
+            getNode: (id: string) => nodes.find((n) => n.id === id),
+        });
+
+        canvas.resetStates();
+        expect(nodes[0].data._branchTaken).toBeUndefined();
     });
 });

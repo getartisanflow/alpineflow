@@ -202,6 +202,25 @@ Workflow addon foundations — validate helper + wait-node directive.
 - `x-flow-wait` directive — renders the standard wait-node template: header with optional icon, label (defaults to "Wait"), and formatted duration (`500ms` / `2.5s` / `1m 30s`); top target handle and bottom source handle. Reads `node.data.durationMs`, `node.data.label`, `node.data.icon`. textContent only — no innerHTML.
 - Structural + theme CSS for `.flow-wait-node` (uses existing theme tokens — no new CSS variables introduced).
 
+---
+
+Workflow addon UI primitives — condition directive + canvas runState + Alpine.data factories.
+
+### Added
+- `x-flow-condition` directive — renders the condition-node template with header, pretty-printed expression body, target handle, and labelled `true`/`false` source handles. Honors `node.data.direction` (`'horizontal'` default | `'vertical'`) and the directive expression. Reflects `node.data._branchTaken` via `data-flow-condition-branch-taken` for theme-driven branch decoration. textContent only.
+- Branch-taken state in `run.ts`: when a `flow-condition` node picks an outgoing edge, `node.data._branchTaken = chosenEdge.sourceHandle` (`'true'` / `'false'`). Mirrored in `replay.ts` on `edge:taken` events whose source is a condition node so replays produce the same decoration.
+- `canvas.resetStates()` extended to clear `_branchTaken` on every condition node alongside the existing runState reset.
+- Canvas-level run tracking: `canvas._currentRunHandle: FlowRunHandle | null`, `canvas.runState: 'idle' | 'running' | 'paused' | 'stopped'` (reactive getter), `canvas.stopRun()` (forwards to active handle).
+- New `WorkflowRunState` type exported.
+- `prettyPrintCondition()` helper — pure utility that turns a `FlowCondition` descriptor into a compact human-readable string. Mirrored on the PHP side by `FlowConditionNode::prettyPrintCondition()`.
+- `Alpine.data('flowReplayControls', …)` factory — duck-typed playback toolbar wiring. Auto-binds to `canvas.lastReplayHandle` or lazy-builds `replayExecution(executionLog)`. Capability detection: scrubber when `scrubTo` exists; progress bar otherwise.
+- `Alpine.data('flowExecutionLog', …)` factory — dense reactive event-log wiring. Filter modes (`all`/`errors`/`lifecycle`), auto-scroll-while-running, click-to-highlight via `flow:highlight-node` CustomEvent dispatch.
+- `Alpine.data('flowRunButton', …)`, `'flowStopButton'`, `'flowResetButton'` factories — read from `runState`, drive `canvas.run` / `canvas.stopRun` / `canvas.resetStates` + `resetExecutionLog`.
+- Structural + theme CSS for `.flow-condition-node`, `.flow-replay-controls`, `.flow-execution-log`, `.flow-run-button`, `.flow-stop-button`, `.flow-reset-button` — reuses existing tokens; no new CSS variables.
+
+### Docs
+- `docs/addons/workflow.md` extended with condition directive + canvas runState + UI primitive factory reference.
+
 ## v0.1.2-alpha — 2026-04-03
 
 ### Fixed

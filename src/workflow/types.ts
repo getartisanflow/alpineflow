@@ -42,6 +42,14 @@ export interface FlowRunHandle {
     readonly isStopped: boolean;
 }
 
+/**
+ * Reactive state of the workflow run on a canvas. Derived from the active
+ * FlowRunHandle (`_currentRunHandle`) — `idle` when none, otherwise reflects
+ * the handle's `isStopped` / `isPaused` flags. Drives the run/stop button
+ * components in the workflow UI primitives.
+ */
+export type WorkflowRunState = 'idle' | 'running' | 'paused' | 'stopped';
+
 export type FlowRunLogEntryType =
     | 'run:started' | 'run:complete' | 'run:error' | 'run:stopped'
     | 'node:enter' | 'node:exit'
@@ -89,5 +97,8 @@ declare module '../core/types' {
         executionLog: FlowRunLogEntry[];
         resetExecutionLog(): void;
         validateWorkflow(): import('./validate').WorkflowValidationResult;
+        readonly runState: WorkflowRunState;
+        stopRun(): void;
+        _currentRunHandle: FlowRunHandle | null;
     }
 }

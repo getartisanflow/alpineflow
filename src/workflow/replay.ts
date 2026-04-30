@@ -101,7 +101,21 @@ export function createReplayExecutor(canvas: any) {
                         break;
 
                     case 'edge:taken':
-                        if (entry.edgeId) { setEdgeTaken(canvas, entry.edgeId); }
+                        if (entry.edgeId) {
+                            setEdgeTaken(canvas, entry.edgeId);
+                            // Mirror _branchTaken on flow-condition source nodes so
+                            // replays produce the same branch decoration as the
+                            // original run.
+                            const edge = (canvas.edges ?? []).find((e: any) => e.id === entry.edgeId);
+                            if (edge && typeof edge.sourceHandle === 'string') {
+                                const sourceNode = (canvas.nodes ?? []).find((n: any) => n.id === edge.source)
+                                    ?? canvas.getNode?.(edge.source);
+                                if (sourceNode && sourceNode.type === 'flow-condition') {
+                                    sourceNode.data = sourceNode.data ?? {};
+                                    sourceNode.data._branchTaken = edge.sourceHandle;
+                                }
+                            }
+                        }
                         break;
 
                     case 'edge:untaken':
