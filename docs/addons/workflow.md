@@ -303,6 +303,85 @@ In WireFlow Blade templates, use from Alpine scope:
 
 Server-side `$this->flowSetNodeState()` and `$this->flowResetStates()` complement the addon for server-driven state pushes. The addon's `$flow.run()` handles client-side orchestration.
 
+## Condition node template — `x-flow-condition` directive
+
+Renders a workflow condition node with a header, a pretty-printed expression body, and three handles (target + true/false sources).
+
+```blade
+<x-flow :nodes="$nodes" :edges="$edges">
+    <x-slot:node>
+        <template x-if="node.type === 'flow-condition'">
+            <div x-flow-condition class="flow-condition-node"></div>
+        </template>
+    </x-slot:node>
+</x-flow>
+```
+
+Reads from `node.data`:
+
+- `condition: { field, op, value }` — declarative condition (or use `evaluate` for custom logic)
+- `evaluate: (payload) => boolean` — escape hatch for arbitrary predicates
+- `label?: string` — optional header override (defaults to `Condition`)
+- `direction?: 'horizontal' | 'vertical'` — default `'horizontal'`; can also be passed as the directive value (`x-flow-condition="'vertical'"`)
+- `evaluateLabel?: string` — body override when `evaluate` is used
+
+The directive renders body text via `prettyPrintCondition()` for declarative conditions, or `evaluateLabel` / `'[custom evaluator]'` when `evaluate` is set. textContent only — no innerHTML anywhere.
+
+### Branch-taken decoration
+
+When a run picks a branch, the addon sets `node.data._branchTaken` to the chosen `sourceHandle` (`'true'` or `'false'`). The directive reflects this via `data-flow-condition-branch-taken="..."` on the host. The default theme highlights the chosen handle with a soft glow and dims the other to `opacity: 0.4`.
+
+`canvas.resetStates()` clears `_branchTaken` on all condition nodes alongside the existing runState reset.
+
+### Replay mirror
+
+`$flow.replayExecution()` mirrors `_branchTaken` when applying `edge:taken` events whose source is a condition node, so replays produce the same visual decoration as the original run.
+
+## Canvas-level run state
+
+The workflow addon attaches three new properties on every canvas:
+
+```js
+canvas.runState           // 'idle' | 'running' | 'paused' | 'stopped'
+canvas.stopRun()          // forwards to the active FlowRunHandle's stop()
+canvas._currentRunHandle  // direct access (escape hatch — populated during runs)
+```
+
+`runState` is a reactive getter derived from the active `FlowRunHandle`. It drives `<x-flow-run-button>`, `<x-flow-stop-button>`, and any consumer code reacting to "is a run in flight".
+
+## `validateWorkflow()`
+
+`canvas.validateWorkflow()` runs a pure validation pass over the canvas's nodes + edges and returns `{ valid: boolean, issues: WorkflowValidationIssue[] }`. Issue codes:
+
+| Severity | Code | Meaning |
+| --- | --- | --- |
+| error | `dangling-edge` | Edge source/target node doesn't exist. |
+| error | `duplicate-node-id` | Two nodes share an id. |
+| error | `missing-condition` | A `flow-condition` has neither `condition` nor `evaluate`. |
+| error | `condition-missing-branch` | A `flow-condition` lacks its `true` or `false` outgoing edge. |
+| error | `unhandled-source-handle` | A `flow-condition` outgoing edge has a `sourceHandle` other than `true`/`false`. |
+| error | `wait-missing-duration` | A `flow-wait` node has non-numeric or missing `data.durationMs`. |
+| warning | `unreachable-node` | A node has no incoming and no outgoing edges. |
+| warning | `cycle` | A directed cycle exists in the graph. |
+
+`valid` is `true` iff no error-severity issues are present.
+
+## UI primitive factories — `Alpine.data`
+
+The workflow addon registers five `Alpine.data` factories used by the matching WireFlow Blade components:
+
+| Factory | Used by |
+| --- | --- |
+| `flowReplayControls` | `<x-flow-replay-controls>` — duck-typed playback toolbar (Play/Pause/Restart/Speed/scrubber/progress). |
+| `flowExecutionLog` | `<x-flow-execution-log>` — dense reactive event viewer with filter dropdown and click-to-highlight. |
+| `flowRunButton` | `<x-flow-run-button>` — workflow run trigger that auto-disables during runs. |
+| `flowStopButton` | `<x-flow-stop-button>` — halts an active run; hidden by default when idle. |
+| `flowResetButton` | `<x-flow-reset-button>` — clears node runState and the execution log. |
+
+Each factory resolves the surrounding canvas via the closest `.flow-container` ancestor or a `:target` selector when used outside the canvas. They consume canvas surfaces (`canvas.run`, `canvas.stopRun`, `canvas.replayExecution`, `canvas.executionLog`, `canvas.resetStates`, `canvas.resetExecutionLog`) — no imports from animate addon internals — so the replay-controls factory works against either `$flow.replay()` or `$flow.replayExecution()` handles via runtime capability detection.
+
+See WireFlow's [workflow addon page](https://artisanflow.dev/wireflow/docs/addons/workflow) for usage of each component.
+
 ## See Also
 
 - [runState (D2)](../migration/v0.2.1-alpha.md#runstate-d2)
