@@ -120,9 +120,41 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
         };
     };
 
+    /**
+     * Re-resolve `scope._canvas` if a required canvas method is missing.
+     *
+     * Alpine.data factories that resolve the canvas via `Alpine.$data()` at
+     * `init()` time will get a stale empty proxy if the button's DOM element is
+     * processed by Alpine BEFORE the `.flow-container`'s `flowCanvas` factory
+     * has run `_initAddons()`. The button caches the empty proxy forever, and
+     * method calls fail at click time. This helper re-resolves once on demand
+     * and is a no-op when the canvas is already fresh. Pass `'__any__'` to
+     * just rebind to whatever canvas is currently in the DOM (used by getters
+     * that need fresh state but don't call a specific method).
+     */
+    const ensureCanvas = (
+        scope: { _canvas: any; _canvasEl?: HTMLElement | null; $el?: HTMLElement },
+        requiredMethod: string,
+    ): boolean => {
+        if (requiredMethod !== '__any__'
+            && typeof scope._canvas?.[requiredMethod] === 'function') {
+            return true;
+        }
+        const fromEl = (scope as any).$el as HTMLElement | undefined;
+        const el = scope._canvasEl
+            ?? fromEl?.closest?.('.flow-container') as HTMLElement | null
+            ?? document.querySelector('.flow-container') as HTMLElement | null;
+        if (!el) return false;
+        scope._canvas = Alpine.$data(el) ?? null;
+        scope._canvasEl = el;
+        if (requiredMethod === '__any__') return !!scope._canvas;
+        return typeof scope._canvas?.[requiredMethod] === 'function';
+    };
+
     Alpine.data('flowReplayControls', (config: { handleExpr: string | null; target: string | null }) => ({
         _handle: null as any,
         _canvas: null as any,
+        _canvasEl: null as HTMLElement | null,
         _pollHandle: 0 as any,
         _runStart: 0,
         _scrubbing: false,
@@ -133,6 +165,7 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
         currentTimeMs: 0,
         durationMs: 0,
         get hasPlayableSource(): boolean {
+            ensureCanvas(this, '__any__');
             if (this._handle) return true;
             return Array.isArray(this._canvas?.executionLog) && this._canvas.executionLog.length > 0;
         },
@@ -141,8 +174,9 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
             return Math.min(100, (this.currentTimeMs / this.durationMs) * 100);
         },
         init() {
-            const { canvas } = resolveCanvas((this as any).$el as HTMLElement, config.target);
+            const { canvas, el } = resolveCanvas((this as any).$el as HTMLElement, config.target);
             this._canvas = canvas;
+            this._canvasEl = el;
             if (config.handleExpr && this._canvas) {
                 this._handle = this._canvas[config.handleExpr] ?? null;
             }
@@ -163,8 +197,9 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
         },
         _ensureHandle(): boolean {
             if (this._handle) return true;
+            ensureCanvas(this, 'replayExecution');
             const log = this._canvas?.executionLog;
-            if (Array.isArray(log) && log.length > 0 && typeof this._canvas.replayExecution === 'function') {
+            if (Array.isArray(log) && log.length > 0 && typeof this._canvas?.replayExecution === 'function') {
                 this._handle = this._canvas.replayExecution(log, { speed: this.speed });
                 this._detectCapabilities();
                 if (Array.isArray(log) && log.length > 0) {
@@ -264,19 +299,15 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
         maxEvents: number;
     }) => ({
         _canvas: null as any,
-        _source: [] as any[],
+        _canvasEl: null as HTMLElement | null,
         _autoScroll: true,
         filter: config.initialFilter || 'all',
         baseTime: 0,
         init() {
             const self = this as any;
-            const { canvas } = resolveCanvas(self.$el as HTMLElement, config.target);
+            const { canvas, el } = resolveCanvas(self.$el as HTMLElement, config.target);
             this._canvas = canvas;
-            if (config.sourceExpr && this._canvas) {
-                this._source = this._canvas[config.sourceExpr] ?? [];
-            } else {
-                this._source = this._canvas?.executionLog ?? [];
-            }
+            this._canvasEl = el;
             // Auto-scroll to the bottom whenever the visible event list grows
             // — but only when the user hasn't manually scrolled away from the
             // tail. onUserScroll() resets the flag based on scroll position.
@@ -285,7 +316,11 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
             });
         },
         get filteredEvents(): any[] {
-            const events = this._source ?? [];
+            ensureCanvas(this, '__any__');
+            const source = config.sourceExpr
+                ? (this._canvas as any)?.[config.sourceExpr] ?? []
+                : this._canvas?.executionLog ?? [];
+            const events = Array.isArray(source) ? source : [];
             if (events.length === 0) return [];
             this.baseTime = events[0]?.t ?? 0;
             let filtered: any[] = events;
@@ -367,8 +402,8 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
         },
         async onClick() {
             if (this.isRunning) return;
-            if (!this._canvas) {
-                console.warn('[wireflow] <x-flow-run-button>: no canvas found');
+            if (!ensureCanvas(this, 'run')) {
+                console.warn('[wireflow] <x-flow-run-button>: canvas not ready (no .flow-container or workflow addon not registered)');
                 return;
             }
             const handlers = (this._canvasEl as any)?.[config.handlersKey] ?? {};
@@ -378,29 +413,36 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
 
     Alpine.data('flowStopButton', (config: { target: string | null; alwaysVisible: boolean }) => ({
         _canvas: null as any,
+        _canvasEl: null as HTMLElement | null,
         alwaysVisible: !!config.alwaysVisible,
         init() {
-            const { canvas } = resolveCanvas((this as any).$el as HTMLElement, config.target);
+            const { canvas, el } = resolveCanvas((this as any).$el as HTMLElement, config.target);
             this._canvas = canvas;
+            this._canvasEl = el;
         },
         get isRunning(): boolean {
+            ensureCanvas(this, '__any__');
             const state = this._canvas?.runState;
             return state === 'running' || state === 'paused';
         },
         onClick() {
-            this._canvas?.stopRun?.();
+            if (!ensureCanvas(this, 'stopRun')) return;
+            this._canvas.stopRun();
         },
     }));
 
     Alpine.data('flowResetButton', (config: { target: string | null }) => ({
         _canvas: null as any,
+        _canvasEl: null as HTMLElement | null,
         init() {
-            const { canvas } = resolveCanvas((this as any).$el as HTMLElement, config.target);
+            const { canvas, el } = resolveCanvas((this as any).$el as HTMLElement, config.target);
             this._canvas = canvas;
+            this._canvasEl = el;
         },
         onClick() {
-            this._canvas?.resetStates?.();
-            this._canvas?.resetExecutionLog?.();
+            if (!ensureCanvas(this, 'resetStates')) return;
+            this._canvas.resetStates();
+            this._canvas.resetExecutionLog?.();
         },
     }));
 }
