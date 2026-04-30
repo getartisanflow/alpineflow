@@ -1620,3 +1620,79 @@
   bottom: 0;
   transform: translate(-50%, 50%);
 }
+
+/* ----------------------------------------------------------------------------
+   Condition node — structural rules (layout only; colors live in the theme)
+   Rendered by the x-flow-condition directive.
+   ---------------------------------------------------------------------------- */
+
+.flow-condition-node {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+}
+
+.flow-node.flow-condition-node,
+.flow-node:has(> .flow-condition-node) {
+  padding: 0;
+}
+
+.flow-condition-header {
+  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+  font-size: 0.8125rem;
+}
+
+.flow-condition-body {
+  padding: 0.5rem 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.6875rem;
+  line-height: 1.4;
+}
+
+/* Handles — positions vary by direction. Default horizontal:
+   target left, true on right at 35%, false on right at 75%. */
+.flow-condition-handle-target,
+.flow-condition-handle-source {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.flow-condition-node[data-flow-condition-direction="horizontal"] .flow-condition-handle-target {
+  left: 0;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.flow-condition-node[data-flow-condition-direction="horizontal"] .flow-condition-handle--true {
+  right: 0;
+  top: 35%;
+  transform: translate(50%, -50%);
+}
+
+.flow-condition-node[data-flow-condition-direction="horizontal"] .flow-condition-handle--false {
+  right: 0;
+  top: 75%;
+  transform: translate(50%, -50%);
+}
+
+.flow-condition-node[data-flow-condition-direction="vertical"] .flow-condition-handle-target {
+  left: 50%;
+  top: 0;
+  transform: translate(-50%, -50%);
+}
+
+.flow-condition-node[data-flow-condition-direction="vertical"] .flow-condition-handle--true {
+  left: 30%;
+  bottom: 0;
+  transform: translate(-50%, 50%);
+}
+
+.flow-condition-node[data-flow-condition-direction="vertical"] .flow-condition-handle--false {
+  left: 70%;
+  bottom: 0;
+  transform: translate(-50%, 50%);
+}

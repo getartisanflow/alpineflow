@@ -631,3 +631,57 @@
   color: var(--flow-text-faint, #6b6e7d);
   border: 1px solid var(--flow-border-subtle, #2d3039);
 }
+
+/* ----------------------------------------------------------------------------
+   Condition node — default theme (colors, borders, decorations)
+   Reuses existing tokens — no new CSS variables introduced.
+   ---------------------------------------------------------------------------- */
+
+.flow-condition-node {
+  background: var(--flow-node-bg, #1a1c23);
+  border: 1px solid var(--flow-border-subtle, #2d3039);
+  border-radius: var(--flow-node-radius, 0.5rem);
+  color: var(--flow-text-body, #e4e5ea);
+}
+
+.flow-condition-header {
+  background: var(--flow-surface-alt, #23252e);
+  border-bottom: 1px solid var(--flow-border-subtle, #2d3039);
+  color: var(--flow-text-body, #e4e5ea);
+}
+
+.flow-condition-body {
+  color: var(--flow-text-muted, #9598a5);
+}
+
+.flow-condition-handle-target {
+  background: var(--flow-edge-stroke, #52525b);
+  border: 2px solid var(--flow-node-bg, #1a1c23);
+}
+
+.flow-condition-handle--true {
+  background: var(--flow-edge-taken-stroke, #14b8a6);
+  border: 2px solid var(--flow-node-bg, #1a1c23);
+}
+
+.flow-condition-handle--false {
+  background: #ef4444;
+  border: 2px solid var(--flow-node-bg, #1a1c23);
+}
+
+/* Branch-taken decoration — highlight chosen branch, mute the other. */
+.flow-condition-node[data-flow-condition-branch-taken="true"] .flow-condition-handle--true {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--flow-edge-taken-stroke, #14b8a6) 30%, transparent);
+}
+
+.flow-condition-node[data-flow-condition-branch-taken="true"] .flow-condition-handle--false {
+  opacity: 0.4;
+}
+
+.flow-condition-node[data-flow-condition-branch-taken="false"] .flow-condition-handle--false {
+  box-shadow: 0 0 0 3px color-mix(in srgb, #ef4444 30%, transparent);
+}
+
+.flow-condition-node[data-flow-condition-branch-taken="false"] .flow-condition-handle--true {
+  opacity: 0.4;
+}
