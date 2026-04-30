@@ -315,6 +315,10 @@ async function resolveNextNodes(
         if (chosenEdgeId) {
             const chosenEdge = outgoingEdges.find((e: any) => e.id === chosenEdgeId) ?? null;
             if (chosenEdge) {
+                if (node.type === 'flow-condition' && typeof chosenEdge.sourceHandle === 'string') {
+                    node.data = node.data ?? {};
+                    node.data._branchTaken = chosenEdge.sourceHandle;
+                }
                 setEdgeTaken(canvas, chosenEdge.id);
                 pushLog(canvas, { type: 'edge:taken', edgeId: chosenEdge.id }, logLimit);
                 if (options.muteUntakenBranches) {
@@ -341,6 +345,10 @@ async function resolveNextNodes(
         const chosenEdge = targetId ? outgoingEdges.find((e: any) => e.target === targetId) : null;
 
         if (chosenEdge) {
+            if (typeof chosenEdge.sourceHandle === 'string') {
+                node.data = node.data ?? {};
+                node.data._branchTaken = chosenEdge.sourceHandle;
+            }
             pushLog(canvas, { type: 'branch:chosen', nodeId: currentId, edgeId: chosenEdge.id }, logLimit);
             setEdgeTaken(canvas, chosenEdge.id);
             pushLog(canvas, { type: 'edge:taken', edgeId: chosenEdge.id }, logLimit);
