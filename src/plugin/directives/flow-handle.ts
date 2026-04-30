@@ -15,7 +15,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
-import type { HandleType, HandlePosition, FlowEdge, FlowNode, Connection, XYPosition } from '../../core/types';
+import type { HandleType, HandlePosition, FlowEdge, FlowNode, Connection, XYPosition, PendingKeyboardConnect } from '../../core/types';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { isValidConnection, checkConnectionRules } from '../../core/connections';
 import { debug } from '../../core/debug';
@@ -27,6 +27,23 @@ import { createConnectionLine, findSnapTarget, startConnectionAutoPan, type Conn
 import { isConnectable } from '../../core/node-flags';
 
 let edgeIdCounter = 0;
+
+/**
+ * Per-container Escape listener registry for keyboard drag-to-connect.
+ *
+ * A canvas may contain N handles (N nodes × 2), and each handle's init used
+ * to attach its own keydown listener to the shared `.flow-container`. On a
+ * 10-node canvas that's 20 duplicate listeners — plus accumulation each time
+ * a handle re-inits (x-if toggles, Livewire morphing, etc.).
+ *
+ * Instead we share ONE keydown listener per container, refcounted by the
+ * number of keyboard-enabled handles currently bound. The first handle to
+ * init attaches; subsequent handles bump the count; the last to clean up
+ * removes the listener. Kept module-local so it lives alongside the
+ * directive it serves and does not leak into the public canvas surface.
+ */
+type ContainerEscEntry = { count: number; handler: (e: KeyboardEvent) => void };
+const containerEscListeners = new WeakMap<HTMLElement, ContainerEscEntry>();
 
 /**
  * Run per-handle validators for a connection.
@@ -42,8 +59,11 @@ export function runHandleValidators(
     `[data-flow-node-id="${CSS.escape(connection.source)}"]`,
   );
   if (sourceNodeEl) {
-    const sourceHandleEl = sourceNodeEl.querySelector(
-      `[data-flow-handle-id="${CSS.escape(connection.sourceHandle ?? 'source')}"]`,
+    const sh = connection.sourceHandle ?? 'source';
+    const sourceHandleEl = (
+      sourceNodeEl.querySelector(
+        `[data-flow-handle-id="${CSS.escape(sh)}"][data-flow-handle-type="source"]`,
+      ) ?? sourceNodeEl.querySelector(`[data-flow-handle-id="${CSS.escape(sh)}"]`)
     ) as HTMLElement | null;
     if (sourceHandleEl?.[HANDLE_VALIDATE_KEY]) {
       if (!sourceHandleEl[HANDLE_VALIDATE_KEY]!(connection)) return false;
@@ -55,8 +75,11 @@ export function runHandleValidators(
     `[data-flow-node-id="${CSS.escape(connection.target)}"]`,
   );
   if (targetNodeEl) {
-    const targetHandleEl = targetNodeEl.querySelector(
-      `[data-flow-handle-id="${CSS.escape(connection.targetHandle ?? 'target')}"]`,
+    const th = connection.targetHandle ?? 'target';
+    const targetHandleEl = (
+      targetNodeEl.querySelector(
+        `[data-flow-handle-id="${CSS.escape(th)}"][data-flow-handle-type="target"]`,
+      ) ?? targetNodeEl.querySelector(`[data-flow-handle-id="${CSS.escape(th)}"]`)
     ) as HTMLElement | null;
     if (targetHandleEl?.[HANDLE_VALIDATE_KEY]) {
       if (!targetHandleEl[HANDLE_VALIDATE_KEY]!(connection)) return false;
@@ -80,8 +103,11 @@ export function checkHandleLimits(
     `[data-flow-node-id="${CSS.escape(connection.source)}"]`,
   );
   if (sourceNodeEl) {
-    const sourceHandleEl = sourceNodeEl.querySelector(
-      `[data-flow-handle-id="${CSS.escape(connection.sourceHandle ?? 'source')}"]`,
+    const sh = connection.sourceHandle ?? 'source';
+    const sourceHandleEl = (
+      sourceNodeEl.querySelector(
+        `[data-flow-handle-id="${CSS.escape(sh)}"][data-flow-handle-type="source"]`,
+      ) ?? sourceNodeEl.querySelector(`[data-flow-handle-id="${CSS.escape(sh)}"]`)
     ) as HTMLElement | null;
     if (sourceHandleEl?.[HANDLE_LIMIT_KEY]) {
       const count = edges.filter(
@@ -96,8 +122,11 @@ export function checkHandleLimits(
     `[data-flow-node-id="${CSS.escape(connection.target)}"]`,
   );
   if (targetNodeEl) {
-    const targetHandleEl = targetNodeEl.querySelector(
-      `[data-flow-handle-id="${CSS.escape(connection.targetHandle ?? 'target')}"]`,
+    const th = connection.targetHandle ?? 'target';
+    const targetHandleEl = (
+      targetNodeEl.querySelector(
+        `[data-flow-handle-id="${CSS.escape(th)}"][data-flow-handle-type="target"]`,
+      ) ?? targetNodeEl.querySelector(`[data-flow-handle-id="${CSS.escape(th)}"]`)
     ) as HTMLElement | null;
     if (targetHandleEl?.[HANDLE_LIMIT_KEY]) {
       const count = edges.filter(
@@ -180,6 +209,335 @@ export function clearValidationClasses(containerEl: HTMLElement): void {
   for (const targetEl of targetHandles) {
     (targetEl as HTMLElement).classList.remove('flow-handle-valid', 'flow-handle-invalid', 'flow-handle-limit-reached');
   }
+}
+
+/**
+ * Toggle `.flow-connect-line--validating` on the temporary drag-line SVG while
+ * an async `connectValidator` is awaiting. Call sites wrap the validator await
+ * with `setDragLineValidating(svg, true)` … `finally { setDragLineValidating(svg, false) }`
+ * so the pending affordance is guaranteed to clear even if the validator throws.
+ *
+ * Safe to call with `null`/`undefined` — the drag line may not exist on all
+ * paths (e.g. click-to-connect) and the helper is a no-op in that case.
+ */
+export function setDragLineValidating(
+  el: Element | null | undefined,
+  on: boolean,
+): void {
+  if (!el) return;
+  if (on) {
+    el.classList.add('flow-connect-line--validating');
+  } else {
+    el.classList.remove('flow-connect-line--validating');
+  }
+}
+
+/**
+ * Single chokepoint for every "connection rejected" path (drag-to-connect,
+ * click-to-connect, handle-pip reconnect, edge-body reconnect). Guarantees:
+ *
+ *   1. A consistent `flow-connect-rejected` CustomEvent on `containerEl` with
+ *      detail `{reason, source, target, sourceHandle, targetHandle}`. `reason`
+ *      is always present as a key, even when undefined (sync rejections don't
+ *      carry a reason).
+ *   2. A discoverable `console.warn('[alpineflow] connection rejected: ...')`
+ *      so devs see the rejection in the console without wiring any listener.
+ *
+ * Extracted so future rejection paths can't diverge on detail shape or forget
+ * to warn. Safe to call with a nullish container (no-op) — the drag-line
+ * lifecycle sometimes tears down the container before rejection dispatches.
+ */
+export function dispatchConnectRejected(
+  containerEl: Element | null | undefined,
+  detail: {
+    source: string;
+    target: string;
+    sourceHandle?: string;
+    targetHandle?: string;
+    reason?: string;
+  },
+): void {
+  // Keep `reason` in the detail shape even when undefined so consumers can
+  // destructure without existence checks.
+  const eventDetail = {
+    source: detail.source,
+    target: detail.target,
+    sourceHandle: detail.sourceHandle,
+    targetHandle: detail.targetHandle,
+    reason: detail.reason,
+  };
+
+  if (!containerEl) return;
+
+  if (detail.reason !== undefined) {
+    console.warn('[alpineflow] connection rejected:', detail.reason);
+  } else {
+    console.warn('[alpineflow] connection rejected');
+  }
+
+  containerEl.dispatchEvent(new CustomEvent('flow-connect-rejected', {
+    detail: eventDetail,
+    bubbles: true,
+  }));
+}
+
+/**
+ * Run the optional async `connectValidator` gate.
+ *
+ * Returns { allowed: true } when no validator is configured. Otherwise:
+ *   - Adds `validatingClass` to the source + target handle elements.
+ *   - Dispatches a `flow-connect-validating` CustomEvent on `containerEl`.
+ *   - Awaits the validator (thrown errors become `{ allowed: false }`).
+ *   - Removes the class and dispatches `flow-connect-validated` with detail
+ *     `{ connection, allowed, reason }`.
+ *
+ * Extracted so it can be unit-tested without simulating pointer drags.
+ */
+export async function runConnectValidator(
+  validator: ((conn: Connection) => Promise<boolean | { allowed: boolean; reason?: string }>) | undefined,
+  connection: Connection,
+  sourceEl: Element | null,
+  targetEl: Element | null,
+  containerEl: Element,
+  validatingClass: string,
+): Promise<{ allowed: boolean; reason?: string }> {
+  if (!validator) return { allowed: true };
+
+  sourceEl?.classList.add(validatingClass);
+  targetEl?.classList.add(validatingClass);
+  containerEl.dispatchEvent(new CustomEvent('flow-connect-validating', {
+    detail: { connection },
+    bubbles: true,
+  }));
+
+  let result: boolean | { allowed: boolean; reason?: string };
+  try {
+    result = await validator(connection);
+  } catch (err) {
+    debug('connection', 'connectValidator threw', err);
+    result = false;
+  } finally {
+    sourceEl?.classList.remove(validatingClass);
+    targetEl?.classList.remove(validatingClass);
+  }
+
+  const allowed = typeof result === 'boolean' ? result : !!result?.allowed;
+  const reason = typeof result === 'object' && result && 'reason' in result ? result.reason : undefined;
+  containerEl.dispatchEvent(new CustomEvent('flow-connect-validated', {
+    detail: { connection, allowed, reason },
+    bubbles: true,
+  }));
+
+  return { allowed, reason };
+}
+
+/**
+ * Validate + apply an edge-endpoint reconnect.
+ *
+ * Runs the same validator chain as drag-to-connect (sync `isValidConnection`,
+ * `connectionRules`, handle limits, per-handle validators, global
+ * `isValidConnection`, then the async `connectValidator`). On success mutates
+ * the edge in place (`edge.target`, `edge.targetHandle` — or the source pair
+ * when `endpoint === 'source'`) and captures history. On rejection leaves the
+ * edge unchanged and dispatches a `flow-connect-rejected` CustomEvent on
+ * `containerEl` with the offending `{source, target, sourceHandle, targetHandle,
+ * reason}` so consumers can show their own UI.
+ *
+ * Extracted so it can be unit-tested without simulating pointer drags.
+ */
+export async function applyReconnectValidation(params: {
+  edge: FlowEdge;
+  newConnection: Connection;
+  canvas: any;
+  containerEl: HTMLElement;
+  endpoint?: HandleType;
+}): Promise<{ applied: boolean; reason?: string }> {
+  const { edge, newConnection, canvas, containerEl } = params;
+  const endpoint: HandleType = params.endpoint ?? 'target';
+
+  const otherEdges = (canvas.edges as FlowEdge[]).filter(
+    (e: FlowEdge) => e.id !== edge.id,
+  );
+
+  const reject = (reason?: string): { applied: false; reason?: string } => {
+    dispatchConnectRejected(containerEl, {
+      source: newConnection.source,
+      target: newConnection.target,
+      sourceHandle: newConnection.sourceHandle,
+      targetHandle: newConnection.targetHandle,
+      reason,
+    });
+    return { applied: false, reason };
+  };
+
+  // ── Sync chain ─────────────────────────────────────────────────────────
+  if (!isValidConnection(newConnection, otherEdges, { preventCycles: canvas._config?.preventCycles })) {
+    return reject();
+  }
+  if (!checkConnectionRules(newConnection, canvas._config?.connectionRules, canvas._nodeMap)) {
+    return reject();
+  }
+  if (!checkHandleLimits(containerEl, newConnection, otherEdges)) {
+    return reject();
+  }
+  if (!runHandleValidators(containerEl, newConnection)) {
+    return reject();
+  }
+  if (canvas._config?.isValidConnection && !canvas._config.isValidConnection(newConnection)) {
+    return reject();
+  }
+
+  // ── Async validator gate ───────────────────────────────────────────────
+  const asyncValidator = canvas._config?.connectValidator;
+  if (asyncValidator) {
+    const validatingClass = canvas._config?.validatingHandleClass ?? 'flow-handle-validating';
+    const { sourceEl, targetEl } = findHandleElements(containerEl, newConnection);
+    canvas._connectValidating = true;
+    let asyncResult: { allowed: boolean; reason?: string };
+    try {
+      asyncResult = await runConnectValidator(
+        asyncValidator, newConnection, sourceEl, targetEl, containerEl, validatingClass,
+      );
+    } finally {
+      canvas._connectValidating = false;
+    }
+    if (!asyncResult.allowed) {
+      return reject(asyncResult.reason);
+    }
+  }
+
+  // ── Apply — mutate the edge in place so Alpine reactivity picks up ────
+  canvas._captureHistory?.();
+  if (endpoint === 'source') {
+    edge.source = newConnection.source;
+    edge.sourceHandle = newConnection.sourceHandle;
+  } else {
+    edge.target = newConnection.target;
+    edge.targetHandle = newConnection.targetHandle;
+  }
+
+  return { applied: true };
+}
+
+/**
+ * Validate + apply a new connection (drag-to-connect / keyboard-connect).
+ *
+ * Runs the same validator chain used by pointer drag-to-connect (sync
+ * `isValidConnection`, `connectionRules`, handle limits, per-handle validators,
+ * global `isValidConnection`, then the async `connectValidator`). On success,
+ * creates the edge via `canvas.addEdges`, emits `connect`, and returns
+ * `{ applied: true, edge }`. On rejection, dispatches `flow-connect-rejected`
+ * on `containerEl` (single chokepoint) and returns `{ applied: false, reason }`.
+ *
+ * Used by the keyboard drag-to-connect path; the pointer drag-to-connect
+ * handler keeps its inline chain for now (drag lifecycle + ghost-node + multi-
+ * connect logic is tightly coupled to the pointer event loop). Both paths end
+ * up firing the same events and dispatching the same rejection shape so
+ * consumers see a consistent API.
+ */
+export async function applyConnectValidation(params: {
+  connection: Connection;
+  canvas: any;
+  containerEl: HTMLElement;
+}): Promise<{ applied: boolean; reason?: string; edge?: FlowEdge }> {
+  const { connection, canvas, containerEl } = params;
+  const edges = canvas.edges as FlowEdge[];
+
+  const reject = (reason?: string): { applied: false; reason?: string } => {
+    dispatchConnectRejected(containerEl, {
+      source: connection.source,
+      target: connection.target,
+      sourceHandle: connection.sourceHandle,
+      targetHandle: connection.targetHandle,
+      reason,
+    });
+    return { applied: false, reason };
+  };
+
+  // Target connectability guard
+  const targetNode = canvas.getNode?.(connection.target);
+  if (targetNode && !isConnectable(targetNode)) {
+    return reject();
+  }
+
+  // ── Sync chain ─────────────────────────────────────────────────────────
+  if (!isValidConnection(connection, edges, { preventCycles: canvas._config?.preventCycles })) {
+    return reject();
+  }
+  if (!checkConnectionRules(connection, canvas._config?.connectionRules, canvas._nodeMap)) {
+    return reject();
+  }
+  if (!checkHandleLimits(containerEl, connection, edges)) {
+    return reject();
+  }
+  if (!runHandleValidators(containerEl, connection)) {
+    return reject();
+  }
+  if (canvas._config?.isValidConnection && !canvas._config.isValidConnection(connection)) {
+    return reject();
+  }
+
+  // ── Async validator gate ───────────────────────────────────────────────
+  const asyncValidator = canvas._config?.connectValidator;
+  if (asyncValidator) {
+    const validatingClass = canvas._config?.validatingHandleClass ?? 'flow-handle-validating';
+    const { sourceEl, targetEl } = findHandleElements(containerEl, connection);
+    canvas._connectValidating = true;
+    let asyncResult: { allowed: boolean; reason?: string };
+    try {
+      asyncResult = await runConnectValidator(
+        asyncValidator, connection, sourceEl, targetEl, containerEl, validatingClass,
+      );
+    } finally {
+      canvas._connectValidating = false;
+    }
+    if (!asyncResult.allowed) {
+      return reject(asyncResult.reason);
+    }
+  }
+
+  // ── Apply — create the edge ───────────────────────────────────────────
+  const edgeId = `e-${connection.source}-${connection.target}-${Date.now()}-${edgeIdCounter++}`;
+  const edge = { id: edgeId, ...connection } as FlowEdge;
+  canvas.addEdges(edge);
+  canvas._emit?.('connect', { connection });
+
+  return { applied: true, edge };
+}
+
+/**
+ * Resolve the source + target handle DOM elements for a connection within a
+ * container. Returns null for any handle it cannot locate. Used by the
+ * drag-to-connect + reconnect paths so the async validator can pulse both
+ * sides of the pending edge.
+ */
+function findHandleElements(
+  containerEl: HTMLElement,
+  connection: Connection,
+): { sourceEl: HTMLElement | null; targetEl: HTMLElement | null } {
+  const sourceNodeEl = containerEl.querySelector(
+    `[data-flow-node-id="${CSS.escape(connection.source)}"]`,
+  );
+  const sh = connection.sourceHandle ?? 'source';
+  const sourceEl = (
+    sourceNodeEl?.querySelector(
+      `[data-flow-handle-id="${CSS.escape(sh)}"][data-flow-handle-type="source"]`,
+    ) ?? sourceNodeEl?.querySelector(`[data-flow-handle-id="${CSS.escape(sh)}"]`)
+    ?? null
+  ) as HTMLElement | null;
+
+  const targetNodeEl = containerEl.querySelector(
+    `[data-flow-node-id="${CSS.escape(connection.target)}"]`,
+  );
+  const th = connection.targetHandle ?? 'target';
+  const targetEl = (
+    targetNodeEl?.querySelector(
+      `[data-flow-handle-id="${CSS.escape(th)}"][data-flow-handle-type="target"]`,
+    ) ?? targetNodeEl?.querySelector(`[data-flow-handle-id="${CSS.escape(th)}"]`)
+    ?? null
+  ) as HTMLElement | null;
+
+  return { sourceEl, targetEl };
 }
 
 export function registerFlowHandleDirective(Alpine: Alpine) {
@@ -295,6 +653,160 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
         const canvasEl = el.closest('[x-data]') as HTMLElement | null;
         return canvasEl ? Alpine.$data(canvasEl) : null;
       };
+
+      // ── Keyboard drag-to-connect (a11y, opt-in) ───────────────────────
+      // When canvas._config.keyboardConnect is true, make this handle focusable
+      // and wire Enter/Space/Escape to drive a connection flow equivalent to
+      // pointer drag-to-connect. Source handles arm a pending connection;
+      // target handles complete it; Escape cancels. Attributes are only set
+      // when the feature is enabled so existing tab order is preserved on apps
+      // that haven't opted in.
+      let keyboardBindingsCleanup: (() => void) | null = null;
+      {
+        const initCanvas = getCanvas();
+        if (initCanvas?._config?.keyboardConnect) {
+          el.setAttribute('tabindex', '0');
+          el.setAttribute('role', 'button');
+          el.setAttribute('aria-label', `${type} handle ${handleId}`);
+
+          const clearPending = (canvas: { _pendingKeyboardConnect?: PendingKeyboardConnect | null } | null | undefined) => {
+            const prev = canvas?._pendingKeyboardConnect;
+            if (!prev) return;
+            const containerEl = el.closest('.flow-container') as HTMLElement | null;
+            if (containerEl) {
+              const prevEl = containerEl.querySelector(
+                `[data-flow-node-id="${CSS.escape(prev.sourceNodeId)}"] [data-flow-handle-id="${CSS.escape(prev.sourceHandleId)}"][data-flow-handle-type="source"]`,
+              );
+              (prevEl as HTMLElement | null)?.classList.remove('flow-handle-connect-pending');
+            }
+            if (canvas) canvas._pendingKeyboardConnect = null;
+          };
+
+          const onKeyDown = (e: KeyboardEvent) => {
+            const isActivate = e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar';
+            if (!isActivate) return;
+
+            const canvas = getCanvas();
+            if (!canvas) return;
+            if (canvas._animationLocked) return;
+
+            const nodeId = getNodeId();
+            if (!nodeId) return;
+
+            if (type === 'source') {
+              // Guard: node / handle must be connectable as start
+              const sourceNode = canvas.getNode?.(nodeId);
+              if (sourceNode && !isConnectable(sourceNode)) return;
+              if (el[HANDLE_CONNECTABLE_START_KEY] === false) return;
+
+              e.preventDefault();
+              e.stopPropagation();
+
+              // Re-arming: clear previous pending first
+              clearPending(canvas);
+
+              canvas._pendingKeyboardConnect = {
+                sourceNodeId: nodeId,
+                sourceHandleId: handleId,
+              };
+              el.classList.add('flow-handle-connect-pending');
+
+              // Route to the existing aria-live announcer when present.
+              // If no announcer is configured on this canvas, skip silently —
+              // we don't invent a new live region here.
+              canvas._announcer?.announce?.(`Connecting from ${type} handle ${handleId}. Focus a target handle and press Enter to connect.`);
+            } else {
+              // target handle: complete pending connection (if any)
+              if (!canvas._pendingKeyboardConnect) return;
+
+              const targetNode = canvas.getNode?.(nodeId);
+              if (targetNode && !isConnectable(targetNode)) return;
+              if (el[HANDLE_CONNECTABLE_END_KEY] === false) return;
+
+              e.preventDefault();
+              e.stopPropagation();
+
+              const { sourceNodeId, sourceHandleId } = canvas._pendingKeyboardConnect;
+              const connection: Connection = {
+                source: sourceNodeId,
+                sourceHandle: sourceHandleId,
+                target: nodeId,
+                targetHandle: handleId,
+              };
+
+              const containerEl = el.closest('.flow-container') as HTMLElement | null;
+              // Clear pending state + class before running the pipeline — the
+              // validator is async, and we don't want the pending affordance
+              // stuck on a no-longer-armed source if the user re-focuses mid-
+              // validation.
+              clearPending(canvas);
+
+              if (!containerEl) return;
+
+              // Fire-and-forget the async validator pipeline. Rejections
+              // dispatch flow-connect-rejected via the shared helper; success
+              // emits `connect` + adds the edge.
+              void applyConnectValidation({ connection, canvas, containerEl }).then((result) => {
+                if (result.applied) {
+                  canvas._announcer?.announce?.(`Connected ${sourceNodeId} to ${nodeId}.`);
+                }
+              });
+            }
+          };
+
+          el.addEventListener('keydown', onKeyDown);
+
+          // Shared Escape listener on the canvas container (not document) so
+          // we don't hijack keys on other focusable apps on the page. Only one
+          // listener is attached per container regardless of how many handles
+          // init — see `containerEscListeners` at the top of this module.
+          const containerEl = el.closest('.flow-container') as HTMLElement | null;
+          if (containerEl) {
+            const existing = containerEscListeners.get(containerEl);
+            if (existing) {
+              existing.count += 1;
+            } else {
+              const handler = (e: KeyboardEvent) => {
+                if (e.key !== 'Escape') return;
+                // Look up the canvas fresh each fire — the container outlives
+                // any individual handle, so closing over `getCanvas()` (which
+                // closes over `el`) would leak if that handle is torn down.
+                const canvasEl =
+                  containerEl.matches('[x-data]')
+                    ? containerEl
+                    : (containerEl.closest('[x-data]') as HTMLElement | null)
+                      ?? (containerEl.querySelector('[x-data]') as HTMLElement | null);
+                if (!canvasEl) return;
+                const canvas = Alpine.$data(canvasEl) as
+                  | { _pendingKeyboardConnect?: PendingKeyboardConnect | null }
+                  | null;
+                if (!canvas?._pendingKeyboardConnect) return;
+                clearPending(canvas);
+              };
+              containerEl.addEventListener('keydown', handler);
+              containerEscListeners.set(containerEl, { count: 1, handler });
+            }
+          }
+
+          keyboardBindingsCleanup = () => {
+            el.removeEventListener('keydown', onKeyDown);
+            if (containerEl) {
+              const entry = containerEscListeners.get(containerEl);
+              if (entry) {
+                entry.count -= 1;
+                if (entry.count <= 0) {
+                  containerEl.removeEventListener('keydown', entry.handler);
+                  containerEscListeners.delete(containerEl);
+                }
+              }
+            }
+            el.removeAttribute('tabindex');
+            el.removeAttribute('role');
+            el.removeAttribute('aria-label');
+            el.classList.remove('flow-handle-connect-pending');
+          };
+        }
+      }
 
       if (type === 'source') {
         // ── Source handle: initiate drag-to-connect ──────────────────
@@ -629,12 +1141,15 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             connectAutoPan?.updatePointer(moveEvent.clientX, moveEvent.clientY);
           };
 
-          const onPointerUp = (upEvent: PointerEvent) => {
+          const onPointerUp = async (upEvent: PointerEvent) => {
             connectAutoPan?.stop();
             connectAutoPan = null;
             document.removeEventListener('pointermove', onPointerMove);
             document.removeEventListener('pointerup', onPointerUp);
             activeConnectionCleanup = null;
+
+            // Guard against overlapping drops while an async connectValidator is pending.
+            if (canvas._connectValidating) return;
 
             if (multiConnectMode) {
               const dropPosition = canvas.screenToFlowPosition(upEvent.clientX, upEvent.clientY);
@@ -740,9 +1255,13 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
               return;
             }
 
-            // Drag completed: existing drag-to-connect logic
-            connectionLineInstance?.destroy();
-            connectionLineInstance = null;
+            // Drag completed: existing drag-to-connect logic.
+            //
+            // NB: the drag-line SVG is intentionally kept alive past this point so
+            // the async connectValidator (if any) can pulse it via
+            // `.flow-connect-line--validating`. It is destroyed in the `finally`
+            // at the bottom of this block so every return path still cleans up.
+            const dragLineEl = connectionLineInstance?.svg ?? null;
             ghostEl?.remove();
             ghostEl = null;
             snappedHandle?.classList.remove('flow-handle-active');
@@ -750,6 +1269,8 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
 
             const dropPosition = canvas.screenToFlowPosition(upEvent.clientX, upEvent.clientY);
             const connectEndBase = { source: sourceNodeId, sourceHandle: handleId, position: dropPosition };
+
+            try {
 
             let targetHandle: HTMLElement | null = snappedHandle;
             if (!targetHandle) {
@@ -788,27 +1309,56 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                 if (isValidConnection(connection, canvas.edges, { preventCycles: canvas._config?.preventCycles })) {
                   if (!checkConnectionRules(connection, canvas._config?.connectionRules, canvas._nodeMap)) {
                     debug('connection', 'Connection rejected (connection rules)', connection);
+                    dispatchConnectRejected(containerEl, connection);
                     canvas._emit('connect-end', { connection: null, ...connectEndBase });
                     canvas.pendingConnection = null;
                     return;
                   }
                   if (!checkHandleLimits(containerEl, connection, canvas.edges)) {
                     debug('connection', 'Connection rejected (handle limit)', connection);
+                    dispatchConnectRejected(containerEl, connection);
                     canvas._emit('connect-end', { connection: null, ...connectEndBase });
                     canvas.pendingConnection = null;
                     return;
                   }
                   if (!runHandleValidators(containerEl, connection)) {
                     debug('connection', 'Connection rejected (per-handle validator)', connection);
+                    dispatchConnectRejected(containerEl, connection);
                     canvas._emit('connect-end', { connection: null, ...connectEndBase });
                     canvas.pendingConnection = null;
                     return;
                   }
                   if (canvas._config?.isValidConnection && !canvas._config.isValidConnection(connection)) {
                     debug('connection', 'Connection rejected (custom validator)', connection);
+                    dispatchConnectRejected(containerEl, connection);
                     canvas._emit('connect-end', { connection: null, ...connectEndBase });
                     canvas.pendingConnection = null;
                     return;
+                  }
+
+                  // Async validator gate
+                  const asyncValidator = canvas._config?.connectValidator;
+                  if (asyncValidator) {
+                    const validatingClass = canvas._config?.validatingHandleClass ?? 'flow-handle-validating';
+                    const { sourceEl, targetEl } = findHandleElements(containerEl, connection);
+                    canvas._connectValidating = true;
+                    setDragLineValidating(dragLineEl, true);
+                    let asyncResult: { allowed: boolean; reason?: string };
+                    try {
+                      asyncResult = await runConnectValidator(
+                        asyncValidator, connection, sourceEl, targetEl, containerEl, validatingClass,
+                      );
+                    } finally {
+                      canvas._connectValidating = false;
+                      setDragLineValidating(dragLineEl, false);
+                    }
+                    if (!asyncResult.allowed) {
+                      debug('connection', 'Connection rejected (async connectValidator)', { connection, reason: asyncResult.reason });
+                      dispatchConnectRejected(containerEl, { ...connection, reason: asyncResult.reason });
+                      canvas._emit('connect-end', { connection: null, ...connectEndBase });
+                      canvas.pendingConnection = null;
+                      return;
+                    }
                   }
 
                   const edgeId = `e-${sourceNodeId}-${targetNodeId}-${Date.now()}-${edgeIdCounter++}`;
@@ -818,6 +1368,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                   canvas._emit('connect-end', { connection, ...connectEndBase });
                 } else {
                   debug('connection', 'Connection rejected (invalid)', connection);
+                  dispatchConnectRejected(containerEl, connection);
                   canvas._emit('connect-end', { connection: null, ...connectEndBase });
                 }
               } else {
@@ -867,6 +1418,13 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                 debug('connection', 'Connection cancelled (no target)');
                 canvas._emit('connect-end', { connection: null, ...connectEndBase });
               }
+            }
+            } finally {
+              // Tear down the drag-line SVG regardless of which path produced the
+              // outcome (success, sync rejection, async rejection, or early return).
+              setDragLineValidating(dragLineEl, false);
+              connectionLineInstance?.destroy();
+              connectionLineInstance = null;
             }
 
             canvas.pendingConnection = null;
@@ -923,6 +1481,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
 
         cleanup(() => {
           activeConnectionCleanup?.();
+          keyboardBindingsCleanup?.();
           el.removeEventListener('pointerdown', onPointerDown);
           el.removeEventListener('pointerenter', onReconnectPointerEnter);
           el.removeEventListener('pointerleave', onReconnectPointerLeave);
@@ -953,10 +1512,11 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
         el.addEventListener('pointerleave', onPointerLeave);
 
         // ── Target handle: click to complete click-to-connect ──────
-        const onTargetClick = (e: MouseEvent) => {
+        const onTargetClick = async (e: MouseEvent) => {
           const canvas = getCanvas();
           if (!canvas?.pendingConnection) return;
           if (canvas._config?.connectOnClick === false) return;
+          if (canvas._connectValidating) return;
 
           e.preventDefault();
           e.stopPropagation();
@@ -998,6 +1558,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             const clickContainerEl = el.closest('.flow-container') as HTMLElement;
             if (!checkConnectionRules(connection, canvas._config?.connectionRules, canvas._nodeMap)) {
               debug('connection', 'Click-to-connect rejected (connection rules)', connection);
+              dispatchConnectRejected(clickContainerEl, connection);
               canvas._emit('connect-end', { connection: null, ...connectEndBase });
               canvas.pendingConnection = null;
               canvas._container?.classList.remove('flow-connecting');
@@ -1006,6 +1567,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             }
             if (clickContainerEl && !checkHandleLimits(clickContainerEl, connection, canvas.edges)) {
               debug('connection', 'Click-to-connect rejected (handle limit)', connection);
+              dispatchConnectRejected(clickContainerEl, connection);
               canvas._emit('connect-end', { connection: null, ...connectEndBase });
               canvas.pendingConnection = null;
               canvas._container?.classList.remove('flow-connecting');
@@ -1014,6 +1576,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             }
             if (clickContainerEl && !runHandleValidators(clickContainerEl, connection)) {
               debug('connection', 'Click-to-connect rejected (per-handle validator)', connection);
+              dispatchConnectRejected(clickContainerEl, connection);
               canvas._emit('connect-end', { connection: null, ...connectEndBase });
               canvas.pendingConnection = null;
               canvas._container?.classList.remove('flow-connecting');
@@ -1022,11 +1585,37 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             }
             if (canvas._config?.isValidConnection && !canvas._config.isValidConnection(connection)) {
               debug('connection', 'Click-to-connect rejected (custom validator)', connection);
+              dispatchConnectRejected(clickContainerEl, connection);
               canvas._emit('connect-end', { connection: null, ...connectEndBase });
               canvas.pendingConnection = null;
               canvas._container?.classList.remove('flow-connecting');
               if (clickContainerEl) clearValidationClasses(clickContainerEl);
               return;
+            }
+
+            // Async validator gate
+            const asyncValidator = canvas._config?.connectValidator;
+            if (asyncValidator && clickContainerEl) {
+              const validatingClass = canvas._config?.validatingHandleClass ?? 'flow-handle-validating';
+              const { sourceEl, targetEl } = findHandleElements(clickContainerEl, connection);
+              canvas._connectValidating = true;
+              let asyncResult: { allowed: boolean; reason?: string };
+              try {
+                asyncResult = await runConnectValidator(
+                  asyncValidator, connection, sourceEl, targetEl, clickContainerEl, validatingClass,
+                );
+              } finally {
+                canvas._connectValidating = false;
+              }
+              if (!asyncResult.allowed) {
+                debug('connection', 'Click-to-connect rejected (async connectValidator)', { connection, reason: asyncResult.reason });
+                dispatchConnectRejected(clickContainerEl, { ...connection, reason: asyncResult.reason });
+                canvas._emit('connect-end', { connection: null, ...connectEndBase });
+                canvas.pendingConnection = null;
+                canvas._container?.classList.remove('flow-connecting');
+                clearValidationClasses(clickContainerEl);
+                return;
+              }
             }
 
             const edgeId = `e-${connection.source}-${connection.target}-${Date.now()}-${edgeIdCounter++}`;
@@ -1036,6 +1625,8 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             canvas._emit('connect-end', { connection, ...connectEndBase });
           } else {
             debug('connection', 'Click-to-connect rejected (invalid)', connection);
+            const invalidContainerEl = el.closest('.flow-container') as HTMLElement;
+            dispatchConnectRejected(invalidContainerEl, connection);
             canvas._emit('connect-end', { connection: null, ...connectEndBase });
           }
 
@@ -1269,11 +1860,14 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             canvas._pendingReconnection = null;
           };
 
-          const onPointerUp = (upE: PointerEvent) => {
+          const onPointerUp = async (upE: PointerEvent) => {
             if (!dragging) {
               cleanupReconnection();
               return;
             }
+
+            // Guard against overlapping drops while an async connectValidator is pending.
+            if (canvas._connectValidating) return;
 
             // Use snapped handle if available, otherwise fall back to elementFromPoint
             let targetHandleEl: HTMLElement | null = snappedHandle;
@@ -1299,32 +1893,28 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                     targetHandle: dropHandleId,
                   };
 
-                  // Filter out current edge from duplicate check
-                  const otherEdges = canvas.edges.filter(
-                    (e: FlowEdge) => e.id !== connectedEdge.id,
-                  );
+                  const oldEdge = { ...connectedEdge };
+                  const reconnectDragLineEl = reconnectLineInstance?.svg ?? null;
+                  setDragLineValidating(reconnectDragLineEl, true);
+                  let result: { applied: boolean; reason?: string };
+                  try {
+                    result = await applyReconnectValidation({
+                      edge: connectedEdge,
+                      newConnection,
+                      canvas,
+                      containerEl,
+                      endpoint: 'target',
+                    });
+                  } finally {
+                    setDragLineValidating(reconnectDragLineEl, false);
+                  }
 
-                  if (isValidConnection(newConnection, otherEdges, { preventCycles: canvas._config?.preventCycles })) {
-                    if (!checkConnectionRules(newConnection, canvas._config?.connectionRules, canvas._nodeMap)) {
-                      debug('reconnect', 'Reconnection rejected (connection rules)', newConnection);
-                    } else if (!checkHandleLimits(containerEl, newConnection, otherEdges)) {
-                      debug('reconnect', 'Reconnection rejected (handle limit)', newConnection);
-                    } else if (!runHandleValidators(containerEl, newConnection)) {
-                      debug('reconnect', 'Reconnection rejected (per-handle validator)', newConnection);
-                    } else if (!canvas._config?.isValidConnection || canvas._config.isValidConnection(newConnection)) {
-                      const oldEdge = { ...connectedEdge };
-
-                      // Capture history before mutation
-                      canvas._captureHistory?.();
-
-                      // Mutate in place (Alpine reactivity picks up changes)
-                      connectedEdge.target = newConnection.target;
-                      connectedEdge.targetHandle = newConnection.targetHandle;
-
-                      successful = true;
-                      debug('reconnect', `Edge "${connectedEdge.id}" reconnected (target)`, newConnection);
-                      canvas._emit('reconnect', { oldEdge, newConnection });
-                    }
+                  if (result.applied) {
+                    successful = true;
+                    debug('reconnect', `Edge "${connectedEdge.id}" reconnected (target)`, newConnection);
+                    canvas._emit('reconnect', { oldEdge, newConnection });
+                  } else {
+                    debug('reconnect', 'Reconnection rejected', { connection: newConnection, reason: result.reason });
                   }
                 }
               }
@@ -1348,6 +1938,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
 
         cleanup(() => {
           activeReconnectCleanup?.();
+          keyboardBindingsCleanup?.();
           el.removeEventListener('pointerdown', onTargetPointerDown);
           el.removeEventListener('pointerenter', onPointerEnter);
           el.removeEventListener('pointerleave', onPointerLeave);

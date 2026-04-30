@@ -9,13 +9,12 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
-import type { FlowEdge, FlowNode, HandlePosition, HandleType, Rect, Connection } from '../../core/types';
+import type { FlowEdge, FlowNode, HandlePosition, HandleType, Rect, Connection, XYPosition } from '../../core/types';
 import type { MarkerType, MarkerConfig } from '../../core/markers';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { normalizeMarker, getMarkerId } from '../../core/markers';
-import { isValidConnection } from '../../core/connections';
 import { isConnectable } from '../../core/node-flags';
-import { runHandleValidators, applyValidationClasses, clearValidationClasses, checkHandleLimits } from './flow-handle';
+import { applyValidationClasses, clearValidationClasses, applyReconnectValidation, setDragLineValidating } from './flow-handle';
 import {
   createConnectionLine,
   findSnapTarget,
@@ -37,6 +36,67 @@ import {
 import { matchesModifier } from '../../core/keyboard-shortcuts';
 
 const BLOCKED_ATTRS = new Set(['x-data', 'x-init', 'x-bind', 'href', 'src', 'action', 'formaction', 'srcdoc']);
+
+/**
+ * Resolve a drop target for an edge-body reconnect drag and route it through
+ * `applyReconnectValidation` so the async `connectValidator` gates the mutation
+ * exactly like the handle-pip reconnect path does.
+ *
+ * The caller (flow-edge's onPointerUp) computes `dropNodeId` + `dropHandleId`
+ * from the pointer event (snapped handle or elementFromPoint fallback); this
+ * function:
+ *
+ *   - short-circuits `applied: false` if there is no drop node, or the drop
+ *     node is not connectable (no validator call, no event emission — matches
+ *     the prior inline chain's "snap back silently" behavior)
+ *   - otherwise builds the `newConnection` based on `draggedEnd` and delegates
+ *     to `applyReconnectValidation` which owns the sync + async validator chain
+ *     plus mutation + `flow-connect-rejected` dispatch
+ *   - on success, emits `reconnect` with `{ oldEdge, newConnection }` so
+ *     listeners see the same payload they saw before the refactor
+ *
+ * Extracted so the edge-body reconnect path is unit-testable without
+ * simulating full pointer drags through SVG.
+ */
+export async function resolveEdgeBodyReconnect(params: {
+  dropNodeId: string | undefined;
+  dropHandleId: string | undefined;
+  draggedEnd: HandleType;
+  edge: FlowEdge;
+  canvas: any;
+  containerEl: HTMLElement;
+}): Promise<{ applied: boolean; reason?: string; newConnection?: Connection }> {
+  const { dropNodeId, dropHandleId, draggedEnd, edge, canvas, containerEl } = params;
+
+  if (!dropNodeId) {
+    return { applied: false };
+  }
+
+  const dropNode = canvas.getNode(dropNodeId);
+  if (dropNode && !isConnectable(dropNode)) {
+    return { applied: false };
+  }
+
+  const newConnection: Connection = draggedEnd === 'target'
+    ? { source: edge.source, sourceHandle: edge.sourceHandle, target: dropNodeId, targetHandle: dropHandleId }
+    : { source: dropNodeId, sourceHandle: dropHandleId, target: edge.target, targetHandle: edge.targetHandle };
+
+  const oldEdge = { ...edge };
+  const result = await applyReconnectValidation({
+    edge,
+    newConnection,
+    canvas,
+    containerEl,
+    endpoint: draggedEnd,
+  });
+
+  if (result.applied) {
+    canvas._emit?.('reconnect', { oldEdge, newConnection });
+    return { applied: true, newConnection };
+  }
+
+  return { applied: false, reason: result.reason, newConnection };
+}
 
 function resolveAnimationMode(animated: boolean | string | undefined): 'none' | 'dash' | 'pulse' | 'dot' {
   if (animated === true || animated === 'dash') return 'dash';
@@ -80,7 +140,58 @@ function rotateHandlePos(position: HandlePosition, rotation: number | undefined)
 }
 
 /**
+ * Return the center point of a DOMRect in screen coordinates.
+ * Used with `pickClosestHandle` to disambiguate same-(id,type) handles.
+ */
+function rectCenter(r: DOMRect): XYPosition {
+  return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
+}
+
+/**
+ * Pick the handle element whose center is geometrically closest to
+ * `opposingCenter` (the OTHER endpoint's screen-space rect center).
+ *
+ * Used when a node has multiple handles sharing the same (id, type) — for
+ * example schema nodes, which stamp a real left-side target plus an
+ * invisible right-side mirror per row. The picker lets the edge route to
+ * whichever side is physically closer, avoiding edges that jump to the
+ * far side of the node when the source is repositioned.
+ *
+ * NOTE: `opposingCenter` is expected in SCREEN coordinates (from a
+ * `getBoundingClientRect` center), matching the space the handle rects
+ * live in here. When it's not available, falls back to the first match.
+ */
+function pickClosestHandle(
+  handles: NodeListOf<Element> | Element[],
+  opposingCenter: XYPosition | undefined,
+): Element | null {
+  const list = Array.from(handles);
+  if (list.length === 0) return null;
+  if (list.length === 1 || !opposingCenter) return list[0];
+  let best: Element | null = null;
+  let bestDist = Infinity;
+  for (const h of list) {
+    const r = (h as HTMLElement).getBoundingClientRect();
+    const cx = (r.left + r.right) / 2;
+    const cy = (r.top + r.bottom) / 2;
+    const dx = cx - opposingCenter.x;
+    const dy = cy - opposingCenter.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < bestDist) {
+      bestDist = d2;
+      best = h;
+    }
+  }
+  return best;
+}
+
+/**
  * Look up a handle's declared position from the DOM.
+ *
+ * When multiple handles share the same (id, type) — e.g. schema-node rows
+ * with mirror handles on the opposite side — `opposingCenter` (the other
+ * endpoint's screen-space rect center) is used to pick the one closest to
+ * that endpoint. Without `opposingCenter`, the first match wins.
  */
 export function resolveHandlePosition(
   container: Element,
@@ -88,12 +199,25 @@ export function resolveHandlePosition(
   handleId: string | undefined,
   handleType: 'source' | 'target',
   node?: FlowNode,
+  opposingCenter?: XYPosition,
 ): HandlePosition {
   const nodeEl = container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`);
   if (nodeEl) {
-    // Try exact handle ID first
+    // Try exact handle ID scoped to the correct type. Schema nodes and other
+    // "row-per-field" layouts have a source + target on each row with the same
+    // handle id — without the type filter, querySelector grabs whichever
+    // appears first in the DOM and the edge lands on the wrong side.
     if (handleId) {
-      const handleEl = nodeEl.querySelector(`[data-flow-handle-id="${CSS.escape(handleId)}"]`);
+      const typed = nodeEl.querySelectorAll(
+        `[data-flow-handle-id="${CSS.escape(handleId)}"][data-flow-handle-type="${handleType}"]`,
+      );
+      let handleEl = pickClosestHandle(typed, opposingCenter);
+      if (!handleEl) {
+        const untyped = nodeEl.querySelectorAll(
+          `[data-flow-handle-id="${CSS.escape(handleId)}"]`,
+        );
+        handleEl = pickClosestHandle(untyped, opposingCenter);
+      }
       if (handleEl) {
         return (handleEl.getAttribute('data-flow-handle-position') as HandlePosition)
           ?? (handleType === 'source' ? 'bottom' : 'top');
@@ -137,6 +261,11 @@ interface HandleMeasurement {
  * Converts the handle's screen position directly via the container rect
  * and viewport, so CSS transforms (e.g. rotation) are correctly accounted for.
  * Returns null if the handle element cannot be found.
+ *
+ * When a node has multiple handles sharing the same (id, type) — e.g.
+ * schema-node rows with opposite-side mirror handles — `opposingCenter`
+ * (the OTHER endpoint's screen-space rect center) is used to pick the
+ * geometrically closest match. Without it, the first match wins.
  */
 function measureHandleCoords(
   container: Element,
@@ -146,6 +275,7 @@ function measureHandleCoords(
   handleType: 'source' | 'target',
   zoom: number,
   viewport: { x: number; y: number },
+  opposingCenter?: XYPosition,
 ): HandleMeasurement | null {
   const nodeEl = container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`) as HTMLElement | null;
   if (!nodeEl) return null;
@@ -153,8 +283,21 @@ function measureHandleCoords(
   let handleEl: HTMLElement | null = null;
 
   if (handleId) {
-    // 1. Try exact handle ID
-    handleEl = nodeEl.querySelector(`[data-flow-handle-id="${CSS.escape(handleId)}"]`);
+    // 1. Try exact handle ID scoped to the correct type (schema-style nodes
+    //    have same-id target + source per row; type disambiguates). When
+    //    multiple match (e.g. real + mirror), pick the geometrically closest
+    //    to the opposing endpoint. Fall back to id-only for backward compat
+    //    with nodes that only have one handle per id.
+    const typed = nodeEl.querySelectorAll(
+      `[data-flow-handle-id="${CSS.escape(handleId)}"][data-flow-handle-type="${handleType}"]`,
+    );
+    handleEl = pickClosestHandle(typed, opposingCenter) as HTMLElement | null;
+    if (!handleEl) {
+      const untyped = nodeEl.querySelectorAll(
+        `[data-flow-handle-id="${CSS.escape(handleId)}"]`,
+      );
+      handleEl = pickClosestHandle(untyped, opposingCenter) as HTMLElement | null;
+    }
     // 2. If not found, try a handle on the same side (for condensed nodes)
     if (!handleEl) {
       const side = inferSideFromHandleId(handleId);
@@ -677,13 +820,16 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           canvas._pendingReconnection = null;
         };
 
-        const onPointerUp = (upE: PointerEvent) => {
+        const onPointerUp = async (upE: PointerEvent) => {
           if (!dragging) {
             // Below threshold — treat as click
             cleanupReconnection();
             handleEdgeClick(upE as unknown as MouseEvent);
             return;
           }
+
+          // Guard against overlapping drops while an async connectValidator is pending.
+          if (canvas._connectValidating) return;
 
           // Use snapped handle if available, otherwise fall back to elementFromPoint
           let handleEl: HTMLElement | null = snappedHandle;
@@ -703,51 +849,34 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
 
           const dropNodeId = nodeEl?.dataset.flowNodeId;
           const dropHandleId = handleEl?.dataset.flowHandleId;
-          let successful = false;
 
-          // Guard-clause chain: each condition must pass to proceed with reconnection
-          if (!dropNodeId) {
-            // No drop target — snap back
-          } else if ((() => { const dn = canvas.getNode(dropNodeId); return dn && !isConnectable(dn); })()) {
-            // Target node is not connectable
+          // Pulse the drag line while the async connectValidator (if any) awaits.
+          // The class is a no-op on sync paths — setDragLineValidating only
+          // adds/removes; the validator lifecycle inside applyReconnectValidation
+          // is synchronous when no validator is configured.
+          const dragLineEl = reconnectLineInstance?.svg ?? null;
+          setDragLineValidating(dragLineEl, true);
+          let result: Awaited<ReturnType<typeof resolveEdgeBodyReconnect>>;
+          try {
+            result = await resolveEdgeBodyReconnect({
+              dropNodeId,
+              dropHandleId,
+              draggedEnd: draggedEnd!,
+              edge,
+              canvas,
+              containerEl,
+            });
+          } finally {
+            setDragLineValidating(dragLineEl, false);
+          }
+
+          if (result.applied) {
+            debug('reconnect', `Edge "${edge.id}" reconnected (${draggedEnd})`, result.newConnection);
           } else {
-            const newConnection: Connection = draggedEnd === 'target'
-              ? { source: edge.source, sourceHandle: edge.sourceHandle, target: dropNodeId, targetHandle: dropHandleId }
-              : { source: dropNodeId, sourceHandle: dropHandleId, target: edge.target, targetHandle: edge.targetHandle };
-
-            const otherEdges = canvas.edges.filter((e: FlowEdge) => e.id !== edge.id);
-
-            if (!isValidConnection(newConnection, otherEdges, { preventCycles: canvas._config?.preventCycles })) {
-              debug('reconnect', 'Reconnection rejected (invalid connection)');
-            } else if (!checkHandleLimits(containerEl, newConnection, otherEdges)) {
-              debug('reconnect', 'Reconnection rejected (handle limit)');
-            } else if (!runHandleValidators(containerEl, newConnection)) {
-              debug('reconnect', 'Reconnection rejected (per-handle validator)');
-            } else if (canvas._config?.isValidConnection && !canvas._config.isValidConnection(newConnection)) {
-              debug('reconnect', 'Reconnection rejected (custom validator)');
-            } else {
-              const oldEdge = { ...edge };
-              canvas._captureHistory?.();
-
-              if (draggedEnd === 'target') {
-                edge.target = newConnection.target;
-                edge.targetHandle = newConnection.targetHandle;
-              } else {
-                edge.source = newConnection.source;
-                edge.sourceHandle = newConnection.sourceHandle;
-              }
-
-              successful = true;
-              debug('reconnect', `Edge "${edge.id}" reconnected (${draggedEnd})`, newConnection);
-              canvas._emit('reconnect', { oldEdge, newConnection });
-            }
+            debug('reconnect', `Edge "${edge.id}" reconnection cancelled — snapping back`, { reason: result.reason });
           }
 
-          if (!successful) {
-            debug('reconnect', `Edge "${edge.id}" reconnection cancelled — snapping back`);
-          }
-
-          canvas._emit('reconnect-end', { edge, successful });
+          canvas._emit('reconnect-end', { edge, successful: result.applied });
           cleanupReconnection();
         };
 
@@ -907,8 +1036,21 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           lastTgtCoords = { x: floating.tx, y: floating.ty };
         } else {
           // ── Standard: resolve from handle elements ──
-          sourcePos = resolveHandlePosition(container, edge.source, edge.sourceHandle, 'source', rawSource);
-          targetPos = resolveHandlePosition(container, edge.target, edge.targetHandle, 'target', rawTarget);
+          // Compute screen-space centers of each endpoint node ONCE so the
+          // handle-geometry picker (for nodes with same-(id,type) mirrors,
+          // e.g. schema rows) can choose whichever side of the node is
+          // physically closer to the OPPOSING endpoint.
+          const sourceNodeEl = container.querySelector(
+            `[data-flow-node-id="${CSS.escape(edge.source)}"]`,
+          ) as HTMLElement | null;
+          const targetNodeEl = container.querySelector(
+            `[data-flow-node-id="${CSS.escape(edge.target)}"]`,
+          ) as HTMLElement | null;
+          const sourceCenter = sourceNodeEl ? rectCenter(sourceNodeEl.getBoundingClientRect()) : undefined;
+          const targetCenter = targetNodeEl ? rectCenter(targetNodeEl.getBoundingClientRect()) : undefined;
+
+          sourcePos = resolveHandlePosition(container, edge.source, edge.sourceHandle, 'source', rawSource, targetCenter);
+          targetPos = resolveHandlePosition(container, edge.target, edge.targetHandle, 'target', rawTarget, sourceCenter);
 
           // Read zoom/viewport from the raw object to avoid creating a reactive
           // dependency on viewport.zoom.  Edge paths are in flow-space and
@@ -924,8 +1066,8 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           sourcePos = rotateHandlePos(sourcePos, srcRotation);
           targetPos = rotateHandlePos(targetPos, tgtRotation);
 
-          srcMeasurement = measureHandleCoords(container, edge.source, sourceNode, edge.sourceHandle, 'source', zoom, rawViewport);
-          tgtMeasurement = measureHandleCoords(container, edge.target, targetNode, edge.targetHandle, 'target', zoom, rawViewport);
+          srcMeasurement = measureHandleCoords(container, edge.source, sourceNode, edge.sourceHandle, 'source', zoom, rawViewport, targetCenter);
+          tgtMeasurement = measureHandleCoords(container, edge.target, targetNode, edge.targetHandle, 'target', zoom, rawViewport, sourceCenter);
 
           // Cache handle center coords for reconnection hit-detection
           const fallbackSrc = getHandleCoords(sourceNode, sourcePos, canvas._shapeRegistry, canvas._config?.nodeOrigin);
@@ -1041,8 +1183,15 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         );
 
         // ── Markers ──────────────────────────────────────────────
-        if (edge.markerStart) {
+        // When `_renderDualMarker` is set (bidirectional-edge collapse has
+        // picked this edge as the primary of a reciprocal pair), mirror the
+        // end marker onto the start so one path carries arrows at both ends.
+        if (edge.markerStart != null) {
           const cfg = normalizeMarker(edge.markerStart);
+          const id = getMarkerId(cfg, canvas._id);
+          pathEl.setAttribute('marker-start', `url(#${id})`);
+        } else if (edge._renderDualMarker && edge.markerEnd) {
+          const cfg = normalizeMarker(edge.markerEnd);
           const id = getMarkerId(cfg, canvas._id);
           pathEl.setAttribute('marker-start', `url(#${id})`);
         } else {

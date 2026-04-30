@@ -48,11 +48,12 @@ Alpine.start();
 - **Directive-driven API** -- build flows with `x-flow-*` directives, no framework boilerplate
 - **7 edge types** -- bezier, smoothstep, straight, orthogonal, avoidant, editable, floating
 - **Node shapes, groups & nesting** -- resize, rotate, and compose complex layouts
-- **Connection modes** -- drag, click, proximity, multi-connect, easy connect
+- **Connection modes** -- drag, click, proximity, multi-connect, easy connect, `keyboardConnect` (a11y), async `connectValidator` gate, `collapseBidirectionalEdges` rendering
 - **Canvas controls** -- minimap, background patterns, panels, keyboard shortcuts
 - **Animation engine** -- timeline, particles, path motion (orbit, wave, pendulum, drift), camera follow
 - **Compute flows** -- manual and auto modes for data-driven pipelines
 - **Interactions** -- context menus, toolbars, collapse, drag from sidebar, save/restore, undo/redo, touch support
+- **Schema addon** (`/schema` subpath) -- typed-field designer with field CRUD, reference inference, stable JSON serialization, three-scope inspector directives
 - **Theming** -- CSS variables and dark mode
 - **TypeScript** -- full type definitions included
 

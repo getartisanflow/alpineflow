@@ -30,8 +30,11 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _autoLoadingOverlay: null,
     get isLoading() { return !this.ready || this._userLoading; },
     isInteractive: true,
+    isFullscreen: false,
+    _fullscreenTarget: null,
     pendingConnection: null,
     _pendingReconnection: null,
+    _pendingKeyboardConnect: null,
 
     // === Selection state ===
     selectedNodes: new Set<string>(),
@@ -202,6 +205,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _scheduleAutoLayout: vi.fn(),
     _runAutoLayout: vi.fn(async () => {}),
     _getBackgroundGap: vi.fn(() => 20),
+    _resolveFullscreenTarget: vi.fn(() => null),
     _resolveBackgroundLayers: vi.fn(() => []),
     _applyLayout: vi.fn(),
     _adjustHandlePositions: vi.fn(),
@@ -276,6 +280,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     setCenter: vi.fn(),
     panBy: vi.fn(),
     toggleInteractive: vi.fn(),
+    toggleFullscreen: vi.fn(),
     closeContextMenu: vi.fn(),
     resetPanels: vi.fn(),
     copy: vi.fn(),

@@ -22,6 +22,7 @@ import type {
   Dimensions,
   FlowCanvasConfig,
   PendingReconnection,
+  PendingKeyboardConnect,
   PatchableConfig,
 } from '../../core/types';
 import { createPanZoom, type PanZoomInstance } from '../../core/pan-zoom';
@@ -137,11 +138,23 @@ export function registerFlowCanvas(Alpine: Alpine) {
     /** Whether interactivity (pan/zoom/drag) is enabled */
     isInteractive: true,
 
+    /** Whether the canvas container is currently in fullscreen mode */
+    isFullscreen: false,
+
+    /** Fullscreen change handler (bound to document for cleanup) */
+    _onFullscreenChange: null as (() => void) | null,
+
+    /** Resolved target element while a fullscreen session is active. */
+    _fullscreenTarget: null as HTMLElement | null,
+
     /** Currently active connection drag, or null */
     pendingConnection: null as { source: string; sourceHandle?: string; position: XYPosition } | null,
 
     /** Currently active edge reconnection drag, or null */
     _pendingReconnection: null as PendingReconnection | null,
+
+    /** Keyboard-armed pending connection (source handle activated via Enter/Space), or null */
+    _pendingKeyboardConnect: null as PendingKeyboardConnect | null,
 
     /** Set of selected node IDs */
     selectedNodes: new Set<string>(),
@@ -554,6 +567,24 @@ export function registerFlowCanvas(Alpine: Alpine) {
       }
       if (config.backgroundGap) {
         this._container.style.setProperty('--flow-bg-pattern-gap', String(config.backgroundGap));
+      }
+
+      // Apply containerHeight config as inline --flow-container-height override.
+      // The CSS rule `.flow-container { height: var(--flow-container-height, 400px); }`
+      // reads this inline value first, winning over the default with specificity (0,0,0).
+      const ch = config.containerHeight;
+      if (ch !== undefined && ch !== 'auto') {
+        let value: string | null = null;
+        if (ch === 'fill') {
+          value = '100%';
+        } else if (typeof ch === 'number' && Number.isFinite(ch)) {
+          value = `${ch}px`;
+        } else if (typeof ch === 'string' && ch.trim()) {
+          value = ch.trim();
+        }
+        if (value !== null) {
+          this._container.style.setProperty('--flow-container-height', value);
+        }
       }
 
       // Set initial zoom level attribute
@@ -1078,12 +1109,105 @@ export function registerFlowCanvas(Alpine: Alpine) {
           onFitView: () => this.fitView({ padding: DEFAULT_FIT_PADDING }),
           onToggleInteractive: () => this.toggleInteractive(),
           onResetPanels: () => this.resetPanels(),
+          onToggleFullscreen: () => this.toggleFullscreen(),
         });
 
         this.$watch('isInteractive', (val: boolean) => {
           this._controls?.update({ isInteractive: val });
         });
+
+        this.$watch('isFullscreen', (val: boolean) => {
+          this._controls?.update({ isFullscreen: val });
+        });
       }
+    },
+
+    /**
+     * Wire a document-level `fullscreenchange` listener so the reactive
+     * `isFullscreen` flag stays accurate when the user exits via Escape
+     * or any out-of-band means. Safe no-op when the Fullscreen API is
+     * unavailable (e.g., restricted iframes).
+     */
+    _initFullscreen() {
+      if (typeof document === 'undefined' || !('fullscreenEnabled' in document)) {
+        return;
+      }
+      this._onFullscreenChange = () => {
+        // The expected target is either the resolved custom target (while a
+        // session is active) or the canvas container (default behavior).
+        const expected = this._fullscreenTarget ?? this._container;
+        const nowFullscreen = document.fullscreenElement === expected;
+        if (nowFullscreen !== this.isFullscreen) {
+          this.isFullscreen = nowFullscreen;
+          this._container?.dispatchEvent(new CustomEvent('flow-fullscreen-change', {
+            bubbles: true,
+            detail: { isFullscreen: nowFullscreen },
+          }));
+        }
+        // Clear resolved target when leaving fullscreen so the next request
+        // resolves fresh (important if the config is patched at runtime).
+        if (!nowFullscreen) {
+          this._fullscreenTarget = null;
+        }
+      };
+      document.addEventListener('fullscreenchange', this._onFullscreenChange);
+    },
+
+    /**
+     * Resolve which element should enter fullscreen. Honors the optional
+     * `fullscreenTarget` config (string selector / HTMLElement / function)
+     * and falls back to the canvas container.
+     */
+    _resolveFullscreenTarget(): HTMLElement | null {
+      if (!this._container) return null;
+      const cfg = this._config?.fullscreenTarget;
+      if (!cfg) return this._container;
+      if (typeof cfg === 'string') {
+        const ancestor = this._container.closest(cfg) as HTMLElement | null;
+        if (ancestor) return ancestor;
+        const first = document.querySelector(cfg) as HTMLElement | null;
+        if (first) return first;
+        console.warn(`[AlpineFlow] fullscreenTarget selector "${cfg}" did not match; falling back to canvas container.`);
+        return this._container;
+      }
+      if (cfg instanceof HTMLElement) return cfg;
+      if (typeof cfg === 'function') {
+        try {
+          const resolved = cfg(this._container);
+          if (resolved instanceof HTMLElement) return resolved;
+        } catch (err) {
+          console.warn('[AlpineFlow] fullscreenTarget resolver threw:', err);
+        }
+      }
+      return this._container;
+    },
+
+    /**
+     * Toggle fullscreen on the canvas container (or the configured
+     * `fullscreenTarget`). Requests fullscreen when not active, exits when
+     * active. Warns and no-ops if the browser doesn't expose
+     * `requestFullscreen` (e.g., restricted iframes).
+     */
+    toggleFullscreen(): void {
+      if (!this._container) return;
+      if (typeof document === 'undefined') return;
+      const target = this._resolveFullscreenTarget();
+      if (!target) return;
+      if (document.fullscreenElement) {
+        // Any fullscreen session — exit it. Works whether it's ours or not.
+        document.exitFullscreen?.();
+        return;
+      }
+      const req = target.requestFullscreen;
+      if (typeof req !== 'function') {
+        console.warn('[AlpineFlow] requestFullscreen is not available in this context');
+        return;
+      }
+      this._fullscreenTarget = target;
+      Promise.resolve(req.call(target)).catch((err: unknown) => {
+        console.warn('[AlpineFlow] fullscreen request rejected:', err);
+        this._fullscreenTarget = null;
+      });
     },
 
     /** Selection box/lasso setup (pointerdown/pointermove/pointerup handlers). */
@@ -1609,6 +1733,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._initClickHandlers();
       this._initKeyboard();
       this._initMinimap();
+      this._initFullscreen();
       this._initControls();
       this._initSelection();
       this._initChildLayout();
@@ -1706,6 +1831,19 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._minimap = null;
       this._controls?.destroy();
       this._controls = null;
+      if (this._onFullscreenChange && typeof document !== 'undefined') {
+        document.removeEventListener('fullscreenchange', this._onFullscreenChange);
+      }
+      this._onFullscreenChange = null;
+      // Exit fullscreen if this canvas was holding it (either the container
+      // or a configured fullscreenTarget wrapper).
+      if (typeof document !== 'undefined') {
+        const held = document.fullscreenElement;
+        if (held && (held === this._container || held === this._fullscreenTarget)) {
+          document.exitFullscreen?.().catch(() => {});
+        }
+      }
+      this._fullscreenTarget = null;
       if (this._onSelectionPointerDown && this._container) {
         this._container.removeEventListener('pointerdown', this._onSelectionPointerDown);
       }

@@ -13,8 +13,11 @@
 import { registerAddon } from '../core/registry';
 import { createRunExecutor } from './run';
 import { createReplayExecutor } from './replay';
+import { validateWorkflow } from './validate';
 
 export type { FlowRunHandlers, FlowRunOptions, FlowRunContext, FlowRunHandle, FlowRunLogEntry, FlowRunLogEntryType, FlowCondition, ReplayHandle, ReplayOptions } from './types';
+export { validateWorkflow } from './validate';
+export type { WorkflowIssueCode, WorkflowValidationIssue, WorkflowValidationResult } from './validate';
 
 export default function AlpineFlowWorkflow(Alpine: any): void {
     registerAddon('workflow', {
@@ -23,6 +26,9 @@ export default function AlpineFlowWorkflow(Alpine: any): void {
             canvas.replayExecution = createReplayExecutor(canvas);
             canvas.executionLog = [];
             canvas.resetExecutionLog = function () { this.executionLog = []; };
+            canvas.validateWorkflow = function () {
+                return validateWorkflow(this);
+            };
         },
     });
 

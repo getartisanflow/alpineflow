@@ -416,6 +416,22 @@ export interface FlowEdge<T = Record<string, any>> {
 
   /** Whether to always show control point handles (vs only when selected). Default: false */
   showControlPoints?: boolean;
+
+  /**
+   * @internal Set by the bidirectional-edge collapse pass when this edge is
+   * the primary side of a reciprocal pair. Causes the renderer to apply
+   * `marker-start` (mirroring `marker-end`) so a single path carries arrows
+   * at both ends. Not intended for user consumption.
+   */
+  _renderDualMarker?: boolean;
+
+  /**
+   * @internal Set by the bidirectional-edge collapse pass when this edge is
+   * the mirror side of a reciprocal pair. Causes the renderer to hide the
+   * edge's SVG (its partner draws the dual-marker pair). Not intended for
+   * user consumption.
+   */
+  _hiddenByCollapse?: boolean;
 }
 
 /** Runtime check: does `obj` look like a FlowNode? */
@@ -483,6 +499,16 @@ export interface PendingReconnection {
   draggedEnd: HandleType;
   anchorPosition: XYPosition;
   position: XYPosition;
+}
+
+/**
+ * Keyboard-armed pending connection — set when a source handle is
+ * activated via Enter/Space while `keyboardConnect` is enabled, and
+ * cleared when Escape fires or a target handle completes the connection.
+ */
+export interface PendingKeyboardConnect {
+  sourceNodeId: string;
+  sourceHandleId: string;
 }
 
 /** Props passed to the custom connection line renderer. */
@@ -860,6 +886,20 @@ export interface FlowCanvasConfig {
   /** ARIA label for the flow container. Default: 'Flow diagram' */
   ariaLabel?: string;
 
+  /**
+   * Controls the canvas container's height. Non-breaking override for
+   * `--flow-container-height` (default `400px`).
+   *
+   * - `undefined` / `'auto'` — default 400px fallback (current behavior)
+   * - `'fill'` — fills parent via `--flow-container-height: 100%`
+   * - `number` — pixel height
+   * - `string` — passed through as a CSS length (`'80vh'`, `'calc(100vh - 60px)'`)
+   *
+   * See also `--flow-container-height` CSS variable — you can also override
+   * via consumer CSS: `.my-wrapper .flow-container { --flow-container-height: 100%; }`
+   */
+  containerHeight?: 'auto' | 'fill' | number | string;
+
   /** Minimum zoom level. Default: 0.5 */
   minZoom?: number;
 
@@ -889,6 +929,12 @@ export interface FlowCanvasConfig {
   /** Default edge type applied to edges that don't specify their own `type`.
    *  Resolution: edge.type ?? canvas.defaultEdgeType ?? 'bezier'. Applies to both initial config edges and runtime-created edges. */
   defaultEdgeType?: EdgeType;
+
+  /** When true, pairs of reciprocal edges (A→B + B→A) render as a single
+   *  dual-marker path. The mirror edge is hidden from rendering; the primary
+   *  edge gains a `marker-start` attribute mirroring its `marker-end`.
+   *  Both edges still exist in `canvas.edges` — only rendering changes. Default: false */
+  collapseBidirectionalEdges?: boolean;
 
   /** Default invisible hit area width for edges. Default: 20 */
   defaultInteractionWidth?: number;
@@ -933,6 +979,28 @@ export interface FlowCanvasConfig {
 
   /** Custom connection validator. Return false to reject. Called after built-in checks. */
   isValidConnection?: (connection: Connection) => boolean;
+
+  /**
+   * Optional async validator run BEFORE an edge is committed on drop.
+   * Return true to allow, false to silently reject, or
+   * { allowed: false, reason: string } to reject with a toast-worthy reason.
+   *
+   * While the returned promise is pending, AlpineFlow adds
+   * .flow-handle-validating to both the source and target handle elements and
+   * dispatches a `flow-connect-validating` DOM event on the canvas container.
+   * When the promise resolves, a `flow-connect-validated` event fires with
+   * detail: { connection, allowed, reason }.
+   *
+   * Run ordering: synchronous `isValidConnection` runs first (cheap reject).
+   * Only if it passes does `connectValidator` run.
+   */
+  connectValidator?: (connection: Connection) => Promise<boolean | { allowed: boolean; reason?: string }>;
+
+  /**
+   * CSS class added to source + target handles during `connectValidator`
+   * execution. Default: 'flow-handle-validating'.
+   */
+  validatingHandleClass?: string;
 
   /**
    * Canvas-level connection rules based on node type.
@@ -994,6 +1062,15 @@ export interface FlowCanvasConfig {
 
   /** CSS selector for external container. When set, panel renders there instead of inside the canvas. */
   controlsContainer?: string;
+
+  /**
+   * Element to enter fullscreen mode, instead of the canvas container.
+   * Useful when the page wraps the canvas + ancillary UI (inspectors,
+   * toolbars) that should stay visible in fullscreen. Accepts a CSS
+   * selector (resolved via `closest()` then `querySelector()` fallback),
+   * an HTMLElement, or a resolver function. Defaults to the canvas container.
+   */
+  fullscreenTarget?: string | HTMLElement | ((container: HTMLElement) => HTMLElement | null);
 
   // ── Auto-Pan ───────────────────────────────────────────────────────
   /** Auto-pan when dragging nodes near canvas edge. Default: true */
@@ -1070,6 +1147,15 @@ export interface FlowCanvasConfig {
 
   /** Enable click-to-connect: click source handle, then click target handle. Default: true */
   connectOnClick?: boolean;
+
+  /**
+   * Enable keyboard-driven drag-to-connect (a11y).
+   * When true, source and target handles become focusable (`tabindex="0"`,
+   * `role="button"`, `aria-label`). Enter/Space on a focused source handle
+   * arms a pending connection; Enter/Space on a target handle completes it;
+   * Escape cancels. Defaults to false to preserve existing tab order.
+   */
+  keyboardConnect?: boolean;
 
   // ── Connection Line Customization ──────────────────────────────────
   /** Type of path used for the temporary connection drag line.
@@ -1170,6 +1256,28 @@ export interface FlowCanvasConfig {
     sourceX: number; sourceY: number; sourcePosition: string;
     targetX: number; targetY: number; targetPosition: string;
   }) => { path: string; labelPosition: { x: number; y: number } }>;
+
+  /**
+   * Optional vocabulary of field types for the schema addon's default-UI
+   * inspector. When set, the "Add field" dropdown lists these options
+   * instead of a free-text input. Order is preserved.
+   *
+   * Consumer examples:
+   *   ['text', 'uuid', 'int4', 'date', 'timestamp']           // DB
+   *   ['String!', 'Int!', 'ID', 'Boolean!']                   // GraphQL
+   *   ['string', 'number', 'boolean', 'Date']                 // TypeScript
+   *
+   * Consumers writing their own inspector UI (custom slot content) can
+   * read `canvas.fieldTypeRegistry` directly and render however they like.
+   */
+  fieldTypeRegistry?: string[];
+
+  /**
+   * When true, `x-flow-schema` auto-stamps `x-schema-reorderable` on each
+   * row, enabling drag-to-reorder. The directive can also be stamped
+   * manually by consumers writing custom node templates. Defaults to false.
+   */
+  rowsReorderable?: boolean;
 
   // ── History (Undo/Redo) ─────────────────────────────────────────
   /** Enable undo/redo history tracking. Default: false */
@@ -1762,4 +1870,54 @@ export interface FlowInstance {
    *
    *  Useful beyond drops: context menus, tooltips, custom pointer interactions. */
   getNodeAtPoint(clientX: number, clientY: number): FlowNode | null;
+}
+
+/**
+ * A single field (row) in a schema node. Each field renders as one row with
+ * a labelled target handle on the left and a labelled source handle on the right.
+ * Handle ids equal `field.name` — edges between schema nodes carry
+ * sourceHandle + targetHandle values that match field names.
+ */
+export interface FlowSchemaField {
+  /** Field name. Used as the handle id so edges can reference it. */
+  name: string;
+
+  /** Display type, e.g. 'uuid', 'text', 'int4', 'timestamp'. Rendered as a pill. */
+  type: string;
+
+  /** Optional key role — renders with .flow-schema-row--pk or --fk. */
+  key?: 'primary' | 'foreign';
+
+  /** Optional required flag — renders with .flow-schema-row--required. */
+  required?: boolean;
+
+  /** Optional icon — an emoji or CSS class name rendered before the field name. */
+  icon?: string;
+
+  /** Free-form description; consumer templates (inspector, hovercards, docs) render this. */
+  description?: string;
+
+  /** Mark a field deprecated — consumer CSS can style via `.flow-schema-row--deprecated`. */
+  deprecated?: boolean;
+
+  /** Free-form tags array — consumer-defined vocabulary (e.g., ['indexed', 'immutable', 'pii']). */
+  tags?: string[];
+
+  /** Default value hint for the field — consumer renders in the inspector / hovercard. Unknown type. */
+  defaultValue?: unknown;
+}
+
+/**
+ * Shape the x-flow-schema directive expects on `node.data`. Your node data
+ * doesn't have to implement this type — any shape with `label: string` and
+ * `fields: FlowSchemaField[]` works.
+ */
+export interface SchemaNodeData {
+  label: string;
+  fields: FlowSchemaField[];
+  /** Optional consumer-defined discriminator (e.g., 'entity' | 'enum' | 'query' | 'view'). Stamps `data-flow-schema-kind="<value>"` on the node element for CSS theming. */
+  kind?: string;
+  _hiddenFields?: string[];
+  _collapsed?: boolean;
+  [key: string]: unknown;
 }

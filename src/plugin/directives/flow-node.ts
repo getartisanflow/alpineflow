@@ -29,14 +29,13 @@ import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { resolveChildValidation } from '../../core/child-validation';
 import { collabStore } from '../../collab/store';
 import { createConnectionLine, findSnapTarget, startConnectionAutoPan, type ConnectionLineInstance } from '../connection-utils';
-import { applyValidationClasses, clearValidationClasses, checkHandleLimits, runHandleValidators } from './flow-handle';
+import { applyValidationClasses, clearValidationClasses, checkHandleLimits, runHandleValidators, applyConnectValidation } from './flow-handle';
 import { isValidConnection, checkConnectionRules } from '../../core/connections';
 import { findProximityCandidate, type ProximityCandidate } from '../../core/proximity-connect';
 import { isDraggable, isConnectable, isSelectable } from '../../core/node-flags';
 
 const BLOCKED_ATTRS = new Set(['x-data', 'x-init', 'x-bind', 'href', 'src', 'action', 'formaction', 'srcdoc']);
 
-let easyConnectEdgeCounter = 0;
 let proximityEdgeCounter = 0;
 
 /** Check if the easy-connect modifier key is held. */
@@ -1372,6 +1371,14 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                 };
 
                 // Run validation chain
+                //
+                // NB: proximity-connect is user-passive — the system auto-suggests
+                // edges as nodes drift near each other. Rejections here are not
+                // user-initiated connection attempts, so we intentionally do NOT
+                // dispatch flow-connect-rejected or console.warn. Surfacing those
+                // signals would be noisy (fires on every tick the validation
+                // fails) and would confuse consumers who expect that event to
+                // mean "the user tried to connect and was rejected."
                 if (isValidConnection(connection, canvas.edges, { preventCycles: canvas._config?.preventCycles })) {
                   const isRulesOk = checkConnectionRules(connection, canvas._config?.connectionRules, canvas._nodeMap);
                   const isHandleOk = isRulesOk && (containerEl ? checkHandleLimits(containerEl, connection, canvas.edges) : true);
@@ -1427,6 +1434,11 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
             const currentCanvas = Alpine.$data(el.closest('[x-data]') as HTMLElement);
             if (!currentCanvas) return;
             if (currentCanvas._animationLocked) return;
+            // Overlap guard: don't start a new easy-connect drag while a
+            // previously-dropped connection is still awaiting its async
+            // connectValidator — matches the drag-to-connect + click-to-connect
+            // guards so two pending validators can't race.
+            if (currentCanvas._connectValidating) return;
 
             const node = evaluate(expression) as FlowNode;
             if (!node) return;
@@ -1503,7 +1515,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
               connectAutoPan?.updatePointer(moveE.clientX, moveE.clientY);
             };
 
-            const onPointerUp = (upE: PointerEvent) => {
+            const onPointerUp = async (upE: PointerEvent) => {
               connectAutoPan?.stop();
               connectAutoPan = null;
               document.removeEventListener('pointermove', onPointerMove);
@@ -1517,6 +1529,11 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
               const dropPosition = currentCanvas.screenToFlowPosition(upE.clientX, upE.clientY);
               const connectEndBase = { source: node.id, sourceHandle: handleId, position: dropPosition };
 
+              // Clear pendingConnection before the async validator runs so the
+              // source handle isn't stuck in a "connecting" state during the
+              // await. The validator's own events drive any UI feedback.
+              currentCanvas.pendingConnection = null;
+
               // Find target handle
               let targetHandle: HTMLElement | null = snappedHandle;
               if (!targetHandle) {
@@ -1524,36 +1541,32 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                 targetHandle = dropTarget?.closest('[data-flow-handle-type="target"]') as HTMLElement | null;
               }
 
-              if (targetHandle) {
-                const targetNodeEl = targetHandle.closest('[x-flow-node]') as HTMLElement | null;
-                const targetNodeId = targetNodeEl?.dataset.flowNodeId;
-                const targetHandleId = targetHandle.dataset.flowHandleId ?? 'target';
-
-                if (targetNodeId) {
-                  const connection = { source: node.id, sourceHandle: handleId, target: targetNodeId, targetHandle: targetHandleId };
-                  if (isValidConnection(connection, currentCanvas.edges, { preventCycles: currentCanvas._config.preventCycles })) {
-                    if (checkConnectionRules(connection, currentCanvas._config?.connectionRules, currentCanvas._nodeMap) &&
-                        checkHandleLimits(containerEl, connection, currentCanvas.edges) &&
-                        runHandleValidators(containerEl, connection) &&
-                        (!currentCanvas._config?.isValidConnection || currentCanvas._config.isValidConnection(connection))) {
-                      const edgeId = `e-${node.id}-${targetNodeId}-${Date.now()}-${easyConnectEdgeCounter++}`;
-                      currentCanvas.addEdges({ id: edgeId, ...connection });
-                      currentCanvas._emit('connect', { connection });
-                      currentCanvas._emit('connect-end', { connection, ...connectEndBase });
-                    } else {
-                      currentCanvas._emit('connect-end', { connection: null, ...connectEndBase });
-                    }
-                  } else {
-                    currentCanvas._emit('connect-end', { connection: null, ...connectEndBase });
-                  }
-                } else {
-                  currentCanvas._emit('connect-end', { connection: null, ...connectEndBase });
-                }
-              } else {
+              if (!targetHandle) {
                 currentCanvas._emit('connect-end', { connection: null, ...connectEndBase });
+                return;
               }
 
-              currentCanvas.pendingConnection = null;
+              const targetNodeEl = targetHandle.closest('[x-flow-node]') as HTMLElement | null;
+              const targetNodeId = targetNodeEl?.dataset.flowNodeId;
+              const targetHandleId = targetHandle.dataset.flowHandleId ?? 'target';
+
+              if (!targetNodeId) {
+                currentCanvas._emit('connect-end', { connection: null, ...connectEndBase });
+                return;
+              }
+
+              const connection = { source: node.id, sourceHandle: handleId, target: targetNodeId, targetHandle: targetHandleId };
+
+              // Delegate the full validator chain (sync + async connectValidator)
+              // to the shared helper. It creates the edge + emits `connect` on
+              // success, and dispatches `flow-connect-rejected` on failure, so
+              // easy-connect stays in parity with drag-to-connect, click-to-
+              // connect, and keyboard-connect.
+              const result = await applyConnectValidation({ connection, canvas: currentCanvas, containerEl });
+              currentCanvas._emit('connect-end', {
+                connection: result.applied ? connection : null,
+                ...connectEndBase,
+              });
             };
 
             document.addEventListener('pointermove', onPointerMove);

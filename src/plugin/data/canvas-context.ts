@@ -14,6 +14,7 @@ import type {
   Dimensions,
   FlowCanvasConfig,
   PendingReconnection,
+  PendingKeyboardConnect,
   AnimateTargets,
   AnimateOptions,
   FlowAnimationHandle,
@@ -112,11 +113,25 @@ export interface CanvasContext {
   /** Whether interactivity (pan/zoom/drag) is enabled */
   isInteractive: boolean;
 
+  /** Whether the canvas container is currently in fullscreen mode */
+  isFullscreen: boolean;
+
+  /**
+   * Resolved fullscreen target element while a fullscreen session is active
+   * (null otherwise). Stored during `toggleFullscreen()` so the
+   * `fullscreenchange` listener can compare the current `document.fullscreenElement`
+   * against the right target when a custom `fullscreenTarget` config is set.
+   */
+  _fullscreenTarget: HTMLElement | null;
+
   /** Currently active connection drag, or null */
   pendingConnection: { source: string; sourceHandle?: string; position: XYPosition } | null;
 
   /** Currently active edge reconnection drag, or null */
   _pendingReconnection: PendingReconnection | null;
+
+  /** Keyboard-armed pending connection (source handle activated via Enter/Space), or null */
+  _pendingKeyboardConnect: PendingKeyboardConnect | null;
 
   // === Selection state ===
 
@@ -467,6 +482,9 @@ export interface CanvasContext {
   /** Get effective background gap (from config, CSS variable, or default) */
   _getBackgroundGap(): number;
 
+  /** Resolve the element to request fullscreen on (config.fullscreenTarget ?? container). */
+  _resolveFullscreenTarget(): HTMLElement | null;
+
   /** Resolve background config to array of layer definitions */
   _resolveBackgroundLayers(): Array<{ variant: 'dots' | 'lines' | 'cross'; gap: number; color: string }>;
 
@@ -693,6 +711,9 @@ export interface CanvasContext {
 
   /** Toggle interactivity */
   toggleInteractive(): void;
+
+  /** Toggle fullscreen on the canvas container */
+  toggleFullscreen(): void;
 
   /** Close the context menu */
   closeContextMenu(): void;
