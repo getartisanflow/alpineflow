@@ -239,7 +239,7 @@ describe('validateWorkflow', () => {
     it('attaches validateWorkflow onto a canvas after the workflow addon setup runs', async () => {
         const { default: AlpineFlowWorkflow } = await import('./index');
         const { getAddon } = await import('../core/registry');
-        AlpineFlowWorkflow({ magic: () => {} } as any);
+        AlpineFlowWorkflow({ magic: () => {}, data: () => {}, $data: () => null } as any);
         const workflow = getAddon<{ setup(c: any): void }>('workflow');
         expect(workflow).toBeDefined();
         const canvas: any = { nodes: [], edges: [] };

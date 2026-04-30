@@ -685,3 +685,60 @@
 .flow-condition-node[data-flow-condition-branch-taken="false"] .flow-condition-handle--true {
   opacity: 0.4;
 }
+
+/* ----------------------------------------------------------------------------
+   Replay controls — default theme.
+   Reuses existing tokens — no new CSS variables introduced.
+   ---------------------------------------------------------------------------- */
+
+.flow-replay-controls {
+  background: var(--flow-node-bg, #1a1c23);
+  border: 1px solid var(--flow-border-subtle, #2d3039);
+  color: var(--flow-text-body, #e4e5ea);
+}
+
+.flow-replay-button {
+  background: transparent;
+  color: var(--flow-text-muted, #9598a5);
+}
+
+.flow-replay-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--flow-text-body, #e4e5ea);
+}
+
+.flow-replay-button--primary {
+  background: var(--flow-edge-stroke, #52525b);
+  color: var(--flow-text-body, #e4e5ea);
+}
+
+.flow-replay-progress {
+  background: var(--flow-border-subtle, #2d3039);
+}
+
+.flow-replay-progress-fill {
+  background: var(--flow-edge-taken-stroke, #14b8a6);
+}
+
+.flow-replay-scrubber {
+  background: var(--flow-border-subtle, #2d3039);
+}
+
+.flow-replay-scrubber-fill {
+  background: var(--flow-edge-taken-stroke, #14b8a6);
+}
+
+.flow-replay-scrubber-thumb {
+  background: var(--flow-text-body, #e4e5ea);
+  border: 2px solid var(--flow-edge-taken-stroke, #14b8a6);
+}
+
+.flow-replay-time {
+  color: var(--flow-text-muted, #9598a5);
+}
+
+.flow-replay-speed {
+  background: transparent;
+  border: 1px solid var(--flow-border-subtle, #2d3039);
+  color: var(--flow-text-muted, #9598a5);
+}

@@ -10,7 +10,7 @@ import { getAddon } from '../core/registry';
  * so calling it once per test suite is enough.
  */
 function applyWorkflowSetup(canvas: any): any {
-    AlpineFlowWorkflow({ magic: () => {} } as any);
+    AlpineFlowWorkflow({ magic: () => {}, data: () => {}, $data: () => null } as any);
     const addon = getAddon<{ setup(c: any): void }>('workflow');
     addon!.setup(canvas);
     return canvas;

@@ -1696,3 +1696,96 @@
   bottom: 0;
   transform: translate(-50%, 50%);
 }
+
+/* ----------------------------------------------------------------------------
+   Replay controls — structural rules (layout only; colors live in the theme)
+   Rendered by the <x-flow-replay-controls> component (Alpine factory
+   `flowReplayControls`).
+   ---------------------------------------------------------------------------- */
+
+.flow-replay-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.flow-replay-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.flow-replay-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.flow-replay-progress-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flow-replay-progress {
+  width: 200px;
+  height: 4px;
+  border-radius: 2px;
+  position: relative;
+  overflow: hidden;
+}
+
+.flow-replay-progress-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 2px;
+}
+
+.flow-replay-scrubber {
+  width: 200px;
+  height: 6px;
+  border-radius: 3px;
+  position: relative;
+  cursor: pointer;
+}
+
+.flow-replay-scrubber-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+}
+
+.flow-replay-scrubber-thumb {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.flow-replay-time {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  min-width: 70px;
+  text-align: center;
+}
+
+.flow-replay-speed {
+  height: 24px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font: inherit;
+  font-size: 11px;
+}
