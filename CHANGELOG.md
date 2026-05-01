@@ -229,6 +229,18 @@ Workflow addon — lazy canvas resolution.
 - `flowRunButton`, `flowStopButton`, `flowResetButton`, `flowReplayControls`, and `flowExecutionLog` Alpine.data factories now lazy re-resolve their cached `_canvas` reference if a required canvas method is missing at click/getter time. Previously, when a button was rendered as a sibling/ancestor of the `.flow-container` (DOM-order: button before canvas), the button's `init()` cached a stale empty proxy from `Alpine.$data()` and click-time method calls threw `TypeError: this._canvas.run is not a function`. The factories are now tolerant of arbitrary DOM order.
 - `flowExecutionLog.filteredEvents` reads from the canvas at getter time instead of caching the source array reference at init — the visible log now stays in sync with the canvas's `executionLog`/sourceExpr regardless of mount order.
 
+---
+
+Audit follow-ups — docs, tests, and internal notes.
+
+### Docs
+- `docs/addons/workflow.md` — added an `x-flow-wait` directive section (sibling to the existing `x-flow-condition` directive section). Documents the rendered DOM, the `node.data` shape (`durationMs`, `label`, `icon`), the duration-format table, and the pairing with `flow-wait` workflow nodes.
+- `CLAUDE.md` — committed the repo-internal working notes (tech stack, build/test commands, branching rules) for human and AI contributors working inside the package.
+
+### Internal
+- `src/plugin/directives/flow-condition.test.ts` — added five error-path tests covering invalid `_branchTaken` values, missing/non-object `condition` shapes, and garbage direction expressions.
+- `src/schema/inspector/shared.ts` — `findCanvasScope()` JSDoc now documents the cached-at-init assumption with a forward reference to the workflow addon's `ensureCanvas` pattern for future portal/tab-switched inspector placements.
+
 ## v0.1.2-alpha — 2026-04-03
 
 ### Fixed
