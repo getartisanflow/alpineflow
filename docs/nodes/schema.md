@@ -217,16 +217,13 @@ The directive fully owns the node element's contents. For custom rendering, skip
 })" class="flow-container" style="height: 340px;">
     <div x-flow-viewport>
         <template x-for="node in nodes" :key="node.id">
-            <div x-flow-node="node">
-                <div class="my-header" x-text="node.data.label"></div>
-                <template x-for="field in node.data.fields" :key="field.name">
-                    <div class="my-row">
-                        <div x-flow-handle:target.left="field.name"></div>
-                        <span x-text="field.name"></span>
-                        <span x-text="field.type"></span>
-                        <div x-flow-handle:source.right="field.name"></div>
-                    </div>
-                </template>
+            <div x-flow-node="node" class="w-96">
+                <div class="my-header text-center text-2xl" x-text="node.data.label"></div>
+                <div class="flex w-full">
+                    <template x-for="field in node.data.fields" :key="field.name">
+                        <div class="p-2 flex-1 text-center" x-text="field.name"></div>
+                    </template>
+                </div>
             </div>
         </template>
     </div>
