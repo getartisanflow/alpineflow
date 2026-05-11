@@ -8,7 +8,46 @@ order: 8
 
 The `x-flow-schema` directive turns a node into a structured table display — header + one row per field + per-row labelled handles. It's the right primitive for ERD diagrams, GraphQL schema viewers, API payload designers, and anything where users drag connections between specific fields of one object and another.
 
-## Minimal example
+::demo
+```html
+<div x-data="flowCanvas({
+    nodes: [
+        {
+            id: 'user',
+            position: { x: 0, y: 0 },
+            data: {
+                label: 'User',
+                fields: [
+                    { name: 'id',         type: 'uuid',      key: 'primary' },
+                    { name: 'email',      type: 'text',      required: true },
+                    { name: 'team_id',    type: 'uuid',      },
+                    { name: 'created_at', type: 'timestamp' },
+                ],
+            },
+        }
+    ],
+    edges: [
+    ],
+    background: 'dots',
+    fitViewOnInit: true,
+    controls: false,
+    pannable: false,
+    zoomable: false,
+})" class="flow-container" style="height: 340px;">
+    <div x-flow-viewport>
+        <template x-for="node in nodes" :key="node.id">
+            <div x-flow-node="node" x-flow-schema></div>
+        </template>
+    </div>
+</div>
+```
+::enddemo
+
+
+
+## Usage
+
+Add a fields block in your data structure to provide the relevant content.
 
 ```html
 <div x-data="flowCanvas({
@@ -83,6 +122,54 @@ An edge between two schema nodes specifies which field on each side it attaches 
 
 Users drag from a row's right-edge handle to another row's left-edge handle — AlpineFlow records `sourceHandle` / `targetHandle` from the handle ids automatically.
 
+::demo
+```html
+<div x-data="flowCanvas({
+    nodes: [
+        {
+            id: 'user',
+            position: { x: 0, y: 0 },
+            data: {
+                label: 'User',
+                fields: [
+                    { name: 'id',         type: 'uuid',      key: 'primary' },
+                    { name: 'email',      type: 'text',      required: true },
+                    { name: 'team_id',    type: 'uuid',      key: 'foreign' },
+                    { name: 'created_at', type: 'timestamp' },
+                ],
+            },
+        },
+        {
+            id: 'team',
+            position: { x: 360, y: 40 },
+            data: {
+                label: 'Team',
+                fields: [
+                    { name: 'id',   type: 'uuid', key: 'primary' },
+                    { name: 'name', type: 'text', required: true },
+                    { name: 'plan', type: 'enum' },
+                ],
+            },
+        },
+    ],
+    edges: [
+        { id: 'user-team', source: 'user', sourceHandle: 'team_id', target: 'team', targetHandle: 'id' },
+    ],
+    background: 'dots',
+    fitViewOnInit: true,
+    controls: false,
+    pannable: false,
+    zoomable: false,
+})" class="flow-container" style="height: 340px;">
+    <div x-flow-viewport>
+        <template x-for="node in nodes" :key="node.id">
+            <div x-flow-node="node" x-flow-schema></div>
+        </template>
+    </div>
+</div>
+```
+::enddemo
+
 ## Custom rendering
 
 The directive fully owns the node element's contents. For custom rendering, skip the directive and write your own template:
@@ -100,6 +187,52 @@ The directive fully owns the node element's contents. For custom rendering, skip
   </template>
 </div>
 ```
+
+
+::demo
+```html
+<div x-data="flowCanvas({
+    nodes: [
+        {
+            id: 'user',
+            position: { x: 0, y: 0 },
+            data: {
+                label: 'User',
+                fields: [
+                    { name: 'id',         type: 'uuid',      key: 'primary' },
+                    { name: 'email',      type: 'text',      required: true },
+                    { name: 'team_id',    type: 'uuid',      },
+                    { name: 'created_at', type: 'timestamp' },
+                ],
+            },
+        }
+    ],
+    edges: [
+    ],
+    background: 'dots',
+    fitViewOnInit: true,
+    controls: false,
+    pannable: false,
+    zoomable: false,
+})" class="flow-container" style="height: 340px;">
+    <div x-flow-viewport>
+        <template x-for="node in nodes" :key="node.id">
+            <div x-flow-node="node">
+                <div class="my-header" x-text="node.data.label"></div>
+                <template x-for="field in node.data.fields" :key="field.name">
+                    <div class="my-row">
+                        <div x-flow-handle:target.left="field.name"></div>
+                        <span x-text="field.name"></span>
+                        <span x-text="field.type"></span>
+                        <div x-flow-handle:source.right="field.name"></div>
+                    </div>
+                </template>
+            </div>
+        </template>
+    </div>
+</div>
+```
+::enddemo
 
 The handle ids + positions + per-row structure are the only things edge wiring cares about — everything else is yours.
 
