@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import Alpine from 'alpinejs';
 import { registerFlowSchemaDirective } from './flow-schema';
 import { registerFlowHandleDirective } from './flow-handle';
@@ -162,6 +162,62 @@ describe('x-flow-schema directive', () => {
     await new Promise((r) => setTimeout(r, 20));
 
     expect(target.querySelectorAll('.flow-schema-row').length).toBe(2);
+  });
+
+  // Issue #21 — the directive's reactive effect must not raise an Alpine
+  // expression error when the `node` scope is absent (mounted without one) or
+  // torn down (Livewire morph detaches the element before the effect re-runs).
+  // Alpine.handleError console.warns "Alpine Expression Error: ..." synchronously
+  // before its async re-throw, so we assert that sentinel is never emitted.
+  const alpineExprErrors = (spy: ReturnType<typeof vi.spyOn>) =>
+    spy.mock.calls.filter((c) => String(c[0]).includes('Alpine Expression Error'));
+
+  it('raises no Alpine expression error when node is missing (issue #21, mode A)', async () => {
+    clearChildren(document.body);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const host = document.createElement('div');
+    host.setAttribute('x-data', `{}`); // no `node` in scope
+    const target = document.createElement('div');
+    target.setAttribute('x-flow-schema', '');
+    host.appendChild(target);
+    document.body.appendChild(host);
+    Alpine.initTree(host);
+    // The effect runs asynchronously, so flush before asserting.
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(alpineExprErrors(warnSpy)).toEqual([]);
+    expect(target.querySelector('.flow-schema-header')).toBeNull();
+    warnSpy.mockRestore();
+  });
+
+  it('raises no Alpine expression error when the element is detached before a reactive update (issue #21, mode B)', async () => {
+    clearChildren(document.body);
+    const host = document.createElement('div');
+    host.setAttribute(
+      'x-data',
+      `{ node: { id: 't', data: { label: 'User', fields: [{ name: 'id', type: 'uuid' }] } } }`,
+    );
+    const target = document.createElement('div');
+    target.setAttribute('x-flow-schema', '');
+    target.setAttribute('data-flow-node-id', 't');
+    host.appendChild(target);
+    document.body.appendChild(host);
+    Alpine.initTree(host);
+    expect(target.querySelectorAll('.flow-schema-row').length).toBe(1);
+
+    const scope = (Alpine as any).$data(host);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Simulate a Livewire morph removing the node subtree, then mutating the
+    // watched data before Alpine tears the effect down. The isConnected guard
+    // must bail: no expression error, no new row rendered on the dead element.
+    host.remove();
+    scope.node.data.fields.push({ name: 'email', type: 'text' });
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(alpineExprErrors(warnSpy)).toEqual([]);
+    expect(target.querySelectorAll('.flow-schema-row').length).toBe(1);
+    warnSpy.mockRestore();
   });
 
   it('silently no-ops when node or node.data is missing', () => {

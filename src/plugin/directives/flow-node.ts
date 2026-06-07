@@ -147,6 +147,12 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
       let lastDragNodeId: string | null = null;
 
       effect(() => {
+        // Bail if the node element was detached (e.g. a Livewire morph after a
+        // non-renderless server action) before this reactive effect re-ran.
+        // Evaluating the node scope or resolving the canvas via Alpine.$data on
+        // a torn-down element throws (`_x_dataStack` of null). See issue #21.
+        if (!el.isConnected) return;
+
         const node = evaluate(expression) as FlowNode;
         if (!node) return;
 
@@ -160,7 +166,10 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
 
         // One-time template injection from nodeTypes registry
         if (!contentInjected) {
-          const canvasForTypes = Alpine.$data(el.closest('[x-data]') as HTMLElement);
+          // Defense in depth: closest() can still return null if the canvas
+          // container lost its [x-data] mid-morph — never call $data on null.
+          const canvasContainer = el.closest('[x-data]') as HTMLElement | null;
+          const canvasForTypes = canvasContainer ? Alpine.$data(canvasContainer) : null;
           let injected = false;
 
           // Try nodeTypes registry first
