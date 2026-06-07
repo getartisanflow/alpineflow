@@ -53,7 +53,10 @@ export function registerFlowConditionDirective(Alpine: Alpine) {
 
         const readNode = (): NodeRef => {
             try {
-                return evaluate('node') as NodeRef;
+                // Alpine re-throws expression errors asynchronously, so this
+                // catch can't stop a missing/torn-down `node` scope from
+                // surfacing as an uncaught "node is not defined". See issue #21.
+                return (evaluate("typeof node !== 'undefined' ? node : null") as NodeRef) ?? null;
             } catch {
                 return null;
             }
@@ -130,6 +133,11 @@ export function registerFlowConditionDirective(Alpine: Alpine) {
         };
 
         effect(() => {
+            // Skip detached elements: a Livewire morph (or teardown) can flush
+            // this effect after the node element leaves the DOM, and
+            // evaluate('node') then throws (scope gone). See issue #21.
+            if (!host.isConnected) return;
+
             const data = readNode()?.data;
             // Touch reactive fields so Alpine subscribes.
             void data?.label;

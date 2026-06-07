@@ -31,7 +31,10 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
 
     const readNode = (): NodeRef => {
       try {
-        return evaluate('node') as NodeRef;
+        // Alpine re-throws expression errors asynchronously, so this catch
+        // can't stop a missing/torn-down `node` scope from surfacing as an
+        // uncaught "node is not defined" — guard the reference itself. See #21.
+        return (evaluate("typeof node !== 'undefined' ? node : null") as NodeRef) ?? null;
       } catch {
         return null;
       }
@@ -218,6 +221,11 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
 
     // Reactive: effect() fires on init and on any reactive read touched inside.
     effect(() => {
+      // Skip detached elements: a Livewire morph (or teardown) can flush this
+      // effect after the node element leaves the DOM, and evaluate('node') then
+      // throws because the Alpine scope is gone. See issue #21.
+      if (!host.isConnected) return;
+
       // Touch label + field properties so Alpine subscribes to mutations.
       const data = readNode()?.data;
       void data?.label;
