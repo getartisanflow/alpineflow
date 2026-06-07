@@ -132,14 +132,14 @@ export function registerFlowContextMenuDirective(Alpine: Alpine) {
         backdrop.style.display = '';
 
         // Focus the menu container so keyboard events are captured
-        htmlEl.focus();
+        htmlEl.focus({ preventScroll: true });
       };
 
       const hide = () => {
         htmlEl.style.display = 'none';
         backdrop.style.display = 'none';
         if (previousFocus && document.contains(previousFocus)) {
-          previousFocus.focus();
+          previousFocus.focus({ preventScroll: true });
           previousFocus = null;
         }
       };
@@ -199,23 +199,23 @@ export function registerFlowContextMenuDirective(Alpine: Alpine) {
           case 'ArrowDown': {
             e.preventDefault();
             const next = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
-            items[next].focus();
+            items[next].focus({ preventScroll: true });
             break;
           }
           case 'ArrowUp': {
             e.preventDefault();
             const prev = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
-            items[prev].focus();
+            items[prev].focus({ preventScroll: true });
             break;
           }
           case 'Tab': {
             e.preventDefault();
             if (e.shiftKey) {
               const prev = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
-              items[prev].focus();
+              items[prev].focus({ preventScroll: true });
             } else {
               const next = currentIndex < items.length - 1 ? currentIndex + 1 : 0;
-              items[next].focus();
+              items[next].focus({ preventScroll: true });
             }
             break;
           }
@@ -232,7 +232,7 @@ export function registerFlowContextMenuDirective(Alpine: Alpine) {
               if (submenu) {
                 e.preventDefault();
                 const firstBtn = submenu.querySelector<HTMLElement>('button:not([disabled])');
-                firstBtn?.focus();
+                firstBtn?.focus({ preventScroll: true });
               }
             }
             break;
@@ -242,7 +242,7 @@ export function registerFlowContextMenuDirective(Alpine: Alpine) {
             if (activeSubmenu) {
               e.preventDefault();
               const trigger = activeSubmenu.closest<HTMLElement>('.flow-context-submenu-trigger');
-              trigger?.focus();
+              trigger?.focus({ preventScroll: true });
             }
             break;
           }
