@@ -1146,6 +1146,10 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             connectAutoPan = null;
             document.removeEventListener('pointermove', onPointerMove);
             document.removeEventListener('pointerup', onPointerUp);
+            // Mirror the listener set registered on drag-start (move/up/cancel)
+            // and torn down by activeConnectionCleanup — otherwise each drop
+            // leaks an orphan `pointercancel` handler on `document`.
+            document.removeEventListener('pointercancel', onPointerUp);
             activeConnectionCleanup = null;
 
             // Guard against overlapping drops while an async connectValidator is pending.
