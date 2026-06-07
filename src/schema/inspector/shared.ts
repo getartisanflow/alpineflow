@@ -56,6 +56,15 @@ export function parseRowId(
  *   3. Multiple canvases without an ancestor match — log a one-shot warning
  *      and bail out; the caller must nest the inspector inside the target
  *      canvas (an explicit selector prop is on the v0.2.2 roadmap).
+ *
+ * Inspector directives currently call this once at init and close over the
+ * returned scope. That works because inspectors render inside or alongside an
+ * already-initialized canvas in every shipped pattern. If a future caller
+ * mounts an inspector before its canvas's Alpine setup runs (e.g. portal-
+ * teleported or tab-switched), the cached `Alpine.$data()` proxy can go stale
+ * and method calls will throw — mirror the workflow addon's `ensureCanvas`
+ * pattern (re-resolve at method-call time) before placing inspectors in such
+ * positions.
  */
 export function findCanvasScope(
     Alpine: Alpine,

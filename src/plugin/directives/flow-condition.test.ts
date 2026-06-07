@@ -109,4 +109,31 @@ describe('x-flow-condition directive', () => {
         const el = mount({ condition: { field: 'x', op: 'equals', value: 1 } });
         expect(el.hasAttribute('data-flow-condition-branch-taken')).toBe(false);
     });
+
+    it('ignores invalid _branchTaken values (anything other than "true"/"false")', () => {
+        const el = mount({
+            condition: { field: 'x', op: 'equals', value: 1 },
+            _branchTaken: 'maybe',
+        });
+        expect(el.hasAttribute('data-flow-condition-branch-taken')).toBe(false);
+    });
+
+    it('renders empty body when neither condition nor evaluate is set', () => {
+        const el = mount({ label: 'Empty' });
+        expect(el.querySelector('.flow-condition-body')?.textContent).toBe('');
+    });
+
+    it('renders empty body when condition is a non-object value', () => {
+        // String/number/null in condition slot must not blow up prettyPrintCondition.
+        const el = mount({ condition: 'not-an-object' as unknown as object });
+        expect(el.querySelector('.flow-condition-body')?.textContent).toBe('');
+    });
+
+    it('falls back to default horizontal direction when expression evaluates to garbage', () => {
+        // The directive expression here is a literal string that doesn't parse as
+        // 'horizontal' or 'vertical'. Should fall through to the data fallback,
+        // then to the 'horizontal' default.
+        const el = mount({ condition: { field: 'x', op: 'equals', value: 1 } }, "'sideways'");
+        expect(el.getAttribute('data-flow-condition-direction')).toBe('horizontal');
+    });
 });

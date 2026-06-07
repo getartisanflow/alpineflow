@@ -303,6 +303,58 @@ In WireFlow Blade templates, use from Alpine scope:
 
 Server-side `$this->flowSetNodeState()` and `$this->flowResetStates()` complement the addon for server-driven state pushes. The addon's `$flow.run()` handles client-side orchestration.
 
+## Wait node template — `x-flow-wait` directive
+
+Renders a workflow wait node with a header (optional icon, label, formatted duration), a top target handle, and a bottom source handle.
+
+```blade
+<x-flow :nodes="$nodes" :edges="$edges">
+    <x-slot:node>
+        <template x-if="node.type === 'flow-wait'">
+            <div x-flow-wait class="flow-wait-node"></div>
+        </template>
+    </x-slot:node>
+</x-flow>
+```
+
+Reads from `node.data`:
+
+- `durationMs?: number` — wait duration in milliseconds; rendered as a compact human-readable string
+- `label?: string` — header label; defaults to `Wait`
+- `icon?: string` — optional emoji or single character placed before the label
+
+The directive owns the element's children entirely. Consumers who want a fully custom wait-node render should skip `x-flow-wait` and stamp their own DOM.
+
+### Duration formatting
+
+| Range | Output | Example |
+| --- | --- | --- |
+| `< 1s` | `{n}ms` | `500ms` |
+| `< 1m`, integer seconds | `{n}s` | `3s` |
+| `< 1m`, fractional | `{n.n}s` | `2.5s` |
+| `≥ 1m`, exact minutes | `{n}m` | `2m` |
+| `≥ 1m`, with seconds | `{n}m {s}s` | `1m 30s` |
+
+Non-numeric or negative values render an empty duration string. textContent only — no innerHTML anywhere.
+
+### Pairs with `flow-wait` workflow nodes
+
+This directive renders the visual node; the workflow engine handles execution timing. Together they form the full surface for wait steps:
+
+```js
+// Data side: workflow engine pauses for durationMs without firing onEnter/onExit
+{ id: 'cooldown', type: 'flow-wait', data: { durationMs: 2000, label: 'Cool-down' } }
+```
+
+```blade
+{{-- View side: the directive renders the matching node template --}}
+<template x-if="node.type === 'flow-wait'">
+    <div x-flow-wait></div>
+</template>
+```
+
+`validateWorkflow()` flags wait nodes with non-numeric or missing `data.durationMs` via the `wait-missing-duration` issue code.
+
 ## Condition node template — `x-flow-condition` directive
 
 Renders a workflow condition node with a header, a pretty-printed expression body, and three handles (target + true/false sources).
