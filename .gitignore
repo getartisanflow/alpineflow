@@ -5,3 +5,4 @@ tests/integration/**/screenshots/
 tests/integration/**/__screenshots__/
 .vitest-attachments/
 .vitest-cache/
+/.idea
