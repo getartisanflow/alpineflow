@@ -10205,7 +10205,9 @@ function Bh(t) {
         algorithm: e?.algorithm,
         direction: o,
         nodeSpacing: e?.nodeSpacing,
-        layerSpacing: e?.layerSpacing
+        layerSpacing: e?.layerSpacing,
+        aspectRatio: e?.aspectRatio,
+        layoutOptions: e?.layoutOptions
       });
       if (r.size === 0) {
         V("layout", "ELK layout returned no positions — skipping apply");

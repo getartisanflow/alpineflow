@@ -11,7 +11,7 @@ import ELK from 'elkjs/lib/elk.bundled.js';
 import type { FlowNode, FlowEdge } from '../types';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../geometry';
 
-export type ElkAlgorithm = 'layered' | 'force' | 'mrtree' | 'radial' | 'stress';
+export type ElkAlgorithm = 'layered' | 'force' | 'mrtree' | 'radial' | 'stress' | 'rectpacking';
 export type ElkDirection = 'DOWN' | 'RIGHT' | 'UP' | 'LEFT';
 
 export interface ElkLayoutOptions {
@@ -19,6 +19,12 @@ export interface ElkLayoutOptions {
   direction?: ElkDirection;
   nodeSpacing?: number;
   layerSpacing?: number;
+  /** Target aspect ratio (width / height). Used by rectpacking and honoured by
+   *  several other algorithms. Maps to `elk.aspectRatio`. */
+  aspectRatio?: number;
+  /** Escape hatch: raw ELK layout options merged last, so callers can set any
+   *  `elk.*` id (e.g. `elk.rectpacking.orderBySize`) without a wrapper change. */
+  layoutOptions?: Record<string, string>;
 }
 
 export async function computeElkLayout(
@@ -31,28 +37,45 @@ export async function computeElkLayout(
     direction = 'DOWN',
     nodeSpacing = 50,
     layerSpacing = 80,
+    aspectRatio,
+    layoutOptions,
   } = options;
 
   const elk = new ELK();
 
+  // rectpacking is designed for unconnected boxes — it ignores edges. Feeding
+  // it edges is at best wasted work, so drop them for that algorithm.
+  const usesEdges = algorithm !== 'rectpacking';
+
+  const layout: Record<string, string> = {
+    'elk.algorithm': algorithm,
+    'elk.direction': direction,
+    'elk.spacing.nodeNode': String(nodeSpacing),
+    'elk.layered.spacing.nodeNodeBetweenLayers': String(layerSpacing),
+  };
+  if (aspectRatio !== undefined) {
+    layout['elk.aspectRatio'] = String(aspectRatio);
+  }
+  // Caller-supplied raw options win over everything above.
+  if (layoutOptions) {
+    Object.assign(layout, layoutOptions);
+  }
+
   const graph = {
     id: 'root',
-    layoutOptions: {
-      'elk.algorithm': algorithm,
-      'elk.direction': direction,
-      'elk.spacing.nodeNode': String(nodeSpacing),
-      'elk.layered.spacing.nodeNodeBetweenLayers': String(layerSpacing),
-    },
+    layoutOptions: layout,
     children: nodes.map((node) => ({
       id: node.id,
       width: node.dimensions?.width ?? DEFAULT_NODE_WIDTH,
       height: node.dimensions?.height ?? DEFAULT_NODE_HEIGHT,
     })),
-    edges: edges.map((edge) => ({
-      id: edge.id,
-      sources: [edge.source],
-      targets: [edge.target],
-    })),
+    edges: usesEdges
+      ? edges.map((edge) => ({
+          id: edge.id,
+          sources: [edge.source],
+          targets: [edge.target],
+        }))
+      : [],
   };
 
   let result;
