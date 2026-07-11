@@ -405,6 +405,107 @@ describe('createHistoryMixin — redo', () => {
   });
 });
 
+// ── identity-preserving restore (Task 9) ─────────────────────────────────────
+
+describe('createHistoryMixin — identity-preserving undo/redo', () => {
+  it('undo preserves node and edge object identity for surviving ids', () => {
+    const history = new FlowHistory();
+    const n1 = makeNode('n1');
+    const e1 = makeEdge('e1');
+    const ctx = mockCtx({ _history: history, nodes: [n1], edges: [e1] });
+    const mixin = createHistoryMixin(ctx);
+
+    // Snapshot the current (n1, e1) state, then add a stray node.
+    history.capture({ nodes: ctx.nodes, edges: ctx.edges });
+    ctx.nodes = [...ctx.nodes, makeNode('n9', { position: { x: 5, y: 5 } })];
+
+    mixin.undo();
+
+    expect(ctx.nodes.find((n) => n.id === 'n1')).toBe(n1); // same reference
+    expect(ctx.edges.find((e) => e.id === 'e1')).toBe(e1); // same reference
+    expect(ctx.nodes.find((n) => n.id === 'n9')).toBeUndefined();
+  });
+
+  it('undo restores edge data onto the SAME reactive object (no orphaned scope)', () => {
+    const history = new FlowHistory();
+    const e1 = makeEdge('e1');
+    const ctx = mockCtx({ _history: history, edges: [e1] });
+    const mixin = createHistoryMixin(ctx);
+
+    history.capture({ nodes: ctx.nodes, edges: ctx.edges }); // snapshot: e1 without label
+    (e1 as any).label = 'changed';
+    mixin.undo();
+
+    expect(ctx.edges.find((e) => e.id === 'e1')).toBe(e1); // same reference
+    expect((e1 as any).label).toBeUndefined(); // restored in place
+  });
+
+  it('undo clears restored selected flags and the selection set', () => {
+    const history = new FlowHistory();
+    const n1 = makeNode('n1', { selected: true, position: { x: 50, y: 0 } });
+    const ctx = mockCtx({
+      _history: history,
+      nodes: [n1],
+      deselectAll() {
+        ctx.selectedNodes.clear();
+        ctx.selectedEdges.clear();
+      },
+    });
+    ctx.selectedNodes.add('n1');
+    const mixin = createHistoryMixin(ctx);
+
+    // Snapshot carries selected: true; then move the node so undo has work to do.
+    history.capture({ nodes: ctx.nodes, edges: ctx.edges });
+    n1.position.x = 99;
+    mixin.undo();
+
+    expect(ctx.nodes.find((n) => n.id === 'n1')!.selected).toBe(false);
+    expect(ctx.selectedNodes.size).toBe(0);
+  });
+
+  it('undo emits a restore event tagged with its source and carrying the restored state', () => {
+    const history = new FlowHistory();
+    const ctx = mockCtx({ _history: history, nodes: [makeNode('n1')] });
+    const mixin = createHistoryMixin(ctx);
+
+    history.capture({ nodes: ctx.nodes, edges: ctx.edges });
+    ctx.nodes = [...ctx.nodes, makeNode('n9')];
+    mixin.undo();
+
+    expect(ctx._emit).toHaveBeenCalledWith(
+      'restore',
+      expect.objectContaining({ source: 'undo', nodes: ctx.nodes, edges: ctx.edges }),
+    );
+  });
+
+  it('redo emits a restore event tagged with source redo', () => {
+    const history = new FlowHistory();
+    const ctx = mockCtx({ _history: history, nodes: [makeNode('n1')] });
+    const mixin = createHistoryMixin(ctx);
+
+    history.capture({ nodes: [makeNode('state1')], edges: [] });
+    ctx.nodes = [makeNode('state2')];
+    mixin.undo();
+    mixin.redo();
+
+    expect(ctx._emit).toHaveBeenCalledWith(
+      'restore',
+      expect.objectContaining({ source: 'redo' }),
+    );
+  });
+
+  it('fromObject preserves identity for surviving edge ids', () => {
+    const e1 = makeEdge('e1');
+    const ctx = mockCtx({ edges: [e1] });
+    const mixin = createHistoryMixin(ctx);
+
+    mixin.fromObject({ edges: [makeEdge('e1', { label: 'x' })] });
+
+    expect(ctx.edges.find((e) => e.id === 'e1')).toBe(e1); // same reference
+    expect((e1 as any).label).toBe('x');
+  });
+});
+
 // ── canUndo / canRedo ────────────────────────────────────────────────────────
 
 describe('createHistoryMixin — canUndo / canRedo', () => {

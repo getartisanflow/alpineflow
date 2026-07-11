@@ -152,6 +152,9 @@ export interface CanvasContext {
   /** Node lookup map (id -> node) */
   _nodeMap: Map<string, FlowNode>;
 
+  /** Reactive parent-id → child-ids index (reconciled by `_rebuildNodeMap`) */
+  _childrenIds: Map<string, string[]>;
+
   /** Stores each node's originally configured dimensions (before layout stretch) */
   _initialDimensions: Map<string, Dimensions>;
 

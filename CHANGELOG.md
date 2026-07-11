@@ -23,6 +23,28 @@ Stops the undo/redo stack from filling with no-op snapshots and roughly halves r
 - New canvas wrappers `_snapshotHistory()` / `_commitHistory()` support capture-on-commit flows.
 - New pure, unit-tested helpers: `commitDragHistory` and `reparentWithoutCapture` (flow-node), `shouldCaptureNudge` (keyboard-shortcuts) — the drag/keydown decisions are extracted so they're testable without driving d3-drag in jsdom.
 
+### Workstream 2 — identity-preserving undo/restore
+Rebuilds the undo/redo *restore* path (the capture side is Workstream 1). Undo/redo, `fromObject`, and the schema addon now restore state by **merging into the existing reactive node/edge objects** instead of replacing the `nodes`/`edges` arrays wholesale — surviving ids keep their object identity, so only genuinely-changed entities re-run their effects (no full schema re-stamp, no double edge re-measure) and live Alpine scopes stay attached. This also fixes a cluster of correctness bugs.
+
+**Breaking / Behavior Changes**
+- **Undo/redo now emit a `restore` event.** `undo()` / `redo()` dispatch `flow-restore` with `{ nodes, edges, source: 'undo' | 'redo' }` (previously they mutated state silently). The `nodes`/`edges` payload matches `fromObject`'s existing `restore` event (which carries `{ nodes, edges, viewport }`), plus a `source` tag so consumers can distinguish undo/redo; wire-bridge and collaboration observers are now notified of undo/redo the same way they are notified of `fromObject`.
+
+**Performance**
+- Undo / redo / `fromObject` / `schemaFromJSON` restore by identity-preserving merge (`mergeEntitiesById`) — property writes are skipped when deep-equal, so Alpine effects re-run only for real changes. Array identity is kept via `splice`.
+- Schema field-op cascades (`renameField` / `removeField`) mutate the affected edge objects in place instead of replacing the whole `edges` array, so only the cascaded edges' reactivity fires.
+- Schema nodes reconcile field rows keyed by `field.name` — a single field change updates one row in place (or adds/removes/reorders just the affected rows) instead of tearing down and re-initializing every row (~180 elements per node on one keystroke).
+- Node "has children" container detection reads a reactive parent→children index by key (`_childrenIds`, O(1)) instead of each node effect scanning the whole `nodes` array (O(N) subscriptions per effect, O(N²) on any array change); appending an unrelated node no longer re-runs every node's effect.
+
+**Fixed**
+- **C1 — orphaned edge scopes after undo.** Undo/redo restored edges by replacing `ctx.edges` wholesale, orphaning every live edge Alpine scope. Edges are now merged onto the same reactive objects, so their scopes stay bound.
+- **C2 — frozen canvas after a schema-addon undo.** `schemaFromJSON` spliced in brand-new node/edge objects without rebuilding `_nodeMap` / `_edgeMap`, so `getNode`/`getEdge` returned orphaned objects and drags wrote to dead proxies. It now merges in place, rebuilds both maps, and preserves non-schema node props (`dimensions`, `type`, …).
+- **C3 — stale `selected` flags after undo.** Snapshots captured while a node/edge was selected carried `selected: true`; restoring them left the node visually selected but out of the selection set. Undo/redo now clear restored `selected` flags and the selection sets stay consistent.
+- **C4 — child-layout watchers bound to old proxies.** Because surviving nodes keep their identity across undo, the `childLayout` watchers bound to node proxies stay live instead of pointing at replaced objects.
+
+**Infrastructure**
+- New `mergeEntitiesById` (identity-preserving entity merge with deep-equal-skip writes) and `reconcileChildrenIndex` (in-place parent→children index with key-level reactive writes) helpers, both unit-tested.
+- New reactive canvas field `_childrenIds`, reconciled inside `_rebuildNodeMap` (so every parentId-affecting mutation path keeps it current).
+
 ### Workstream 3 — zoom/pan pipeline coalescing
 
 **Performance**

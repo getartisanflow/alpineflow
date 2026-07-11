@@ -319,12 +319,12 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
           const _childLayout = node.childLayout;
           const _fixedDimensions = node.fixedDimensions;
           // Treat "has children" as an implicit container signal — group nodes
-          // with positioned children need their dimensions to hold. Alpine
-          // reactivity tracks parentId across the nodes array, so this
-          // re-evaluates when children are added or removed.
-          const _hasChildren = (canvas.nodes as FlowNode[]).some(
-            (n: FlowNode) => n.parentId === node.id,
-          );
+          // with positioned children need their dimensions to hold. Reads the
+          // reactive parent→children index by key, so this effect re-runs only
+          // when THIS node's own child list changes — not on every array-level
+          // change (the previous `nodes.some(...)` scan subscribed every node
+          // effect to the whole array).
+          const _hasChildren = (canvas._childrenIds?.get(node.id)?.length ?? 0) > 0;
           el.style.width = node.dimensions.width + 'px';
           if (_childLayout || _fixedDimensions || _hasChildren) {
             el.style.height = node.dimensions.height + 'px';
