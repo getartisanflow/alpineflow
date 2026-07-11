@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { deepMerge } from './deep-merge';
+import { deepMerge, mergeEntitiesById } from './deep-merge';
 
 describe('deepMerge', () => {
   it('merges top-level keys', () => {
@@ -103,5 +103,41 @@ describe('deepMerge', () => {
       const result = deepMerge(target, { color: '#374151' });
       expect(result.color).toBe('#374151');
     });
+  });
+});
+
+describe('mergeEntitiesById', () => {
+  it('preserves object identity for surviving ids', () => {
+    const a = { id: 'a', position: { x: 0, y: 0 }, data: { label: 'A' } };
+    const existing = [a];
+    const merged = mergeEntitiesById(existing, [
+      { id: 'a', position: { x: 9, y: 0 }, data: { label: 'A' } },
+    ]);
+    expect(merged[0]).toBe(a); // same reference
+    expect(a.position).toEqual({ x: 9, y: 0 });
+  });
+
+  it('does not reassign properties that are deep-equal (no spurious reactive writes)', () => {
+    const data = { label: 'A' };
+    const a = { id: 'a', data };
+    mergeEntitiesById([a], [{ id: 'a', data: { label: 'A' } }]);
+    expect(a.data).toBe(data); // untouched — deep-equal skipped
+  });
+
+  it('removes stale keys when deleteMissing is true (default)', () => {
+    const a: any = { id: 'a', selected: true };
+    mergeEntitiesById([a], [{ id: 'a' } as any]);
+    expect('selected' in a).toBe(false);
+  });
+
+  it('keeps missing keys when deleteMissing is false', () => {
+    const a: any = { id: 'a', dimensions: { width: 100, height: 40 } };
+    mergeEntitiesById([a], [{ id: 'a' } as any], { deleteMissing: false });
+    expect(a.dimensions).toEqual({ width: 100, height: 40 });
+  });
+
+  it('adds new ids and drops removed ids', () => {
+    const merged = mergeEntitiesById([{ id: 'a' } as any], [{ id: 'b' } as any]);
+    expect(merged.map((e) => e.id)).toEqual(['b']);
   });
 });

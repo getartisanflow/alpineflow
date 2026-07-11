@@ -51,3 +51,45 @@ export function deepMerge<T extends Record<string, any>>(
 
   return target;
 }
+
+function jsonEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (a === undefined || b === undefined) return a === b;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/**
+ * Merge `incoming` entities into `existing` by id, PRESERVING the original
+ * object references for ids present in both. Property writes are skipped when
+ * deep-equal, so Alpine effects watching those objects only re-run for real
+ * changes. Returns the merged list in `incoming` order.
+ */
+export function mergeEntitiesById<T extends { id: string }>(
+  existing: T[],
+  incoming: T[],
+  opts: { deleteMissing?: boolean } = {},
+): T[] {
+  const deleteMissing = opts.deleteMissing ?? true;
+  const existingById = new Map(existing.map((e) => [e.id, e]));
+  const merged: T[] = [];
+  for (const inc of incoming) {
+    const cur = existingById.get(inc.id);
+    if (!cur) {
+      merged.push(inc);
+      continue;
+    }
+    if (deleteMissing) {
+      for (const key of Object.keys(cur)) {
+        if (key !== 'id' && !(key in inc)) delete (cur as Record<string, unknown>)[key];
+      }
+    }
+    for (const [key, value] of Object.entries(inc)) {
+      if (key === 'id') continue;
+      if (!jsonEqual((cur as Record<string, unknown>)[key], value)) {
+        (cur as Record<string, unknown>)[key] = value;
+      }
+    }
+    merged.push(cur);
+  }
+  return merged;
+}
