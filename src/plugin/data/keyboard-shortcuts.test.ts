@@ -4,6 +4,7 @@ import {
   resolveShortcuts,
   matchesKey,
   matchesModifier,
+  shouldCaptureNudge,
 } from '../../core/keyboard-shortcuts';
 
 describe('resolveShortcuts', () => {
@@ -121,5 +122,24 @@ describe('matchesModifier', () => {
 
   it('returns false for unknown modifier string', () => {
     expect(matchesModifier({ ...noMods, shiftKey: true }, 'Super')).toBe(false);
+  });
+});
+
+describe('shouldCaptureNudge', () => {
+  it('captures on the first press when a node is selected and it moves', () => {
+    expect(shouldCaptureNudge(false, 1, 5, 0)).toBe(true);
+    expect(shouldCaptureNudge(false, 3, 0, -5)).toBe(true);
+  });
+
+  it('does not capture on auto-repeat (key held down)', () => {
+    expect(shouldCaptureNudge(true, 1, 5, 0)).toBe(false);
+  });
+
+  it('does not capture when nothing is selected', () => {
+    expect(shouldCaptureNudge(false, 0, 5, 0)).toBe(false);
+  });
+
+  it('does not capture when the key produced no movement', () => {
+    expect(shouldCaptureNudge(false, 2, 0, 0)).toBe(false);
   });
 });
