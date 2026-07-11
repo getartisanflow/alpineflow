@@ -426,6 +426,12 @@ export interface CanvasContext {
   /** Capture a history snapshot before a mutation */
   _captureHistory(): void;
 
+  /** Serialize the current state without pushing — pair with _commitHistory for deferred capture */
+  _snapshotHistory(): string | null;
+
+  /** Push a snapshot taken earlier via _snapshotHistory (dedups against the stack top; ignores null) */
+  _commitHistory(snapshot: string | null): void;
+
   /** Suspend history capture (e.g. during animation) */
   _suspendHistory(): void;
 

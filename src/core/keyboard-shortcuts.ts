@@ -90,6 +90,15 @@ export function matchesKey(eventKey: string, configured: KeyCode | KeyCode[] | n
   return (configured.length === 1 ? configured.toLowerCase() : configured) === key;
 }
 
+/**
+ * Decide whether an arrow-key nudge should capture a history snapshot. Captures
+ * once per physical keypress: skips auto-repeat (`repeat`), skips when nothing is
+ * selected, and skips keys that produced no movement (dx === 0 && dy === 0).
+ */
+export function shouldCaptureNudge(repeat: boolean, selectedCount: number, dx: number, dy: number): boolean {
+  return !repeat && selectedCount > 0 && (dx !== 0 || dy !== 0);
+}
+
 /** Check if a modifier key is held on an event. Maps 'Shift'→shiftKey, 'Control'→ctrlKey, etc. */
 export function matchesModifier(
   event: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean; altKey: boolean },
