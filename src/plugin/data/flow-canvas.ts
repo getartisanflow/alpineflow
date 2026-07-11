@@ -186,14 +186,31 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _backgroundGap: config.backgroundGap ?? null as number | null,
     _patternColorOverride: config.patternColor ?? null as string | null,
 
+    /**
+     * Cached resolution of the `--flow-bg-pattern-gap` CSS variable. Reading it
+     * requires `getComputedStyle`, a forced style recalc that is prohibitively
+     * expensive to run on every viewport frame at schema scale. Populated on the
+     * first successful read; invalidate (set `null`) on any theme/colorMode
+     * change, since the active theme can redefine the variable.
+     */
+    _bgGapCache: null as number | null,
+
+    /** Last backgroundImage string written to the container — lets `_applyBackground`
+     * skip the (per-frame identical) gradient write. */
+    _lastBgImage: null as string | null,
+
     _getBackgroundGap(): number {
       if (this._backgroundGap !== null) {
         return this._backgroundGap;
+      }
+      if (this._bgGapCache !== null) {
+        return this._bgGapCache;
       }
       if (this._container) {
         const raw = getComputedStyle(this._container).getPropertyValue('--flow-bg-pattern-gap').trim();
         const parsed = parseFloat(raw);
         if (!isNaN(parsed)) {
+          this._bgGapCache = parsed;
           return parsed;
         }
       }
@@ -467,11 +484,14 @@ export function registerFlowCanvas(Alpine: Alpine) {
       const el = this._container;
       if (!el) return;
       const style = this.backgroundStyle();
-      Object.assign(el.style, {
-        backgroundImage: style.backgroundImage,
-        backgroundSize: style.backgroundSize,
-        backgroundPosition: style.backgroundPosition,
-      });
+      // The gradient image is identical frame-to-frame; only size/position track
+      // the viewport. Skip the redundant image write to avoid style churn.
+      if (style.backgroundImage !== this._lastBgImage) {
+        el.style.backgroundImage = style.backgroundImage;
+        this._lastBgImage = style.backgroundImage;
+      }
+      el.style.backgroundSize = style.backgroundSize;
+      el.style.backgroundPosition = style.backgroundPosition;
     },
 
     /**
@@ -761,6 +781,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
           this._viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`;
         }
       });
+      // The container + theme are attached now, so drop any gap resolved before
+      // the active theme was applied and let this first paint re-read it. Any
+      // future theme/colorMode-change path that re-applies the background must
+      // likewise invalidate `_bgGapCache` before calling `_applyBackground()`.
+      this._bgGapCache = null;
       this._applyBackground();
 
       // Register with global store so other components can access this instance
