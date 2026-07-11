@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+Schema-scale performance pass — Workstream 3: zoom/pan pipeline coalescing.
+
+### Performance
+- **Frame-coalesced viewport pipeline** — zoom/pan side-effects (reactive `viewport` write, background, culling, zoom-level, context-menu close, viewport events) now run once per animation frame instead of once per wheel event (120Hz+ on trackpads). Only the CSS transform is written at event rate. (WS3 · T16)
+- **Background gap caching** — the `--flow-bg-pattern-gap` CSS variable is resolved via `getComputedStyle` at most once and cached (invalidated on theme change), removing a forced style recalc from every viewport frame; `backgroundImage` is only rewritten when it actually changes. (T15)
+- **Lean minimap viewport getter** — the minimap viewport indicator updates through a new `getViewportState` option that reads only viewport + container size, skipping the full `toAbsoluteNodes` node remap it previously ran on every viewport change. (T17)
+- **Devtools per-frame work removed** — the event log does no work while the panel is collapsed, and the reactive display is split into a viewport effect and a data effect so a viewport frame no longer re-serializes the current selection. (T18)
+- **Throttled Livewire viewport bridge** — `viewport-change` / `viewport-move` wire events are trailing-throttled to one Livewire round-trip per 150 ms window (the final viewport wins). (T19)
+
+### Breaking / Behavior Changes
+- Zoom side-effects (viewport events, background, culling) now fire at most once per animation frame — `onViewportChange` fires at rAF cadence rather than per wheel event.
+- `canvas.viewport` (the reactive state consumers watch) now settles on the **next animation frame** after a viewport change — this includes programmatic `setViewport` / `zoomIn` / `zoomOut` / `fitView` / `panBy`. Synchronous coordinate math should read the live viewport, which `screenToFlowPosition` / `flowToScreenPosition` now do internally (`canvas._viewportLive`). Gesture end (`viewport-move-end`) still commits the end-state synchronously.
+- **Test-facing:** tests that assert `canvas.viewport` immediately after a programmatic viewport change must now flush a `requestAnimationFrame` first.
+
 ## v0.2.1-alpha — 2026-04-14
 
 > Companion release: [WireFlow v0.2.1-alpha](https://github.com/getartisanflow/wireflow/blob/main/CHANGELOG.md#v021-alpha--2026-04-14) ships the matching server-side surface (`<x-schema-designer>`, `WithSchemaDesigner`, validator rules, `@connect-validate` bridge) plus the post-Phase-5 `<x-flow>` / `<x-schema-designer>` polish that pairs with the fullscreen + row-select + cascade fixes below.
