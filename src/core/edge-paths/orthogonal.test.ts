@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { getOrthogonalPath, OBSTACLE_PADDING, findRoute, __routeDebugForTests, type RoutePoint } from './orthogonal';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { getOrthogonalPath, OBSTACLE_PADDING, findRoute, __routeDebugForTests, routeCacheStatsForTests, type RoutePoint } from './orthogonal';
 
 interface TestRect { x: number; y: number; width: number; height: number }
 
@@ -210,6 +210,10 @@ describe('findRoute (heap + scanline adjacency)', () => {
 // ── findRoute: corridor pruning with full-set fallback (Task 25) ─────────────
 
 describe('findRoute corridor pruning', () => {
+  // The route memo cache persists across tests; clear it so each call runs
+  // computeRoute and refreshes the __routeDebugForTests diagnostics.
+  beforeEach(() => routeCacheStatsForTests().clear());
+
   it('prunes far-away obstacles from the visibility grid', () => {
     const near: TestRect = { x: 100, y: 0, width: 80, height: 60 };
     const far: TestRect[] = Array.from({ length: 40 }, (_, i) => ({
@@ -238,5 +242,40 @@ describe('findRoute corridor pruning', () => {
     expect(route).not.toBeNull();
     expect(__routeDebugForTests().usedFullSet).toBe(true); // fallback fired
     expect(routeHitsAny(route!, all)).toBe(false); // final route avoids everything
+  });
+});
+
+// ── findRoute: LRU route memo cache (Task 26) ────────────────────────────────
+
+describe('findRoute route cache', () => {
+  beforeEach(() => routeCacheStatsForTests().clear());
+
+  it('identical route queries hit the cache', () => {
+    const obstacles = [{ x: 100, y: 0, width: 80, height: 60 }];
+    findRoute(0, 30, 'right', 300, 30, 'left', obstacles);
+    findRoute(0, 30, 'right', 300, 30, 'left', obstacles);
+    expect(routeCacheStatsForTests().hits).toBe(1);
+  });
+
+  it('a moved obstacle misses the cache', () => {
+    findRoute(0, 30, 'right', 300, 30, 'left', [{ x: 100, y: 0, width: 80, height: 60 }]);
+    findRoute(0, 30, 'right', 300, 30, 'left', [{ x: 120, y: 0, width: 80, height: 60 }]);
+    expect(routeCacheStatsForTests().hits).toBe(0);
+  });
+
+  it('a full pass of identical queries is one miss then all hits', () => {
+    const obstacles = [{ x: 100, y: 0, width: 80, height: 60 }];
+    for (let i = 0; i < 100; i++) {
+      findRoute(0, 30, 'right', 300, 30, 'left', obstacles);
+    }
+    expect(routeCacheStatsForTests().misses).toBe(1);
+    expect(routeCacheStatsForTests().hits).toBe(99);
+  });
+
+  it('a cache hit returns the identical waypoints as the miss', () => {
+    const obstacles = [{ x: 100, y: 0, width: 80, height: 60 }];
+    const first = findRoute(0, 30, 'right', 300, 30, 'left', obstacles);
+    const second = findRoute(0, 30, 'right', 300, 30, 'left', obstacles);
+    expect(second).toBe(first); // same cached reference
   });
 });

@@ -474,8 +474,10 @@ function routeCrossesObstacles(route: RoutePoint[], paddedObstacles: Rect[]): bo
  *
  * Returns simplified waypoints (including actual source/target endpoints) or
  * null if no route can be found.
+ *
+ * Internal — call the memoized {@link findRoute} wrapper instead.
  */
-export function findRoute(
+function computeRoute(
   sourceX: number,
   sourceY: number,
   sourcePosition: HandlePosition,
@@ -540,6 +542,83 @@ export function findRoute(
   ];
 
   return simplifyPath(fullRoute);
+}
+
+// ── Route memo cache ─────────────────────────────────────────────────────────
+
+const ROUTE_CACHE_MAX = 512;
+const routeCache = new Map<string, RoutePoint[] | null>();
+const cacheStats = {
+  hits: 0,
+  misses: 0,
+  clear(): void {
+    routeCache.clear();
+    this.hits = 0;
+    this.misses = 0;
+  },
+};
+
+/**
+ * Cache key from endpoints + obstacle geometry. Coordinates are rounded to
+ * integers so sub-pixel churn (drag jitter, fractional zoom) stays cache-hot.
+ */
+function routeKey(
+  sx: number,
+  sy: number,
+  sp: HandlePosition,
+  tx: number,
+  ty: number,
+  tp: HandlePosition,
+  obstacles: Rect[],
+): string {
+  let key = `${Math.round(sx)},${Math.round(sy)},${sp}|${Math.round(tx)},${Math.round(ty)},${tp}`;
+  for (const r of obstacles) {
+    key += `|${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)},${Math.round(r.height)}`;
+  }
+  return key;
+}
+
+/**
+ * Memoized {@link computeRoute}. Full-graph passes (undo tick, selection flush)
+ * re-route every edge even when nothing moved; identical (endpoints, obstacles)
+ * inputs return the cached result instead of recomputing.
+ *
+ * The cached array is returned by reference; callers (getOrthogonalPath,
+ * avoidant.ts) only read it. If a future caller mutates the waypoint array,
+ * return a shallow copy on hit.
+ */
+export function findRoute(
+  sourceX: number,
+  sourceY: number,
+  sourcePosition: HandlePosition,
+  targetX: number,
+  targetY: number,
+  targetPosition: HandlePosition,
+  obstacles: Rect[],
+): RoutePoint[] | null {
+  const key = routeKey(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, obstacles);
+
+  if (routeCache.has(key)) {
+    cacheStats.hits++;
+    // LRU touch: re-insert so this key becomes most-recently used.
+    const cached = routeCache.get(key)!;
+    routeCache.delete(key);
+    routeCache.set(key, cached);
+    return cached;
+  }
+
+  cacheStats.misses++;
+  const result = computeRoute(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, obstacles);
+  routeCache.set(key, result);
+  if (routeCache.size > ROUTE_CACHE_MAX) {
+    // Evict least-recently used (first insertion-ordered key).
+    routeCache.delete(routeCache.keys().next().value!);
+  }
+  return result;
+}
+
+export function routeCacheStatsForTests(): typeof cacheStats {
+  return cacheStats;
 }
 
 // ── Main export ──────────────────────────────────────────────────────────────
