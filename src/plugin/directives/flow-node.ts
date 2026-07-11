@@ -55,6 +55,32 @@ export function commitDragHistory(
   }
 }
 
+/**
+ * Reparent a node during a drag with history suspended. `reparentNode` captures
+ * its own snapshot (for programmatic callers), but inside a drag that would push
+ * a second entry on top of the drag's deferred pre-drag snapshot — the exact
+ * no-op/duplicate entry this pass eliminates. Suspending keeps `commitDragHistory`
+ * as the single authoritative undo entry for the whole drag. try/finally mirrors
+ * the suspend/resume convention in canvas-selection.ts so a throw can't leak the
+ * suspend depth.
+ */
+export function reparentWithoutCapture(
+  canvas: {
+    _suspendHistory?: () => void;
+    _resumeHistory?: () => void;
+    reparentNode?: (nodeId: string, parentId: string | null) => boolean;
+  },
+  nodeId: string,
+  parentId: string | null,
+): void {
+  canvas._suspendHistory?.();
+  try {
+    canvas.reparentNode?.(nodeId, parentId);
+  } finally {
+    canvas._resumeHistory?.();
+  }
+}
+
 /** Check if the easy-connect modifier key is held. */
 export function isEasyConnectKey(
   e: PointerEvent | { altKey: boolean; metaKey: boolean; shiftKey: boolean },
@@ -1304,7 +1330,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                   containerEl.querySelector(`[data-flow-node-id="${CSS.escape(dropTargetId)}"]`)
                     ?.classList.remove('flow-node-drop-target');
                 }
-                canvas.reparentNode(nodeId, dropTargetId);
+                reparentWithoutCapture(canvas, nodeId, dropTargetId);
                 dropTargetId = null;
               } else if (wasReorderParent && wasReorderParent !== n.parentId) {
                 // Was previewing in another group but dropped outside all
@@ -1343,7 +1369,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                 const targetEl = containerEl.querySelector(`[data-flow-node-id="${CSS.escape(dropTargetId)}"]`);
                 targetEl?.classList.remove('flow-node-drop-target');
               }
-              canvas.reparentNode(nodeId, dropTargetId);
+              reparentWithoutCapture(canvas, nodeId, dropTargetId);
               dropTargetId = null;
             } else if (n && n.parentId && !dropTargetId) {
               // Check if child was dragged outside parent bounds (detach)
@@ -1364,7 +1390,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                     relX > detachParent.dimensions.width ||
                     relY > detachParent.dimensions.height;
                   if (outside) {
-                    canvas.reparentNode(nodeId, null);
+                    reparentWithoutCapture(canvas, nodeId, null);
                   }
                 }
               }
