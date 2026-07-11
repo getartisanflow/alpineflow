@@ -16,7 +16,6 @@ export function createRowsMixin(ctx: CanvasContext) {
 
     selectRow(rowId: string): void {
       if (ctx.selectedRows.has(rowId)) return;
-      ctx._captureHistory();
       ctx.selectedRows.add(rowId);
       const dotIdx = rowId.indexOf('.');
       const nodeId = dotIdx === -1 ? rowId : rowId.slice(0, dotIdx);
@@ -28,7 +27,6 @@ export function createRowsMixin(ctx: CanvasContext) {
 
     deselectRow(rowId: string): void {
       if (!ctx.selectedRows.has(rowId)) return;
-      ctx._captureHistory();
       ctx.selectedRows.delete(rowId);
       const dotIdx = rowId.indexOf('.');
       const nodeId = dotIdx === -1 ? rowId : rowId.slice(0, dotIdx);
@@ -56,7 +54,6 @@ export function createRowsMixin(ctx: CanvasContext) {
 
     deselectAllRows(): void {
       if (ctx.selectedRows.size === 0) return;
-      ctx._captureHistory();
       debug('selection', 'Deselecting all rows');
       ctx.selectedRows.clear();
       ctx._container?.querySelectorAll('.flow-row-selected').forEach((el: Element) => {
