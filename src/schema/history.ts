@@ -61,7 +61,17 @@ export function attachSchemaHistory(canvas: any, opts: SchemaHistoryOptions = {}
             // is pushed when the outermost batch exits.
             return;
         }
-        undoStack.push(schemaToJSON(canvas));
+        const snap = schemaToJSON(canvas);
+        // Dedup identical states: a cascading op (renameField/removeField)
+        // dispatches schema:field-* AND schema:edges-cascaded *after* all
+        // mutations complete, yielding two byte-identical snapshots. Coalesce
+        // them into a single undoable step by skipping a snapshot equal to the
+        // current stack top, so the first undo is never a no-op.
+        const top = undoStack[undoStack.length - 1];
+        if (top !== undefined && JSON.stringify(top) === JSON.stringify(snap)) {
+            return;
+        }
+        undoStack.push(snap);
         evictOldest();
         redoStack.length = 0;
     };

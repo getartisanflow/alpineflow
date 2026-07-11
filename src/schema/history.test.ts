@@ -235,6 +235,48 @@ describe('attachSchemaHistory', () => {
         expect(() => h.dispose()).not.toThrow();
     });
 
+    it('a rename that cascades edges pushes exactly one snapshot (dedup)', async () => {
+        const canvas = makeCanvas();
+        // Edge whose source handle references user.id, so the rename cascades.
+        canvas.edges.push({
+            id: 'e1',
+            source: 'user',
+            sourceHandle: 'id',
+            target: 'team',
+            targetHandle: 'name',
+        } as any);
+        const h = attachSchemaHistory(canvas);
+
+        renameField(canvas as any, 'user', 'id', 'uuid');
+        await Promise.resolve(); // flush any deferred work
+
+        // renameField dispatches schema:field-renamed AND schema:edges-cascaded
+        // after all mutations complete, producing two byte-identical snapshots.
+        // Dedup collapses them into a single undoable step above the floor.
+        expect(h.canUndo).toBe(true);
+        expect(h.undo()).toBe(true);
+        expect(canvas.nodes[0].data.fields.map((f: any) => f.name)).toEqual(['id']);
+        expect(h.canUndo).toBe(false); // one snapshot, not two
+        h.dispose();
+    });
+
+    it('a batch leaves no duplicate deferred snapshot', async () => {
+        const canvas = makeCanvas();
+        const h = attachSchemaHistory(canvas);
+
+        h.batch(() => {
+            addField(canvas as any, 'user', { name: 'a', type: 'text' } as any);
+            addField(canvas as any, 'user', { name: 'b', type: 'text' } as any);
+        });
+        await Promise.resolve(); // flush any deferred microtask
+
+        // Exactly one undo step for the whole batch — no trailing duplicate.
+        expect(h.undo()).toBe(true);
+        expect(canvas.nodes[0].data.fields.map((f: any) => f.name)).toEqual(['id']);
+        expect(h.canUndo).toBe(false);
+        h.dispose();
+    });
+
     it('captures removals and restores fields with their original order on undo', () => {
         const canvas = makeCanvas();
         // Seed a second field first (pre-attach) so removal + undo restores it.
