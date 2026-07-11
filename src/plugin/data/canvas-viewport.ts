@@ -31,7 +31,8 @@ export function createViewportMixin(ctx: CanvasContext) {
     screenToFlowPosition(x: number, y: number): XYPosition {
       if (!ctx._container) return { x, y };
       const rect = ctx._container.getBoundingClientRect();
-      return screenToFlowPosition(x, y, ctx.viewport, rect);
+      // Live viewport: reactive `viewport` lags a frame behind the transform.
+      return screenToFlowPosition(x, y, ctx._viewportLive ?? ctx.viewport, rect);
     },
 
     /**
@@ -41,7 +42,8 @@ export function createViewportMixin(ctx: CanvasContext) {
     flowToScreenPosition(x: number, y: number): XYPosition {
       if (!ctx._container) return { x, y };
       const rect = ctx._container.getBoundingClientRect();
-      return flowToScreenPosition(x, y, ctx.viewport, rect);
+      // Live viewport: reactive `viewport` lags a frame behind the transform.
+      return flowToScreenPosition(x, y, ctx._viewportLive ?? ctx.viewport, rect);
     },
 
     // ── Fit & Bounds ──────────────────────────────────────────────────────

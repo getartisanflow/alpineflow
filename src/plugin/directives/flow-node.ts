@@ -556,21 +556,26 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                   container: containerEl,
                   speed: canvas._config?.autoPanSpeed ?? 15,
                   onPan(dx, dy) {
-                    const zoom = canvas.viewport?.zoom || 1;
+                    // Reactive `viewport` is frame-coalesced, but auto-pan drives
+                    // setViewport synchronously and must measure the delta applied
+                    // this tick. `_viewportLive` is updated synchronously by every
+                    // transform (setViewport fires it immediately), so read that.
+                    const liveVp = () => canvas._viewportLive ?? canvas.viewport;
+                    const zoom = liveVp().zoom || 1;
 
                     // Capture viewport before pan so we can measure actual delta
-                    const vpBefore = { x: canvas.viewport.x, y: canvas.viewport.y };
+                    const vpBefore = { x: liveVp().x, y: liveVp().y };
 
                     // Pan the viewport (negative because CSS translate decreases to scroll right/down)
                     canvas._panZoom?.setViewport({
-                      x: canvas.viewport.x - dx,
-                      y: canvas.viewport.y - dy,
+                      x: liveVp().x - dx,
+                      y: liveVp().y - dy,
                       zoom,
                     });
 
                     // Actual delta applied (may differ from requested if translateExtent clamped it)
-                    const actualDx = vpBefore.x - canvas.viewport.x;
-                    const actualDy = vpBefore.y - canvas.viewport.y;
+                    const actualDx = vpBefore.x - liveVp().x;
+                    const actualDy = vpBefore.y - liveVp().y;
 
                     // If viewport didn't move at all, it's fully clamped by translateExtent
                     const vpHitBoundary = (actualDx === 0 && actualDy === 0);
@@ -1226,8 +1231,10 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
               // listener doesn't fire while d3-drag captures pointer events.
               if (dragCollab.awareness && sourceEvent instanceof MouseEvent && canvas._container) {
                 const rect = canvas._container.getBoundingClientRect();
-                const cx = (sourceEvent.clientX - rect.left - canvas.viewport.x) / canvas.viewport.zoom;
-                const cy = (sourceEvent.clientY - rect.top - canvas.viewport.y) / canvas.viewport.zoom;
+                // Live viewport: reactive `viewport` lags a frame during auto-pan.
+                const liveVp = canvas._viewportLive ?? canvas.viewport;
+                const cx = (sourceEvent.clientX - rect.left - liveVp.x) / liveVp.zoom;
+                const cy = (sourceEvent.clientY - rect.top - liveVp.y) / liveVp.zoom;
                 dragCollab.awareness.updateCursor({ x: cx, y: cy });
               }
             }
@@ -1468,10 +1475,12 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
             const containerEl = el.closest('.flow-container') as HTMLElement;
             if (!containerEl) return;
 
-            // Compute source position (handle center or node center)
-            const initZoom = currentCanvas.viewport?.zoom || 1;
-            const initVpX = currentCanvas.viewport?.x || 0;
-            const initVpY = currentCanvas.viewport?.y || 0;
+            // Compute source position (handle center or node center).
+            // Live viewport: reactive `viewport` may lag a frame behind a zoom.
+            const initVp = currentCanvas._viewportLive ?? currentCanvas.viewport;
+            const initZoom = initVp?.zoom || 1;
+            const initVpX = initVp?.x || 0;
+            const initVpY = initVp?.y || 0;
             const initContainerRect = containerEl.getBoundingClientRect();
 
             let sourceX: number, sourceY: number;

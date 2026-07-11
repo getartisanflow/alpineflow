@@ -1,28 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { registerFlowCanvas } from './flow-canvas';
-import type { FlowCanvasConfig } from '../../core/types';
-
-// ── Real-factory harness ─────────────────────────────────────────────────────
-// The background methods (backgroundStyle / _getBackgroundGap / _applyBackground)
-// live directly on the flowCanvas() data object, not in a mixin, so mockCtx()
-// cannot reach them. Capture the real Alpine.data factory with a stub Alpine and
-// invoke it to obtain the genuine `self` object — no Alpine reactivity required
-// to call these plain methods.
-
-function realCanvas(config: FlowCanvasConfig = {}): any {
-  let factory: ((c: FlowCanvasConfig) => any) | null = null;
-  const stubAlpine: any = {
-    data: (_name: string, fn: (c: FlowCanvasConfig) => any) => {
-      factory = fn;
-    },
-    raw: (x: any) => x,
-    reactive: (x: any) => x,
-  };
-  registerFlowCanvas(stubAlpine);
-  if (!factory) throw new Error('flowCanvas factory was not captured');
-  return (factory as (c: FlowCanvasConfig) => any)(config);
-}
+import { realCanvas } from './__real-canvas-harness';
 
 afterEach(() => {
   vi.restoreAllMocks();

@@ -305,6 +305,20 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _initialDimensions: new Map<string, Dimensions>(),
     _edgeMap: new Map<string, FlowEdge>(),
     _viewportEl: null as HTMLElement | null,
+
+    // ── Viewport frame coalescing ─────────────────────────────────────────
+    /**
+     * The most recent viewport from d3-zoom, written synchronously on every
+     * transform (event rate). Reactive `viewport` and all viewport side-effects
+     * are flushed from here once per animation frame; synchronous pointer-path
+     * math (drag, auto-pan, coordinate transforms) must read this, not the
+     * frame-lagged reactive `viewport`.
+     */
+    _viewportLive: null as Viewport | null,
+    /** Pending requestAnimationFrame handle for the coalesced flush, or null. */
+    _vpFrame: null as number | null,
+    /** True when a user-driven move happened since the last flush (gates `viewport-move`). */
+    _vpMoved: false,
     _history: null as FlowHistory | null,
     _announcer: null as FlowAnnouncer | null,
     _computeEngine: new ComputeEngine(),
@@ -369,7 +383,12 @@ export function registerFlowCanvas(Alpine: Alpine) {
      * dispatch a DOM CustomEvent (flow-xxx) for Alpine @flow-xxx listeners.
      */
     _emit(event: string, detail?: any) {
-      debug('event', event, detail);
+      // viewport-change/-move fire once per animation frame; keep them out of the
+      // debug log so `debug: true` doesn't churn 2-3 lines per frame during zoom.
+      // viewport-move-start/-end still log so gesture bracketing stays debuggable.
+      if (event !== 'viewport-change' && event !== 'viewport-move') {
+        debug('event', event, detail);
+      }
 
       // Config callback: 'node-click' → 'onNodeClick'
       const callbackName = 'on' + event.split('-').map(
@@ -495,8 +514,61 @@ export function registerFlowCanvas(Alpine: Alpine) {
     },
 
     /**
+     * d3-zoom transform handler. Runs on every wheel/pan event (120Hz+ on
+     * trackpads). Only the transform write needs event-rate latency; the reactive
+     * viewport write plus every side-effect (background, culling, zoom-level,
+     * context-menu, events) is coalesced to a single flush per animation frame.
+     */
+    _onViewportTransform(vp: Viewport) {
+      this._viewportLive = vp;
+      if (this._viewportEl) {
+        this._viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`;
+      }
+      if (this._vpFrame !== null) return;
+      this._vpFrame = requestAnimationFrame(() => {
+        this._vpFrame = null;
+        this._flushViewportFrame();
+      });
+    },
+
+    /**
+     * Apply the coalesced viewport state and its side-effects once per frame.
+     * Reactive `viewport` is written here (not per event), so consumers watching
+     * `viewport` re-run at frame rate rather than per wheel event.
+     */
+    _flushViewportFrame() {
+      const vp = this._viewportLive;
+      if (!vp) return;
+      this.viewport.x = vp.x;
+      this.viewport.y = vp.y;
+      this.viewport.zoom = vp.zoom;
+      this._applyBackground();
+      this._applyCulling();
+      this._applyZoomLevel(vp.zoom);
+      if (this.contextMenu.show) { this.closeContextMenu(); }
+      this._emit('viewport-change', { viewport: { ...vp } });
+      if (this._vpMoved) {
+        this._vpMoved = false;
+        this._emit('viewport-move', { viewport: { ...vp } });
+      }
+    },
+
+    /**
+     * Gesture end (user released the wheel/pointer). Commit the end-state
+     * synchronously so it is never a frame late, cancelling any pending frame.
+     */
+    _onViewportMoveEnd(vp: Viewport) {
+      if (this._vpFrame !== null) {
+        cancelAnimationFrame(this._vpFrame);
+        this._vpFrame = null;
+      }
+      this._flushViewportFrame();
+      this._emit('viewport-move-end', { viewport: { ...vp } });
+    },
+
+    /**
      * Toggle CSS display on off-screen nodes and edges.
-     * Called from onTransformChange — entirely outside Alpine's reactive system.
+     * Called from _flushViewportFrame — entirely outside Alpine's reactive system.
      */
     _applyCulling() {
       if (config.viewportCulling !== true) return;
@@ -713,26 +785,18 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
       this._panZoom = createPanZoom(this._container, {
         onTransformChange: (vp: Viewport) => {
-          this.viewport.x = vp.x;
-          this.viewport.y = vp.y;
-          this.viewport.zoom = vp.zoom;
-          if (this._viewportEl) {
-            this._viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`;
-          }
-          this._applyBackground();
-          this._applyCulling();
-          this._applyZoomLevel(vp.zoom);
-          if (this.contextMenu.show) { this.closeContextMenu(); }
-          this._emit('viewport-change', { viewport: { ...vp } });
+          this._onViewportTransform(vp);
         },
         onMoveStart: (vp: Viewport) => {
           this._emit('viewport-move-start', { viewport: { ...vp } });
         },
-        onMove: (vp: Viewport) => {
-          this._emit('viewport-move', { viewport: { ...vp } });
+        onMove: () => {
+          // Coalesced: record that a user move happened; viewport-move is emitted
+          // (at most once) from the per-frame flush.
+          this._vpMoved = true;
         },
         onMoveEnd: (vp: Viewport) => {
-          this._emit('viewport-move-end', { viewport: { ...vp } });
+          this._onViewportMoveEnd(vp);
         },
         minZoom: config.minZoom,
         maxZoom: config.maxZoom,
@@ -1938,6 +2002,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
         this._container.removeAttribute('data-flow-canvas');
       }
       (this as any).$store.flow.unregister(this._id);
+      if (this._vpFrame !== null) {
+        cancelAnimationFrame(this._vpFrame);
+        this._vpFrame = null;
+      }
       this._panZoom?.destroy();
       this._panZoom = null;
       this._announcer?.destroy();
