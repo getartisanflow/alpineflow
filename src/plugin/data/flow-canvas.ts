@@ -1168,6 +1168,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
             containerWidth: this._container?.clientWidth ?? 0,
             containerHeight: this._container?.clientHeight ?? 0,
           }),
+          getViewportState: () => ({
+            viewport: this.viewport,
+            containerWidth: this._container?.clientWidth ?? 0,
+            containerHeight: this._container?.clientHeight ?? 0,
+          }),
           setViewport: (vp) => this._panZoom?.setViewport(vp),
           config,
         });
