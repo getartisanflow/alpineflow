@@ -246,4 +246,117 @@ describe('x-flow-schema directive', () => {
     const el = mount({ label: 'User', kind: '', fields: [] });
     expect(el.hasAttribute('data-flow-schema-kind')).toBe(false);
   });
+
+  // ── Task 13: keyed row reconciliation ──────────────────────────────────────
+  // Reconcile rows keyed by field.name instead of tearing down + re-stamping
+  // every row on any tracked change.
+
+  function mountReactive(data: { label: string; fields: Array<Record<string, unknown>>; kind?: string }) {
+    clearChildren(document.body);
+    const host = document.createElement('div');
+    host.setAttribute('x-data', `{ node: { id: 't', data: ${JSON.stringify(data)} } }`);
+    const target = document.createElement('div');
+    target.setAttribute('x-flow-schema', '');
+    target.className = 'flow-node';
+    target.setAttribute('data-flow-node-id', 't');
+    host.appendChild(target);
+    document.body.appendChild(host);
+    Alpine.initTree(host);
+    const scope = (Alpine as any).$data(host);
+    return { target, scope };
+  }
+  const nextFlush = () => new Promise((r) => setTimeout(r, 20));
+
+  it('changing one field type keeps the other row elements identical', async () => {
+    const { target, scope } = mountReactive({
+      label: 'User',
+      fields: [
+        { name: 'id', type: 'uuid' },
+        { name: 'email', type: 'text' },
+        { name: 'name', type: 'text' },
+      ],
+    });
+    const rows = () => Array.from(target.querySelectorAll('.flow-schema-row'));
+    const before = rows();
+    scope.node.data.fields[1].type = 'string';
+    await nextFlush();
+    const after = rows();
+    expect(after[0]).toBe(before[0]);
+    expect(after[2]).toBe(before[2]);
+    // The changed row keeps identity too, and its type text updates in place.
+    expect(after[1]).toBe(before[1]);
+    expect(after[1].querySelector('.flow-schema-row-type')?.textContent).toBe('string');
+  });
+
+  it('adding a field appends exactly one new row, keeping existing rows', async () => {
+    const { target, scope } = mountReactive({
+      label: 'User',
+      fields: [
+        { name: 'id', type: 'uuid' },
+        { name: 'email', type: 'text' },
+        { name: 'name', type: 'text' },
+      ],
+    });
+    const before = Array.from(target.querySelectorAll('.flow-schema-row'));
+    scope.node.data.fields.push({ name: 'created_at', type: 'timestamp' });
+    await nextFlush();
+    const after = Array.from(target.querySelectorAll('.flow-schema-row')) as HTMLElement[];
+    expect(after.length).toBe(before.length + 1);
+    before.forEach((el, i) => expect(after[i]).toBe(el));
+    expect(after[3].dataset.flowSchemaField).toBe('created_at');
+    // The new row is wired: its handles were initialized via Alpine.initTree.
+    expect(after[3].querySelectorAll('[data-flow-handle-id]').length).toBe(4);
+  });
+
+  it('label change updates header text without touching rows', async () => {
+    const { target, scope } = mountReactive({
+      label: 'User',
+      fields: [{ name: 'id', type: 'uuid' }],
+    });
+    const row0 = target.querySelector('.flow-schema-row');
+    scope.node.data.label = 'Users (renamed)';
+    await nextFlush();
+    expect(target.querySelector('.flow-schema-header')!.textContent).toBe('Users (renamed)');
+    expect(target.querySelector('.flow-schema-row')).toBe(row0);
+  });
+
+  it('removing a field drops exactly that row, keeping the rest in order', async () => {
+    const { target, scope } = mountReactive({
+      label: 'User',
+      fields: [
+        { name: 'id', type: 'uuid' },
+        { name: 'email', type: 'text' },
+        { name: 'name', type: 'text' },
+      ],
+    });
+    const before = Array.from(target.querySelectorAll('.flow-schema-row')) as HTMLElement[];
+    const idRow = before[0];
+    const nameRow = before[2];
+    scope.node.data.fields.splice(1, 1); // remove email
+    await nextFlush();
+    const after = Array.from(target.querySelectorAll('.flow-schema-row')) as HTMLElement[];
+    expect(after.map((r) => r.dataset.flowSchemaField)).toEqual(['id', 'name']);
+    expect(after[0]).toBe(idRow);
+    expect(after[1]).toBe(nameRow);
+  });
+
+  it('reorders existing rows to match a new field order without re-creating them', async () => {
+    const { target, scope } = mountReactive({
+      label: 'User',
+      fields: [
+        { name: 'id', type: 'uuid' },
+        { name: 'email', type: 'text' },
+        { name: 'name', type: 'text' },
+      ],
+    });
+    const before = Array.from(target.querySelectorAll('.flow-schema-row')) as HTMLElement[];
+    // Reverse the field order in place.
+    scope.node.data.fields.reverse();
+    await nextFlush();
+    const after = Array.from(target.querySelectorAll('.flow-schema-row')) as HTMLElement[];
+    expect(after.map((r) => r.dataset.flowSchemaField)).toEqual(['name', 'email', 'id']);
+    // Same three element objects, just reordered (reference identity, not a rebuild).
+    expect(after).toHaveLength(before.length);
+    after.forEach((r) => expect(before).toContain(r));
+  });
 });

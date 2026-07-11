@@ -76,13 +76,38 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
 
     host.classList.add('flow-schema-node');
 
+    // Persistent scaffold + keyed row registry. Reused across renders so that a
+    // single tracked change reconciles rows in place instead of tearing down and
+    // re-initializing every row (one rename keystroke used to destroy + re-stamp
+    // ~180 elements per node).
+    let headerEl: HTMLElement | null = null;
+    let bodyEl: HTMLElement | null = null;
+    const rowByName = new Map<string, HTMLElement>();
+
+    const ensureScaffold = (): void => {
+      if (headerEl && bodyEl) return;
+      clearChildren(host);
+      rowByName.clear();
+      headerEl = document.createElement('div');
+      headerEl.className = 'flow-schema-header';
+      host.appendChild(headerEl);
+      bodyEl = document.createElement('div');
+      bodyEl.className = 'flow-schema-body';
+      host.appendChild(bodyEl);
+    };
+
     const render = (): void => {
       const node = readNode() as (NodeRef & { id?: unknown }) | null;
       const data = node?.data;
       if (!data) {
         clearChildren(host);
+        headerEl = null;
+        bodyEl = null;
+        rowByName.clear();
         return;
       }
+
+      ensureScaffold();
 
       const label = typeof data.label === 'string' ? data.label : '';
       const fields = Array.isArray(data.fields) ? data.fields : [];
@@ -94,30 +119,82 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
         host.removeAttribute('data-flow-schema-kind');
       }
 
-      clearChildren(host);
+      if (headerEl!.textContent !== label) headerEl!.textContent = label;
 
       const rowsReorderable = readRowsReorderable();
       const keyboardNav = readKeyboardNav();
 
-      // Header
-      const header = document.createElement('div');
-      header.className = 'flow-schema-header';
-      header.textContent = label;
-      host.appendChild(header);
-
-      // Body
-      const body = document.createElement('div');
-      body.className = 'flow-schema-body';
+      // ── Reconcile rows keyed by field.name ──
+      // 1. Create missing rows / update surviving rows in place.
+      const seen = new Set<string>();
       for (const field of fields) {
-        body.appendChild(renderRow(field, nodeId, rowsReorderable, keyboardNav));
+        seen.add(field.name);
+        const existing = rowByName.get(field.name);
+        if (existing) {
+          updateRow(existing, field);
+        } else {
+          const row = renderRow(field, nodeId, rowsReorderable, keyboardNav);
+          rowByName.set(field.name, row);
+          bodyEl!.appendChild(row);
+          // Activate x-flow-handle + x-flow-row-select on this one new row.
+          Alpine.initTree(row);
+        }
       }
-      host.appendChild(body);
+      // 2. Destroy rows whose fields are gone.
+      for (const [name, row] of rowByName) {
+        if (!seen.has(name)) {
+          Alpine.destroyTree(row);
+          row.remove();
+          rowByName.delete(name);
+        }
+      }
+      // 3. Order rows to match `fields`, moving only those out of position
+      //    (a straight append-all would churn every row's DOM position each
+      //    render; moving a node preserves its listeners and Alpine state).
+      let cursor: ChildNode | null = bodyEl!.firstChild;
+      for (const field of fields) {
+        const row = rowByName.get(field.name);
+        if (!row) continue;
+        if (cursor === row) {
+          cursor = cursor.nextSibling;
+        } else {
+          bodyEl!.insertBefore(row, cursor);
+        }
+      }
+    };
 
-      // Activate x-flow-handle + x-flow-row-select directives on the newly
-      // stamped rows. Without this call, rows have the right classes +
-      // attributes but no pointer listeners — drag-to-connect and
-      // row-click selection would be dead.
-      Alpine.initTree(body);
+    /**
+     * Update the presentation of a surviving row in place — key/required
+     * classes, the optional icon span, and the name/type text — WITHOUT
+     * touching the row's handles. Handles are keyed by field.name (the row's
+     * reconcile key), so a surviving row's handles are already correct.
+     */
+    const updateRow = (row: HTMLElement, field: FlowSchemaField): void => {
+      if (row.dataset.flowSchemaField !== field.name) {
+        row.dataset.flowSchemaField = field.name;
+      }
+      row.classList.toggle('flow-schema-row--pk', field.key === 'primary');
+      row.classList.toggle('flow-schema-row--fk', field.key === 'foreign');
+      row.classList.toggle('flow-schema-row--required', !!field.required);
+
+      // Icon span: renderRow inserts it (between the target handle and the name)
+      // only when field.icon is set — keep it in sync as icons come and go.
+      let icon = row.querySelector<HTMLElement>('.flow-schema-row-icon');
+      const nameEl = row.querySelector<HTMLElement>('.flow-schema-row-name');
+      if (field.icon) {
+        if (!icon) {
+          icon = document.createElement('span');
+          icon.className = 'flow-schema-row-icon';
+          row.insertBefore(icon, nameEl);
+        }
+        if (icon.textContent !== field.icon) icon.textContent = field.icon;
+      } else if (icon) {
+        icon.remove();
+      }
+
+      if (nameEl && nameEl.textContent !== field.name) nameEl.textContent = field.name;
+      const typeEl = row.querySelector<HTMLElement>('.flow-schema-row-type');
+      if (typeEl && typeEl.textContent !== field.type) typeEl.textContent = field.type;
     };
 
     const renderRow = (
@@ -244,7 +321,13 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
     });
 
     cleanup(() => {
+      for (const row of rowByName.values()) {
+        Alpine.destroyTree(row);
+      }
+      rowByName.clear();
       clearChildren(host);
+      headerEl = null;
+      bodyEl = null;
       host.classList.remove('flow-schema-node');
     });
   });
