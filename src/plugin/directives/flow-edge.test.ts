@@ -98,13 +98,16 @@ function mountEdges(nodes: MockNode[], edges: MockEdge[], opts: { nodeElements?:
   (window as unknown as Record<string, unknown>)[scopeName] = () => canvas;
   host.setAttribute('x-data', `${scopeName}()`);
 
-  // Optional real node elements (for endpoint-lookup tests).
+  // Optional real node elements (for endpoint-lookup tests). Registered in
+  // both the DOM (so querySelector fallback works) and canvas._nodeElements
+  // (so the O(1) map-lookup path is exercised).
   if (opts.nodeElements) {
     for (const n of nodes) {
       const nodeEl = document.createElement('div');
       nodeEl.className = 'flow-node';
       nodeEl.setAttribute('data-flow-node-id', n.id);
       host.appendChild(nodeEl);
+      canvas._nodeElements.set(n.id, nodeEl);
     }
   }
 
@@ -226,5 +229,29 @@ describe('x-flow-edge row-highlight reactivity (Task 22)', () => {
     expect(c2.count()).toBe(0); // e2 must not re-run
     c1.disconnect();
     c2.disconnect();
+  });
+});
+
+describe('x-flow-edge endpoint lookup refactor (Task 23)', () => {
+  function twoNodes(): MockNode[] {
+    return [
+      { id: 'a', position: { x: 0, y: 0 }, dimensions: { width: 120, height: 60 }, data: {} },
+      { id: 'b', position: { x: 300, y: 200 }, dimensions: { width: 120, height: 60 }, data: {} },
+    ];
+  }
+
+  // Characterization: pins the emitted `d` for a 2-node + 1-edge fixture so the
+  // switch to _nodeElements-based endpoint resolution provably changes nothing.
+  // The inline snapshot is captured on pre-refactor code, then re-verified after.
+  it('edge path is unchanged after _nodeElements lookup refactor', async () => {
+    const { groups, visiblePath } = mountEdges(
+      twoNodes(),
+      [{ id: 'e1', source: 'a', target: 'b', sourceHandle: 'a-r', targetHandle: 'b-l' }],
+      { nodeElements: true },
+    );
+    await flush();
+    const d = visiblePath(groups[0]).getAttribute('d');
+    expect(d).toBeTruthy();
+    expect(d).toMatchInlineSnapshot(`"M60,60 C60,130 360,130 360,200"`);
   });
 });

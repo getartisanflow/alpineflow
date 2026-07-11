@@ -200,8 +200,12 @@ export function resolveHandlePosition(
   handleType: 'source' | 'target',
   node?: FlowNode,
   opposingCenter?: XYPosition,
+  providedNodeEl?: HTMLElement | null,
 ): HandlePosition {
-  const nodeEl = container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`);
+  // Prefer the caller-resolved node element (O(1) via canvas._nodeElements);
+  // fall back to a container-wide query only when it wasn't provided. All
+  // handle lookups below are already scoped to this element.
+  const nodeEl = providedNodeEl ?? container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`);
   if (nodeEl) {
     // Try exact handle ID scoped to the correct type. Schema nodes and other
     // "row-per-field" layouts have a source + target on each row with the same
@@ -276,8 +280,11 @@ function measureHandleCoords(
   zoom: number,
   viewport: { x: number; y: number },
   opposingCenter?: XYPosition,
+  providedNodeEl?: HTMLElement | null,
 ): HandleMeasurement | null {
-  const nodeEl = container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`) as HTMLElement | null;
+  // Prefer the caller-resolved node element (O(1) via canvas._nodeElements);
+  // fall back to a container-wide query only when it wasn't provided.
+  const nodeEl = providedNodeEl ?? (container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`) as HTMLElement | null);
   if (!nodeEl) return null;
 
   let handleEl: HTMLElement | null = null;
@@ -1040,17 +1047,18 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           // handle-geometry picker (for nodes with same-(id,type) mirrors,
           // e.g. schema rows) can choose whichever side of the node is
           // physically closer to the OPPOSING endpoint.
-          const sourceNodeEl = container.querySelector(
-            `[data-flow-node-id="${CSS.escape(edge.source)}"]`,
-          ) as HTMLElement | null;
-          const targetNodeEl = container.querySelector(
-            `[data-flow-node-id="${CSS.escape(edge.target)}"]`,
-          ) as HTMLElement | null;
+          // Resolve endpoint elements in O(1) via the canvas node-element
+          // registry, falling back to a container-wide query when an element
+          // isn't registered (test mounts, mid-init edge cases).
+          const sourceNodeEl = (canvas._nodeElements?.get(edge.source)
+            ?? container.querySelector(`[data-flow-node-id="${CSS.escape(edge.source)}"]`)) as HTMLElement | null;
+          const targetNodeEl = (canvas._nodeElements?.get(edge.target)
+            ?? container.querySelector(`[data-flow-node-id="${CSS.escape(edge.target)}"]`)) as HTMLElement | null;
           const sourceCenter = sourceNodeEl ? rectCenter(sourceNodeEl.getBoundingClientRect()) : undefined;
           const targetCenter = targetNodeEl ? rectCenter(targetNodeEl.getBoundingClientRect()) : undefined;
 
-          sourcePos = resolveHandlePosition(container, edge.source, edge.sourceHandle, 'source', rawSource, targetCenter);
-          targetPos = resolveHandlePosition(container, edge.target, edge.targetHandle, 'target', rawTarget, sourceCenter);
+          sourcePos = resolveHandlePosition(container, edge.source, edge.sourceHandle, 'source', rawSource, targetCenter, sourceNodeEl);
+          targetPos = resolveHandlePosition(container, edge.target, edge.targetHandle, 'target', rawTarget, sourceCenter, targetNodeEl);
 
           // Read zoom/viewport from the raw object to avoid creating a reactive
           // dependency on viewport.zoom.  Edge paths are in flow-space and
@@ -1066,8 +1074,8 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           sourcePos = rotateHandlePos(sourcePos, srcRotation);
           targetPos = rotateHandlePos(targetPos, tgtRotation);
 
-          srcMeasurement = measureHandleCoords(container, edge.source, sourceNode, edge.sourceHandle, 'source', zoom, rawViewport, targetCenter);
-          tgtMeasurement = measureHandleCoords(container, edge.target, targetNode, edge.targetHandle, 'target', zoom, rawViewport, sourceCenter);
+          srcMeasurement = measureHandleCoords(container, edge.source, sourceNode, edge.sourceHandle, 'source', zoom, rawViewport, targetCenter, sourceNodeEl);
+          tgtMeasurement = measureHandleCoords(container, edge.target, targetNode, edge.targetHandle, 'target', zoom, rawViewport, sourceCenter, targetNodeEl);
 
           // Cache handle center coords for reconnection hit-detection
           const fallbackSrc = getHandleCoords(sourceNode, sourcePos, canvas._shapeRegistry, canvas._config?.nodeOrigin);
