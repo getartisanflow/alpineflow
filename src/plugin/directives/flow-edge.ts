@@ -1084,13 +1084,29 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         lastVisibleSrcCoords = adjustedSrc;
         lastVisibleTgtCoords = adjustedTgt;
 
-        // Compute obstacle rects for orthogonal routing (performance-gated)
+        // Compute obstacle rects for orthogonal routing (performance-gated).
+        //
+        // Obstacle geometry is deliberately non-reactive: the node list and
+        // node map are unwrapped with Alpine.raw so this edge effect does NOT
+        // subscribe to every other node's position/dimensions. Without this, a
+        // single node write re-routes the entire edge graph. `_layoutAnimTick`
+        // (read at the top of this effect) is the refresh signal — drag-end and
+        // layout-animation frames bump it, which re-measures routes against
+        // moved obstacles.
+        //
+        // NB: `canvas` is Alpine's merged-scope proxy, which Alpine.raw() does
+        // not unwrap; we unwrap the genuine reactive `nodes`/`_nodeMap` objects
+        // instead. Reading `_config.nodeOrigin` tracks a stable key that does
+        // not change on node moves.
         let obstacleRects: Rect[] | undefined;
         if (resolvedEdgeType === 'orthogonal' || resolvedEdgeType === 'avoidant') {
-          obstacleRects = canvas.nodes
+          const rawNodes = Alpine.raw(canvas.nodes) as FlowNode[];
+          const rawNodeMap = Alpine.raw(canvas._nodeMap) as typeof canvas._nodeMap;
+          const nodeOrigin = canvas._config?.nodeOrigin;
+          obstacleRects = rawNodes
             .filter((n: FlowNode) => n.id !== edge.source && n.id !== edge.target)
             .map((n: FlowNode) => {
-              const abs = toAbsoluteNode(n, canvas._nodeMap, canvas._config?.nodeOrigin);
+              const abs = toAbsoluteNode(n, rawNodeMap, nodeOrigin);
               return {
                 x: abs.position.x,
                 y: abs.position.y,

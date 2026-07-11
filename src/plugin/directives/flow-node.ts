@@ -1421,6 +1421,16 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
             }
 
             groupDragStartPositions = null;
+
+            // Obstacle geometry for avoidant/orthogonal edges is read
+            // non-reactively (see flow-edge.ts), so a dragged node that is an
+            // *obstacle* for other edges does not re-route them through its own
+            // position dependency. Bump the layout tick once the drag settles so
+            // those routes re-measure against the moved obstacle.
+            if (didDrag) {
+              canvas._layoutAnimTick++;
+            }
+
             // Reset so the next click isn't treated as a drag.
             // d3-drag already suppresses the click event immediately
             // after a real drag, so this is safe.
