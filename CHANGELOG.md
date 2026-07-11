@@ -2,14 +2,51 @@
 
 ## Unreleased
 
-### Performance — avoidant edges at schema scale
+Schema-scale performance pass — fixes undo/zoom/edge performance at Draftsman scale (~50 nodes × 25 fields, ~100 edges). Landed as independent workstreams.
+
+### Workstream 1 — history capture hygiene
+Stops the undo/redo stack from filling with no-op snapshots and roughly halves retained history memory. Capture-side only; the undo/redo *restore* path is unchanged.
+
+**Breaking / Behavior Changes**
+- **Row/node selection no longer creates history entries.** Selecting or deselecting a schema row (row selection generally) no longer captures a history snapshot — selection state lives outside the `{nodes, edges}` snapshot, so those captures were byte-identical no-ops that flooded the 50-slot stack. Selection is no longer undoable.
+- **Identical consecutive history states are deduped.** Both `FlowHistory` (canvas) and the schema history addon skip a snapshot equal to the top of the stack, so a capture that doesn't change the graph never adds an undo step.
+- Node drag captures history on **commit** — only when the node actually moved — instead of on pointer-down, so a plain click-to-select no longer pushes an undo entry.
+- Arrow-key nudge captures **once per physical keypress**; holding a key (auto-repeat) no longer pushes an entry per repeat, and keys that move nothing / an empty selection capture nothing.
+
+**Fixed**
+- A reparent/detach **drag** now records a single undo entry (previously two — `reparentNode`'s own capture plus the drag's deferred snapshot); one undo fully reverts both position and parent.
+- A schema `renameField` / `removeField` that **cascades edges** now records exactly one undoable step instead of two byte-identical snapshots, so the first undo is never a visual no-op.
+- A net-no-op schema `batch()` no longer leaves a duplicate-of-top undo step.
+
+**Infrastructure**
+- `FlowHistory` stores snapshots as JSON strings (≈half the retained memory of 50 live object graphs) with O(1) duplicate-state dedup; adds `snapshot()` / `commit()` for deferred capture.
+- New canvas wrappers `_snapshotHistory()` / `_commitHistory()` support capture-on-commit flows.
+- New pure, unit-tested helpers: `commitDragHistory` and `reparentWithoutCapture` (flow-node), `shouldCaptureNudge` (keyboard-shortcuts) — the drag/keydown decisions are extracted so they're testable without driving d3-drag in jsdom.
+
+### Workstream 3 — zoom/pan pipeline coalescing
+
+**Performance**
+- **Frame-coalesced viewport pipeline** — zoom/pan side-effects (reactive `viewport` write, background, culling, zoom-level, context-menu close, viewport events) now run once per animation frame instead of once per wheel event (120Hz+ on trackpads). Only the CSS transform is written at event rate. (WS3 · T16)
+- **Background gap caching** — the `--flow-bg-pattern-gap` CSS variable is resolved via `getComputedStyle` at most once and cached (invalidated on theme change), removing a forced style recalc from every viewport frame; `backgroundImage` is only rewritten when it actually changes. (T15)
+- **Lean minimap viewport getter** — the minimap viewport indicator updates through a new `getViewportState` option that reads only viewport + container size, skipping the full `toAbsoluteNodes` node remap it previously ran on every viewport change. (T17)
+- **Devtools per-frame work removed** — the event log does no work while the panel is collapsed, and the reactive display is split into a viewport effect and a data effect so a viewport frame no longer re-serializes the current selection. (T18)
+- **Throttled Livewire viewport bridge** — `viewport-change` / `viewport-move` wire events are trailing-throttled to one Livewire round-trip per 150 ms window (the final viewport wins). (T19)
+
+**Breaking / Behavior Changes**
+- Zoom side-effects (viewport events, background, culling) now fire at most once per animation frame — `onViewportChange` fires at rAF cadence rather than per wheel event.
+- `canvas.viewport` (the reactive state consumers watch) now settles on the **next animation frame** after a viewport change — this includes programmatic `setViewport` / `zoomIn` / `zoomOut` / `fitView` / `panBy`. Synchronous coordinate math should read the live viewport, which `screenToFlowPosition` / `flowToScreenPosition` now do internally (`canvas._viewportLive`). Gesture end (`viewport-move-end`) still commits the end-state synchronously.
+- **Test-facing:** tests that assert `canvas.viewport` immediately after a programmatic viewport change must now flush a `requestAnimationFrame` first.
+
+### Workstream 4 — avoidant edges at schema scale
+
+**Performance**
 - Avoidant/orthogonal edges no longer subscribe to every node's position. Obstacle geometry is read non-reactively, so a single node write no longer re-routes the whole edge graph; routes refresh on the `_layoutAnimTick` signal (bumped at node drag-end, resize, reorder/reparent, and during layout animation).
 - Row-highlight tracks only the specific row keys an edge touches instead of `selectedRows.size`, so selecting a row re-runs only the edges connected to it rather than every edge.
 - Edge endpoint elements resolve in O(1) via the canvas node-element registry (`_nodeElements`) instead of container-wide `[data-flow-node-id]` queries.
 - Orthogonal/avoidant pathfinding uses a binary min-heap + scanline adjacency (was a linear-scan priority queue with an all-pairs neighbour test). Obstacles are pruned to a corridor around the edge (with a full-set fallback validated against the complete obstacle set), and routes are memoized in a 512-entry LRU cache keyed by endpoints + obstacle geometry.
 - Benchmarks (`npm run bench`, chromium): a single dense-field route drops 0.159 ms → 0.042 ms (~3.75×); a repeated full-graph pass of 60 edges drops 8.13 ms → 0.24 ms (~34×, memo cache); a short local edge amid 100 spread-out obstacles routes on a <50-point grid (~0.004 ms) instead of 160+ points unpruned.
 
-### Changed (alpha-breaking) — avoidant edge routing
+**Breaking / Behavior Changes**
 - Obstacle geometry for avoidant/orthogonal edges is now non-reactive. A node moved by a programmatic data mutation that does not bump `_layoutAnimTick` will not re-route dependent edges until the next tick. Interactive gestures (drag, resize, reorder/reparent) bump the tick, so gesture-driven moves re-route as before.
 - After the Dijkstra rewrite, routes across dense obstacle fields may choose different waypoints among equal-cost shortest paths. Path length and obstacle avoidance are unchanged — only the specific corners of a tie-broken route may differ, so an avoidant edge can render a visually different (but equally short) path.
 

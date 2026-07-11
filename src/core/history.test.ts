@@ -159,6 +159,57 @@ describe('FlowHistory', () => {
     });
   });
 
+  // ── duplicate-state dedup ─────────────────────────────────────────────
+
+  describe('duplicate-state dedup', () => {
+    it('skips capture when state is identical to top of stack', () => {
+      const h = new FlowHistory();
+      const state = { nodes: [{ id: 'a', position: { x: 0, y: 0 } }] as any, edges: [] };
+      h.capture(state);
+      h.capture(state); // identical — must not push a second entry
+      expect(h.canUndo).toBe(true);
+      expect(h.undo(state)).not.toBeNull();
+      expect(h.canUndo).toBe(false); // only one entry existed
+    });
+
+    it('still captures when state differs', () => {
+      const h = new FlowHistory();
+      h.capture({ nodes: [{ id: 'a', position: { x: 0, y: 0 } }] as any, edges: [] });
+      h.capture({ nodes: [{ id: 'a', position: { x: 5, y: 0 } }] as any, edges: [] });
+      h.undo({ nodes: [], edges: [] });
+      expect(h.canUndo).toBe(true);
+    });
+  });
+
+  // ── deferred capture (snapshot / commit) ──────────────────────────────
+
+  describe('snapshot / commit', () => {
+    it('snapshot() serializes without pushing; commit() pushes it', () => {
+      const h = new FlowHistory();
+      const snap = h.snapshot({ nodes: [{ id: 'a', position: { x: 0, y: 0 } }] as any, edges: [] });
+      expect(h.canUndo).toBe(false); // snapshot alone does not push
+      h.commit(snap);
+      expect(h.canUndo).toBe(true);
+    });
+
+    it('commit() dedups against the top of the stack', () => {
+      const h = new FlowHistory();
+      const snap = h.snapshot({ nodes: [{ id: 'a', position: { x: 0, y: 0 } }] as any, edges: [] });
+      h.commit(snap);
+      h.commit(snap); // identical snapshot — no second entry
+      expect(h.undo({ nodes: [], edges: [] })).not.toBeNull();
+      expect(h.canUndo).toBe(false);
+    });
+
+    it('commit() is a no-op while suspended', () => {
+      const h = new FlowHistory();
+      h.suspend();
+      const snap = h.snapshot({ nodes: [{ id: 'a', position: { x: 0, y: 0 } }] as any, edges: [] });
+      h.commit(snap);
+      expect(h.canUndo).toBe(false);
+    });
+  });
+
   // ── canUndo / canRedo ─────────────────────────────────────────────────
 
   describe('canUndo / canRedo', () => {

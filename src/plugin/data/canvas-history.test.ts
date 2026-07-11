@@ -442,3 +442,39 @@ describe('createHistoryMixin — canUndo / canRedo', () => {
     expect(mixin.canRedo).toBe(true);
   });
 });
+
+// ── deferred capture: _snapshotHistory / _commitHistory ──────────────────────
+
+describe('canvas — deferred capture (_snapshotHistory / _commitHistory)', () => {
+  it('_snapshotHistory/_commitHistory defer the push until commit', () => {
+    const history = new FlowHistory();
+    const ctx = mockCtx({
+      _history: history,
+      nodes: [makeNode('n1', { position: { x: 0, y: 0 } })],
+    });
+    const mixin = createHistoryMixin(ctx);
+
+    const snap = ctx._snapshotHistory();
+    expect(mixin.canUndo).toBe(false); // snapshot() alone does not push
+    ctx.nodes[0].position.x = 100; // mutate after snapshotting
+    ctx._commitHistory(snap);
+    expect(mixin.canUndo).toBe(true);
+
+    mixin.undo();
+    expect(ctx.nodes[0].position.x).toBe(0); // pre-mutation state restored
+  });
+
+  it('_snapshotHistory returns null when history is disabled', () => {
+    const ctx = mockCtx({ _history: null });
+    expect(ctx._snapshotHistory()).toBeNull();
+  });
+
+  it('_commitHistory ignores a null snapshot', () => {
+    const history = new FlowHistory();
+    const ctx = mockCtx({ _history: history, nodes: [makeNode('n1')] });
+    const mixin = createHistoryMixin(ctx);
+
+    ctx._commitHistory(null);
+    expect(mixin.canUndo).toBe(false);
+  });
+});

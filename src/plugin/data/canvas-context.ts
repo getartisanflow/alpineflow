@@ -181,6 +181,13 @@ export interface CanvasContext {
   /** Viewport wrapper element (.flow-viewport) */
   _viewportEl: HTMLElement | null;
 
+  /**
+   * Live viewport written synchronously on every d3-zoom transform. Reactive
+   * `viewport` is frame-coalesced, so synchronous pointer-path math must read
+   * `_viewportLive ?? viewport` to avoid a one-frame-stale coordinate divisor.
+   */
+  _viewportLive: Viewport | null;
+
   /** SVG element holding marker <defs> */
   _markerDefsEl: SVGSVGElement | null;
 
@@ -418,6 +425,12 @@ export interface CanvasContext {
 
   /** Capture a history snapshot before a mutation */
   _captureHistory(): void;
+
+  /** Serialize the current state without pushing — pair with _commitHistory for deferred capture */
+  _snapshotHistory(): string | null;
+
+  /** Push a snapshot taken earlier via _snapshotHistory (dedups against the stack top; ignores null) */
+  _commitHistory(snapshot: string | null): void;
 
   /** Suspend history capture (e.g. during animation) */
   _suspendHistory(): void;

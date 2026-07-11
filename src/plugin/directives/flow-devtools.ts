@@ -335,6 +335,9 @@ export function registerFlowDevtoolsDirective(Alpine: Alpine) {
 
       if (eventMax > 0 && eventListEl) {
         flowEventHandler = (e: Event) => {
+          // No log work while collapsed — the panel is hidden, and viewport-move/
+          // -change fire at frame rate. Rows are rebuilt from live events on expand.
+          if (!expanded) return;
           const ce = e as CustomEvent;
           const name = ce.type.replace('flow-', '');
           let detailStr = '';
@@ -380,6 +383,21 @@ export function registerFlowDevtoolsDirective(Alpine: Alpine) {
       }
 
       // ── Alpine effects for reactive data ───────────────────────────
+      // Two effects, split by update cadence. The viewport values change every
+      // animation frame during zoom/pan; keeping them in their own effect means
+      // a frame only touches three text nodes and never re-runs the (expensive)
+      // selection serialization or the counts/activity reads below.
+      effect(() => {
+        const canvas = Alpine.$data(canvasEl) as any;
+        if (!canvas || !canvas.viewport) return;
+
+        if (vpXEl) vpXEl.textContent = Math.round(canvas.viewport.x).toString();
+        if (vpYEl) vpYEl.textContent = Math.round(canvas.viewport.y).toString();
+        if (vpZoomEl) vpZoomEl.textContent = canvas.viewport.zoom.toFixed(2);
+      });
+
+      // Data effect: counts, visible, selection JSON, activity. Deliberately does
+      // NOT read canvas.viewport, so viewport frames never trigger it.
       effect(() => {
         const canvas = Alpine.$data(canvasEl) as any;
         if (!canvas) return;
@@ -391,17 +409,6 @@ export function registerFlowDevtoolsDirective(Alpine: Alpine) {
         // Visible
         if (visibleValueEl && canvas._getVisibleNodeIds) {
           visibleValueEl.textContent = String(canvas._getVisibleNodeIds().size);
-        }
-
-        // Viewport
-        if (vpXEl && canvas.viewport) {
-          vpXEl.textContent = Math.round(canvas.viewport.x).toString();
-        }
-        if (vpYEl && canvas.viewport) {
-          vpYEl.textContent = Math.round(canvas.viewport.y).toString();
-        }
-        if (vpZoomEl && canvas.viewport) {
-          vpZoomEl.textContent = canvas.viewport.zoom.toFixed(2);
         }
 
         // State (selection)

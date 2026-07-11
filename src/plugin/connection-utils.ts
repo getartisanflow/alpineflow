@@ -218,14 +218,18 @@ export function startConnectionAutoPan(
     container: containerEl,
     speed: canvas._config?.autoPanSpeed ?? 15,
     onPan(dx: number, dy: number) {
-      const vpBefore = { x: canvas.viewport.x, y: canvas.viewport.y };
+      // Reactive `viewport` is frame-coalesced; setViewport updates `_viewportLive`
+      // synchronously, so measure the applied delta against that (reading reactive
+      // `viewport` here would always yield 0 and kill the auto-pan loop).
+      const liveVp = () => canvas._viewportLive ?? canvas.viewport;
+      const vpBefore = { x: liveVp().x, y: liveVp().y };
       canvas._panZoom?.setViewport({
-        x: canvas.viewport.x - dx,
-        y: canvas.viewport.y - dy,
-        zoom: canvas.viewport.zoom,
+        x: liveVp().x - dx,
+        y: liveVp().y - dy,
+        zoom: liveVp().zoom,
       });
-      const actualDx = vpBefore.x - canvas.viewport.x;
-      const actualDy = vpBefore.y - canvas.viewport.y;
+      const actualDx = vpBefore.x - liveVp().x;
+      const actualDy = vpBefore.y - liveVp().y;
       return actualDx === 0 && actualDy === 0;
     },
   });

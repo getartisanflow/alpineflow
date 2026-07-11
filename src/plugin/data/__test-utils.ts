@@ -80,6 +80,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _shapeRegistry: {},
     _container: null,
     _viewportEl: null,
+    _viewportLive: null,
     _markerDefsEl: null,
     _containerStyles: null,
     _nodeElements: new Map<string, HTMLElement>(),
@@ -184,6 +185,12 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _rebuildNodeMap: vi.fn(),
     _rebuildEdgeMap: vi.fn(),
     _captureHistory: vi.fn(),
+    _snapshotHistory(): string | null {
+      return this._history ? this._history.snapshot({ nodes: this.nodes, edges: this.edges }) : null;
+    },
+    _commitHistory(snapshot: string | null): void {
+      if (snapshot !== null) this._history?.commit(snapshot);
+    },
     _suspendHistory: vi.fn(),
     _resumeHistory: vi.fn(),
     _getChildValidation: vi.fn(() => undefined),

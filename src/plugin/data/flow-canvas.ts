@@ -41,7 +41,7 @@ import { createSelectionBox, type SelectionBoxInstance } from '../../core/select
 import { createLasso, type LassoInstance } from '../../core/lasso';
 import { getNodesInPolygon, getNodesFullyInPolygon, pointInPolygon } from '../../core/lasso-hit-test';
 import { clearValidationClasses } from '../directives/flow-handle';
-import { resolveShortcuts, matchesKey, matchesModifier } from '../../core/keyboard-shortcuts';
+import { resolveShortcuts, matchesKey, matchesModifier, shouldCaptureNudge } from '../../core/keyboard-shortcuts';
 import { isDraggable, isSelectable } from '../../core/node-flags';
 import { attachLongPress } from '../../core/long-press';
 import { getNodesInRect, getNodesFullyInRect } from '../../core/geometry';
@@ -186,14 +186,31 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _backgroundGap: config.backgroundGap ?? null as number | null,
     _patternColorOverride: config.patternColor ?? null as string | null,
 
+    /**
+     * Cached resolution of the `--flow-bg-pattern-gap` CSS variable. Reading it
+     * requires `getComputedStyle`, a forced style recalc that is prohibitively
+     * expensive to run on every viewport frame at schema scale. Populated on the
+     * first successful read; invalidate (set `null`) on any theme/colorMode
+     * change, since the active theme can redefine the variable.
+     */
+    _bgGapCache: null as number | null,
+
+    /** Last backgroundImage string written to the container — lets `_applyBackground`
+     * skip the (per-frame identical) gradient write. */
+    _lastBgImage: null as string | null,
+
     _getBackgroundGap(): number {
       if (this._backgroundGap !== null) {
         return this._backgroundGap;
+      }
+      if (this._bgGapCache !== null) {
+        return this._bgGapCache;
       }
       if (this._container) {
         const raw = getComputedStyle(this._container).getPropertyValue('--flow-bg-pattern-gap').trim();
         const parsed = parseFloat(raw);
         if (!isNaN(parsed)) {
+          this._bgGapCache = parsed;
           return parsed;
         }
       }
@@ -288,6 +305,20 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _initialDimensions: new Map<string, Dimensions>(),
     _edgeMap: new Map<string, FlowEdge>(),
     _viewportEl: null as HTMLElement | null,
+
+    // ── Viewport frame coalescing ─────────────────────────────────────────
+    /**
+     * The most recent viewport from d3-zoom, written synchronously on every
+     * transform (event rate). Reactive `viewport` and all viewport side-effects
+     * are flushed from here once per animation frame; synchronous pointer-path
+     * math (drag, auto-pan, coordinate transforms) must read this, not the
+     * frame-lagged reactive `viewport`.
+     */
+    _viewportLive: null as Viewport | null,
+    /** Pending requestAnimationFrame handle for the coalesced flush, or null. */
+    _vpFrame: null as number | null,
+    /** True when a user-driven move happened since the last flush (gates `viewport-move`). */
+    _vpMoved: false,
     _history: null as FlowHistory | null,
     _announcer: null as FlowAnnouncer | null,
     _computeEngine: new ComputeEngine(),
@@ -352,7 +383,12 @@ export function registerFlowCanvas(Alpine: Alpine) {
      * dispatch a DOM CustomEvent (flow-xxx) for Alpine @flow-xxx listeners.
      */
     _emit(event: string, detail?: any) {
-      debug('event', event, detail);
+      // viewport-change/-move fire once per animation frame; keep them out of the
+      // debug log so `debug: true` doesn't churn 2-3 lines per frame during zoom.
+      // viewport-move-start/-end still log so gesture bracketing stays debuggable.
+      if (event !== 'viewport-change' && event !== 'viewport-move') {
+        debug('event', event, detail);
+      }
 
       // Config callback: 'node-click' → 'onNodeClick'
       const callbackName = 'on' + event.split('-').map(
@@ -455,6 +491,14 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._history?.capture({ nodes: this.nodes, edges: this.edges });
     },
 
+    _snapshotHistory(): string | null {
+      return this._history ? this._history.snapshot({ nodes: this.nodes, edges: this.edges }) : null;
+    },
+
+    _commitHistory(snapshot: string | null): void {
+      if (snapshot !== null) this._history?.commit(snapshot);
+    },
+
     _suspendHistory() {
       this._history?.suspend();
     },
@@ -467,16 +511,72 @@ export function registerFlowCanvas(Alpine: Alpine) {
       const el = this._container;
       if (!el) return;
       const style = this.backgroundStyle();
-      Object.assign(el.style, {
-        backgroundImage: style.backgroundImage,
-        backgroundSize: style.backgroundSize,
-        backgroundPosition: style.backgroundPosition,
+      // The gradient image is identical frame-to-frame; only size/position track
+      // the viewport. Skip the redundant image write to avoid style churn.
+      if (style.backgroundImage !== this._lastBgImage) {
+        el.style.backgroundImage = style.backgroundImage;
+        this._lastBgImage = style.backgroundImage;
+      }
+      el.style.backgroundSize = style.backgroundSize;
+      el.style.backgroundPosition = style.backgroundPosition;
+    },
+
+    /**
+     * d3-zoom transform handler. Runs on every wheel/pan event (120Hz+ on
+     * trackpads). Only the transform write needs event-rate latency; the reactive
+     * viewport write plus every side-effect (background, culling, zoom-level,
+     * context-menu, events) is coalesced to a single flush per animation frame.
+     */
+    _onViewportTransform(vp: Viewport) {
+      this._viewportLive = vp;
+      if (this._viewportEl) {
+        this._viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`;
+      }
+      if (this._vpFrame !== null) return;
+      this._vpFrame = requestAnimationFrame(() => {
+        this._vpFrame = null;
+        this._flushViewportFrame();
       });
     },
 
     /**
+     * Apply the coalesced viewport state and its side-effects once per frame.
+     * Reactive `viewport` is written here (not per event), so consumers watching
+     * `viewport` re-run at frame rate rather than per wheel event.
+     */
+    _flushViewportFrame() {
+      const vp = this._viewportLive;
+      if (!vp) return;
+      this.viewport.x = vp.x;
+      this.viewport.y = vp.y;
+      this.viewport.zoom = vp.zoom;
+      this._applyBackground();
+      this._applyCulling();
+      this._applyZoomLevel(vp.zoom);
+      if (this.contextMenu.show) { this.closeContextMenu(); }
+      this._emit('viewport-change', { viewport: { ...vp } });
+      if (this._vpMoved) {
+        this._vpMoved = false;
+        this._emit('viewport-move', { viewport: { ...vp } });
+      }
+    },
+
+    /**
+     * Gesture end (user released the wheel/pointer). Commit the end-state
+     * synchronously so it is never a frame late, cancelling any pending frame.
+     */
+    _onViewportMoveEnd(vp: Viewport) {
+      if (this._vpFrame !== null) {
+        cancelAnimationFrame(this._vpFrame);
+        this._vpFrame = null;
+      }
+      this._flushViewportFrame();
+      this._emit('viewport-move-end', { viewport: { ...vp } });
+    },
+
+    /**
      * Toggle CSS display on off-screen nodes and edges.
-     * Called from onTransformChange — entirely outside Alpine's reactive system.
+     * Called from _flushViewportFrame — entirely outside Alpine's reactive system.
      */
     _applyCulling() {
       if (config.viewportCulling !== true) return;
@@ -664,8 +764,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
             if (cursorThrottled) return;
             cursorThrottled = true;
             const rect = container.getBoundingClientRect();
-            const x = (e.clientX - rect.left - this.viewport.x) / this.viewport.zoom;
-            const y = (e.clientY - rect.top - this.viewport.y) / this.viewport.zoom;
+            // Live viewport: reactive `viewport` lags a frame behind during zoom.
+            const liveVp = this._viewportLive ?? this.viewport;
+            const x = (e.clientX - rect.left - liveVp.x) / liveVp.zoom;
+            const y = (e.clientY - rect.top - liveVp.y) / liveVp.zoom;
             collabAwareness.updateCursor({ x, y });
             setTimeout(() => { cursorThrottled = false; }, throttleMs);
           };
@@ -693,26 +795,18 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
       this._panZoom = createPanZoom(this._container, {
         onTransformChange: (vp: Viewport) => {
-          this.viewport.x = vp.x;
-          this.viewport.y = vp.y;
-          this.viewport.zoom = vp.zoom;
-          if (this._viewportEl) {
-            this._viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`;
-          }
-          this._applyBackground();
-          this._applyCulling();
-          this._applyZoomLevel(vp.zoom);
-          if (this.contextMenu.show) { this.closeContextMenu(); }
-          this._emit('viewport-change', { viewport: { ...vp } });
+          this._onViewportTransform(vp);
         },
         onMoveStart: (vp: Viewport) => {
           this._emit('viewport-move-start', { viewport: { ...vp } });
         },
-        onMove: (vp: Viewport) => {
-          this._emit('viewport-move', { viewport: { ...vp } });
+        onMove: () => {
+          // Coalesced: record that a user move happened; viewport-move is emitted
+          // (at most once) from the per-frame flush.
+          this._vpMoved = true;
         },
         onMoveEnd: (vp: Viewport) => {
-          this._emit('viewport-move-end', { viewport: { ...vp } });
+          this._onViewportMoveEnd(vp);
         },
         minZoom: config.minZoom,
         maxZoom: config.maxZoom,
@@ -761,6 +855,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
           this._viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`;
         }
       });
+      // The container + theme are attached now, so drop any gap resolved before
+      // the active theme was applied and let this first paint re-read it. Any
+      // future theme/colorMode-change path that re-applies the background must
+      // likewise invalidate `_bgGapCache` before calling `_applyBackground()`.
+      this._bgGapCache = null;
       this._applyBackground();
 
       // Register with global store so other components can access this instance
@@ -1022,7 +1121,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
             }
           }
 
-          this._captureHistory();
+          // Capture once per physical keypress: skip auto-repeat, empty
+          // selection, and keys that produced no movement.
+          if (shouldCaptureNudge(e.repeat, this.selectedNodes.size, dx, dy)) {
+            this._captureHistory();
+          }
 
           for (const nodeId of this.selectedNodes) {
             const node = this.getNode(nodeId);
@@ -1075,6 +1178,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
         this._minimap = createMiniMap(this._container, {
           getState: () => ({
             nodes: toAbsoluteNodes(this.nodes, this._nodeMap, this._config.nodeOrigin),
+            viewport: this.viewport,
+            containerWidth: this._container?.clientWidth ?? 0,
+            containerHeight: this._container?.clientHeight ?? 0,
+          }),
+          getViewportState: () => ({
             viewport: this.viewport,
             containerWidth: this._container?.clientWidth ?? 0,
             containerHeight: this._container?.clientHeight ?? 0,
@@ -1913,6 +2021,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
         this._container.removeAttribute('data-flow-canvas');
       }
       (this as any).$store.flow.unregister(this._id);
+      if (this._vpFrame !== null) {
+        cancelAnimationFrame(this._vpFrame);
+        this._vpFrame = null;
+      }
       this._panZoom?.destroy();
       this._panZoom = null;
       this._announcer?.destroy();
