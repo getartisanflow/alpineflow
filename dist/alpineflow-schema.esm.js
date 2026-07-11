@@ -23,7 +23,7 @@ const ue = /^[a-z][a-z0-9_]*$/, pe = 40;
 function se(e) {
   return typeof e == "string" && e.length <= pe && ue.test(e);
 }
-function W(e, t, s) {
+function J(e, t, s) {
   const n = e?.el ?? e?._container;
   if (!n || typeof n.dispatchEvent != "function")
     return;
@@ -41,19 +41,19 @@ function W(e, t, s) {
   for (const a of r)
     console.error("[alpineflow/schema] listener threw while handling", t, a);
 }
-function J(e, t) {
+function z(e, t) {
   return e?.nodes?.find((s) => s.id === t) ?? null;
 }
 function me(e, t, s) {
-  const n = J(e, t);
-  return n ? se(s?.name) ? (n.data || (n.data = { label: t, fields: [] }), (n.data.fields ?? []).some((i) => i.name === s.name) ? { applied: !1, reason: "duplicate" } : (Array.isArray(n.data.fields) || (n.data.fields = []), n.data.fields.push({ ...s }), W(e, "schema:field-added", { nodeId: t, field: { ...s } }), { applied: !0 })) : { applied: !1, reason: "invalid-name" } : { applied: !1, reason: "no-node" };
+  const n = z(e, t);
+  return n ? se(s?.name) ? (n.data || (n.data = { label: t, fields: [] }), (n.data.fields ?? []).some((i) => i.name === s.name) ? { applied: !1, reason: "duplicate" } : (Array.isArray(n.data.fields) || (n.data.fields = []), n.data.fields.push({ ...s }), J(e, "schema:field-added", { nodeId: t, field: { ...s } }), { applied: !0 })) : { applied: !1, reason: "invalid-name" } : { applied: !1, reason: "no-node" };
 }
 function ge(e, t, s, n) {
   if (s === n)
     return { applied: !1, reason: "unchanged", cascadedEdgeIds: [] };
   if (!se(n))
     return { applied: !1, reason: "invalid-name", cascadedEdgeIds: [] };
-  const r = J(e, t);
+  const r = z(e, t);
   if (!r)
     return { applied: !1, reason: "no-node", cascadedEdgeIds: [] };
   const i = r.data?.fields ?? [], d = i.find((u) => u.name === s);
@@ -63,12 +63,12 @@ function ge(e, t, s, n) {
     return { applied: !1, reason: "duplicate", cascadedEdgeIds: [] };
   d.name = n;
   const a = e.edges ?? [], { edges: o, cascadedIds: c } = le(a, t, s, n);
-  return c.length > 0 && e.edges.splice(0, e.edges.length, ...o), W(e, "schema:field-renamed", {
+  return c.length > 0 && e.edges.splice(0, e.edges.length, ...o), J(e, "schema:field-renamed", {
     nodeId: t,
     oldName: s,
     newName: n,
     cascadedEdgeIds: c
-  }), c.length > 0 && W(e, "schema:edges-cascaded", {
+  }), c.length > 0 && J(e, "schema:edges-cascaded", {
     nodeId: t,
     fieldName: n,
     edgeIds: c,
@@ -76,7 +76,7 @@ function ge(e, t, s, n) {
   }), { applied: !0, cascadedEdgeIds: c };
 }
 function he(e, t, s) {
-  const n = J(e, t);
+  const n = z(e, t);
   if (!n)
     return { applied: !1, reason: "no-node", droppedEdgeIds: [] };
   const i = (n.data?.fields ?? []).findIndex((c) => c.name === s);
@@ -84,11 +84,11 @@ function he(e, t, s) {
     return { applied: !1, reason: "no-field", droppedEdgeIds: [] };
   n.data.fields.splice(i, 1);
   const d = e.edges ?? [], { edges: a, droppedIds: o } = fe(d, t, s);
-  return o.length > 0 && e.edges.splice(0, e.edges.length, ...a), W(e, "schema:field-removed", {
+  return o.length > 0 && e.edges.splice(0, e.edges.length, ...a), J(e, "schema:field-removed", {
     nodeId: t,
     fieldName: s,
     droppedEdgeIds: o
-  }), o.length > 0 && W(e, "schema:edges-cascaded", {
+  }), o.length > 0 && J(e, "schema:edges-cascaded", {
     nodeId: t,
     fieldName: s,
     edgeIds: o,
@@ -100,7 +100,7 @@ function ye(e, t, s) {
     return { applied: !1, reason: "mismatch" };
   if (new Set(s).size !== s.length)
     return { applied: !1, reason: "mismatch" };
-  const n = J(e, t);
+  const n = z(e, t);
   if (!n)
     return { applied: !1, reason: "no-node" };
   const r = n.data?.fields ?? [];
@@ -134,7 +134,7 @@ function ie(e) {
       const a = t.get(d);
       if (!a || a.id === n.id)
         continue;
-      const o = a.data?.fields ?? [], u = o.find((p) => p.key === "primary")?.name ?? o[0]?.name ?? "id";
+      const o = a.data?.fields ?? [], u = o.find((f) => f.key === "primary")?.name ?? o[0]?.name ?? "id";
       s.push({
         fromNodeId: n.id,
         fromFieldName: i.name,
@@ -195,12 +195,12 @@ function Ee(e, t) {
     if (a.get(o) !== r) continue;
     const c = [{ node: o, idx: 0 }];
     for (a.set(o, i); c.length > 0; ) {
-      const u = c[c.length - 1], p = s.get(u.node) ?? [];
-      if (u.idx < p.length) {
-        const g = p[u.idx++], m = a.get(g);
-        if (m === i)
+      const u = c[c.length - 1], f = s.get(u.node) ?? [];
+      if (u.idx < f.length) {
+        const g = f[u.idx++], p = a.get(g);
+        if (p === i)
           return !0;
-        m === r && (a.set(g, i), c.push({ node: g, idx: 0 }));
+        p === r && (a.set(g, i), c.push({ node: g, idx: 0 }));
       } else
         a.set(u.node, d), c.pop();
     }
@@ -222,18 +222,18 @@ function ve(e) {
     if (!o || typeof o.id != "string") continue;
     const c = Array.isArray(o.data?.fields) ? o.data.fields : [];
     if (c.length === 0) continue;
-    const u = /* @__PURE__ */ new Set(), p = /* @__PURE__ */ new Set();
-    for (const m of c)
-      !m || typeof m.name != "string" || (u.has(m.name) && p.add(m.name), u.add(m.name));
-    for (const m of p)
+    const u = /* @__PURE__ */ new Set(), f = /* @__PURE__ */ new Set();
+    for (const p of c)
+      !p || typeof p.name != "string" || (u.has(p.name) && f.add(p.name), u.add(p.name));
+    for (const p of f)
       t.push({
         severity: "error",
         code: "duplicate-field",
         nodeId: o.id,
-        fieldName: m,
-        message: `Duplicate field "${m}" on node "${o.id}".`
+        fieldName: p,
+        message: `Duplicate field "${p}" on node "${o.id}".`
       });
-    c.some((m) => m && m.key === "primary") || t.push({
+    c.some((p) => p && p.key === "primary") || t.push({
       severity: "warning",
       code: "missing-primary-key",
       nodeId: o.id,
@@ -297,13 +297,13 @@ function be(e, t, s = {}) {
     a.has(l) || c.push(l);
   for (const l of a.keys())
     o.has(l) || u.push(l);
-  const p = [], g = /* @__PURE__ */ new Set(), m = /* @__PURE__ */ new Set();
+  const f = [], g = /* @__PURE__ */ new Set(), p = /* @__PURE__ */ new Set();
   if (s.detectRenames) {
     const l = (h) => (Array.isArray(h.fields) ? h.fields : []).filter((T) => T && typeof T.name == "string").map((T) => T.name).sort().join("\0");
     for (const h of u) {
-      const S = a.get(h);
-      if (!S) continue;
-      const T = l(S), D = [];
+      const I = a.get(h);
+      if (!I) continue;
+      const T = l(I), D = [];
       for (const x of c) {
         if (g.has(x)) continue;
         const C = o.get(x);
@@ -311,41 +311,41 @@ function be(e, t, s = {}) {
       }
       if (D.length === 1) {
         const x = D[0];
-        p.push({ from: h, to: x }), g.add(x), m.add(h);
+        f.push({ from: h, to: x }), g.add(x), p.add(h);
       }
     }
   }
-  const b = c.filter((l) => !g.has(l)), f = u.filter((l) => !m.has(l)), E = [];
+  const b = c.filter((l) => !g.has(l)), m = u.filter((l) => !p.has(l)), y = [];
   for (const l of a.keys())
-    o.has(l) && E.push({ beforeId: l, afterId: l });
-  for (const l of p)
-    E.push({ beforeId: l.from, afterId: l.to });
-  const v = /* @__PURE__ */ new Map();
+    o.has(l) && y.push({ beforeId: l, afterId: l });
+  for (const l of f)
+    y.push({ beforeId: l.from, afterId: l.to });
+  const E = /* @__PURE__ */ new Map();
   for (const l of s.fieldRenames ?? []) {
     if (!l || typeof l.nodeId != "string" || typeof l.from != "string" || typeof l.to != "string") continue;
-    let h = v.get(l.nodeId);
-    h || (h = [], v.set(l.nodeId, h)), h.push({ from: l.from, to: l.to });
+    let h = E.get(l.nodeId);
+    h || (h = [], E.set(l.nodeId, h)), h.push({ from: l.from, to: l.to });
   }
-  const I = /* @__PURE__ */ new Map();
-  for (const l of p)
-    I.set(l.from, l.to);
+  const S = /* @__PURE__ */ new Map();
+  for (const l of f)
+    S.set(l.from, l.to);
   for (const l of s.fieldRenames ?? []) {
     if (!l || typeof l.nodeId != "string") continue;
-    const h = I.get(l.nodeId);
-    if (h && !v.has(h)) {
-      const S = v.get(l.nodeId) ?? [];
-      v.set(h, S);
+    const h = S.get(l.nodeId);
+    if (h && !E.has(h)) {
+      const I = E.get(l.nodeId) ?? [];
+      E.set(h, I);
     }
   }
-  const y = [], A = [], F = [], N = [];
-  for (const { beforeId: l, afterId: h } of E) {
-    const S = a.get(l), T = o.get(h);
-    if (!S || !T) continue;
-    const D = oe(S), x = oe(T), C = v.get(h) ?? v.get(l) ?? [], q = /* @__PURE__ */ new Set(), j = /* @__PURE__ */ new Set();
+  const v = [], A = [], F = [], N = [];
+  for (const { beforeId: l, afterId: h } of y) {
+    const I = a.get(l), T = o.get(h);
+    if (!I || !T) continue;
+    const D = oe(I), x = oe(T), C = E.get(h) ?? E.get(l) ?? [], q = /* @__PURE__ */ new Set(), j = /* @__PURE__ */ new Set();
     for (const w of C) {
       const B = D.get(w.from), M = x.get(w.to);
       if (!B || !M || q.has(w.from) || j.has(w.to)) continue;
-      y.push({ nodeId: h, from: w.from, to: w.to }), q.add(w.from), j.add(w.to);
+      v.push({ nodeId: h, from: w.from, to: w.to }), q.add(w.from), j.add(w.to);
       const Y = typeof B.type == "string" ? B.type : "", G = typeof M.type == "string" ? M.type : "";
       Y !== G && N.push({
         nodeId: h,
@@ -380,18 +380,18 @@ function be(e, t, s = {}) {
     R.has(l) || $.push(l);
   for (const l of R)
     H.has(l) || P.push(l);
-  b.sort(), f.sort(), p.sort((l, h) => l.from.localeCompare(h.from));
+  b.sort(), m.sort(), f.sort((l, h) => l.from.localeCompare(h.from));
   const L = (l) => `${l.nodeId}\0${l.fieldName}`;
-  return A.sort((l, h) => L(l).localeCompare(L(h))), F.sort((l, h) => L(l).localeCompare(L(h))), y.sort((l, h) => {
-    const S = l.nodeId.localeCompare(h.nodeId);
-    return S !== 0 ? S : l.from.localeCompare(h.from);
+  return A.sort((l, h) => L(l).localeCompare(L(h))), F.sort((l, h) => L(l).localeCompare(L(h))), v.sort((l, h) => {
+    const I = l.nodeId.localeCompare(h.nodeId);
+    return I !== 0 ? I : l.from.localeCompare(h.from);
   }), N.sort((l, h) => L(l).localeCompare(L(h))), $.sort(), P.sort(), {
     addedNodes: b,
-    removedNodes: f,
-    renamedNodes: p,
+    removedNodes: m,
+    renamedNodes: f,
     addedFields: A,
     removedFields: F,
-    renamedFields: y,
+    renamedFields: v,
     changedFieldTypes: N,
     addedEdges: $,
     removedEdges: P
@@ -404,7 +404,7 @@ const we = {
   includeFieldKeys: !0,
   graphName: "schema"
 };
-function z(e) {
+function W(e) {
   return e.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 function _(e) {
@@ -413,7 +413,7 @@ function _(e) {
 function Se(e, t) {
   const s = String(e?.id ?? ""), n = String(e?.data?.label ?? ""), r = Array.isArray(e?.data?.fields) ? e.data.fields : [], i = 1 + (t.includeFieldKeys ? 1 : 0) + (t.includeFieldTypes ? 1 : 0), d = [];
   d.push(
-    `      <TR><TD BGCOLOR="#f0f0f0" COLSPAN="${i}"><B>${z(n)}</B></TD></TR>`
+    `      <TR><TD BGCOLOR="#f0f0f0" COLSPAN="${i}"><B>${W(n)}</B></TD></TR>`
   );
   for (const a of r) {
     const o = String(a?.name ?? ""), c = [];
@@ -421,7 +421,7 @@ function Se(e, t) {
       const u = a?.key === "primary" ? "PK" : a?.key === "foreign" ? "FK" : "";
       c.push(`<TD>${u}</TD>`);
     }
-    c.push(`<TD PORT="${z(o)}">${z(o)}</TD>`), t.includeFieldTypes && c.push(`<TD>${z(String(a?.type ?? ""))}</TD>`), d.push(`      <TR>${c.join("")}</TR>`);
+    c.push(`<TD PORT="${W(o)}">${W(o)}</TD>`), t.includeFieldTypes && c.push(`<TD>${W(String(a?.type ?? ""))}</TD>`), d.push(`      <TR>${c.join("")}</TR>`);
   }
   return `  "${_(s)}" [label=<
     <TABLE BORDER="0" CELLBORDER="1" CELLSPACING="0" CELLPADDING="4">
@@ -515,9 +515,9 @@ function Re(e, t, s, n) {
     return;
   const i = Math.max(1, Math.ceil(Math.sqrt(r))), d = Math.ceil(r / i), a = t + 300, o = s + 200;
   for (let c = 0; c < r; c++) {
-    const u = c % i, p = Math.floor(c / i);
-    let g = u * a, m = p * o;
-    n === "BT" ? m = (d - 1 - p) * o : n === "RL" && (g = (i - 1 - u) * a), e[c].position = { x: g, y: m };
+    const u = c % i, f = Math.floor(c / i);
+    let g = u * a, p = f * o;
+    n === "BT" ? p = (d - 1 - f) * o : n === "RL" && (g = (i - 1 - u) * a), e[c].position = { x: g, y: p };
   }
 }
 const re = [
@@ -526,7 +526,7 @@ const re = [
   "schema:field-removed",
   "schema:edges-cascaded"
 ];
-function Je(e, t = {}) {
+function ze(e, t = {}) {
   const s = Math.max(1, t.limit ?? 50), n = [], r = [];
   let i = 0, d = 0, a = null, o = !1;
   const c = e?.el ?? e?._container ?? null;
@@ -535,19 +535,22 @@ function Je(e, t = {}) {
   const u = () => {
     for (; n.length > s && n.length > 1; )
       n.shift();
-  }, p = () => {
-    o || i > 0 || d > 0 || (n.push(K(e)), u(), r.length = 0);
+  }, f = (y) => {
+    const E = n[n.length - 1];
+    E !== void 0 && JSON.stringify(E) === JSON.stringify(y) || (n.push(y), u(), r.length = 0);
+  }, g = () => {
+    o || i > 0 || d > 0 || f(K(e));
   };
   n.push(K(e));
-  const g = () => {
-    p();
+  const p = () => {
+    g();
   };
-  for (const f of re)
-    c.addEventListener(f, g);
-  const m = (f) => {
+  for (const y of re)
+    c.addEventListener(y, p);
+  const b = (y) => {
     i++;
     try {
-      de(e, f);
+      de(e, y);
     } finally {
       i--;
     }
@@ -562,31 +565,31 @@ function Je(e, t = {}) {
     undo() {
       if (o || n.length <= 1)
         return !1;
-      const f = n.pop();
-      r.push(f);
+      const y = n.pop();
+      r.push(y);
       const E = n[n.length - 1];
-      return m(E), !0;
+      return b(E), !0;
     },
     redo() {
       if (o || r.length === 0)
         return !1;
-      const f = r.pop();
-      return n.push(f), m(f), !0;
+      const y = r.pop();
+      return n.push(y), b(y), !0;
     },
     clear() {
       n.length = 0, r.length = 0, o || n.push(K(e));
     },
-    batch(f) {
+    batch(y) {
       if (o)
-        return f();
+        return y();
       d === 0 && (a = K(e)), d++;
       try {
-        const E = f();
-        return d--, d === 0 && (a = null, i === 0 && !o && (n.push(K(e)), u(), r.length = 0)), E;
+        const E = y();
+        return d--, d === 0 && (a = null, i === 0 && !o && f(K(e))), E;
       } catch (E) {
         if (d--, d === 0) {
-          const v = a;
-          a = null, v && !o && m(v);
+          const S = a;
+          a = null, S && !o && b(S);
         }
         throw E;
       }
@@ -594,8 +597,8 @@ function Je(e, t = {}) {
     dispose() {
       if (!o) {
         o = !0;
-        for (const f of re)
-          c.removeEventListener(f, g);
+        for (const y of re)
+          c.removeEventListener(y, p);
         n.length = 0, r.length = 0, a = null;
       }
     }
@@ -710,28 +713,28 @@ function He(e) {
         return;
       const a = Q(i), o = {
         addField(u) {
-          const p = k(d.selectedNodes);
-          return p ? d.addField?.(p, u) ?? { applied: !1, reason: "no-helper" } : { applied: !1, reason: "no-selection" };
+          const f = k(d.selectedNodes);
+          return f ? d.addField?.(f, u) ?? { applied: !1, reason: "no-helper" } : { applied: !1, reason: "no-selection" };
         },
-        renameField(u, p) {
+        renameField(u, f) {
           const g = k(d.selectedNodes);
-          return g ? d.renameField?.(g, u, p) ?? {
+          return g ? d.renameField?.(g, u, f) ?? {
             applied: !1,
             reason: "no-helper",
             cascadedEdgeIds: []
           } : { applied: !1, reason: "no-selection", cascadedEdgeIds: [] };
         },
         removeField(u) {
-          const p = k(d.selectedNodes);
-          return p ? d.removeField?.(p, u) ?? {
+          const f = k(d.selectedNodes);
+          return f ? d.removeField?.(f, u) ?? {
             applied: !1,
             reason: "no-helper",
             droppedEdgeIds: []
           } : { applied: !1, reason: "no-selection", droppedEdgeIds: [] };
         },
         reorderFields(u) {
-          const p = k(d.selectedNodes);
-          return p ? d.reorderFields?.(p, u) ?? {
+          const f = k(d.selectedNodes);
+          return f ? d.reorderFields?.(f, u) ?? {
             applied: !1,
             reason: "no-helper"
           } : { applied: !1, reason: "no-selection" };
@@ -740,7 +743,7 @@ function He(e) {
         inspector: o,
         get selectedNode() {
           const u = k(d.selectedNodes);
-          return u ? d.nodes?.find((p) => p.id === u) ?? null : null;
+          return u ? d.nodes?.find((f) => f.id === u) ?? null : null;
         }
       });
       a && n(() => {
@@ -756,10 +759,10 @@ function Me(e, t) {
     ":scope > [data-schema-default-ui-root]"
   ), n = ee(s);
   U(e);
-  const r = Z(e), i = k(t.selectedNodes), d = i ? t.nodes?.find((f) => f.id === i) : null;
+  const r = Z(e), i = k(t.selectedNodes), d = i ? t.nodes?.find((m) => m.id === i) : null;
   if (!d) {
-    const f = document.createElement("div");
-    f.setAttribute("data-schema-inspector-empty", ""), f.textContent = "No node selected.", r.appendChild(f), O(r, n);
+    const m = document.createElement("div");
+    m.setAttribute("data-schema-inspector-empty", ""), m.textContent = "No node selected.", r.appendChild(m), O(r, n);
     return;
   }
   const a = document.createElement("header");
@@ -767,47 +770,47 @@ function Me(e, t) {
   const o = document.createElement("ul");
   o.setAttribute("data-schema-inspector-fields", "");
   const c = Array.isArray(d.data?.fields) ? d.data.fields : [];
-  for (const f of c) {
-    const E = document.createElement("li");
-    E.setAttribute("data-schema-inspector-field", ""), E.dataset.fieldName = String(f?.name ?? "");
-    const v = document.createElement("span");
-    if (v.textContent = String(f?.name ?? ""), E.appendChild(v), f?.type) {
-      const y = document.createElement("span");
-      y.setAttribute("data-field-type", ""), y.textContent = String(f.type), E.appendChild(y);
+  for (const m of c) {
+    const y = document.createElement("li");
+    y.setAttribute("data-schema-inspector-field", ""), y.dataset.fieldName = String(m?.name ?? "");
+    const E = document.createElement("span");
+    if (E.textContent = String(m?.name ?? ""), y.appendChild(E), m?.type) {
+      const v = document.createElement("span");
+      v.setAttribute("data-field-type", ""), v.textContent = String(m.type), y.appendChild(v);
     }
-    const I = document.createElement("button");
-    I.type = "button", I.setAttribute("data-action", "remove"), I.textContent = "remove", I.addEventListener("click", () => {
-      t.removeField?.(d.id, f.name);
-    }), E.appendChild(I), o.appendChild(E);
+    const S = document.createElement("button");
+    S.type = "button", S.setAttribute("data-action", "remove"), S.textContent = "remove", S.addEventListener("click", () => {
+      t.removeField?.(d.id, m.name);
+    }), y.appendChild(S), o.appendChild(y);
   }
   r.appendChild(o);
   const u = document.createElement("form");
   u.setAttribute("data-schema-inspector-add-field", "");
-  const p = document.createElement("input");
-  p.setAttribute("data-field", "name"), p.placeholder = "field name", u.appendChild(p);
+  const f = document.createElement("input");
+  f.setAttribute("data-field", "name"), f.placeholder = "field name", u.appendChild(f);
   const g = Array.isArray(t._config?.fieldTypeRegistry) ? t._config.fieldTypeRegistry : null;
-  let m;
+  let p;
   if (g && g.length > 0) {
-    const f = document.createElement("select");
-    f.setAttribute("data-field", "type");
-    for (const E of g) {
-      const v = document.createElement("option");
-      v.value = E, v.textContent = E, f.appendChild(v);
+    const m = document.createElement("select");
+    m.setAttribute("data-field", "type");
+    for (const y of g) {
+      const E = document.createElement("option");
+      E.value = y, E.textContent = y, m.appendChild(E);
     }
-    f.value = g[0], m = f;
+    m.value = g[0], p = m;
   } else {
-    const f = document.createElement("input");
-    f.setAttribute("data-field", "type"), f.placeholder = "type", f.value = "text", m = f;
+    const m = document.createElement("input");
+    m.setAttribute("data-field", "type"), m.placeholder = "type", m.value = "text", p = m;
   }
-  u.appendChild(m);
+  u.appendChild(p);
   const b = document.createElement("button");
-  b.type = "submit", b.textContent = "add", u.appendChild(b), u.addEventListener("submit", (f) => {
-    f.preventDefault();
-    const E = p.value.trim();
-    if (!E)
+  b.type = "submit", b.textContent = "add", u.appendChild(b), u.addEventListener("submit", (m) => {
+    m.preventDefault();
+    const y = f.value.trim();
+    if (!y)
       return;
-    const v = m.value, I = (typeof v == "string" ? v.trim() : "") || "text";
-    t.addField?.(d.id, { name: E, type: I })?.applied && (p.value = "");
+    const E = p.value, S = (typeof E == "string" ? E.trim() : "") || "text";
+    t.addField?.(d.id, { name: y, type: S })?.applied && (f.value = "");
   }), r.appendChild(u), O(r, n);
 }
 function _e(e) {
@@ -821,12 +824,12 @@ function _e(e) {
         const g = o();
         if (!g)
           return null;
-        const m = d.nodes?.find((f) => f.id === g.nodeId);
-        return m ? (m.data?.fields ?? []).find((f) => f?.name === g.fieldName) ?? null : null;
+        const p = d.nodes?.find((m) => m.id === g.nodeId);
+        return p ? (p.data?.fields ?? []).find((m) => m?.name === g.fieldName) ?? null : null;
       }, u = {
         renameField(g) {
-          const m = o();
-          return m ? d.renameField?.(m.nodeId, m.fieldName, g) ?? {
+          const p = o();
+          return p ? d.renameField?.(p.nodeId, p.fieldName, g) ?? {
             applied: !1,
             reason: "no-helper",
             cascadedEdgeIds: []
@@ -846,14 +849,14 @@ function _e(e) {
          * cascade correctly.
          */
         updateField(g) {
-          const m = c();
-          if (!m)
+          const p = c();
+          if (!p)
             return { applied: !1, reason: "no-selection" };
-          for (const [b, f] of Object.entries(g))
-            b !== "name" && (m[b] = f);
+          for (const [b, m] of Object.entries(g))
+            b !== "name" && (p[b] = m);
           return { applied: !0 };
         }
-      }, p = e.addScopeToNode(i, {
+      }, f = e.addScopeToNode(i, {
         inspector: u,
         get selectedRow() {
           return o();
@@ -862,7 +865,7 @@ function _e(e) {
       a && n(() => {
         Oe(i, d, o());
       }), r(() => {
-        U(i), p?.();
+        U(i), f?.();
       });
     }
   );
@@ -874,35 +877,35 @@ function Oe(e, t, s) {
   U(e);
   const i = Z(e);
   if (!s) {
-    const f = document.createElement("div");
-    f.setAttribute("data-schema-inspector-empty", ""), f.textContent = "No row selected.", i.appendChild(f), O(i, r);
+    const m = document.createElement("div");
+    m.setAttribute("data-schema-inspector-empty", ""), m.textContent = "No row selected.", i.appendChild(m), O(i, r);
     return;
   }
-  const a = t.nodes?.find((f) => f.id === s.nodeId)?.data?.fields?.find((f) => f?.name === s.fieldName) ?? null;
+  const a = t.nodes?.find((m) => m.id === s.nodeId)?.data?.fields?.find((m) => m?.name === s.fieldName) ?? null;
   if (!a) {
-    const f = document.createElement("div");
-    f.setAttribute("data-schema-inspector-empty", ""), f.textContent = "Selected row no longer exists.", i.appendChild(f), O(i, r);
+    const m = document.createElement("div");
+    m.setAttribute("data-schema-inspector-empty", ""), m.textContent = "Selected row no longer exists.", i.appendChild(m), O(i, r);
     return;
   }
   const o = document.createElement("label");
   o.textContent = "name ";
   const c = document.createElement("input");
   c.setAttribute("data-field", "name"), c.value = String(a.name ?? ""), c.addEventListener("change", () => {
-    const f = c.value.trim();
-    !f || f === a.name || t.renameField?.(s.nodeId, s.fieldName, f);
+    const m = c.value.trim();
+    !m || m === a.name || t.renameField?.(s.nodeId, s.fieldName, m);
   }), o.appendChild(c), i.appendChild(o);
   const u = document.createElement("label");
   u.textContent = "type ";
-  const p = document.createElement("input");
-  p.setAttribute("data-field", "type"), p.value = String(a.type ?? ""), p.addEventListener("change", () => {
-    a.type = p.value;
-  }), u.appendChild(p), i.appendChild(u);
+  const f = document.createElement("input");
+  f.setAttribute("data-field", "type"), f.value = String(a.type ?? ""), f.addEventListener("change", () => {
+    a.type = f.value;
+  }), u.appendChild(f), i.appendChild(u);
   const g = document.createElement("label");
   g.textContent = "required ";
-  const m = document.createElement("input");
-  m.type = "checkbox", m.setAttribute("data-field", "required"), m.checked = !!a.required, m.addEventListener("change", () => {
-    a.required = m.checked;
-  }), g.appendChild(m), i.appendChild(g);
+  const p = document.createElement("input");
+  p.type = "checkbox", p.setAttribute("data-field", "required"), p.checked = !!a.required, p.addEventListener("change", () => {
+    a.required = p.checked;
+  }), g.appendChild(p), i.appendChild(g);
   const b = document.createElement("button");
   b.type = "button", b.setAttribute("data-action", "remove"), b.textContent = "remove", b.addEventListener("click", () => {
     t.removeField?.(s.nodeId, s.fieldName);
@@ -916,27 +919,27 @@ function Pe(e) {
       if (!d)
         return;
       const a = Q(i), o = () => {
-        const p = k(d.selectedEdges);
-        return p ? d.edges?.find((g) => g.id === p) ?? null : null;
+        const f = k(d.selectedEdges);
+        return f ? d.edges?.find((g) => g.id === f) ?? null : null;
       }, c = {
-        updateEdge(p) {
+        updateEdge(f) {
           const g = o();
           if (!g)
             return { applied: !1, reason: "no-selection" };
-          for (const [m, b] of Object.entries(p))
-            g[m] = b;
+          for (const [p, b] of Object.entries(f))
+            g[p] = b;
           return { applied: !0 };
         },
-        setLabel(p) {
-          return this.updateEdge({ label: p });
+        setLabel(f) {
+          return this.updateEdge({ label: f });
         },
         removeEdge() {
-          const p = o();
-          if (!p)
+          const f = o();
+          if (!f)
             return { applied: !1, reason: "no-selection" };
           if (typeof d.removeEdges == "function")
-            return d.removeEdges([p.id]), { applied: !0 };
-          const g = d.edges?.findIndex((m) => m.id === p.id) ?? -1;
+            return d.removeEdges([f.id]), { applied: !0 };
+          const g = d.edges?.findIndex((p) => p.id === f.id) ?? -1;
           return g === -1 ? { applied: !1, reason: "no-helper" } : (d.edges.splice(g, 1), { applied: !0 });
         }
       }, u = e.addScopeToNode(i, {
@@ -988,15 +991,15 @@ function Ke(e) {
       const r = t;
       r.classList.add("flow-schema-reorderable"), r.style.touchAction = "none";
       let i = !1, d = !1, a = 0, o = 0, c = 0, u = null;
-      const p = () => {
-        const y = r.parentElement;
-        return y ? Array.from(
-          y.querySelectorAll(":scope > .flow-schema-row")
+      const f = () => {
+        const v = r.parentElement;
+        return v ? Array.from(
+          v.querySelectorAll(":scope > .flow-schema-row")
         ) : [];
       }, g = () => {
-        for (const y of p())
-          y.classList.remove("flow-schema-row-drop-target");
-      }, m = (y) => {
+        for (const v of f())
+          v.classList.remove("flow-schema-row-drop-target");
+      }, p = (v) => {
         const A = r.parentElement;
         if (!A) return o;
         const F = Array.from(
@@ -1006,38 +1009,38 @@ function Ke(e) {
         let N = 0;
         for (const R of F) {
           const H = R.getBoundingClientRect();
-          H.top + H.height / 2 < y && N++;
+          H.top + H.height / 2 < v && N++;
         }
         return N;
-      }, b = (y) => {
+      }, b = (v) => {
         g();
-        const A = p();
-        let F = y;
-        y >= o && (F = y + 1);
-        const N = A[F] ?? A[y];
+        const A = f();
+        let F = v;
+        v >= o && (F = v + 1);
+        const N = A[F] ?? A[v];
         N && N !== r && N.classList.add("flow-schema-row-drop-target");
-      }, f = () => {
+      }, m = () => {
         r.style.transform = "", r.classList.remove("flow-schema-row-dragging"), g();
-      }, E = (y) => {
-        if (i || y.button !== void 0 && y.button !== 0) return;
-        i = !0, d = !1, a = y.clientY, u = y.pointerId ?? null, o = p().indexOf(r), c = o, r.classList.add("flow-schema-row-dragging");
+      }, y = (v) => {
+        if (i || v.button !== void 0 && v.button !== 0) return;
+        i = !0, d = !1, a = v.clientY, u = v.pointerId ?? null, o = f().indexOf(r), c = o, r.classList.add("flow-schema-row-dragging");
         try {
           u !== null && typeof r.setPointerCapture == "function" && r.setPointerCapture(u);
         } catch {
         }
-        document.addEventListener("pointermove", v), document.addEventListener("pointerup", I), document.addEventListener("pointercancel", I);
-      }, v = (y) => {
+        document.addEventListener("pointermove", E), document.addEventListener("pointerup", S), document.addEventListener("pointercancel", S);
+      }, E = (v) => {
         if (!i) return;
-        const A = y.clientY - a;
-        !d && Math.abs(A) > Be && (d = !0), r.style.transform = `translateY(${A}px)`, d && (c = m(y.clientY), b(c));
-      }, I = (y) => {
+        const A = v.clientY - a;
+        !d && Math.abs(A) > Be && (d = !0), r.style.transform = `translateY(${A}px)`, d && (c = p(v.clientY), b(c));
+      }, S = (v) => {
         if (!i) return;
         const A = d, F = c, N = o;
         try {
           u !== null && typeof r.releasePointerCapture == "function" && typeof r.hasPointerCapture == "function" && r.hasPointerCapture(u) && r.releasePointerCapture(u);
         } catch {
         }
-        if (document.removeEventListener("pointermove", v), document.removeEventListener("pointerup", I), document.removeEventListener("pointercancel", I), i = !1, u = null, f(), !A)
+        if (document.removeEventListener("pointermove", E), document.removeEventListener("pointerup", S), document.removeEventListener("pointercancel", S), i = !1, u = null, m(), !A)
           return;
         const R = (C) => {
           C.stopImmediatePropagation(), C.stopPropagation(), C.preventDefault();
@@ -1058,16 +1061,16 @@ function Ke(e) {
         if (!L || typeof L.reorderFields != "function") return;
         const h = (L.nodes ?? []).find((C) => C?.id === $)?.data?.fields ?? [];
         if (!Array.isArray(h) || h.length < 2) return;
-        const S = h.map((C) => C.name);
-        if (N < 0 || N >= S.length) return;
-        const [T] = S.splice(N, 1), D = Math.max(0, Math.min(F, S.length));
-        S.splice(D, 0, T), !S.every(
+        const I = h.map((C) => C.name);
+        if (N < 0 || N >= I.length) return;
+        const [T] = I.splice(N, 1), D = Math.max(0, Math.min(F, I.length));
+        I.splice(D, 0, T), !I.every(
           (C, q) => h[q]?.name === C
-        ) && L.reorderFields($, S);
+        ) && L.reorderFields($, I);
       };
-      r.addEventListener("pointerdown", E), n(() => {
+      r.addEventListener("pointerdown", y), n(() => {
         try {
-          r.removeEventListener("pointerdown", E), typeof document < "u" && (document.removeEventListener("pointermove", v), document.removeEventListener("pointerup", I), document.removeEventListener("pointercancel", I)), r.classList.remove("flow-schema-reorderable"), r.classList.remove("flow-schema-row-dragging"), g(), r.style.transform = "", r.style.touchAction = "";
+          r.removeEventListener("pointerdown", y), typeof document < "u" && (document.removeEventListener("pointermove", E), document.removeEventListener("pointerup", S), document.removeEventListener("pointercancel", S)), r.classList.remove("flow-schema-reorderable"), r.classList.remove("flow-schema-row-dragging"), g(), r.style.transform = "", r.style.touchAction = "";
         } catch {
         }
       });
@@ -1103,10 +1106,10 @@ function Ge(e, t) {
   })();
   return a ? (a.focus(), !0) : !1;
 }
-function We(e) {
+function Je(e) {
   e.click();
 }
-function ze(e) {
+function We(e) {
   e.directive(
     "schema-keyboard-nav",
     (t, s, { effect: n, cleanup: r }) => {
@@ -1129,7 +1132,7 @@ function ze(e) {
           return;
         }
         if (o === "Enter" || o === " ") {
-          a.preventDefault(), We(i);
+          a.preventDefault(), Je(i);
           return;
         }
         if (o === "Escape") {
@@ -1147,7 +1150,7 @@ function ze(e) {
   );
 }
 function je(e) {
-  e && typeof e.directive == "function" && (He(e), _e(e), Pe(e), Ke(e), ze(e)), ce("schema", {
+  e && typeof e.directive == "function" && (He(e), _e(e), Pe(e), Ke(e), We(e)), ce("schema", {
     setup(t) {
       !t.el && t._container && (t.el = t._container), t.addField = function(s, n) {
         return me(this, s, n);
@@ -1177,14 +1180,14 @@ function je(e) {
 }
 export {
   me as addField,
-  Je as attachSchemaHistory,
+  ze as attachSchemaHistory,
   je as default,
   be as diffSchemas,
   ie as inferReferences,
   Pe as registerEdgeInspectorDirective,
   He as registerNodeInspectorDirective,
   _e as registerRowInspectorDirective,
-  ze as registerSchemaKeyboardNavDirective,
+  We as registerSchemaKeyboardNavDirective,
   Ke as registerSchemaReorderableDirective,
   he as removeField,
   ge as renameField,
