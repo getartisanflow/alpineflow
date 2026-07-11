@@ -22,6 +22,45 @@ export function buildNodeMap(nodes: FlowNode[]): Map<string, FlowNode> {
 }
 
 /**
+ * Reconcile a parent→children-ids index in place against the current node list.
+ *
+ * Only keys whose child list actually changed are written, and keys whose
+ * children have all left are deleted. When `target` is an Alpine-reactive Map,
+ * appending or moving an UNRELATED node therefore produces zero writes, so node
+ * effects that read a single parent's entry (`target.get(id)`) don't re-run.
+ * This replaces the previous per-effect `nodes.some(n => n.parentId === id)`
+ * scan — each of N node effects subscribed to the whole array and scanned it
+ * (O(N) subscriptions per effect, O(N²) proxied reads on any array change).
+ */
+export function reconcileChildrenIndex(
+  target: Map<string, string[]>,
+  nodes: FlowNode[],
+): void {
+  const next = new Map<string, string[]>();
+  for (const node of nodes) {
+    if (node.parentId) {
+      const list = next.get(node.parentId);
+      if (list) {
+        list.push(node.id);
+      } else {
+        next.set(node.parentId, [node.id]);
+      }
+    }
+  }
+  // Delete keys that no longer have any children.
+  for (const key of target.keys()) {
+    if (!next.has(key)) target.delete(key);
+  }
+  // Upsert only the keys whose child list changed.
+  for (const [key, list] of next) {
+    const prev = target.get(key);
+    if (!prev || prev.length !== list.length || prev.some((id, i) => id !== list[i])) {
+      target.set(key, list);
+    }
+  }
+}
+
+/**
  * Walk the parentId chain and sum positions to get the absolute flow-space
  * position of a node. Iterative with a visited-set cycle guard.
  */

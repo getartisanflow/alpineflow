@@ -47,6 +47,7 @@ import { attachLongPress } from '../../core/long-press';
 import { getNodesInRect, getNodesFullyInRect } from '../../core/geometry';
 import {
   buildNodeMap,
+  reconcileChildrenIndex,
   getAbsolutePosition as getAbsolutePositionUtil,
   toAbsoluteNodes,
   sortNodesTopological,
@@ -301,6 +302,13 @@ export function registerFlowCanvas(Alpine: Alpine) {
     /** Cleanup function for touch selection mode listeners */
     _touchSelectionCleanup: null as (() => void) | null,
     _nodeMap: new Map<string, FlowNode>(),
+    /**
+     * Reactive parent-id → child-ids index, reconciled in `_rebuildNodeMap`.
+     * Lets each node effect ask "do I have children?" via an O(1) keyed lookup
+     * instead of scanning the whole nodes array (which subscribed every node
+     * effect to the entire array — O(N²) on any array change).
+     */
+    _childrenIds: new Map<string, string[]>(),
     /** Stores each node's originally configured dimensions (before layout stretch). */
     _initialDimensions: new Map<string, Dimensions>(),
     _edgeMap: new Map<string, FlowEdge>(),
@@ -436,6 +444,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
     _rebuildNodeMap() {
       this._nodeMap = buildNodeMap(this.nodes);
+      reconcileChildrenIndex(this._childrenIds, this.nodes);
     },
 
     _rebuildEdgeMap() {

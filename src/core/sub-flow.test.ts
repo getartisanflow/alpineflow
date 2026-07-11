@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildNodeMap,
+  reconcileChildrenIndex,
   getAbsolutePosition,
   toAbsoluteNode,
   toAbsoluteNodes,
@@ -41,6 +42,46 @@ describe('buildNodeMap', () => {
     const dup: FlowNode = { id: 'a', position: { x: 999, y: 999 }, data: {} };
     const map = buildNodeMap([nodeA, dup]);
     expect(map.get('a')).toBe(dup);
+  });
+});
+
+// ── reconcileChildrenIndex ──────────────────────────────────────────────────
+
+describe('reconcileChildrenIndex', () => {
+  const n = (id: string, parentId?: string): FlowNode =>
+    ({ id, position: { x: 0, y: 0 }, data: {}, ...(parentId ? { parentId } : {}) }) as FlowNode;
+
+  it('maps each parent to its child ids in document order; leaves childless nodes absent', () => {
+    const idx = new Map<string, string[]>();
+    reconcileChildrenIndex(idx, [n('p'), n('c1', 'p'), n('c2', 'p'), n('leaf')]);
+    expect(idx.get('p')).toEqual(['c1', 'c2']);
+    expect(idx.has('leaf')).toBe(false);
+  });
+
+  it('leaves an unchanged parent key as the SAME array reference (no reactive write)', () => {
+    const idx = new Map<string, string[]>();
+    reconcileChildrenIndex(idx, [n('p'), n('c1', 'p')]);
+    const before = idx.get('p');
+    // Append an unrelated childless node — p's child list is unchanged, so its
+    // entry must not be rewritten (a reactive Map would otherwise re-notify).
+    reconcileChildrenIndex(idx, [n('p'), n('c1', 'p'), n('stray')]);
+    expect(idx.get('p')).toBe(before);
+  });
+
+  it('replaces a parent key array when its children change', () => {
+    const idx = new Map<string, string[]>();
+    reconcileChildrenIndex(idx, [n('p'), n('c1', 'p')]);
+    const before = idx.get('p');
+    reconcileChildrenIndex(idx, [n('p'), n('c1', 'p'), n('c2', 'p')]);
+    expect(idx.get('p')).not.toBe(before);
+    expect(idx.get('p')).toEqual(['c1', 'c2']);
+  });
+
+  it('deletes a parent key once all its children leave', () => {
+    const idx = new Map<string, string[]>();
+    reconcileChildrenIndex(idx, [n('p'), n('c1', 'p')]);
+    reconcileChildrenIndex(idx, [n('p')]); // c1 reparented away
+    expect(idx.has('p')).toBe(false);
   });
 });
 

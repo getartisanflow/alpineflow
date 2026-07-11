@@ -53,6 +53,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
 
     // === Maps & caches ===
     _nodeMap: new Map<string, FlowNode>(),
+    _childrenIds: new Map<string, string[]>(),
     _initialDimensions: new Map<string, Dimensions>(),
     _edgeMap: new Map<string, FlowEdge>(),
     _validationErrorCache: new Map<string, string[]>(),
