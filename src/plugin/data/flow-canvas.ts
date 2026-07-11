@@ -455,6 +455,14 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._history?.capture({ nodes: this.nodes, edges: this.edges });
     },
 
+    _snapshotHistory(): string | null {
+      return this._history ? this._history.snapshot({ nodes: this.nodes, edges: this.edges }) : null;
+    },
+
+    _commitHistory(snapshot: string | null) {
+      if (snapshot !== null) this._history?.commit(snapshot);
+    },
+
     _suspendHistory() {
       this._history?.suspend();
     },
