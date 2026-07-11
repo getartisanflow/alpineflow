@@ -38,6 +38,23 @@ const BLOCKED_ATTRS = new Set(['x-data', 'x-init', 'x-bind', 'href', 'src', 'act
 
 let proximityEdgeCounter = 0;
 
+/**
+ * Commit a deferred drag-history snapshot (taken on pointerdown) — but only if
+ * the pointer actually moved (`didDrag`). d3-drag fires its `start` handler on
+ * every pointerdown, so a plain click-to-select would otherwise push a no-op
+ * undo entry; gating on `didDrag` keeps clicks out of the history stack.
+ * `pendingSnapshot === null` means history was disabled at drag start.
+ */
+export function commitDragHistory(
+  canvas: { _commitHistory?: (snapshot: string | null) => void },
+  didDrag: boolean,
+  pendingSnapshot: string | null,
+): void {
+  if (didDrag && pendingSnapshot !== null) {
+    canvas._commitHistory?.(pendingSnapshot);
+  }
+}
+
 /** Check if the easy-connect modifier key is held. */
 export function isEasyConnectKey(
   e: PointerEvent | { altKey: boolean; metaKey: boolean; shiftKey: boolean },
@@ -129,6 +146,8 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
     ) => {
       let dragInstance: DragInstance | null = null;
       let didDrag = false;
+      // Snapshot taken on drag start; committed on drag end only if didDrag.
+      let pendingDragSnapshot: string | null = null;
       let dragStartSelected = false;
       let groupDragStartPositions: Map<string, { x: number; y: number }> | null = null;
       let autoPan: AutoPanInstance | null = null;
@@ -516,7 +535,9 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                 ?.classList.remove('flow-node-drop-target');
             }
             dropTargetId = null;
-            canvas._captureHistory?.();
+            // Defer history capture: snapshot now, commit on drag end only if
+            // the node actually moved (a plain click must not push an entry).
+            pendingDragSnapshot = canvas._snapshotHistory?.() ?? null;
             debug('drag', `Node "${nodeId}" drag start`, position);
             const n = canvas.getNode(nodeId);
             if (n) {
@@ -1307,6 +1328,10 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
               }
 
               groupDragStartPositions = null;
+              // This branch commits a real node-state mutation (reparent/reorder),
+              // so commit the deferred snapshot before returning.
+              commitDragHistory(canvas, didDrag, pendingDragSnapshot);
+              pendingDragSnapshot = null;
               didDrag = false;
               return; // Skip normal onDragEnd logic
             }
@@ -1421,6 +1446,10 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
             }
 
             groupDragStartPositions = null;
+            // Commit the deferred history snapshot only if the node actually
+            // moved; a plain click leaves it uncommitted.
+            commitDragHistory(canvas, didDrag, pendingDragSnapshot);
+            pendingDragSnapshot = null;
             // Reset so the next click isn't treated as a drag.
             // d3-drag already suppresses the click event immediately
             // after a real drag, so this is safe.
