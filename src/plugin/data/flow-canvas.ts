@@ -756,8 +756,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
             if (cursorThrottled) return;
             cursorThrottled = true;
             const rect = container.getBoundingClientRect();
-            const x = (e.clientX - rect.left - this.viewport.x) / this.viewport.zoom;
-            const y = (e.clientY - rect.top - this.viewport.y) / this.viewport.zoom;
+            // Live viewport: reactive `viewport` lags a frame behind during zoom.
+            const liveVp = this._viewportLive ?? this.viewport;
+            const x = (e.clientX - rect.left - liveVp.x) / liveVp.zoom;
+            const y = (e.clientY - rect.top - liveVp.y) / liveVp.zoom;
             collabAwareness.updateCursor({ x, y });
             setTimeout(() => { cursorThrottled = false; }, throttleMs);
           };

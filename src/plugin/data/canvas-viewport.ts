@@ -150,20 +150,24 @@ export function createViewportMixin(ctx: CanvasContext) {
      * Zoom in by `ZOOM_STEP_FACTOR`, clamped to `maxZoom`.
      */
     zoomIn(options?: { duration?: number }): void {
+      // Base off the live viewport: reactive `viewport` settles a frame late, so
+      // two relative ops in one tick would otherwise both read the same stale base.
+      const vp = ctx._viewportLive ?? ctx.viewport;
       const maxZoom = ctx._config.maxZoom ?? 2;
-      const newZoom = Math.min(ctx.viewport.zoom * ZOOM_STEP_FACTOR, maxZoom);
-      debug('viewport', 'zoomIn', { from: ctx.viewport.zoom, to: newZoom });
-      ctx._panZoom?.setViewport({ ...ctx.viewport, zoom: newZoom }, options);
+      const newZoom = Math.min(vp.zoom * ZOOM_STEP_FACTOR, maxZoom);
+      debug('viewport', 'zoomIn', { from: vp.zoom, to: newZoom });
+      ctx._panZoom?.setViewport({ ...vp, zoom: newZoom }, options);
     },
 
     /**
      * Zoom out by `ZOOM_STEP_FACTOR`, clamped to `minZoom`.
      */
     zoomOut(options?: { duration?: number }): void {
+      const vp = ctx._viewportLive ?? ctx.viewport;
       const minZoom = ctx._config.minZoom ?? 0.5;
-      const newZoom = Math.max(ctx.viewport.zoom / ZOOM_STEP_FACTOR, minZoom);
-      debug('viewport', 'zoomOut', { from: ctx.viewport.zoom, to: newZoom });
-      ctx._panZoom?.setViewport({ ...ctx.viewport, zoom: newZoom }, options);
+      const newZoom = Math.max(vp.zoom / ZOOM_STEP_FACTOR, minZoom);
+      debug('viewport', 'zoomOut', { from: vp.zoom, to: newZoom });
+      ctx._panZoom?.setViewport({ ...vp, zoom: newZoom }, options);
     },
 
     /**
@@ -173,7 +177,7 @@ export function createViewportMixin(ctx: CanvasContext) {
     setCenter(x: number, y: number, zoom?: number, options?: { duration?: number }): void {
       const el = ctx._container;
       if (!el) return;
-      const z = zoom ?? ctx.viewport.zoom;
+      const z = zoom ?? (ctx._viewportLive ?? ctx.viewport).zoom;
       const vpX = el.clientWidth / 2 - x * z;
       const vpY = el.clientHeight / 2 - y * z;
       debug('viewport', 'setCenter', { x, y, zoom: z });
@@ -184,9 +188,10 @@ export function createViewportMixin(ctx: CanvasContext) {
      * Pan the viewport by a delta `(dx, dy)`.
      */
     panBy(dx: number, dy: number, options?: { duration?: number }): void {
+      const vp = ctx._viewportLive ?? ctx.viewport;
       debug('viewport', 'panBy', { dx, dy });
       ctx._panZoom?.setViewport(
-        { x: ctx.viewport.x + dx, y: ctx.viewport.y + dy, zoom: ctx.viewport.zoom },
+        { x: vp.x + dx, y: vp.y + dy, zoom: vp.zoom },
         options,
       );
     },

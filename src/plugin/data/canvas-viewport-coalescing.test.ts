@@ -117,6 +117,35 @@ describe('viewport frame coalescing', () => {
     expect(changes.length).toBe(1); // no second flush
   });
 
+  it('relative viewport ops compound within one tick by reading the live base', () => {
+    const canvas = realCanvas({ background: 'dots', maxZoom: 100 });
+    canvas._container = document.createElement('div');
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+      getPropertyValue: () => '20px',
+    } as unknown as CSSStyleDeclaration);
+    // d3-zoom's duration-0 setViewport applies the transform synchronously,
+    // updating the live viewport before the call returns.
+    canvas._panZoom = {
+      setViewport: (vp: any) => {
+        const cur = canvas._viewportLive ?? canvas.viewport;
+        canvas._onViewportTransform({
+          x: vp.x ?? cur.x,
+          y: vp.y ?? cur.y,
+          zoom: vp.zoom ?? cur.zoom,
+        });
+      },
+    };
+
+    canvas.zoomIn();
+    const afterOne = canvas._viewportLive.zoom;
+    canvas.zoomIn();
+    const afterTwo = canvas._viewportLive.zoom;
+
+    expect(afterOne).toBeGreaterThan(1);
+    expect(afterTwo).toBeGreaterThan(afterOne); // compounded, not collapsed to one step
+    expect(afterTwo / afterOne).toBeCloseTo(afterOne, 5); // equal ratio per step
+  });
+
   it('emits viewport-move once per frame only when a user move occurred, then resets the flag', () => {
     const { canvas, container } = makeCanvas();
     const moves: any[] = [];
