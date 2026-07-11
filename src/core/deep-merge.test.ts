@@ -140,4 +140,22 @@ describe('mergeEntitiesById', () => {
     const merged = mergeEntitiesById([{ id: 'a' } as any], [{ id: 'b' } as any]);
     expect(merged.map((e) => e.id)).toEqual(['b']);
   });
+
+  it('ignores __proto__ to prevent prototype pollution', () => {
+    const cur: any = { id: 'a' };
+    // JSON.parse creates an OWN "__proto__" data property; the merge copy loop
+    // must not let a bracket assignment invoke the __proto__ setter.
+    const malicious = JSON.parse('{"id":"a","__proto__":{"polluted":true}}');
+    mergeEntitiesById([cur], [malicious]);
+    expect(Object.getPrototypeOf(cur)).toBe(Object.prototype); // prototype not swapped
+    expect(cur.polluted).toBeUndefined();
+    expect(({} as any).polluted).toBeUndefined();
+  });
+
+  it('ignores constructor/prototype keys during merge', () => {
+    const cur: any = { id: 'a' };
+    mergeEntitiesById([cur], [{ id: 'a', constructor: { polluted: true }, prototype: { x: 1 } } as any]);
+    expect(cur.constructor).toBe(Object); // not shadowed
+    expect(cur.prototype).toBeUndefined();
+  });
 });

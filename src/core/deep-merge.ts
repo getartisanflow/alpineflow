@@ -84,7 +84,11 @@ export function mergeEntitiesById<T extends { id: string }>(
       }
     }
     for (const [key, value] of Object.entries(inc)) {
-      if (key === 'id') continue;
+      // Guard against prototype pollution (mirrors deepMerge): a bracket
+      // assignment to `__proto__` would invoke the prototype setter.
+      if (key === 'id' || key === '__proto__' || key === 'constructor' || key === 'prototype') {
+        continue;
+      }
       if (!jsonEqual((cur as Record<string, unknown>)[key], value)) {
         (cur as Record<string, unknown>)[key] = value;
       }

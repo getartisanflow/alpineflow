@@ -100,10 +100,17 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       const node = readNode() as (NodeRef & { id?: unknown }) | null;
       const data = node?.data;
       if (!data) {
+        // Tear the rows down explicitly. Only individual rows carry Alpine's
+        // init marker (initTree is per-row), so removing the unmarked bodyEl
+        // would NOT cascade Alpine's auto-cleanup to them — the row scopes would
+        // leak, still subscribed to reactive state.
+        for (const row of rowByName.values()) {
+          Alpine.destroyTree(row);
+        }
+        rowByName.clear();
         clearChildren(host);
         headerEl = null;
         bodyEl = null;
-        rowByName.clear();
         return;
       }
 

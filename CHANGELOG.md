@@ -27,7 +27,7 @@ Stops the undo/redo stack from filling with no-op snapshots and roughly halves r
 Rebuilds the undo/redo *restore* path (the capture side is Workstream 1). Undo/redo, `fromObject`, and the schema addon now restore state by **merging into the existing reactive node/edge objects** instead of replacing the `nodes`/`edges` arrays wholesale — surviving ids keep their object identity, so only genuinely-changed entities re-run their effects (no full schema re-stamp, no double edge re-measure) and live Alpine scopes stay attached. This also fixes a cluster of correctness bugs.
 
 **Breaking / Behavior Changes**
-- **Undo/redo now emit a `restore` event.** `undo()` / `redo()` dispatch `flow-restore` with `{ source: 'undo' | 'redo' }` (previously they mutated state silently). Wire-bridge and collaboration observers are now notified of undo/redo, matching `fromObject`, which already emitted `restore`.
+- **Undo/redo now emit a `restore` event.** `undo()` / `redo()` dispatch `flow-restore` with `{ nodes, edges, source: 'undo' | 'redo' }` (previously they mutated state silently). The `nodes`/`edges` payload matches `fromObject`'s existing `restore` event (which carries `{ nodes, edges, viewport }`), plus a `source` tag so consumers can distinguish undo/redo; wire-bridge and collaboration observers are now notified of undo/redo the same way they are notified of `fromObject`.
 
 **Performance**
 - Undo / redo / `fromObject` / `schemaFromJSON` restore by identity-preserving merge (`mergeEntitiesById`) — property writes are skipped when deep-equal, so Alpine effects re-run only for real changes. Array identity is kept via `splice`.

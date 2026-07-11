@@ -463,7 +463,7 @@ describe('createHistoryMixin — identity-preserving undo/redo', () => {
     expect(ctx.selectedNodes.size).toBe(0);
   });
 
-  it('undo emits a restore event tagged with its source', () => {
+  it('undo emits a restore event tagged with its source and carrying the restored state', () => {
     const history = new FlowHistory();
     const ctx = mockCtx({ _history: history, nodes: [makeNode('n1')] });
     const mixin = createHistoryMixin(ctx);
@@ -472,7 +472,10 @@ describe('createHistoryMixin — identity-preserving undo/redo', () => {
     ctx.nodes = [...ctx.nodes, makeNode('n9')];
     mixin.undo();
 
-    expect(ctx._emit).toHaveBeenCalledWith('restore', { source: 'undo' });
+    expect(ctx._emit).toHaveBeenCalledWith(
+      'restore',
+      expect.objectContaining({ source: 'undo', nodes: ctx.nodes, edges: ctx.edges }),
+    );
   });
 
   it('redo emits a restore event tagged with source redo', () => {
@@ -485,7 +488,10 @@ describe('createHistoryMixin — identity-preserving undo/redo', () => {
     mixin.undo();
     mixin.redo();
 
-    expect(ctx._emit).toHaveBeenCalledWith('restore', { source: 'redo' });
+    expect(ctx._emit).toHaveBeenCalledWith(
+      'restore',
+      expect.objectContaining({ source: 'redo' }),
+    );
   });
 
   it('fromObject preserves identity for surviving edge ids', () => {

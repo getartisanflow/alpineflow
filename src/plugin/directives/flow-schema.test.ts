@@ -359,4 +359,22 @@ describe('x-flow-schema directive', () => {
     expect(after).toHaveLength(before.length);
     after.forEach((r) => expect(before).toContain(r));
   });
+
+  it('destroys tracked row scopes when node data goes away (no orphaned scopes)', async () => {
+    const { target, scope } = mountReactive({
+      label: 'User',
+      fields: [{ name: 'id', type: 'uuid' }],
+    });
+    const row = target.querySelector('.flow-schema-row') as HTMLElement;
+    const destroySpy = vi.spyOn(Alpine, 'destroyTree');
+    // The node loses its data (e.g. reactive clear). The rows must be torn down,
+    // not merely detached — a detached-but-alive row keeps its handle/row-select
+    // directives subscribed to reactive state forever.
+    scope.node.data = null;
+    await nextFlush();
+    expect(destroySpy).toHaveBeenCalledWith(row);
+    expect(target.querySelectorAll('.flow-schema-row').length).toBe(0);
+    expect(target.querySelector('.flow-schema-header')).toBeNull();
+    destroySpy.mockRestore();
+  });
 });
