@@ -277,6 +277,22 @@ describe('attachSchemaHistory', () => {
         h.dispose();
     });
 
+    it('a net-no-op batch does not create a duplicate undo step', () => {
+        const canvas = makeCanvas();
+        const h = attachSchemaHistory(canvas);
+
+        h.batch(() => {
+            addField(canvas as any, 'user', { name: 'tmp', type: 'text' } as any);
+            removeField(canvas as any, 'user', 'tmp');
+        });
+
+        // The batch returns the graph to its pre-batch (floor) state, so the
+        // deduped commit must not push a duplicate-of-top entry.
+        expect(canvas.nodes[0].data.fields.map((f: any) => f.name)).toEqual(['id']);
+        expect(h.canUndo).toBe(false);
+        h.dispose();
+    });
+
     it('captures removals and restores fields with their original order on undo', () => {
         const canvas = makeCanvas();
         // Seed a second field first (pre-attach) so removal + undo restores it.

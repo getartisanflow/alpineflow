@@ -459,7 +459,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
       return this._history ? this._history.snapshot({ nodes: this.nodes, edges: this.edges }) : null;
     },
 
-    _commitHistory(snapshot: string | null) {
+    _commitHistory(snapshot: string | null): void {
       if (snapshot !== null) this._history?.commit(snapshot);
     },
 
