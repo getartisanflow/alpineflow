@@ -162,6 +162,113 @@ function buildVisibilityGraph(
 
 // ── Dijkstra ─────────────────────────────────────────────────────────────────
 
+/**
+ * Binary min-heap keyed by an external distance array. Indices (into
+ * `graphPoints`) are stored; ordering reads `dist[index]`. Decrease-key is
+ * emulated with lazy insertion — a node may appear multiple times, and stale
+ * entries are skipped via the caller's `visited` set on pop.
+ */
+class MinHeap {
+  private items: number[] = [];
+
+  constructor(private dist: Float64Array) {}
+
+  get size(): number {
+    return this.items.length;
+  }
+
+  push(i: number): void {
+    this.items.push(i);
+    let c = this.items.length - 1;
+    while (c > 0) {
+      const p = (c - 1) >> 1;
+      if (this.dist[this.items[p]] <= this.dist[this.items[c]]) break;
+      [this.items[p], this.items[c]] = [this.items[c], this.items[p]];
+      c = p;
+    }
+  }
+
+  pop(): number | undefined {
+    const n = this.items.length;
+    if (n === 0) return undefined;
+    const top = this.items[0];
+    const last = this.items.pop()!;
+    if (n > 1) {
+      this.items[0] = last;
+      let p = 0;
+      for (;;) {
+        const l = 2 * p + 1;
+        const r = l + 1;
+        let m = p;
+        if (l < this.items.length && this.dist[this.items[l]] < this.dist[this.items[m]]) m = l;
+        if (r < this.items.length && this.dist[this.items[r]] < this.dist[this.items[m]]) m = r;
+        if (m === p) break;
+        [this.items[p], this.items[m]] = [this.items[m], this.items[p]];
+        p = m;
+      }
+    }
+    return top;
+  }
+}
+
+/**
+ * Build orthogonal adjacency from scanline geometry: along each shared x-line
+ * (and y-line) connect only *consecutive* points whose joining segment is
+ * unobstructed. Because the weight is additive Manhattan distance, chaining
+ * through the intermediate collinear points costs exactly the same as a direct
+ * non-consecutive hop, so shortest-path cost is preserved while the neighbour
+ * scan drops from O(N) per pop to the handful of segments that actually touch
+ * each point. `point.index` equals the array position (see buildVisibilityGraph
+ * and findRoute), so it doubles as the adjacency index.
+ */
+function buildAdjacency(points: RoutePoint[], obstacles: Rect[]): number[][] {
+  const adj: number[][] = points.map(() => []);
+  const byX = new Map<number, RoutePoint[]>();
+  const byY = new Map<number, RoutePoint[]>();
+
+  for (const p of points) {
+    let xs = byX.get(p.x);
+    if (!xs) {
+      xs = [];
+      byX.set(p.x, xs);
+    }
+    xs.push(p);
+
+    let ys = byY.get(p.y);
+    if (!ys) {
+      ys = [];
+      byY.set(p.y, ys);
+    }
+    ys.push(p);
+  }
+
+  for (const line of byX.values()) {
+    line.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1];
+      const b = line[i];
+      if (!isVSegmentBlocked(a.x, a.y, b.y, obstacles)) {
+        adj[a.index].push(b.index);
+        adj[b.index].push(a.index);
+      }
+    }
+  }
+
+  for (const line of byY.values()) {
+    line.sort((a, b) => a.x - b.x);
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1];
+      const b = line[i];
+      if (!isHSegmentBlocked(a.x, b.x, a.y, obstacles)) {
+        adj[a.index].push(b.index);
+        adj[b.index].push(a.index);
+      }
+    }
+  }
+
+  return adj;
+}
+
 function dijkstra(
   source: RoutePoint,
   target: RoutePoint,
@@ -173,22 +280,14 @@ function dijkstra(
   const prev = new Int32Array(n).fill(-1);
   const visited = new Uint8Array(n);
 
+  const adj = buildAdjacency(graphPoints, obstacles);
+
   dist[source.index] = 0;
+  const heap = new MinHeap(dist);
+  heap.push(source.index);
 
-  // Simple priority queue via sorted array (adequate for small graphs)
-  // For the typical number of graph points (<200) this outperforms a heap.
-  const queue: number[] = [source.index];
-
-  while (queue.length > 0) {
-    // Find minimum distance node in queue
-    let minIdx = 0;
-    for (let i = 1; i < queue.length; i++) {
-      if (dist[queue[i]] < dist[queue[minIdx]]) {
-        minIdx = i;
-      }
-    }
-    const uIdx = queue[minIdx];
-    queue.splice(minIdx, 1);
+  while (heap.size > 0) {
+    const uIdx = heap.pop()!;
 
     if (visited[uIdx]) continue;
     visited[uIdx] = 1;
@@ -196,33 +295,19 @@ function dijkstra(
     if (uIdx === target.index) break;
 
     const u = graphPoints[uIdx];
+    const du = dist[uIdx];
 
-    // Check all other points for orthogonal connectivity
-    for (let i = 0; i < n; i++) {
-      if (visited[i]) continue;
+    for (const vIdx of adj[uIdx]) {
+      if (visited[vIdx]) continue;
 
-      const v = graphPoints[i];
-
-      // Only connect orthogonally (same x or same y)
-      if (u.x !== v.x && u.y !== v.y) continue;
-
-      // Check if the segment is blocked by any obstacle
-      let blocked = false;
-      if (u.x === v.x) {
-        blocked = isVSegmentBlocked(u.x, u.y, v.y, obstacles);
-      } else {
-        blocked = isHSegmentBlocked(u.x, v.x, u.y, obstacles);
-      }
-
-      if (blocked) continue;
-
+      const v = graphPoints[vIdx];
       const weight = Math.abs(v.x - u.x) + Math.abs(v.y - u.y);
-      const newDist = dist[uIdx] + weight;
+      const newDist = du + weight;
 
-      if (newDist < dist[i]) {
-        dist[i] = newDist;
-        prev[i] = uIdx;
-        queue.push(i);
+      if (newDist < dist[vIdx]) {
+        dist[vIdx] = newDist;
+        prev[vIdx] = uIdx;
+        heap.push(vIdx); // lazy decrease-key; the visited skip drops stale pops
       }
     }
   }

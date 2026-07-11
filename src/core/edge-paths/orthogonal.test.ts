@@ -1,5 +1,33 @@
 import { describe, it, expect } from 'vitest';
-import { getOrthogonalPath, OBSTACLE_PADDING } from './orthogonal';
+import { getOrthogonalPath, OBSTACLE_PADDING, findRoute, type RoutePoint } from './orthogonal';
+
+interface TestRect { x: number; y: number; width: number; height: number }
+
+/** Manhattan length of a polyline — routing cost is invariant to waypoint ties. */
+function manhattanLength(points: RoutePoint[]): number {
+  let len = 0;
+  for (let i = 1; i < points.length; i++) {
+    len += Math.abs(points[i].x - points[i - 1].x) + Math.abs(points[i].y - points[i - 1].y);
+  }
+  return len;
+}
+
+/** True if the axis-aligned segment a→b passes through any obstacle interior. */
+function segmentHitsObstacle(a: RoutePoint, b: RoutePoint, obstacles: TestRect[]): boolean {
+  const minX = Math.min(a.x, b.x), maxX = Math.max(a.x, b.x);
+  const minY = Math.min(a.y, b.y), maxY = Math.max(a.y, b.y);
+  for (const r of obstacles) {
+    if (maxX > r.x && minX < r.x + r.width && maxY > r.y && minY < r.y + r.height) return true;
+  }
+  return false;
+}
+
+function routeHitsAny(route: RoutePoint[], obstacles: TestRect[]): boolean {
+  for (let i = 1; i < route.length; i++) {
+    if (segmentHitsObstacle(route[i - 1], route[i], obstacles)) return true;
+  }
+  return false;
+}
 
 // ── getOrthogonalPath ────────────────────────────────────────────────────────
 
@@ -132,5 +160,49 @@ describe('getOrthogonalPath', () => {
 
   it('exports OBSTACLE_PADDING constant', () => {
     expect(OBSTACLE_PADDING).toBe(20);
+  });
+});
+
+// ── findRoute: heap + scanline-adjacency Dijkstra (Task 24) ──────────────────
+
+describe('findRoute (heap + scanline adjacency)', () => {
+  // 8×6 grid of 48 obstacles — thousands of visibility-graph points.
+  const denseObstacles: TestRect[] = Array.from({ length: 48 }, (_, i) => ({
+    x: (i % 8) * 150,
+    y: Math.floor(i / 8) * 120,
+    width: 100,
+    height: 80,
+  }));
+
+  // Recorded from the pre-refactor (linear-PQ + all-pairs) implementation.
+  // Shortest-path COST is invariant; only tie-broken waypoints may differ.
+  const KNOWN_LENGTH = 2100;
+
+  it('finds a route of equal length on a dense obstacle field', () => {
+    const route = findRoute(-50, -50, 'right', 1250, 750, 'left', denseObstacles);
+    expect(route).not.toBeNull();
+    expect(manhattanLength(route!)).toBe(KNOWN_LENGTH);
+  });
+
+  it('every segment of the dense route clears every obstacle', () => {
+    const route = findRoute(-50, -50, 'right', 1250, 750, 'left', denseObstacles);
+    expect(route).not.toBeNull();
+    expect(routeHitsAny(route!, denseObstacles)).toBe(false);
+  });
+
+  it('routes around a single obstacle with the expected cost', () => {
+    const route = findRoute(0, 30, 'right', 300, 30, 'left', [{ x: 100, y: 0, width: 80, height: 60 }]);
+    expect(route).not.toBeNull();
+    expect(manhattanLength(route!)).toBe(400);
+    expect(routeHitsAny(route!, [{ x: 100, y: 0, width: 80, height: 60 }])).toBe(false);
+  });
+
+  it('returns null when the target is fully enclosed', () => {
+    // Target boxed in by a ring the router cannot escape.
+    const route = findRoute(
+      -50, -50, 'right', 150, 150, 'left',
+      [{ x: -OBSTACLE_PADDING - 1, y: -OBSTACLE_PADDING - 1, width: 400, height: 400 }],
+    );
+    expect(route).toBeNull();
   });
 });
