@@ -1307,6 +1307,11 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
               }
 
               groupDragStartPositions = null;
+              // Reorder/reparent repositions siblings in the layout container.
+              // Obstacle geometry for avoidant/orthogonal edges is non-reactive
+              // (see flow-edge.ts), so bump the layout tick to re-route edges
+              // that treat those siblings as obstacles.
+              canvas._layoutAnimTick++;
               didDrag = false;
               return; // Skip normal onDragEnd logic
             }

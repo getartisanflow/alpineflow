@@ -202,6 +202,23 @@ describe('x-flow-edge obstacle reactivity (Task 21)', () => {
     expect(counts.count()).toBeGreaterThan(0);
     counts.disconnect();
   });
+
+  it('bumping _layoutAnimTick re-routes the edge (obstacle refresh signal)', async () => {
+    // Obstacle geometry is non-reactive, so the ONLY way an unrelated node's
+    // move (drag-end, resize, reorder) reaches dependent edges is via this tick.
+    const { data, groups, visiblePath } = mountEdges(flatNodes(), [
+      { id: 'e1', source: 'a', target: 'b', type: 'avoidant' },
+    ]);
+    await flush();
+    const counts = observePathD(visiblePath(groups[0]));
+
+    data.getNode('c')!.position.x = 500; // move an obstacle (no re-route yet)
+    data._layoutAnimTick++; // ...then the refresh signal fires
+    await flush();
+
+    expect(counts.count()).toBeGreaterThan(0);
+    counts.disconnect();
+  });
 });
 
 describe('x-flow-edge row-highlight reactivity (Task 22)', () => {

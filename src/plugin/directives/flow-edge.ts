@@ -1094,22 +1094,25 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
 
         // Compute obstacle rects for orthogonal routing (performance-gated).
         //
-        // Obstacle geometry is deliberately non-reactive: the node list and
-        // node map are unwrapped with Alpine.raw so this edge effect does NOT
-        // subscribe to every other node's position/dimensions. Without this, a
-        // single node write re-routes the entire edge graph. `_layoutAnimTick`
-        // (read at the top of this effect) is the refresh signal — drag-end and
-        // layout-animation frames bump it, which re-measures routes against
+        // Obstacle geometry is deliberately non-reactive: it is read from the
+        // raw node list so this edge effect does NOT subscribe to every other
+        // node's position/dimensions. Without this, a single node write
+        // re-routes the entire edge graph. `_layoutAnimTick` (read at the top of
+        // this effect) is the refresh signal — node drag-end, resize, reorder,
+        // and layout-animation frames bump it, which re-measures routes against
         // moved obstacles.
         //
         // NB: `canvas` is Alpine's merged-scope proxy, which Alpine.raw() does
-        // not unwrap; we unwrap the genuine reactive `nodes`/`_nodeMap` objects
-        // instead. Reading `_config.nodeOrigin` tracks a stable key that does
-        // not change on node moves.
+        // not unwrap, so we unwrap the genuine reactive `nodes` array instead.
+        // The parent-lookup map is rebuilt from those raw nodes rather than
+        // reusing `_nodeMap`: Alpine.raw() only unwraps the Map container, whose
+        // stored values would still be reactive proxies, so a parented obstacle
+        // node would otherwise re-subscribe via its parent's position. Reading
+        // `_config.nodeOrigin` tracks a stable key that does not change on moves.
         let obstacleRects: Rect[] | undefined;
         if (resolvedEdgeType === 'orthogonal' || resolvedEdgeType === 'avoidant') {
           const rawNodes = Alpine.raw(canvas.nodes) as FlowNode[];
-          const rawNodeMap = Alpine.raw(canvas._nodeMap) as typeof canvas._nodeMap;
+          const rawNodeMap = new Map<string, FlowNode>(rawNodes.map((n): [string, FlowNode] => [n.id, n]));
           const nodeOrigin = canvas._config?.nodeOrigin;
           obstacleRects = rawNodes
             .filter((n: FlowNode) => n.id !== edge.source && n.id !== edge.target)
