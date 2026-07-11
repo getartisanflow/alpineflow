@@ -1361,6 +1361,11 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
               }
 
               groupDragStartPositions = null;
+              // Reorder/reparent repositions siblings in the layout container.
+              // Obstacle geometry for avoidant/orthogonal edges is non-reactive
+              // (see flow-edge.ts), so bump the layout tick to re-route edges
+              // that treat those siblings as obstacles.
+              canvas._layoutAnimTick++;
               // This branch commits a real node-state mutation (reparent/reorder),
               // so commit the deferred snapshot before returning.
               commitDragHistory(canvas, didDrag, pendingDragSnapshot);
@@ -1479,6 +1484,16 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
             }
 
             groupDragStartPositions = null;
+
+            // Obstacle geometry for avoidant/orthogonal edges is read
+            // non-reactively (see flow-edge.ts), so a dragged node that is an
+            // *obstacle* for other edges does not re-route them through its own
+            // position dependency. Bump the layout tick once the drag settles so
+            // those routes re-measure against the moved obstacle.
+            if (didDrag) {
+              canvas._layoutAnimTick++;
+            }
+
             // Commit the deferred history snapshot only if the node actually
             // moved; a plain click leaves it uncommitted.
             commitDragHistory(canvas, didDrag, pendingDragSnapshot);

@@ -163,6 +163,12 @@ export function registerFlowResizerDirective(Alpine: Alpine) {
             nodeEl.style.width = `${result.dimensions.width}px`;
             nodeEl.style.height = `${result.dimensions.height}px`;
 
+            // Obstacle geometry for avoidant/orthogonal edges is read
+            // non-reactively (see flow-edge.ts), so a resized obstacle node does
+            // not re-route dependent edges on its own. Bump the layout tick each
+            // frame so those routes track the resize live.
+            canvas._layoutAnimTick++;
+
             canvas._emit('node-resize', { node, dimensions: { ...result.dimensions } });
           };
 

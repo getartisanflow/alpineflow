@@ -162,6 +162,113 @@ function buildVisibilityGraph(
 
 // ── Dijkstra ─────────────────────────────────────────────────────────────────
 
+/**
+ * Binary min-heap keyed by an external distance array. Indices (into
+ * `graphPoints`) are stored; ordering reads `dist[index]`. Decrease-key is
+ * emulated with lazy insertion — a node may appear multiple times, and stale
+ * entries are skipped via the caller's `visited` set on pop.
+ */
+class MinHeap {
+  private items: number[] = [];
+
+  constructor(private dist: Float64Array) {}
+
+  get size(): number {
+    return this.items.length;
+  }
+
+  push(i: number): void {
+    this.items.push(i);
+    let c = this.items.length - 1;
+    while (c > 0) {
+      const p = (c - 1) >> 1;
+      if (this.dist[this.items[p]] <= this.dist[this.items[c]]) break;
+      [this.items[p], this.items[c]] = [this.items[c], this.items[p]];
+      c = p;
+    }
+  }
+
+  pop(): number | undefined {
+    const n = this.items.length;
+    if (n === 0) return undefined;
+    const top = this.items[0];
+    const last = this.items.pop()!;
+    if (n > 1) {
+      this.items[0] = last;
+      let p = 0;
+      for (;;) {
+        const l = 2 * p + 1;
+        const r = l + 1;
+        let m = p;
+        if (l < this.items.length && this.dist[this.items[l]] < this.dist[this.items[m]]) m = l;
+        if (r < this.items.length && this.dist[this.items[r]] < this.dist[this.items[m]]) m = r;
+        if (m === p) break;
+        [this.items[p], this.items[m]] = [this.items[m], this.items[p]];
+        p = m;
+      }
+    }
+    return top;
+  }
+}
+
+/**
+ * Build orthogonal adjacency from scanline geometry: along each shared x-line
+ * (and y-line) connect only *consecutive* points whose joining segment is
+ * unobstructed. Because the weight is additive Manhattan distance, chaining
+ * through the intermediate collinear points costs exactly the same as a direct
+ * non-consecutive hop, so shortest-path cost is preserved while the neighbour
+ * scan drops from O(N) per pop to the handful of segments that actually touch
+ * each point. `point.index` equals the array position (see buildVisibilityGraph
+ * and findRoute), so it doubles as the adjacency index.
+ */
+function buildAdjacency(points: RoutePoint[], obstacles: Rect[]): number[][] {
+  const adj: number[][] = points.map(() => []);
+  const byX = new Map<number, RoutePoint[]>();
+  const byY = new Map<number, RoutePoint[]>();
+
+  for (const p of points) {
+    let xs = byX.get(p.x);
+    if (!xs) {
+      xs = [];
+      byX.set(p.x, xs);
+    }
+    xs.push(p);
+
+    let ys = byY.get(p.y);
+    if (!ys) {
+      ys = [];
+      byY.set(p.y, ys);
+    }
+    ys.push(p);
+  }
+
+  for (const line of byX.values()) {
+    line.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1];
+      const b = line[i];
+      if (!isVSegmentBlocked(a.x, a.y, b.y, obstacles)) {
+        adj[a.index].push(b.index);
+        adj[b.index].push(a.index);
+      }
+    }
+  }
+
+  for (const line of byY.values()) {
+    line.sort((a, b) => a.x - b.x);
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1];
+      const b = line[i];
+      if (!isHSegmentBlocked(a.x, b.x, a.y, obstacles)) {
+        adj[a.index].push(b.index);
+        adj[b.index].push(a.index);
+      }
+    }
+  }
+
+  return adj;
+}
+
 function dijkstra(
   source: RoutePoint,
   target: RoutePoint,
@@ -173,22 +280,14 @@ function dijkstra(
   const prev = new Int32Array(n).fill(-1);
   const visited = new Uint8Array(n);
 
+  const adj = buildAdjacency(graphPoints, obstacles);
+
   dist[source.index] = 0;
+  const heap = new MinHeap(dist);
+  heap.push(source.index);
 
-  // Simple priority queue via sorted array (adequate for small graphs)
-  // For the typical number of graph points (<200) this outperforms a heap.
-  const queue: number[] = [source.index];
-
-  while (queue.length > 0) {
-    // Find minimum distance node in queue
-    let minIdx = 0;
-    for (let i = 1; i < queue.length; i++) {
-      if (dist[queue[i]] < dist[queue[minIdx]]) {
-        minIdx = i;
-      }
-    }
-    const uIdx = queue[minIdx];
-    queue.splice(minIdx, 1);
+  while (heap.size > 0) {
+    const uIdx = heap.pop()!;
 
     if (visited[uIdx]) continue;
     visited[uIdx] = 1;
@@ -196,33 +295,19 @@ function dijkstra(
     if (uIdx === target.index) break;
 
     const u = graphPoints[uIdx];
+    const du = dist[uIdx];
 
-    // Check all other points for orthogonal connectivity
-    for (let i = 0; i < n; i++) {
-      if (visited[i]) continue;
+    for (const vIdx of adj[uIdx]) {
+      if (visited[vIdx]) continue;
 
-      const v = graphPoints[i];
-
-      // Only connect orthogonally (same x or same y)
-      if (u.x !== v.x && u.y !== v.y) continue;
-
-      // Check if the segment is blocked by any obstacle
-      let blocked = false;
-      if (u.x === v.x) {
-        blocked = isVSegmentBlocked(u.x, u.y, v.y, obstacles);
-      } else {
-        blocked = isHSegmentBlocked(u.x, v.x, u.y, obstacles);
-      }
-
-      if (blocked) continue;
-
+      const v = graphPoints[vIdx];
       const weight = Math.abs(v.x - u.x) + Math.abs(v.y - u.y);
-      const newDist = dist[uIdx] + weight;
+      const newDist = du + weight;
 
-      if (newDist < dist[i]) {
-        dist[i] = newDist;
-        prev[i] = uIdx;
-        queue.push(i);
+      if (newDist < dist[vIdx]) {
+        dist[vIdx] = newDist;
+        prev[vIdx] = uIdx;
+        heap.push(vIdx); // lazy decrease-key; the visited skip drops stale pops
       }
     }
   }
@@ -333,14 +418,66 @@ function getPathMidpoint(
 
 // ── Shared routing pipeline ──────────────────────────────────────────────────
 
+/** Flow units beyond the endpoint bounding box that the corridor retains. */
+const CORRIDOR_MARGIN = 200;
+
+/** Test-only diagnostics for the most recent findRoute call. */
+const routeDebug = { gridSize: 0, usedFullSet: false };
+
+export function __routeDebugForTests(): { gridSize: number; usedFullSet: boolean } {
+  return { ...routeDebug };
+}
+
+/**
+ * Keep only obstacles whose bounding box intersects the endpoint bounding box
+ * expanded by CORRIDOR_MARGIN. Most routes interact only with nearby obstacles,
+ * so this collapses the scanline grid from every-node to a local neighbourhood.
+ */
+function corridorObstacles(
+  sx: number,
+  sy: number,
+  tx: number,
+  ty: number,
+  obstacles: Rect[],
+): Rect[] {
+  const minX = Math.min(sx, tx) - CORRIDOR_MARGIN;
+  const maxX = Math.max(sx, tx) + CORRIDOR_MARGIN;
+  const minY = Math.min(sy, ty) - CORRIDOR_MARGIN;
+  const maxY = Math.max(sy, ty) + CORRIDOR_MARGIN;
+  return obstacles.filter(
+    (r) => r.x < maxX && r.x + r.width > minX && r.y < maxY && r.y + r.height > minY,
+  );
+}
+
+/** True if any axis-aligned segment of a graph route crosses a padded obstacle. */
+function routeCrossesObstacles(route: RoutePoint[], paddedObstacles: Rect[]): boolean {
+  for (let i = 1; i < route.length; i++) {
+    const a = route[i - 1];
+    const b = route[i];
+    if (a.x === b.x) {
+      if (isVSegmentBlocked(a.x, a.y, b.y, paddedObstacles)) return true;
+    } else if (a.y === b.y) {
+      if (isHSegmentBlocked(a.x, b.x, a.y, paddedObstacles)) return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Find an obstacle-free route from source to target using handle-aware offsets,
  * a visibility graph, and Dijkstra pathfinding.
  *
+ * Obstacles are first pruned to a corridor around the endpoints; the pruned
+ * route is validated against the FULL obstacle set, so pruning that either
+ * fails to find a route (coarser grid) or routes through a dropped obstacle
+ * transparently retries once with the complete set.
+ *
  * Returns simplified waypoints (including actual source/target endpoints) or
  * null if no route can be found.
+ *
+ * Internal — call the memoized {@link findRoute} wrapper instead.
  */
-export function findRoute(
+function computeRoute(
   sourceX: number,
   sourceY: number,
   sourcePosition: HandlePosition,
@@ -357,33 +494,43 @@ export function findRoute(
   const tgtOffX = targetX + tgtDir.x * HANDLE_OFFSET;
   const tgtOffY = targetY + tgtDir.y * HANDLE_OFFSET;
 
-  // Pad obstacles
-  const paddedObstacles = obstacles.map((r) => padRect(r, OBSTACLE_PADDING));
+  // Route against an arbitrary obstacle subset, returning the graph route
+  // (offset → … → offset) computed on its padded scanline grid.
+  const routeAgainst = (subset: Rect[]): RoutePoint[] | null => {
+    const paddedObstacles = subset.map((r) => padRect(r, OBSTACLE_PADDING));
+    const graphPoints = buildVisibilityGraph(srcOffX, srcOffY, tgtOffX, tgtOffY, paddedObstacles);
+    routeDebug.gridSize = graphPoints.length;
 
-  // Build visibility graph between the offset points
-  const graphPoints = buildVisibilityGraph(
-    srcOffX,
-    srcOffY,
-    tgtOffX,
-    tgtOffY,
-    paddedObstacles,
-  );
+    const sourcePoint = graphPoints.find((p) => p.x === srcOffX && p.y === srcOffY);
+    const targetPoint = graphPoints.find((p) => p.x === tgtOffX && p.y === tgtOffY);
+    if (!sourcePoint) {
+      graphPoints.push({ x: srcOffX, y: srcOffY, index: graphPoints.length });
+    }
+    if (!targetPoint) {
+      graphPoints.push({ x: tgtOffX, y: tgtOffY, index: graphPoints.length });
+    }
+    const finalSource = sourcePoint ?? graphPoints[graphPoints.length - (targetPoint ? 1 : 2)];
+    const finalTarget = targetPoint ?? graphPoints[graphPoints.length - 1];
 
-  // Find offset source and target in graph points
-  const sourcePoint = graphPoints.find((p) => p.x === srcOffX && p.y === srcOffY);
-  const targetPoint = graphPoints.find((p) => p.x === tgtOffX && p.y === tgtOffY);
+    return dijkstra(finalSource, finalTarget, graphPoints, paddedObstacles);
+  };
 
-  if (!sourcePoint) {
-    graphPoints.push({ x: srcOffX, y: srcOffY, index: graphPoints.length });
+  const pruned = corridorObstacles(sourceX, sourceY, targetX, targetY, obstacles);
+  const prunedRemovedSome = pruned.length < obstacles.length;
+  routeDebug.usedFullSet = !prunedRemovedSome;
+
+  let route = routeAgainst(pruned);
+
+  // Validate against the full padded set: pruning may fail to route (coarser
+  // grid) or route through an obstacle it dropped. Retry once with everything.
+  if (prunedRemovedSome) {
+    const fullPadded = obstacles.map((r) => padRect(r, OBSTACLE_PADDING));
+    const usable = route !== null && route.length >= 2;
+    if (!usable || routeCrossesObstacles(route as RoutePoint[], fullPadded)) {
+      routeDebug.usedFullSet = true;
+      route = routeAgainst(obstacles);
+    }
   }
-  if (!targetPoint) {
-    graphPoints.push({ x: tgtOffX, y: tgtOffY, index: graphPoints.length });
-  }
-  const finalSource = sourcePoint ?? graphPoints[graphPoints.length - (targetPoint ? 1 : 2)];
-  const finalTarget = targetPoint ?? graphPoints[graphPoints.length - 1];
-
-  // Run Dijkstra between offset points
-  const route = dijkstra(finalSource, finalTarget, graphPoints, paddedObstacles);
 
   if (!route || route.length < 2) return null;
 
@@ -395,6 +542,83 @@ export function findRoute(
   ];
 
   return simplifyPath(fullRoute);
+}
+
+// ── Route memo cache ─────────────────────────────────────────────────────────
+
+const ROUTE_CACHE_MAX = 512;
+const routeCache = new Map<string, RoutePoint[] | null>();
+const cacheStats = {
+  hits: 0,
+  misses: 0,
+  clear(): void {
+    routeCache.clear();
+    this.hits = 0;
+    this.misses = 0;
+  },
+};
+
+/**
+ * Cache key from endpoints + obstacle geometry. Coordinates are rounded to
+ * integers so sub-pixel churn (drag jitter, fractional zoom) stays cache-hot.
+ */
+function routeKey(
+  sx: number,
+  sy: number,
+  sp: HandlePosition,
+  tx: number,
+  ty: number,
+  tp: HandlePosition,
+  obstacles: Rect[],
+): string {
+  let key = `${Math.round(sx)},${Math.round(sy)},${sp}|${Math.round(tx)},${Math.round(ty)},${tp}`;
+  for (const r of obstacles) {
+    key += `|${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)},${Math.round(r.height)}`;
+  }
+  return key;
+}
+
+/**
+ * Memoized {@link computeRoute}. Full-graph passes (undo tick, selection flush)
+ * re-route every edge even when nothing moved; identical (endpoints, obstacles)
+ * inputs return the cached result instead of recomputing.
+ *
+ * The cached array is returned by reference; callers (getOrthogonalPath,
+ * avoidant.ts) only read it. If a future caller mutates the waypoint array,
+ * return a shallow copy on hit.
+ */
+export function findRoute(
+  sourceX: number,
+  sourceY: number,
+  sourcePosition: HandlePosition,
+  targetX: number,
+  targetY: number,
+  targetPosition: HandlePosition,
+  obstacles: Rect[],
+): RoutePoint[] | null {
+  const key = routeKey(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, obstacles);
+
+  if (routeCache.has(key)) {
+    cacheStats.hits++;
+    // LRU touch: re-insert so this key becomes most-recently used.
+    const cached = routeCache.get(key)!;
+    routeCache.delete(key);
+    routeCache.set(key, cached);
+    return cached;
+  }
+
+  cacheStats.misses++;
+  const result = computeRoute(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, obstacles);
+  routeCache.set(key, result);
+  if (routeCache.size > ROUTE_CACHE_MAX) {
+    // Evict least-recently used (first insertion-ordered key).
+    routeCache.delete(routeCache.keys().next().value!);
+  }
+  return result;
+}
+
+export function routeCacheStatsForTests(): typeof cacheStats {
+  return cacheStats;
 }
 
 // ── Main export ──────────────────────────────────────────────────────────────

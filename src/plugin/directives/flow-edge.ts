@@ -200,8 +200,12 @@ export function resolveHandlePosition(
   handleType: 'source' | 'target',
   node?: FlowNode,
   opposingCenter?: XYPosition,
+  providedNodeEl?: HTMLElement | null,
 ): HandlePosition {
-  const nodeEl = container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`);
+  // Prefer the caller-resolved node element (O(1) via canvas._nodeElements);
+  // fall back to a container-wide query only when it wasn't provided. All
+  // handle lookups below are already scoped to this element.
+  const nodeEl = providedNodeEl ?? container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`);
   if (nodeEl) {
     // Try exact handle ID scoped to the correct type. Schema nodes and other
     // "row-per-field" layouts have a source + target on each row with the same
@@ -276,8 +280,11 @@ function measureHandleCoords(
   zoom: number,
   viewport: { x: number; y: number },
   opposingCenter?: XYPosition,
+  providedNodeEl?: HTMLElement | null,
 ): HandleMeasurement | null {
-  const nodeEl = container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`) as HTMLElement | null;
+  // Prefer the caller-resolved node element (O(1) via canvas._nodeElements);
+  // fall back to a container-wide query only when it wasn't provided.
+  const nodeEl = providedNodeEl ?? (container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`) as HTMLElement | null);
   if (!nodeEl) return null;
 
   let handleEl: HTMLElement | null = null;
@@ -1040,17 +1047,18 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           // handle-geometry picker (for nodes with same-(id,type) mirrors,
           // e.g. schema rows) can choose whichever side of the node is
           // physically closer to the OPPOSING endpoint.
-          const sourceNodeEl = container.querySelector(
-            `[data-flow-node-id="${CSS.escape(edge.source)}"]`,
-          ) as HTMLElement | null;
-          const targetNodeEl = container.querySelector(
-            `[data-flow-node-id="${CSS.escape(edge.target)}"]`,
-          ) as HTMLElement | null;
+          // Resolve endpoint elements in O(1) via the canvas node-element
+          // registry, falling back to a container-wide query when an element
+          // isn't registered (test mounts, mid-init edge cases).
+          const sourceNodeEl = (canvas._nodeElements?.get(edge.source)
+            ?? container.querySelector(`[data-flow-node-id="${CSS.escape(edge.source)}"]`)) as HTMLElement | null;
+          const targetNodeEl = (canvas._nodeElements?.get(edge.target)
+            ?? container.querySelector(`[data-flow-node-id="${CSS.escape(edge.target)}"]`)) as HTMLElement | null;
           const sourceCenter = sourceNodeEl ? rectCenter(sourceNodeEl.getBoundingClientRect()) : undefined;
           const targetCenter = targetNodeEl ? rectCenter(targetNodeEl.getBoundingClientRect()) : undefined;
 
-          sourcePos = resolveHandlePosition(container, edge.source, edge.sourceHandle, 'source', rawSource, targetCenter);
-          targetPos = resolveHandlePosition(container, edge.target, edge.targetHandle, 'target', rawTarget, sourceCenter);
+          sourcePos = resolveHandlePosition(container, edge.source, edge.sourceHandle, 'source', rawSource, targetCenter, sourceNodeEl);
+          targetPos = resolveHandlePosition(container, edge.target, edge.targetHandle, 'target', rawTarget, sourceCenter, targetNodeEl);
 
           // Read zoom/viewport from the raw object to avoid creating a reactive
           // dependency on viewport.zoom.  Edge paths are in flow-space and
@@ -1066,8 +1074,8 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           sourcePos = rotateHandlePos(sourcePos, srcRotation);
           targetPos = rotateHandlePos(targetPos, tgtRotation);
 
-          srcMeasurement = measureHandleCoords(container, edge.source, sourceNode, edge.sourceHandle, 'source', zoom, rawViewport, targetCenter);
-          tgtMeasurement = measureHandleCoords(container, edge.target, targetNode, edge.targetHandle, 'target', zoom, rawViewport, sourceCenter);
+          srcMeasurement = measureHandleCoords(container, edge.source, sourceNode, edge.sourceHandle, 'source', zoom, rawViewport, targetCenter, sourceNodeEl);
+          tgtMeasurement = measureHandleCoords(container, edge.target, targetNode, edge.targetHandle, 'target', zoom, rawViewport, sourceCenter, targetNodeEl);
 
           // Cache handle center coords for reconnection hit-detection
           const fallbackSrc = getHandleCoords(sourceNode, sourcePos, canvas._shapeRegistry, canvas._config?.nodeOrigin);
@@ -1084,13 +1092,32 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         lastVisibleSrcCoords = adjustedSrc;
         lastVisibleTgtCoords = adjustedTgt;
 
-        // Compute obstacle rects for orthogonal routing (performance-gated)
+        // Compute obstacle rects for orthogonal routing (performance-gated).
+        //
+        // Obstacle geometry is deliberately non-reactive: it is read from the
+        // raw node list so this edge effect does NOT subscribe to every other
+        // node's position/dimensions. Without this, a single node write
+        // re-routes the entire edge graph. `_layoutAnimTick` (read at the top of
+        // this effect) is the refresh signal — node drag-end, resize, reorder,
+        // and layout-animation frames bump it, which re-measures routes against
+        // moved obstacles.
+        //
+        // NB: `canvas` is Alpine's merged-scope proxy, which Alpine.raw() does
+        // not unwrap, so we unwrap the genuine reactive `nodes` array instead.
+        // The parent-lookup map is rebuilt from those raw nodes rather than
+        // reusing `_nodeMap`: Alpine.raw() only unwraps the Map container, whose
+        // stored values would still be reactive proxies, so a parented obstacle
+        // node would otherwise re-subscribe via its parent's position. Reading
+        // `_config.nodeOrigin` tracks a stable key that does not change on moves.
         let obstacleRects: Rect[] | undefined;
         if (resolvedEdgeType === 'orthogonal' || resolvedEdgeType === 'avoidant') {
-          obstacleRects = canvas.nodes
+          const rawNodes = Alpine.raw(canvas.nodes) as FlowNode[];
+          const rawNodeMap = new Map<string, FlowNode>(rawNodes.map((n): [string, FlowNode] => [n.id, n]));
+          const nodeOrigin = canvas._config?.nodeOrigin;
+          obstacleRects = rawNodes
             .filter((n: FlowNode) => n.id !== edge.source && n.id !== edge.target)
             .map((n: FlowNode) => {
-              const abs = toAbsoluteNode(n, canvas._nodeMap, canvas._config?.nodeOrigin);
+              const abs = toAbsoluteNode(n, rawNodeMap, nodeOrigin);
               return {
                 x: abs.position.x,
                 y: abs.position.y,
@@ -1312,9 +1339,14 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         }
 
         // ── Row-highlight: highlight edges connected to selected rows ──
-        const rowHighlighted = canvas.selectedRows?.size > 0 && !edge.selected && (
-          (edge.sourceHandle && canvas.selectedRows.has(edge.sourceHandle.replace(/-[lr]$/, ''))) ||
-          (edge.targetHandle && canvas.selectedRows.has(edge.targetHandle.replace(/-[lr]$/, '')))
+        // Track only the specific row keys this edge touches — NOT
+        // selectedRows.size. Reading `.size` is an iterate-level dependency, so
+        // any row select/deselect would re-run EVERY edge effect (re-pathfinding
+        // the whole avoidant graph). `has(key)` tracks that key alone; `clear()`
+        // still notifies previously-present keys, so un-highlighting works.
+        const rowHighlighted = !edge.selected && (
+          (edge.sourceHandle ? canvas.selectedRows?.has(edge.sourceHandle.replace(/-[lr]$/, '')) : false) ||
+          (edge.targetHandle ? canvas.selectedRows?.has(edge.targetHandle.replace(/-[lr]$/, '')) : false)
         );
 
         if (rowHighlighted) {

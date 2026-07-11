@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-Schema-scale performance pass — fixes undo/zoom performance at Draftsman scale (~50 nodes × 25 fields, ~100 edges). Landed as independent workstreams.
+Schema-scale performance pass — fixes undo/zoom/edge performance at Draftsman scale (~50 nodes × 25 fields, ~100 edges). Landed as independent workstreams.
 
 ### Workstream 1 — history capture hygiene
 Stops the undo/redo stack from filling with no-op snapshots and roughly halves retained history memory. Capture-side only; the undo/redo *restore* path is unchanged.
@@ -36,6 +36,19 @@ Stops the undo/redo stack from filling with no-op snapshots and roughly halves r
 - Zoom side-effects (viewport events, background, culling) now fire at most once per animation frame — `onViewportChange` fires at rAF cadence rather than per wheel event.
 - `canvas.viewport` (the reactive state consumers watch) now settles on the **next animation frame** after a viewport change — this includes programmatic `setViewport` / `zoomIn` / `zoomOut` / `fitView` / `panBy`. Synchronous coordinate math should read the live viewport, which `screenToFlowPosition` / `flowToScreenPosition` now do internally (`canvas._viewportLive`). Gesture end (`viewport-move-end`) still commits the end-state synchronously.
 - **Test-facing:** tests that assert `canvas.viewport` immediately after a programmatic viewport change must now flush a `requestAnimationFrame` first.
+
+### Workstream 4 — avoidant edges at schema scale
+
+**Performance**
+- Avoidant/orthogonal edges no longer subscribe to every node's position. Obstacle geometry is read non-reactively, so a single node write no longer re-routes the whole edge graph; routes refresh on the `_layoutAnimTick` signal (bumped at node drag-end, resize, reorder/reparent, and during layout animation).
+- Row-highlight tracks only the specific row keys an edge touches instead of `selectedRows.size`, so selecting a row re-runs only the edges connected to it rather than every edge.
+- Edge endpoint elements resolve in O(1) via the canvas node-element registry (`_nodeElements`) instead of container-wide `[data-flow-node-id]` queries.
+- Orthogonal/avoidant pathfinding uses a binary min-heap + scanline adjacency (was a linear-scan priority queue with an all-pairs neighbour test). Obstacles are pruned to a corridor around the edge (with a full-set fallback validated against the complete obstacle set), and routes are memoized in a 512-entry LRU cache keyed by endpoints + obstacle geometry.
+- Benchmarks (`npm run bench`, chromium): a single dense-field route drops 0.159 ms → 0.042 ms (~3.75×); a repeated full-graph pass of 60 edges drops 8.13 ms → 0.24 ms (~34×, memo cache); a short local edge amid 100 spread-out obstacles routes on a <50-point grid (~0.004 ms) instead of 160+ points unpruned.
+
+**Breaking / Behavior Changes**
+- Obstacle geometry for avoidant/orthogonal edges is now non-reactive. A node moved by a programmatic data mutation that does not bump `_layoutAnimTick` will not re-route dependent edges until the next tick. Interactive gestures (drag, resize, reorder/reparent) bump the tick, so gesture-driven moves re-route as before.
+- After the Dijkstra rewrite, routes across dense obstacle fields may choose different waypoints among equal-cost shortest paths. Path length and obstacle avoidance are unchanged — only the specific corners of a tie-broken route may differ, so an avoidant edge can render a visually different (but equally short) path.
 
 ## v0.2.1-alpha — 2026-04-14
 
