@@ -311,3 +311,58 @@ describe('listener atomicity — exceptions in listeners do not corrupt return v
         errorSpy.mockRestore();
     });
 });
+
+describe('cascades mutate live edges in place (identity-preserving)', () => {
+    it('renameField cascade mutates the SAME edge object in place', () => {
+        const canvas = makeCanvas();
+        const edgeRef = canvas.edges.find((e: any) => e.id === 'e-user-team');
+
+        renameField(canvas, 'user', 'team_id', 'team_uuid'); // e's sourceHandle is 'team_id'
+
+        // Same object reference — not a wholesale replacement that would orphan
+        // the edge's live Alpine scope.
+        expect(canvas.edges.find((e: any) => e.id === 'e-user-team')).toBe(edgeRef);
+        expect(edgeRef.sourceHandle).toBe('team_uuid');
+    });
+
+    it('renameField only touches cascaded edges, leaving others identical', () => {
+        const canvas = makeCanvas();
+        // A second edge that does NOT reference user.team_id.
+        canvas.edges.push({
+            id: 'e2',
+            source: 'team',
+            sourceHandle: 'id',
+            target: 'user',
+            targetHandle: 'email',
+        } as any);
+        const untouchedRef = canvas.edges.find((e: any) => e.id === 'e2');
+
+        renameField(canvas, 'user', 'team_id', 'team_uuid');
+
+        expect(canvas.edges.find((e: any) => e.id === 'e2')).toBe(untouchedRef);
+    });
+
+    it('removeField drops only affected edges in place and rebuilds the edge map', () => {
+        const canvas: any = makeCanvas();
+        // Survivor edge unaffected by removing user.team_id.
+        canvas.edges.push({
+            id: 'e2',
+            source: 'team',
+            sourceHandle: 'id',
+            target: 'user',
+            targetHandle: 'email',
+        });
+        // Give the canvas a live edge map so we can prove it gets rebuilt.
+        canvas._edgeMap = new Map(canvas.edges.map((e: any) => [e.id, e]));
+        canvas._rebuildEdgeMap = () => {
+            canvas._edgeMap = new Map(canvas.edges.map((e: any) => [e.id, e]));
+        };
+        const survivorRef = canvas.edges.find((e: any) => e.id === 'e2');
+
+        removeField(canvas, 'user', 'team_id'); // drops e-user-team
+
+        expect(canvas.edges.map((e: any) => e.id)).toEqual(['e2']);
+        expect(canvas.edges.find((e: any) => e.id === 'e2')).toBe(survivorRef); // identity kept
+        expect(canvas._edgeMap.has('e-user-team')).toBe(false); // stale map entry gone
+    });
+});
