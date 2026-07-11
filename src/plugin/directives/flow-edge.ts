@@ -1328,9 +1328,14 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         }
 
         // ── Row-highlight: highlight edges connected to selected rows ──
-        const rowHighlighted = canvas.selectedRows?.size > 0 && !edge.selected && (
-          (edge.sourceHandle && canvas.selectedRows.has(edge.sourceHandle.replace(/-[lr]$/, ''))) ||
-          (edge.targetHandle && canvas.selectedRows.has(edge.targetHandle.replace(/-[lr]$/, '')))
+        // Track only the specific row keys this edge touches — NOT
+        // selectedRows.size. Reading `.size` is an iterate-level dependency, so
+        // any row select/deselect would re-run EVERY edge effect (re-pathfinding
+        // the whole avoidant graph). `has(key)` tracks that key alone; `clear()`
+        // still notifies previously-present keys, so un-highlighting works.
+        const rowHighlighted = !edge.selected && (
+          (edge.sourceHandle ? canvas.selectedRows?.has(edge.sourceHandle.replace(/-[lr]$/, '')) : false) ||
+          (edge.targetHandle ? canvas.selectedRows?.has(edge.targetHandle.replace(/-[lr]$/, '')) : false)
         );
 
         if (rowHighlighted) {

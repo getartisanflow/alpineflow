@@ -87,6 +87,9 @@ function mountEdges(nodes: MockNode[], edges: MockEdge[], opts: { nodeElements?:
     getEdge(id: string) {
       return this.edges.find((e) => e.id === id);
     },
+    selectRow(key: string) {
+      this.selectedRows.add(key);
+    },
     deselectAll() {},
     _emitSelectionChange() {},
   };
@@ -105,8 +108,14 @@ function mountEdges(nodes: MockNode[], edges: MockEdge[], opts: { nodeElements?:
     }
   }
 
+  // A `.flow-container` ancestor is required: the row-highlight path calls
+  // getComputedStyle(gEl.closest('.flow-container')), which throws on null.
+  const containerEl = document.createElement('div');
+  containerEl.className = 'flow-container';
+  host.appendChild(containerEl);
+
   const svg = document.createElementNS(SVG_NS, 'svg');
-  host.appendChild(svg);
+  containerEl.appendChild(svg);
 
   const groups: SVGGElement[] = [];
   edges.forEach((_, i) => {
@@ -189,5 +198,33 @@ describe('x-flow-edge obstacle reactivity (Task 21)', () => {
 
     expect(counts.count()).toBeGreaterThan(0);
     counts.disconnect();
+  });
+});
+
+describe('x-flow-edge row-highlight reactivity (Task 22)', () => {
+  function schemaNodes(): MockNode[] {
+    return [
+      { id: 'users', position: { x: 0, y: 0 }, dimensions: { width: 160, height: 120 }, data: {} },
+      { id: 'posts', position: { x: 400, y: 0 }, dimensions: { width: 160, height: 120 }, data: {} },
+      { id: 'teams', position: { x: 0, y: 300 }, dimensions: { width: 160, height: 120 }, data: {} },
+    ];
+  }
+
+  it('selecting a row only re-runs edges touching that row', async () => {
+    const { data, groups, visiblePath } = mountEdges(schemaNodes(), [
+      { id: 'e1', source: 'users', target: 'posts', sourceHandle: 'users.id-r', targetHandle: 'posts.user_id-l' },
+      { id: 'e2', source: 'teams', target: 'users', sourceHandle: 'teams.id-r', targetHandle: 'users.team_id-l' },
+    ]);
+    await flush();
+    const c1 = observePathD(visiblePath(groups[0]));
+    const c2 = observePathD(visiblePath(groups[1]));
+
+    data.selectRow('users.id'); // matches e1's sourceHandle (stripped), not e2's handles
+    await flush();
+
+    expect(c1.count()).toBeGreaterThan(0); // e1 touches users.id
+    expect(c2.count()).toBe(0); // e2 must not re-run
+    c1.disconnect();
+    c2.disconnect();
   });
 });
