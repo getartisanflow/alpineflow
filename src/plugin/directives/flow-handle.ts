@@ -887,9 +887,11 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
 
             const handleRect = el.getBoundingClientRect();
             const initContainerRect = containerEl.getBoundingClientRect();
-            const initZoom = canvas.viewport?.zoom || 1;
-            const initVpX = canvas.viewport?.x || 0;
-            const initVpY = canvas.viewport?.y || 0;
+            // Live viewport: reactive `viewport` may lag a frame behind a zoom.
+            const liveVp = canvas._viewportLive ?? canvas.viewport;
+            const initZoom = liveVp?.zoom || 1;
+            const initVpX = liveVp?.x || 0;
+            const initVpY = liveVp?.y || 0;
 
             sourceX = (handleRect.left + handleRect.width / 2 - initContainerRect.left - initVpX) / initZoom;
             sourceY = (handleRect.top + handleRect.height / 2 - initContainerRect.top - initVpY) / initZoom;
@@ -944,9 +946,11 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             const selected = [...canvas.selectedNodes] as string[];
             const result: Array<{ nodeId: string; handleId: string; pos: XYPosition }> = [];
             const containerRect = containerEl!.getBoundingClientRect();
-            const zoom = canvas.viewport?.zoom || 1;
-            const vpX = canvas.viewport?.x || 0;
-            const vpY = canvas.viewport?.y || 0;
+            // Live viewport: reactive `viewport` may lag a frame behind a zoom.
+            const liveVp = canvas._viewportLive ?? canvas.viewport;
+            const zoom = liveVp?.zoom || 1;
+            const vpX = liveVp?.x || 0;
+            const vpY = liveVp?.y || 0;
 
             for (const id of selected) {
               if (id === sourceNodeId) continue;
@@ -1700,9 +1704,11 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
           const sourceHandleEl = sourceNodeEl?.querySelector(sourceHandleSelector) as HTMLElement | null;
 
           const cRect = containerEl.getBoundingClientRect();
-          const initZoom = canvas.viewport?.zoom || 1;
-          const initVpX = canvas.viewport?.x || 0;
-          const initVpY = canvas.viewport?.y || 0;
+          // Live viewport: reactive `viewport` may lag a frame behind a zoom.
+          const liveVp = canvas._viewportLive ?? canvas.viewport;
+          const initZoom = liveVp?.zoom || 1;
+          const initVpX = liveVp?.x || 0;
+          const initVpY = liveVp?.y || 0;
 
           let anchorX: number;
           let anchorY: number;

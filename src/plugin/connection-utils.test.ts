@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { createConnectionLine, findSnapTarget, type ConnectionLineInstance } from './connection-utils';
+import { createConnectionLine, findSnapTarget, startConnectionAutoPan, type ConnectionLineInstance } from './connection-utils';
+import { createAutoPan } from '../core/auto-pan';
+
+// Capture the onPan callback passed to createAutoPan so we can exercise the real
+// delta-measurement logic without driving the rAF loop.
+vi.mock('../core/auto-pan', () => ({
+  createAutoPan: vi.fn(),
+}));
 
 describe('createConnectionLine', () => {
   describe('straight (default)', () => {
@@ -211,5 +218,53 @@ describe('findSnapTarget', () => {
       targetNodeId: 'b',
     });
     expect(result.element).toBeNull();
+  });
+});
+
+describe('startConnectionAutoPan (frame-coalesced viewport)', () => {
+  // A canvas whose _panZoom.setViewport updates the LIVE viewport synchronously
+  // but defers the reactive `viewport` write — exactly what the rAF-coalesced
+  // pipeline does. onPan must measure its applied delta against the live value.
+  function coalescedCanvas() {
+    const canvas: any = {
+      _config: {},
+      viewport: { x: 0, y: 0, zoom: 1 }, // reactive — NOT updated synchronously
+      _viewportLive: { x: 0, y: 0, zoom: 1 },
+      _panZoom: {
+        setViewport(vp: any) {
+          canvas._viewportLive = { x: vp.x, y: vp.y, zoom: vp.zoom };
+        },
+      },
+    };
+    return canvas;
+  }
+
+  function captureOnPan() {
+    let captured: { onPan: (dx: number, dy: number) => boolean } | null = null;
+    (createAutoPan as unknown as ReturnType<typeof vi.fn>).mockImplementation((opts: any) => {
+      captured = opts;
+      return { updatePointer: vi.fn(), start: vi.fn(), stop: vi.fn() };
+    });
+    return () => captured!;
+  }
+
+  it('onPan measures the applied delta via _viewportLive so the loop keeps running', () => {
+    const get = captureOnPan();
+    const canvas = coalescedCanvas();
+    startConnectionAutoPan(document.createElement('div'), canvas, 0, 0);
+
+    const hitBoundary = get().onPan(15, 0);
+
+    expect(hitBoundary).toBe(false); // panned → not at boundary → loop continues
+    expect(canvas._viewportLive.x).toBe(-15);
+  });
+
+  it('reports boundary (stops) only when the viewport truly cannot move', () => {
+    const get = captureOnPan();
+    const canvas = coalescedCanvas();
+    canvas._panZoom.setViewport = () => {}; // simulate translateExtent clamp: no movement
+    startConnectionAutoPan(document.createElement('div'), canvas, 0, 0);
+
+    expect(get().onPan(15, 0)).toBe(true); // no movement → boundary → stop
   });
 });

@@ -2,23 +2,40 @@
 
 ## Unreleased
 
-Workstream 1 — history capture hygiene. Stops the undo/redo stack from filling with no-op snapshots at schema scale (≈50 nodes × 25 fields, ~100 edges) and roughly halves retained history memory. Capture-side only; the undo/redo *restore* path is unchanged.
+Schema-scale performance pass — fixes undo/zoom performance at Draftsman scale (~50 nodes × 25 fields, ~100 edges). Landed as independent workstreams.
 
-### Changed (alpha-breaking) — Breaking / Behavior Changes
+### Workstream 1 — history capture hygiene
+Stops the undo/redo stack from filling with no-op snapshots and roughly halves retained history memory. Capture-side only; the undo/redo *restore* path is unchanged.
+
+**Breaking / Behavior Changes**
 - **Row/node selection no longer creates history entries.** Selecting or deselecting a schema row (row selection generally) no longer captures a history snapshot — selection state lives outside the `{nodes, edges}` snapshot, so those captures were byte-identical no-ops that flooded the 50-slot stack. Selection is no longer undoable.
 - **Identical consecutive history states are deduped.** Both `FlowHistory` (canvas) and the schema history addon skip a snapshot equal to the top of the stack, so a capture that doesn't change the graph never adds an undo step.
 - Node drag captures history on **commit** — only when the node actually moved — instead of on pointer-down, so a plain click-to-select no longer pushes an undo entry.
 - Arrow-key nudge captures **once per physical keypress**; holding a key (auto-repeat) no longer pushes an entry per repeat, and keys that move nothing / an empty selection capture nothing.
 
-### Fixed
+**Fixed**
 - A reparent/detach **drag** now records a single undo entry (previously two — `reparentNode`'s own capture plus the drag's deferred snapshot); one undo fully reverts both position and parent.
 - A schema `renameField` / `removeField` that **cascades edges** now records exactly one undoable step instead of two byte-identical snapshots, so the first undo is never a visual no-op.
 - A net-no-op schema `batch()` no longer leaves a duplicate-of-top undo step.
 
-### Infrastructure
+**Infrastructure**
 - `FlowHistory` stores snapshots as JSON strings (≈half the retained memory of 50 live object graphs) with O(1) duplicate-state dedup; adds `snapshot()` / `commit()` for deferred capture.
 - New canvas wrappers `_snapshotHistory()` / `_commitHistory()` support capture-on-commit flows.
 - New pure, unit-tested helpers: `commitDragHistory` and `reparentWithoutCapture` (flow-node), `shouldCaptureNudge` (keyboard-shortcuts) — the drag/keydown decisions are extracted so they're testable without driving d3-drag in jsdom.
+
+### Workstream 3 — zoom/pan pipeline coalescing
+
+**Performance**
+- **Frame-coalesced viewport pipeline** — zoom/pan side-effects (reactive `viewport` write, background, culling, zoom-level, context-menu close, viewport events) now run once per animation frame instead of once per wheel event (120Hz+ on trackpads). Only the CSS transform is written at event rate. (WS3 · T16)
+- **Background gap caching** — the `--flow-bg-pattern-gap` CSS variable is resolved via `getComputedStyle` at most once and cached (invalidated on theme change), removing a forced style recalc from every viewport frame; `backgroundImage` is only rewritten when it actually changes. (T15)
+- **Lean minimap viewport getter** — the minimap viewport indicator updates through a new `getViewportState` option that reads only viewport + container size, skipping the full `toAbsoluteNodes` node remap it previously ran on every viewport change. (T17)
+- **Devtools per-frame work removed** — the event log does no work while the panel is collapsed, and the reactive display is split into a viewport effect and a data effect so a viewport frame no longer re-serializes the current selection. (T18)
+- **Throttled Livewire viewport bridge** — `viewport-change` / `viewport-move` wire events are trailing-throttled to one Livewire round-trip per 150 ms window (the final viewport wins). (T19)
+
+**Breaking / Behavior Changes**
+- Zoom side-effects (viewport events, background, culling) now fire at most once per animation frame — `onViewportChange` fires at rAF cadence rather than per wheel event.
+- `canvas.viewport` (the reactive state consumers watch) now settles on the **next animation frame** after a viewport change — this includes programmatic `setViewport` / `zoomIn` / `zoomOut` / `fitView` / `panBy`. Synchronous coordinate math should read the live viewport, which `screenToFlowPosition` / `flowToScreenPosition` now do internally (`canvas._viewportLive`). Gesture end (`viewport-move-end`) still commits the end-state synchronously.
+- **Test-facing:** tests that assert `canvas.viewport` immediately after a programmatic viewport change must now flush a `requestAnimationFrame` first.
 
 ## v0.2.1-alpha — 2026-04-14
 

@@ -181,6 +181,13 @@ export interface CanvasContext {
   /** Viewport wrapper element (.flow-viewport) */
   _viewportEl: HTMLElement | null;
 
+  /**
+   * Live viewport written synchronously on every d3-zoom transform. Reactive
+   * `viewport` is frame-coalesced, so synchronous pointer-path math must read
+   * `_viewportLive ?? viewport` to avoid a one-frame-stale coordinate divisor.
+   */
+  _viewportLive: Viewport | null;
+
   /** SVG element holding marker <defs> */
   _markerDefsEl: SVGSVGElement | null;
 

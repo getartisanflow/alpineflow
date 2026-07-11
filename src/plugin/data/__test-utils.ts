@@ -80,6 +80,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _shapeRegistry: {},
     _container: null,
     _viewportEl: null,
+    _viewportLive: null,
     _markerDefsEl: null,
     _containerStyles: null,
     _nodeElements: new Map<string, HTMLElement>(),
