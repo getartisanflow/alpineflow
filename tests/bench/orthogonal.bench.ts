@@ -47,4 +47,20 @@ describe('orthogonal findRoute — schema-scale routing', () => {
     },
     { iterations: 10 },
   );
+
+  // 100 obstacles spread across a large canvas; the routed edge is short and
+  // local, so corridor pruning (Task 25) drops almost all of them from the grid.
+  const spread: Rect[] = Array.from({ length: 100 }, (_, i) => ({
+    x: (i % 10) * 500,
+    y: Math.floor(i / 10) * 500,
+    width: 120,
+    height: 80,
+  }));
+  bench(
+    'short local edge amid 100 spread-out obstacles (corridor pruning)',
+    () => {
+      findRoute(250, 250, 'right', 450, 250, 'left', spread);
+    },
+    { iterations: 50 },
+  );
 });

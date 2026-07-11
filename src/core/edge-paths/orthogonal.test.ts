@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getOrthogonalPath, OBSTACLE_PADDING, findRoute, type RoutePoint } from './orthogonal';
+import { getOrthogonalPath, OBSTACLE_PADDING, findRoute, __routeDebugForTests, type RoutePoint } from './orthogonal';
 
 interface TestRect { x: number; y: number; width: number; height: number }
 
@@ -204,5 +204,39 @@ describe('findRoute (heap + scanline adjacency)', () => {
       [{ x: -OBSTACLE_PADDING - 1, y: -OBSTACLE_PADDING - 1, width: 400, height: 400 }],
     );
     expect(route).toBeNull();
+  });
+});
+
+// ── findRoute: corridor pruning with full-set fallback (Task 25) ─────────────
+
+describe('findRoute corridor pruning', () => {
+  it('prunes far-away obstacles from the visibility grid', () => {
+    const near: TestRect = { x: 100, y: 0, width: 80, height: 60 };
+    const far: TestRect[] = Array.from({ length: 40 }, (_, i) => ({
+      x: 5000 + i * 200,
+      y: 5000,
+      width: 80,
+      height: 60,
+    }));
+    const all = [near, ...far];
+    const route = findRoute(0, 30, 'right', 300, 30, 'left', all);
+    expect(route).not.toBeNull();
+    // Grid built from the single near obstacle, not all 41.
+    expect(__routeDebugForTests().gridSize).toBeLessThan(50);
+    expect(__routeDebugForTests().usedFullSet).toBe(false);
+    expect(routeHitsAny(route!, all)).toBe(false);
+  });
+
+  it('falls back to the full obstacle set when the corridor route is invalid', () => {
+    // Both endpoints exit left; a wall spanning far beyond the corridor blocks
+    // the direct path, forcing a wide leftward detour through a pruned obstacle.
+    // The pruned route would clip that obstacle, so validation retries in full.
+    const wall: TestRect = { x: -500, y: 100, width: 1200, height: 300 };
+    const prunedObstacle: TestRect = { x: -540, y: 410, width: 60, height: 100 };
+    const all = [wall, prunedObstacle];
+    const route = findRoute(0, 0, 'left', 0, 500, 'left', all);
+    expect(route).not.toBeNull();
+    expect(__routeDebugForTests().usedFullSet).toBe(true); // fallback fired
+    expect(routeHitsAny(route!, all)).toBe(false); // final route avoids everything
   });
 });

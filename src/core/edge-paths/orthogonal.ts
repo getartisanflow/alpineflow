@@ -418,9 +418,59 @@ function getPathMidpoint(
 
 // ── Shared routing pipeline ──────────────────────────────────────────────────
 
+/** Flow units beyond the endpoint bounding box that the corridor retains. */
+const CORRIDOR_MARGIN = 200;
+
+/** Test-only diagnostics for the most recent findRoute call. */
+const routeDebug = { gridSize: 0, usedFullSet: false };
+
+export function __routeDebugForTests(): { gridSize: number; usedFullSet: boolean } {
+  return { ...routeDebug };
+}
+
+/**
+ * Keep only obstacles whose bounding box intersects the endpoint bounding box
+ * expanded by CORRIDOR_MARGIN. Most routes interact only with nearby obstacles,
+ * so this collapses the scanline grid from every-node to a local neighbourhood.
+ */
+function corridorObstacles(
+  sx: number,
+  sy: number,
+  tx: number,
+  ty: number,
+  obstacles: Rect[],
+): Rect[] {
+  const minX = Math.min(sx, tx) - CORRIDOR_MARGIN;
+  const maxX = Math.max(sx, tx) + CORRIDOR_MARGIN;
+  const minY = Math.min(sy, ty) - CORRIDOR_MARGIN;
+  const maxY = Math.max(sy, ty) + CORRIDOR_MARGIN;
+  return obstacles.filter(
+    (r) => r.x < maxX && r.x + r.width > minX && r.y < maxY && r.y + r.height > minY,
+  );
+}
+
+/** True if any axis-aligned segment of a graph route crosses a padded obstacle. */
+function routeCrossesObstacles(route: RoutePoint[], paddedObstacles: Rect[]): boolean {
+  for (let i = 1; i < route.length; i++) {
+    const a = route[i - 1];
+    const b = route[i];
+    if (a.x === b.x) {
+      if (isVSegmentBlocked(a.x, a.y, b.y, paddedObstacles)) return true;
+    } else if (a.y === b.y) {
+      if (isHSegmentBlocked(a.x, b.x, a.y, paddedObstacles)) return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Find an obstacle-free route from source to target using handle-aware offsets,
  * a visibility graph, and Dijkstra pathfinding.
+ *
+ * Obstacles are first pruned to a corridor around the endpoints; the pruned
+ * route is validated against the FULL obstacle set, so pruning that either
+ * fails to find a route (coarser grid) or routes through a dropped obstacle
+ * transparently retries once with the complete set.
  *
  * Returns simplified waypoints (including actual source/target endpoints) or
  * null if no route can be found.
@@ -442,33 +492,43 @@ export function findRoute(
   const tgtOffX = targetX + tgtDir.x * HANDLE_OFFSET;
   const tgtOffY = targetY + tgtDir.y * HANDLE_OFFSET;
 
-  // Pad obstacles
-  const paddedObstacles = obstacles.map((r) => padRect(r, OBSTACLE_PADDING));
+  // Route against an arbitrary obstacle subset, returning the graph route
+  // (offset → … → offset) computed on its padded scanline grid.
+  const routeAgainst = (subset: Rect[]): RoutePoint[] | null => {
+    const paddedObstacles = subset.map((r) => padRect(r, OBSTACLE_PADDING));
+    const graphPoints = buildVisibilityGraph(srcOffX, srcOffY, tgtOffX, tgtOffY, paddedObstacles);
+    routeDebug.gridSize = graphPoints.length;
 
-  // Build visibility graph between the offset points
-  const graphPoints = buildVisibilityGraph(
-    srcOffX,
-    srcOffY,
-    tgtOffX,
-    tgtOffY,
-    paddedObstacles,
-  );
+    const sourcePoint = graphPoints.find((p) => p.x === srcOffX && p.y === srcOffY);
+    const targetPoint = graphPoints.find((p) => p.x === tgtOffX && p.y === tgtOffY);
+    if (!sourcePoint) {
+      graphPoints.push({ x: srcOffX, y: srcOffY, index: graphPoints.length });
+    }
+    if (!targetPoint) {
+      graphPoints.push({ x: tgtOffX, y: tgtOffY, index: graphPoints.length });
+    }
+    const finalSource = sourcePoint ?? graphPoints[graphPoints.length - (targetPoint ? 1 : 2)];
+    const finalTarget = targetPoint ?? graphPoints[graphPoints.length - 1];
 
-  // Find offset source and target in graph points
-  const sourcePoint = graphPoints.find((p) => p.x === srcOffX && p.y === srcOffY);
-  const targetPoint = graphPoints.find((p) => p.x === tgtOffX && p.y === tgtOffY);
+    return dijkstra(finalSource, finalTarget, graphPoints, paddedObstacles);
+  };
 
-  if (!sourcePoint) {
-    graphPoints.push({ x: srcOffX, y: srcOffY, index: graphPoints.length });
+  const pruned = corridorObstacles(sourceX, sourceY, targetX, targetY, obstacles);
+  const prunedRemovedSome = pruned.length < obstacles.length;
+  routeDebug.usedFullSet = !prunedRemovedSome;
+
+  let route = routeAgainst(pruned);
+
+  // Validate against the full padded set: pruning may fail to route (coarser
+  // grid) or route through an obstacle it dropped. Retry once with everything.
+  if (prunedRemovedSome) {
+    const fullPadded = obstacles.map((r) => padRect(r, OBSTACLE_PADDING));
+    const usable = route !== null && route.length >= 2;
+    if (!usable || routeCrossesObstacles(route as RoutePoint[], fullPadded)) {
+      routeDebug.usedFullSet = true;
+      route = routeAgainst(obstacles);
+    }
   }
-  if (!targetPoint) {
-    graphPoints.push({ x: tgtOffX, y: tgtOffY, index: graphPoints.length });
-  }
-  const finalSource = sourcePoint ?? graphPoints[graphPoints.length - (targetPoint ? 1 : 2)];
-  const finalTarget = targetPoint ?? graphPoints[graphPoints.length - 1];
-
-  // Run Dijkstra between offset points
-  const route = dijkstra(finalSource, finalTarget, graphPoints, paddedObstacles);
 
   if (!route || route.length < 2) return null;
 
