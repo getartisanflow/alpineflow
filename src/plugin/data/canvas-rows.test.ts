@@ -15,14 +15,14 @@ function makeEdge(id: string, source: string, target: string, overrides: Partial
 
 describe('createRowsMixin — Row Selection', () => {
   describe('selectRow', () => {
-    it('adds rowId to selectedRows, captures history, emits events', () => {
+    it('adds rowId to selectedRows and emits events without capturing history', () => {
       const ctx = mockCtx();
       const mixin = createRowsMixin(ctx);
 
       mixin.selectRow('n1.attr1');
 
       expect(ctx.selectedRows.has('n1.attr1')).toBe(true);
-      expect(ctx._captureHistory).toHaveBeenCalledOnce();
+      expect(ctx._captureHistory).not.toHaveBeenCalled();
       expect(ctx._emit).toHaveBeenCalledWith('row-select', {
         rowId: 'n1.attr1',
         nodeId: 'n1',
@@ -58,7 +58,7 @@ describe('createRowsMixin — Row Selection', () => {
   });
 
   describe('deselectRow', () => {
-    it('removes rowId from selectedRows, captures history, emits events', () => {
+    it('removes rowId from selectedRows and emits events without capturing history', () => {
       const ctx = mockCtx();
       const mixin = createRowsMixin(ctx);
       ctx.selectedRows.add('n1.attr1');
@@ -66,7 +66,7 @@ describe('createRowsMixin — Row Selection', () => {
       mixin.deselectRow('n1.attr1');
 
       expect(ctx.selectedRows.has('n1.attr1')).toBe(false);
-      expect(ctx._captureHistory).toHaveBeenCalledOnce();
+      expect(ctx._captureHistory).not.toHaveBeenCalled();
       expect(ctx._emit).toHaveBeenCalledWith('row-deselect', {
         rowId: 'n1.attr1',
         nodeId: 'n1',
@@ -153,7 +153,7 @@ describe('createRowsMixin — Row Selection', () => {
   });
 
   describe('deselectAllRows', () => {
-    it('clears all selected rows, captures history, emits event', () => {
+    it('clears all selected rows and emits event without capturing history', () => {
       const ctx = mockCtx();
       const mixin = createRowsMixin(ctx);
       ctx.selectedRows.add('n1.attr1');
@@ -162,7 +162,7 @@ describe('createRowsMixin — Row Selection', () => {
       mixin.deselectAllRows();
 
       expect(ctx.selectedRows.size).toBe(0);
-      expect(ctx._captureHistory).toHaveBeenCalledOnce();
+      expect(ctx._captureHistory).not.toHaveBeenCalled();
       expect(ctx._emit).toHaveBeenCalledWith('row-selection-change', {
         selectedRows: [],
       });
@@ -192,6 +192,22 @@ describe('createRowsMixin — Row Selection', () => {
       expect(container.querySelectorAll).toHaveBeenCalledWith('.flow-row-selected');
       expect(mockEl.classList.remove).toHaveBeenCalledWith('flow-row-selected');
     });
+  });
+});
+
+// ── Selection is not undoable ──────────────────────────────────────────────────
+
+describe('createRowsMixin — selection does not capture history', () => {
+  it('row selection/deselection does not capture history snapshots', () => {
+    const ctx = mockCtx();
+    const mixin = createRowsMixin(ctx);
+
+    mixin.selectRow('users.email');
+    mixin.deselectAllRows();
+    mixin.selectRow('users.id');
+    mixin.deselectRow('users.id');
+
+    expect(ctx._captureHistory).not.toHaveBeenCalled();
   });
 });
 

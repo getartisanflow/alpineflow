@@ -49,6 +49,22 @@ export function attachSchemaHistory(canvas: any, opts: SchemaHistoryOptions = {}
         }
     };
 
+    // Push a snapshot, deduping against the current stack top, then evict + clear
+    // redo. Dedup identical states: a cascading op (renameField/removeField)
+    // dispatches schema:field-* AND schema:edges-cascaded *after* all mutations
+    // complete, yielding two byte-identical snapshots — coalesce them into a
+    // single undoable step so the first undo is never a no-op. Shared by the
+    // event path (pushSnapshot) and the batch-commit path.
+    const pushDeduped = (snap: SchemaGraphJSON): void => {
+        const top = undoStack[undoStack.length - 1];
+        if (top !== undefined && JSON.stringify(top) === JSON.stringify(snap)) {
+            return;
+        }
+        undoStack.push(snap);
+        evictOldest();
+        redoStack.length = 0;
+    };
+
     const pushSnapshot = (): void => {
         if (disposed) {
             return;
@@ -61,9 +77,7 @@ export function attachSchemaHistory(canvas: any, opts: SchemaHistoryOptions = {}
             // is pushed when the outermost batch exits.
             return;
         }
-        undoStack.push(schemaToJSON(canvas));
-        evictOldest();
-        redoStack.length = 0;
+        pushDeduped(schemaToJSON(canvas));
     };
 
     // Initial floor snapshot — captures pre-mutation state so the first undo
@@ -146,9 +160,8 @@ export function attachSchemaHistory(canvas: any, opts: SchemaHistoryOptions = {}
                     // the aggregate result of all mutations inside.
                     batchEntrySnapshot = null;
                     if (suspendDepth === 0 && !disposed) {
-                        undoStack.push(schemaToJSON(canvas));
-                        evictOldest();
-                        redoStack.length = 0;
+                        // A net-no-op batch must not leave a duplicate-of-top entry.
+                        pushDeduped(schemaToJSON(canvas));
                     }
                 }
                 return result;

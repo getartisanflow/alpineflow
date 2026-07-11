@@ -41,7 +41,7 @@ import { createSelectionBox, type SelectionBoxInstance } from '../../core/select
 import { createLasso, type LassoInstance } from '../../core/lasso';
 import { getNodesInPolygon, getNodesFullyInPolygon, pointInPolygon } from '../../core/lasso-hit-test';
 import { clearValidationClasses } from '../directives/flow-handle';
-import { resolveShortcuts, matchesKey, matchesModifier } from '../../core/keyboard-shortcuts';
+import { resolveShortcuts, matchesKey, matchesModifier, shouldCaptureNudge } from '../../core/keyboard-shortcuts';
 import { isDraggable, isSelectable } from '../../core/node-flags';
 import { attachLongPress } from '../../core/long-press';
 import { getNodesInRect, getNodesFullyInRect } from '../../core/geometry';
@@ -453,6 +453,14 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
     _captureHistory() {
       this._history?.capture({ nodes: this.nodes, edges: this.edges });
+    },
+
+    _snapshotHistory(): string | null {
+      return this._history ? this._history.snapshot({ nodes: this.nodes, edges: this.edges }) : null;
+    },
+
+    _commitHistory(snapshot: string | null): void {
+      if (snapshot !== null) this._history?.commit(snapshot);
     },
 
     _suspendHistory() {
@@ -1022,7 +1030,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
             }
           }
 
-          this._captureHistory();
+          // Capture once per physical keypress: skip auto-repeat, empty
+          // selection, and keys that produced no movement.
+          if (shouldCaptureNudge(e.repeat, this.selectedNodes.size, dx, dy)) {
+            this._captureHistory();
+          }
 
           for (const nodeId of this.selectedNodes) {
             const node = this.getNode(nodeId);
