@@ -1011,6 +1011,23 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         // Resolve edge type using fallback: edge.type ?? canvas.defaultEdgeType ?? 'bezier'
         const resolvedEdgeType = edge.type ?? canvas._config?.defaultEdgeType ?? 'bezier';
 
+        // ── WS-D zoom LOD ────────────────────────────────────────────────
+        // Opt-in: at/under the configured zoom bucket, render as a straight
+        // line (skip pathfinding + curvature). Only read `_zoomLevel` when
+        // `edgeLod` is set, so the default path gains no new reactive dep.
+        // `_zoomLevel` is bucketed, so this fires only on threshold crossings.
+        const edgeLod = canvas._config?.edgeLod;
+        let effectiveEdgeType = resolvedEdgeType;
+        if (edgeLod) {
+          const level = canvas._zoomLevel; // reactive, bucketed
+          const simplify = edgeLod.simplifyAt === 'medium'
+            ? (level === 'medium' || level === 'far')
+            : level === 'far';
+          if (simplify) {
+            effectiveEdgeType = 'straight';
+          }
+        }
+
         // Reactive dependency — bumped each frame during layout animation
         // so edges re-measure DOM handle positions while CSS transitions run.
         void canvas._layoutAnimTick;
@@ -1119,40 +1136,53 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         // instead (`Alpine.raw(canvas._obstacleSnapshot)` / `Alpine.raw(canvas.nodes)`).
         let obstacleRects: Rect[] | undefined;
         if (resolvedEdgeType === 'orthogonal' || resolvedEdgeType === 'avoidant') {
-          const snapshot = Alpine.raw(canvas._obstacleSnapshot) as
-            | Array<{ id: string; x: number; y: number; width: number; height: number }>
-            | null
-            | undefined;
-          if (snapshot) {
-            // Shared snapshot (built once per commit). Filter out this edge's
-            // own endpoints. Structurally assignable to Rect[] (extra `id` is
-            // ignored by the router). Preserves node order from the snapshot,
-            // which preserves `raw.nodes` order — so the router's VALUE-keyed
-            // route cache still hits (same rects, same order as the legacy
-            // per-edge build) and routes come out unchanged.
-            obstacleRects = snapshot.filter((r) => r.id !== edge.source && r.id !== edge.target);
+          // WS-D: while an endpoint node is being dragged, skip pathfinding and
+          // let the router fall back to a bezier curve (empty-obstacle fast
+          // path). `Set.has(id)` is key-scoped, so only edges touching the
+          // dragged node re-run when `_draggingNodeIds` changes.
+          const simplifyingOnDrag = canvas._config?.avoidantSimplifyOnDrag !== false
+            && (canvas._draggingNodeIds?.has(edge.source) || canvas._draggingNodeIds?.has(edge.target));
+          if (simplifyingOnDrag) {
+            obstacleRects = undefined;
           } else {
-            // Fallback for minimal mounts that never triggered a geometry
-            // commit — legacy per-edge build, byte-identical to the prior
-            // behavior so routes are unchanged when no snapshot exists yet.
-            const rawNodes = Alpine.raw(canvas.nodes) as FlowNode[];
-            const rawNodeMap = new Map<string, FlowNode>(rawNodes.map((n): [string, FlowNode] => [n.id, n]));
-            const nodeOrigin = canvas._config?.nodeOrigin;
-            obstacleRects = rawNodes
-              .filter((n: FlowNode) => n.id !== edge.source && n.id !== edge.target)
-              .map((n: FlowNode) => {
-                const abs = toAbsoluteNode(n, rawNodeMap, nodeOrigin);
-                return {
-                  x: abs.position.x,
-                  y: abs.position.y,
-                  width: abs.dimensions?.width ?? DEFAULT_NODE_WIDTH,
-                  height: abs.dimensions?.height ?? DEFAULT_NODE_HEIGHT,
-                };
-              });
+            const snapshot = Alpine.raw(canvas._obstacleSnapshot) as
+              | Array<{ id: string; x: number; y: number; width: number; height: number }>
+              | null
+              | undefined;
+            if (snapshot) {
+              // Shared snapshot (built once per commit). Filter out this edge's
+              // own endpoints. Structurally assignable to Rect[] (extra `id` is
+              // ignored by the router). Preserves node order from the snapshot,
+              // which preserves `raw.nodes` order — so the router's VALUE-keyed
+              // route cache still hits (same rects, same order as the legacy
+              // per-edge build) and routes come out unchanged.
+              obstacleRects = snapshot.filter((r) => r.id !== edge.source && r.id !== edge.target);
+            } else {
+              // Fallback for minimal mounts that never triggered a geometry
+              // commit — legacy per-edge build, byte-identical to the prior
+              // behavior so routes are unchanged when no snapshot exists yet.
+              const rawNodes = Alpine.raw(canvas.nodes) as FlowNode[];
+              const rawNodeMap = new Map<string, FlowNode>(rawNodes.map((n): [string, FlowNode] => [n.id, n]));
+              const nodeOrigin = canvas._config?.nodeOrigin;
+              obstacleRects = rawNodes
+                .filter((n: FlowNode) => n.id !== edge.source && n.id !== edge.target)
+                .map((n: FlowNode) => {
+                  const abs = toAbsoluteNode(n, rawNodeMap, nodeOrigin);
+                  return {
+                    x: abs.position.x,
+                    y: abs.position.y,
+                    width: abs.dimensions?.width ?? DEFAULT_NODE_WIDTH,
+                    height: abs.dimensions?.height ?? DEFAULT_NODE_HEIGHT,
+                  };
+                });
+            }
           }
         }
 
-        const { path, labelPosition } = getEdgePath(edge, sourceNode, targetNode, sourcePos, targetPos, adjustedSrc, adjustedTgt, canvas._config?.edgeTypes, obstacleRects, canvas._shapeRegistry, canvas._config?.nodeOrigin, canvas._config?.defaultEdgeType);
+        // Only the path geometry uses the LOD-resolved type; everything else
+        // (markers, labels, edge classes) keeps the configured type via `edge`.
+        const pathEdge = effectiveEdgeType === resolvedEdgeType ? edge : { ...edge, type: effectiveEdgeType };
+        const { path, labelPosition } = getEdgePath(pathEdge, sourceNode, targetNode, sourcePos, targetPos, adjustedSrc, adjustedTgt, canvas._config?.edgeTypes, obstacleRects, canvas._shapeRegistry, canvas._config?.nodeOrigin, canvas._config?.defaultEdgeType);
         pathEl.setAttribute('d', path);
         interactionPath.setAttribute('d', path);
 

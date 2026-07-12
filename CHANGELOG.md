@@ -119,6 +119,21 @@ Builds on Workstream 4. Where WS4 made a single route fast, WS C stops the *whol
 - Per-edge dirty tracking: reactive key-scoped `_edgeDirtyTicks` + plain `_edgeCorridors`, driven by `_markDirtyEdges(changedNodeIds?, prevSnapshot?)`. Stale entries are pruned in `removeEdges`, in `removeNodes` (cascade edge removal), and on full invalidation (undo/redo/`fromObject`).
 - `CORRIDOR_MARGIN` is now exported from `edge-paths/orthogonal.ts` so the invalidation corridor and the router's obstacle pruning share one constant.
 
+### Workstream D — interaction degradation + zoom LOD
+
+Builds on Workstream C. Where WS C stops unaffected edges from re-routing, WS D degrades edge *fidelity* while it can't be perceived anyway — during a drag and at low zoom — so dense avoidant graphs stay responsive under interaction. Both mechanisms reuse WS C's committed-geometry pipeline (`_commitNodeGeometry` re-routes properly on drop) and the existing bucketed `_zoomLevel`.
+
+**Breaking / Behavior Changes**
+- **`avoidantSimplifyOnDrag` — new, defaults to `true` (ON).** While a node is being dragged, avoidant/orthogonal edges that touch it skip pathfinding and render as a simplified bezier curve for the duration of the gesture, then re-route properly on drop (via WS C's `_commitNodeGeometry`). This is a visible in-gesture appearance change: an edge touching a dragged node curves/straightens while the drag is in flight and snaps back to its routed path on release. Set `avoidantSimplifyOnDrag: false` to keep full pathfinding on every drag frame (the previous behaviour).
+
+**Performance**
+- Dragging a node no longer runs avoidant/orthogonal pathfinding for its incident edges on every pointermove — the router falls back to its empty-obstacle bezier fast path for the gesture. A new reactive `_draggingNodeIds` Set is read key-scoped (`.has(edge.source)` / `.has(edge.target)`), so only edges actually touching a dragged node re-run when the drag begins or ends; group-drag members are included so their edges degrade too. (Task D1)
+- **Opt-in zoom-level LOD (`edgeLod: { simplifyAt: 'far' | 'medium' }`, default off).** When set, edges render as a plain straight line once the viewport zoom bucket is at or below `simplifyAt`, skipping pathfinding and curvature at zoom levels where the detail isn't legible. Endpoint measurement is unaffected; markers, labels and CSS classes keep the edge's configured type — only the path geometry simplifies, and the label anchor follows that simplified path. It reads the already-bucketed reactive `_zoomLevel`, so an edge recomputes only when a zoom *threshold* is crossed, not on every wheel tick. When `edgeLod` is unset the edge effect never reads `_zoomLevel`, so the default render gains **zero** new reactive dependencies. (Task D2)
+
+**Infrastructure**
+- `flow-canvas`: reactive `_draggingNodeIds: Set<string>`, populated in `flow-node` `onDragStart` (dragged node + group-drag members) and cleared unconditionally on drag end; the clear and the geometry commit coalesce into a single reactive flush so affected edges re-route exactly once with the final geometry. Also pruned when a dragged node is removed (`removeNodes`) or its directive is torn down mid-gesture, so an interrupted drag (e.g. a collaborator deletes the node, or the node unmounts) can't strand an id and pin a later re-added/undo-restored node's edges to the simplified path.
+- New config flags `avoidantSimplifyOnDrag?: boolean` and `edgeLod?: false | { simplifyAt: 'far' | 'medium' }` on `FlowCanvasConfig`.
+
 ## v0.2.1-alpha — 2026-04-14
 
 > Companion release: [WireFlow v0.2.1-alpha](https://github.com/getartisanflow/wireflow/blob/main/CHANGELOG.md#v021-alpha--2026-04-14) ships the matching server-side surface (`<x-schema-designer>`, `WithSchemaDesigner`, validator rules, `@connect-validate` bridge) plus the post-Phase-5 `<x-flow>` / `<x-schema-designer>` polish that pairs with the fullscreen + row-select + cascade fixes below.
