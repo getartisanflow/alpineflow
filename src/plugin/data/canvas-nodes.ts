@@ -304,6 +304,7 @@ export function createNodesMixin(ctx: CanvasContext) {
         ctx.selectedNodes.delete(id);
         ctx._initialDimensions.delete(id);
         ctx._uninstallChildLayoutWatchers(id);
+        ctx._draggingNodeIds?.delete(id);
       }
       // Prune routing state for cascade-removed edges — mirrors removeEdges'
       // cleanup, which this path bypasses since it splices ctx.edges directly.

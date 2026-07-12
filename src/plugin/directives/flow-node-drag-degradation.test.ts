@@ -140,4 +140,20 @@ describe('x-flow-node — _draggingNodeIds populate/clear (WS-D, avoidantSimplif
 
     expect(canvas._draggingNodeIds.size).toBe(0);
   });
+
+  it('prunes the id when the node directive is torn down mid-drag, before onDragEnd ever fires (interrupted-drag guard)', async () => {
+    const { scope, nodeEl } = mount([node('n1')]);
+    await Alpine.nextTick();
+    const canvas = scope();
+    const options = capturedDragOptions();
+
+    options.onDragStart!({ nodeId: 'n1', position: { x: 0, y: 0 }, sourceEvent: {} as MouseEvent });
+    expect(canvas._draggingNodeIds.has('n1')).toBe(true);
+
+    // Directive torn down mid-gesture — e.g. a collaborator deletes the node
+    // or the host component unmounts — with no onDragEnd ever firing.
+    Alpine.destroyTree(nodeEl);
+
+    expect(canvas._draggingNodeIds.has('n1')).toBe(false);
+  });
 });

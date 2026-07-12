@@ -1880,6 +1880,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
           const canvas = Alpine.$data(el.closest('[x-data]') as HTMLElement);
           canvas?._nodeElements?.delete(nodeId);
           canvas?._resizeObserver?.unobserve(el);
+          canvas?._draggingNodeIds?.delete(nodeId);
         }
       });
     },
