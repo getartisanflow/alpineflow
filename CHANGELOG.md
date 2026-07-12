@@ -77,6 +77,24 @@ Rebuilds the undo/redo *restore* path (the capture side is Workstream 1). Undo/r
 - Obstacle geometry for avoidant/orthogonal edges is now non-reactive. A node moved by a programmatic data mutation that does not bump `_layoutAnimTick` will not re-route dependent edges until the next tick. Interactive gestures (drag, resize, reorder/reparent) bump the tick, so gesture-driven moves re-route as before.
 - After the Dijkstra rewrite, routes across dense obstacle fields may choose different waypoints among equal-cost shortest paths. Path length and obstacle avoidance are unchanged — only the specific corners of a tie-broken route may differ, so an avoidant edge can render a visually different (but equally short) path.
 
+### Workstream C — shared router + dirty-corridor invalidation
+
+Builds on Workstream 4. Where WS4 made a single route fast, WS C stops the *whole graph* from redoing obstacle work on every commit: obstacles are built once per geometry commit and shared across edges, and a node move re-routes only the edges whose corridor it actually affects. Routing itself (path selection, cost, tie-breaking, appearance) is unchanged — this is purely a speed pass.
+
+**Performance**
+- Avoidant/orthogonal edges no longer each rebuild an obstacle array from the full node list on every effect run. A new `_commitNodeGeometry()` builds the obstacle geometry **once per geometry commit** into a shared, non-reactive `_obstacleSnapshot` and maintains a `SpatialGrid`; each edge just filters the shared snapshot for its own endpoints. Bench (`npm run bench`, chromium): obstacle construction for a full-graph pass of 50 nodes × 100 edges is **4.23× faster** (8.0k → 33.9k ops/s).
+- **Dirty-corridor invalidation.** A geometry commit re-routes only the edges a changed node can actually affect — those that touch it (source/target) or whose last-routed corridor (endpoint bbox ± `CORRIDOR_MARGIN`, the same margin the router uses to prune obstacles) contains the node's old or new rect — instead of re-routing every edge. Moving one corner node among 100 spread-out edges dirties **1** edge, not 100. Edges re-route via a key-scoped per-edge signal (`_edgeDirtyTicks`), so an unaffected edge's effect does not run.
+- The `_layoutAnimTick` signal is retained purely for handle re-measurement during layout animation; it no longer doubles as the whole-graph routing trigger.
+
+**Breaking / Behavior Changes**
+- **Hidden nodes are no longer treated as routing obstacles.** A `hidden` node previously still deflected other edges' avoidant/orthogonal routes even though it (and its own edges) were not rendered; it no longer does, so a route passing where a hidden node sits may differ. This is the only route-appearance change in the workstream — all other routes are unchanged (the router's value-keyed cache hits on the identical obstacle set and order).
+- The dirty-corridor guarantee is exact on the router's primary (corridor-pruned) path. A far obstacle that only participates via the router's full-set retry path, moved by a programmatic mutation that does not bump `_layoutAnimTick`, may not re-route a distant edge until the next tick — the same non-reactive-obstacle caveat class as Workstream 4. Interactive gestures still bump the tick and re-measure all edges.
+
+**Infrastructure**
+- `flow-canvas`: non-reactive `_obstacleSnapshot` (mutated in place across commits to keep its reactive identity stable) + `_spatialGrid` (`SpatialGrid`), reactive `_obstacleEpoch`, and `_commitNodeGeometry(changedNodeIds?)` wired at every geometry commit point (node drag-end, reorder/reparent, ResizeObserver dimension write, `addNodes` / `removeNodes`, undo/redo, `fromObject`, and once at init).
+- Per-edge dirty tracking: reactive key-scoped `_edgeDirtyTicks` + plain `_edgeCorridors`, driven by `_markDirtyEdges(changedNodeIds?, prevSnapshot?)`. Stale entries are pruned in `removeEdges` and on full invalidation (undo/redo/`fromObject`).
+- `CORRIDOR_MARGIN` is now exported from `edge-paths/orthogonal.ts` so the invalidation corridor and the router's obstacle pruning share one constant.
+
 ## v0.2.1-alpha — 2026-04-14
 
 > Companion release: [WireFlow v0.2.1-alpha](https://github.com/getartisanflow/wireflow/blob/main/CHANGELOG.md#v021-alpha--2026-04-14) ships the matching server-side surface (`<x-schema-designer>`, `WithSchemaDesigner`, validator rules, `@connect-validate` bridge) plus the post-Phase-5 `<x-flow>` / `<x-schema-designer>` polish that pairs with the fullscreen + row-select + cascade fixes below.
