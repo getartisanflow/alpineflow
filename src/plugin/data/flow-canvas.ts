@@ -572,8 +572,21 @@ export function registerFlowCanvas(Alpine: Alpine) {
       };
 
       if (!changedNodeIds || changedNodeIds.length === 0) {
+        const liveIds = new Set<string>();
         for (const e of rawEdges) {
+          liveIds.add(e.id);
           bump(e.id); // full invalidation (undo/redo/fromObject/init)
+        }
+        // Prune routing state for edges removed outside removeEdges (e.g.
+        // undo/redo/fromObject splice ctx.edges directly, bypassing the
+        // cleanup removeEdges does) — otherwise these Maps leak entries for
+        // churned edge ids over long sessions. Raw deletes: no reactive
+        // trigger needed, the removed edges' effects are already torn down.
+        for (const id of [...rawTicks.keys()]) {
+          if (!liveIds.has(id)) rawTicks.delete(id);
+        }
+        for (const id of [...corridors.keys()]) {
+          if (!liveIds.has(id)) corridors.delete(id);
         }
         return;
       }

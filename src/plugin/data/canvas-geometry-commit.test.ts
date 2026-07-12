@@ -238,8 +238,28 @@ describe('_markDirtyEdges — selective edge invalidation', () => {
 
     expect(dirtiedCount).toBeGreaterThan(0); // sanity: the win test isn't a no-op
     expect(dirtiedCount).toBeLessThanOrEqual(5); // << 100 — the headline win
-    // eslint-disable-next-line no-console
-    console.log(`[WIN] 1 corner node -> ${dirtiedCount}/100 edges dirtied`);
+  });
+
+  it('prunes _edgeDirtyTicks/_edgeCorridors for edges removed via fromObject on the next full commit', () => {
+    const canvas = mountCanvas({ nodes: [] });
+
+    canvas.edges = [makeEdge('e-live', 'a', 'b'), makeEdge('e-stale', 'x', 'y')];
+    canvas._edgeDirtyTicks.set('e-live', 1);
+    canvas._edgeDirtyTicks.set('e-stale', 3);
+    canvas._edgeCorridors.set('e-live', { minX: 0, minY: 0, maxX: 10, maxY: 10 });
+    canvas._edgeCorridors.set('e-stale', { minX: 100, minY: 100, maxX: 110, maxY: 110 });
+
+    // Simulate undo/redo/fromObject dropping 'e-stale' by replacing ctx.edges
+    // directly (bypassing removeEdges, which would have pruned the maps
+    // itself) — 'e-stale' now has stale entries in both maps but no edge.
+    canvas.edges = canvas.edges.filter((e: FlowEdge) => e.id !== 'e-stale');
+
+    canvas._commitNodeGeometry(); // full invalidation (no changed ids) → prune
+
+    expect(Alpine.raw(canvas._edgeDirtyTicks).has('e-stale')).toBe(false);
+    expect(Alpine.raw(canvas._edgeCorridors).has('e-stale')).toBe(false);
+    expect(Alpine.raw(canvas._edgeDirtyTicks).get('e-live')).toBe(2); // bumped by full invalidation, not deleted
+    expect(Alpine.raw(canvas._edgeCorridors).has('e-live')).toBe(true);
   });
 });
 
