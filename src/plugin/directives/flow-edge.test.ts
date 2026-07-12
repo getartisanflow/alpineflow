@@ -65,7 +65,11 @@ let canvasSeq = 0;
  * Build a minimal-but-complete reactive canvas scope for the edge effect,
  * mount `<svg><g x-flow-edge="edges[N]">` for each edge, and return handles.
  */
-function mountEdges(nodes: MockNode[], edges: MockEdge[], opts: { nodeElements?: boolean } = {}) {
+function mountEdges(
+  nodes: MockNode[],
+  edges: MockEdge[],
+  opts: { nodeElements?: boolean; config?: Record<string, unknown> } = {},
+) {
   const host = document.createElement('div');
   const canvas = {
     nodes,
@@ -74,8 +78,14 @@ function mountEdges(nodes: MockNode[], edges: MockEdge[], opts: { nodeElements?:
     selectedEdges: new Set<string>(),
     selectedNodes: new Set<string>(),
     _layoutAnimTick: 0,
+    // ── Interaction degradation (Workstream D) ──────────────────────────
+    // REACTIVE bucketed zoom level, mirroring flow-canvas.ts's `_zoomLevel`
+    // (set by `_applyZoomLevel`). Edge effects read it only when `edgeLod`
+    // is configured (WS-D task D2). Existing tests never read it, so
+    // defaulting to 'close' here is safe.
+    _zoomLevel: 'close' as 'far' | 'medium' | 'close',
     viewport: { x: 0, y: 0, zoom: 1 },
-    _config: {} as Record<string, unknown>,
+    _config: { ...(opts.config ?? {}) } as Record<string, unknown>,
     _shapeRegistry: undefined as unknown,
     // toAbsoluteNode returns parentless nodes untouched, so an empty map is fine
     // for these flat fixtures.
@@ -96,6 +106,11 @@ function mountEdges(nodes: MockNode[], edges: MockEdge[], opts: { nodeElements?:
     _obstacleSnapshot: null as Array<{ id: string; x: number; y: number; width: number; height: number }> | null,
     _edgeDirtyTicks: new Map<string, number>(),
     _edgeCorridors: new Map<string, { minX: number; minY: number; maxX: number; maxY: number }>(),
+    // ── Interaction degradation (Workstream D) ──────────────────────────
+    // REACTIVE Set of node ids currently being dragged, mirroring
+    // flow-canvas.ts's `_draggingNodeIds`. Edge effects read key-scoped
+    // `.has(edge.source)` / `.has(edge.target)` on it (avoidantSimplifyOnDrag).
+    _draggingNodeIds: new Set<string>(),
     _commitNodeGeometry(changedNodeIds?: string[]) {
       // Shallow-copy BEFORE mutating in place below (see the "keep the same
       // reference" comment) so _markDirtyEdges can see the pre-commit rects.
@@ -433,6 +448,174 @@ describe('x-flow-edge dirty-corridor invalidation (Workstream C, task C2)', () =
 
   it('sanity: CORRIDOR_MARGIN import matches the router constant (no magic-number duplication)', () => {
     expect(CORRIDOR_MARGIN).toBe(200);
+  });
+});
+
+describe('x-flow-edge drag simplification (WS-D)', () => {
+  /** a/b are the edge endpoints; c sits between them and forces a real
+   *  avoidant route around it.
+   *
+   *  Path-command facts (empirically verified against avoidant.ts /
+   *  bezier.ts — NOT "no C"; avoidant routing always renders via Catmull-Rom
+   *  cubic-bezier segments, so `C` is present either way):
+   *  - A real multi-waypoint route around an obstacle emits ONE `C` segment
+   *    PER waypoint pair (buildCatmullRomPath) — i.e. multiple `C`s.
+   *  - The empty-obstacle fast path (getAvoidantPath -> getBezierPath) emits
+   *    exactly ONE `M...C...` segment — a single `C`.
+   *  So "bezier fallback" is distinguished by C-count === 1, not by C's
+   *  absence/presence. */
+  function dragFixtureNodes(): MockNode[] {
+    return [
+      { id: 'a', position: { x: 0, y: 0 }, dimensions: { width: 100, height: 60 }, data: {} },
+      { id: 'b', position: { x: 400, y: 0 }, dimensions: { width: 100, height: 60 }, data: {} },
+      { id: 'c', position: { x: 200, y: -20 }, dimensions: { width: 100, height: 100 }, data: {} },
+    ];
+  }
+
+  /** Count `C` (cubic bezier) commands in a path's `d` attribute. */
+  function countC(d: string | null): number {
+    return d ? (d.match(/C/g) ?? []).length : 0;
+  }
+
+  it('edges touching a dragged node route as bezier during the drag', async () => {
+    const { data, groups, visiblePath } = mountEdges(dragFixtureNodes(), [
+      { id: 'e1', source: 'a', target: 'b', type: 'avoidant' },
+    ]);
+    await flush();
+
+    // Initial render: real pathfinding around obstacle 'c' — multiple bend
+    // segments (more than the single-C bezier fast path).
+    expect(countC(visiblePath(groups[0]).getAttribute('d'))).toBeGreaterThan(1);
+
+    // Start dragging endpoint 'a' — the edge should degrade to a single-curve
+    // bezier for the duration of the gesture (avoidantSimplifyOnDrag, default true).
+    data._draggingNodeIds.add('a');
+    await flush();
+    expect(countC(visiblePath(groups[0]).getAttribute('d'))).toBe(1);
+
+    // Drop: clear the dragging set and commit final geometry — routes again.
+    data._draggingNodeIds.clear();
+    data._commitNodeGeometry(['a']);
+    await flush();
+    expect(countC(visiblePath(groups[0]).getAttribute('d'))).toBeGreaterThan(1);
+  });
+
+  it('respects avoidantSimplifyOnDrag: false', async () => {
+    const { data, groups, visiblePath } = mountEdges(
+      dragFixtureNodes(),
+      [{ id: 'e1', source: 'a', target: 'b', type: 'avoidant' }],
+      { config: { avoidantSimplifyOnDrag: false } },
+    );
+    await flush();
+    expect(countC(visiblePath(groups[0]).getAttribute('d'))).toBeGreaterThan(1);
+
+    data._draggingNodeIds.add('a');
+    await flush();
+
+    // Flag disabled — pathfinding still runs during the drag (still multi-segment).
+    expect(countC(visiblePath(groups[0]).getAttribute('d'))).toBeGreaterThan(1);
+  });
+
+  it('only edges touching a dragged node re-run', async () => {
+    const nodes: MockNode[] = [
+      ...dragFixtureNodes(),
+      { id: 'd', position: { x: 2000, y: 2000 }, dimensions: { width: 100, height: 60 }, data: {} },
+      { id: 'e', position: { x: 2400, y: 2000 }, dimensions: { width: 100, height: 60 }, data: {} },
+    ];
+    const { data, groups, visiblePath } = mountEdges(nodes, [
+      { id: 'e1', source: 'a', target: 'b', type: 'avoidant' },
+      { id: 'e2', source: 'd', target: 'e', type: 'avoidant' },
+    ]);
+    await flush();
+
+    const c1 = observePathD(visiblePath(groups[0]));
+    const c2 = observePathD(visiblePath(groups[1]));
+
+    data._draggingNodeIds.add('a');
+    await flush();
+
+    expect(c1.count()).toBeGreaterThan(0); // e1 touches 'a' — re-runs
+    expect(c2.count()).toBe(0); // e2 doesn't touch 'a' — key-scoped, no re-run
+    c1.disconnect();
+    c2.disconnect();
+  });
+});
+
+describe('x-flow-edge zoom LOD (WS-D)', () => {
+  /** a/b are the edge endpoints; c sits between them and forces a real
+   *  avoidant route around it (same fixture as the drag-simplification
+   *  block above). */
+  function lodFixtureNodes(): MockNode[] {
+    return [
+      { id: 'a', position: { x: 0, y: 0 }, dimensions: { width: 100, height: 60 }, data: {} },
+      { id: 'b', position: { x: 400, y: 0 }, dimensions: { width: 100, height: 60 }, data: {} },
+      { id: 'c', position: { x: 200, y: -20 }, dimensions: { width: 100, height: 100 }, data: {} },
+    ];
+  }
+
+  it('simplifies to a straight path at/under the configured zoom bucket, restores above it', async () => {
+    const { data, groups, visiblePath } = mountEdges(
+      lodFixtureNodes(),
+      [{ id: 'e1', source: 'a', target: 'b', type: 'avoidant' }],
+      { config: { edgeLod: { simplifyAt: 'far' } } },
+    );
+    await flush();
+
+    // Initial render at 'close' — real avoidant routing around obstacle 'c'.
+    const closeD = visiblePath(groups[0]).getAttribute('d');
+    expect(closeD).toContain('C');
+
+    // Drop to 'far' — LOD simplifies to a straight path.
+    data._zoomLevel = 'far';
+    await flush();
+    const farD = visiblePath(groups[0]).getAttribute('d');
+    expect(farD).toContain('L');
+    expect(farD).not.toContain('C');
+    expect(farD).not.toBe(closeD);
+
+    // Back to 'close' — avoidant routing restored.
+    data._zoomLevel = 'close';
+    await flush();
+    expect(visiblePath(groups[0]).getAttribute('d')).toContain('C');
+  });
+
+  it("simplifyAt:'medium' simplifies at both 'medium' and 'far', not 'close'", async () => {
+    const { data, groups, visiblePath } = mountEdges(
+      lodFixtureNodes(),
+      [{ id: 'e1', source: 'a', target: 'b', type: 'avoidant' }],
+      { config: { edgeLod: { simplifyAt: 'medium' } } },
+    );
+    await flush();
+    expect(visiblePath(groups[0]).getAttribute('d')).toContain('C');
+
+    data._zoomLevel = 'medium';
+    await flush();
+    let d = visiblePath(groups[0]).getAttribute('d');
+    expect(d).toContain('L');
+    expect(d).not.toContain('C');
+
+    data._zoomLevel = 'far';
+    await flush();
+    d = visiblePath(groups[0]).getAttribute('d');
+    expect(d).toContain('L');
+    expect(d).not.toContain('C');
+
+    data._zoomLevel = 'close';
+    await flush();
+    expect(visiblePath(groups[0]).getAttribute('d')).toContain('C');
+  });
+
+  it('with edgeLod unset, changing _zoomLevel does NOT re-run the edge effect (zero new deps by default)', async () => {
+    const { data, groups, visiblePath } = mountEdges(lodFixtureNodes(), [
+      { id: 'e1', source: 'a', target: 'b', type: 'avoidant' },
+    ]);
+    await flush();
+
+    const counts = observePathD(visiblePath(groups[0]));
+    data._zoomLevel = 'far';
+    await flush();
+    expect(counts.count()).toBe(0);
+    counts.disconnect();
   });
 });
 

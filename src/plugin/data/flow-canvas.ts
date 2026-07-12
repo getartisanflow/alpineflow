@@ -381,6 +381,14 @@ export function registerFlowCanvas(Alpine: Alpine) {
     /** PLAIN Map edge id → endpoint-bbox corridor {minX,minY,maxX,maxY}. Written by edges post-route; read via Alpine.raw. */
     _edgeCorridors: new Map<string, { minX: number; minY: number; maxX: number; maxY: number }>(),
 
+    // ── Interaction degradation (Workstream D) ───────────────────────────
+    /** REACTIVE Set of node ids currently being dragged. Edge effects read
+     * key-scoped `.has(edge.source)` / `.has(edge.target)`, so ONLY edges
+     * touching a dragged node re-run when the set changes. Populated in
+     * flow-node `onDragStart` (incl. group-drag members), cleared on drag end.
+     * Drives `avoidantSimplifyOnDrag` bezier degradation. */
+    _draggingNodeIds: new Set<string>(),
+
     // ── Auto-Layout ──────────────────────────────────────────────────
     _autoLayoutTimer: null as ReturnType<typeof setTimeout> | null,
     _autoLayoutReady: false,

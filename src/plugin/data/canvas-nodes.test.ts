@@ -395,6 +395,20 @@ describe('createNodesMixin — removeNodes', () => {
     expect(ctx._initialDimensions.has('n1')).toBe(false);
   });
 
+  it('prunes a stranded _draggingNodeIds entry when the node is removed mid-drag (WS-D interrupted-drag guard)', () => {
+    const n1 = makeNode('n1');
+    const ctx = mockCtx({ nodes: [n1] });
+    ctx._nodeMap.set('n1', n1);
+    // Simulate onDragStart having run but onDragEnd never firing (e.g. a
+    // collaborator deletes the node mid-drag) — the id is stranded in the set.
+    ctx._draggingNodeIds.add('n1');
+    const mixin = createNodesMixin(ctx);
+
+    mixin.removeNodes('n1');
+
+    expect(ctx._draggingNodeIds.has('n1')).toBe(false);
+  });
+
   it('creates reconnection edges when config.reconnectOnDelete is set', () => {
     const n1 = makeNode('n1');
     const n2 = makeNode('n2');

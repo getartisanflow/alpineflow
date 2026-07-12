@@ -181,6 +181,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _obstacleEpoch: 0,
     _edgeDirtyTicks: new Map<string, number>(),
     _edgeCorridors: new Map(),
+    _draggingNodeIds: new Set<string>(),
     _commitNodeGeometry: vi.fn(),
     _markDirtyEdges: vi.fn(),
 

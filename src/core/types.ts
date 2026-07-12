@@ -930,6 +930,20 @@ export interface FlowCanvasConfig {
    *  Resolution: edge.type ?? canvas.defaultEdgeType ?? 'bezier'. Applies to both initial config edges and runtime-created edges. */
   defaultEdgeType?: EdgeType;
 
+  /** While a node is dragged, avoidant/orthogonal edges touching it skip
+   *  pathfinding and render as a bezier curve for the duration of the gesture;
+   *  they re-route properly on drop. Set `false` to keep full pathfinding during
+   *  drags. Default: true. */
+  avoidantSimplifyOnDrag?: boolean;
+
+  /** Opt-in level-of-detail for edges. When set, edges whose configured type is
+   *  avoidant/orthogonal/bezier/etc. render as a plain straight line once the
+   *  viewport zoom bucket is at or below `simplifyAt` — skipping pathfinding and
+   *  curvature at low zoom where the detail isn't visible. Endpoint positions,
+   *  markers, labels and CSS classes are unaffected; only the path geometry
+   *  simplifies. Default: false (no LOD). */
+  edgeLod?: false | { simplifyAt: 'far' | 'medium' };
+
   /** When true, pairs of reciprocal edges (A→B + B→A) render as a single
    *  dual-marker path. The mirror edge is hidden from rendering; the primary
    *  edge gains a `marker-start` attribute mirroring its `marker-end`.
