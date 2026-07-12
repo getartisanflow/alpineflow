@@ -9,6 +9,7 @@ import { vi } from 'vitest';
 import type { CanvasContext, ActiveParticle, ContextMenuState } from './canvas-context';
 import type { FlowNode, FlowEdge, Viewport, Dimensions, XYPosition } from '../../core/types';
 import type { CollapseState } from '../../core/collapse';
+import { SpatialGrid } from '../../core/geometry';
 
 /**
  * Create a mock CanvasContext with sensible defaults for unit tests.
@@ -173,6 +174,15 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     // === Layout animation ===
     _layoutAnimTick: 0,
     _layoutAnimFrame: 0,
+
+    // === Shared obstacle cache (Workstream C) ===
+    _spatialGrid: new SpatialGrid(),
+    _obstacleSnapshot: null,
+    _obstacleEpoch: 0,
+    _edgeDirtyTicks: new Map<string, number>(),
+    _edgeCorridors: new Map(),
+    _commitNodeGeometry: vi.fn(),
+    _markDirtyEdges: vi.fn(),
 
     // === Auto-Layout state ===
     _autoLayoutTimer: null,

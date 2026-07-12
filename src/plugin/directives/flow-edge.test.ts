@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import Alpine from 'alpinejs';
 import { registerFlowEdgeDirective } from './flow-edge';
+import { CORRIDOR_MARGIN } from '../../core/edge-paths/orthogonal';
 
 // ============================================================================
 // x-flow-edge directive — reactivity-scoping tests (Workstream 4)
@@ -81,6 +82,85 @@ function mountEdges(nodes: MockNode[], edges: MockEdge[], opts: { nodeElements?:
     _nodeMap: new Map<string, MockNode>(),
     _nodeElements: new Map<string, HTMLElement>(),
     _id: 'test-canvas',
+    // ── Workstream C (task C2): shared obstacle snapshot + dirty-corridor
+    // invalidation. This is a hand-rolled mirror of the real
+    // flowCanvas._commitNodeGeometry/_markDirtyEdges pair (flow-canvas.ts) —
+    // duplicated here because this harness builds a plain reactive scope
+    // rather than mounting the full flowCanvas Alpine.data() factory.
+    // INTENTIONALLY SIMPLIFIED: unlike the real implementation, this mock
+    // omits the hidden-node obstacle filter and the edge-removal/full-
+    // invalidation pruning of _edgeDirtyTicks/_edgeCorridors. The real
+    // methods are covered against a real mounted flowCanvas in
+    // canvas-geometry-commit.test.ts — treat that file as the source of
+    // truth for behavior this mirror doesn't reproduce.
+    _obstacleSnapshot: null as Array<{ id: string; x: number; y: number; width: number; height: number }> | null,
+    _edgeDirtyTicks: new Map<string, number>(),
+    _edgeCorridors: new Map<string, { minX: number; minY: number; maxX: number; maxY: number }>(),
+    _commitNodeGeometry(changedNodeIds?: string[]) {
+      // Shallow-copy BEFORE mutating in place below (see the "keep the same
+      // reference" comment) so _markDirtyEdges can see the pre-commit rects.
+      const existing = this._obstacleSnapshot;
+      const prevSnapshot = existing ? existing.slice() : null;
+      const rects = this.nodes.map((n) => ({
+        id: n.id,
+        x: n.position.x,
+        y: n.position.y,
+        width: n.dimensions.width,
+        height: n.dimensions.height,
+      }));
+      // Mirrors flow-canvas.ts's _commitNodeGeometry: keep the SAME array
+      // reference across commits (mutate in place) instead of reassigning.
+      // Reading `canvas._obstacleSnapshot` through Alpine's reactive scope —
+      // even immediately wrapped in Alpine.raw() — tracks a dependency on
+      // that property's identity, so reassigning it every commit would
+      // re-run EVERY orthogonal/avoidant edge's effect every commit and
+      // defeat dirty-corridor invalidation entirely.
+      if (existing) {
+        existing.length = 0;
+        existing.push(...rects);
+      } else {
+        this._obstacleSnapshot = rects;
+      }
+      this._markDirtyEdges(changedNodeIds, prevSnapshot);
+    },
+    _markDirtyEdges(
+      changedNodeIds?: string[],
+      prevSnapshot?: Array<{ id: string; x: number; y: number; width: number; height: number }> | null,
+    ) {
+      const bump = (id: string) => this._edgeDirtyTicks.set(id, (this._edgeDirtyTicks.get(id) ?? 0) + 1);
+      if (!changedNodeIds || changedNodeIds.length === 0) {
+        for (const e of this.edges) bump(e.id);
+        return;
+      }
+      const changed = new Set(changedNodeIds);
+      const changedRects: Array<{ x: number; y: number; width: number; height: number }> = [];
+      for (const id of changed) {
+        const nr = this._obstacleSnapshot?.find((o) => o.id === id);
+        if (nr) changedRects.push(nr);
+        const pr = prevSnapshot?.find((o) => o.id === id);
+        if (pr) changedRects.push(pr);
+      }
+      for (const e of this.edges) {
+        let dirty = changed.has(e.source) || changed.has(e.target);
+        if (!dirty) {
+          const corridor = this._edgeCorridors.get(e.id);
+          if (corridor) {
+            for (const r of changedRects) {
+              if (
+                r.x < corridor.maxX + CORRIDOR_MARGIN && r.x + r.width > corridor.minX - CORRIDOR_MARGIN &&
+                r.y < corridor.maxY + CORRIDOR_MARGIN && r.y + r.height > corridor.minY - CORRIDOR_MARGIN
+              ) {
+                dirty = true;
+                break;
+              }
+            }
+          } else {
+            dirty = true; // never-routed-yet — conservative, matches production
+          }
+        }
+        if (dirty) bump(e.id);
+      }
+    },
     getNode(id: string) {
       return this.nodes.find((n) => n.id === id);
     },
@@ -270,6 +350,89 @@ describe('x-flow-edge endpoint lookup refactor (Task 23)', () => {
     const d = visiblePath(groups[0]).getAttribute('d');
     expect(d).toBeTruthy();
     expect(d).toMatchInlineSnapshot(`"M60,60 C60,130 360,130 360,200"`);
+  });
+});
+
+describe('x-flow-edge dirty-corridor invalidation (Workstream C, task C2)', () => {
+  function farNodes(): MockNode[] {
+    return [
+      { id: 'a', position: { x: 0, y: 0 }, dimensions: { width: 100, height: 60 }, data: {} },
+      { id: 'b', position: { x: 400, y: 0 }, dimensions: { width: 100, height: 60 }, data: {} },
+      { id: 'c', position: { x: 2000, y: 2000 }, dimensions: { width: 100, height: 60 }, data: {} },
+      { id: 'd', position: { x: 2400, y: 2000 }, dimensions: { width: 100, height: 60 }, data: {} },
+    ];
+  }
+
+  it('endpoint-touching edge re-routes and the far edge stays clean after _commitNodeGeometry', async () => {
+    const { data, groups, visiblePath } = mountEdges(farNodes(), [
+      { id: 'e1', source: 'a', target: 'b', type: 'avoidant' },
+      { id: 'e2', source: 'c', target: 'd', type: 'avoidant' },
+    ]);
+    await flush(); // initial render records both edges' corridors
+
+    // Prime the shared snapshot with one full-invalidation commit first (as a
+    // real app would on initial layout). This FIRST commit is the null→array
+    // transition on `_obstacleSnapshot` (a genuine reassignment, since there
+    // is no existing array yet to mutate in place) — every already-rendered
+    // edge tracks that property and so legitimately re-runs once here. Only
+    // AFTER this priming commit does `_obstacleSnapshot` become a stable
+    // array reference that subsequent commits mutate in place, which is what
+    // makes selective re-routing possible on the SECOND+ commit onward.
+    data._commitNodeGeometry();
+    await flush();
+
+    const c1 = observePathD(visiblePath(groups[0]));
+    const c2 = observePathD(visiblePath(groups[1]));
+
+    data.getNode('a')!.position.x += 40;
+    data._commitNodeGeometry(['a']);
+    await flush();
+
+    expect(c1.count()).toBeGreaterThan(0); // e1 re-routes (endpoint match)
+    expect(c2.count()).toBe(0); // e2 does NOT re-run (corridor far away)
+    c1.disconnect();
+    c2.disconnect();
+  });
+
+  it('an edge whose endpoints never move still re-routes solely via its dirty tick when an obstacle corners it', async () => {
+    // s/t never move — only an unrelated obstacle node ('ob') moves into e3's
+    // recorded corridor. The ONLY dependency that can trigger a re-run here is
+    // `_edgeDirtyTicks.get('e3')` (no direct position read, no _layoutAnimTick
+    // bump) — this isolates the new routing-dependency wiring.
+    const nodes: MockNode[] = [
+      { id: 's', position: { x: 5000, y: 5000 }, dimensions: { width: 100, height: 60 }, data: {} },
+      { id: 't', position: { x: 5400, y: 5000 }, dimensions: { width: 100, height: 60 }, data: {} },
+      { id: 'ob', position: { x: 0, y: 0 }, dimensions: { width: 100, height: 60 }, data: {} },
+    ];
+    const { data, groups, visiblePath } = mountEdges(nodes, [
+      { id: 'e3', source: 's', target: 't', type: 'avoidant' },
+    ]);
+    await flush(); // records e3's corridor around the s/t bounding box
+    expect(data._edgeCorridors.get('e3')).toBeTruthy();
+
+    // Prime the shared snapshot (see the priming comment in the previous
+    // test): the null→array transition on the FIRST _commitNodeGeometry call
+    // is a genuine reassignment that legitimately re-runs already-rendered
+    // edges once. Priming here first means the observed commit below is a
+    // pure in-place mutation, isolating the dirty-tick as the sole cause.
+    data._commitNodeGeometry();
+    await flush();
+
+    const c3 = observePathD(visiblePath(groups[0]));
+
+    // Move 'ob' into e3's recorded corridor (well within CORRIDOR_MARGIN).
+    const corridor = data._edgeCorridors.get('e3')!;
+    data.getNode('ob')!.position.x = corridor.minX + (corridor.maxX - corridor.minX) / 2;
+    data.getNode('ob')!.position.y = corridor.minY;
+    data._commitNodeGeometry(['ob']);
+    await flush();
+
+    expect(c3.count()).toBeGreaterThan(0);
+    c3.disconnect();
+  });
+
+  it('sanity: CORRIDOR_MARGIN import matches the router constant (no magic-number duplication)', () => {
+    expect(CORRIDOR_MARGIN).toBe(200);
   });
 });
 

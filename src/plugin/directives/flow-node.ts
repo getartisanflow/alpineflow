@@ -1307,6 +1307,14 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
           },
 
           onDragEnd({ nodeId, position }) {
+            // Capture moved node ids BEFORE groupDragStartPositions is nulled
+            // below (both the reorder/reparent branch and the normal-drag
+            // branch null it), so the obstacle-cache commit at the end of
+            // each branch knows which nodes' geometry actually changed.
+            const movedIds = groupDragStartPositions
+              ? [nodeId, ...groupDragStartPositions.keys()]
+              : [nodeId];
+
             el.classList.remove('flow-node-dragging');
             debug('drag', `Node "${nodeId}" drag end`, position);
 
@@ -1380,6 +1388,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
               // (see flow-edge.ts), so bump the layout tick to re-route edges
               // that treat those siblings as obstacles.
               canvas._layoutAnimTick++;
+              canvas._commitNodeGeometry(movedIds);
               // This branch commits a real node-state mutation (reparent/reorder),
               // so commit the deferred snapshot before returning.
               commitDragHistory(canvas, didDrag, pendingDragSnapshot);
@@ -1506,6 +1515,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
             // those routes re-measure against the moved obstacle.
             if (didDrag) {
               canvas._layoutAnimTick++;
+              canvas._commitNodeGeometry(movedIds);
             }
 
             // Commit the deferred history snapshot only if the node actually

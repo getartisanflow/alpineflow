@@ -52,6 +52,7 @@ import type { FlowAnnouncer } from '../../core/announcer';
 import type { ComputeEngine } from '../../core/compute';
 import type { CollapseState } from '../../core/collapse';
 import type { KeyboardShortcuts } from '../../core/keyboard-shortcuts';
+import type { SpatialGrid } from '../../core/geometry';
 
 // ── Active particle entry (shared loop) ─────────────────────────────────────
 
@@ -397,6 +398,20 @@ export interface CanvasContext {
 
   /** rAF handle for layout animation tick */
   _layoutAnimFrame: number;
+
+  // === Shared obstacle cache (Workstream C) ===
+  _spatialGrid: SpatialGrid;
+  _obstacleSnapshot: Array<{ id: string; x: number; y: number; width: number; height: number }> | null;
+  _obstacleEpoch: number;
+  /** REACTIVE Map edge id → tick. Edge effects read key-scoped `.get(edge.id)`; bumped by _markDirtyEdges. */
+  _edgeDirtyTicks: Map<string, number>;
+  /** PLAIN Map edge id → endpoint-bbox corridor {minX,minY,maxX,maxY}. Written by edges post-route; read via Alpine.raw. */
+  _edgeCorridors: Map<string, { minX: number; minY: number; maxX: number; maxY: number }>;
+  _commitNodeGeometry(changedNodeIds?: string[]): void;
+  _markDirtyEdges(
+    changedNodeIds?: string[],
+    prevSnapshot?: Array<{ id: string; x: number; y: number; width: number; height: number }> | null,
+  ): void;
 
   // === Auto-Layout state ===
 

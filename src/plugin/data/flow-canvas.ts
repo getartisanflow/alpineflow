@@ -44,11 +44,13 @@ import { clearValidationClasses } from '../directives/flow-handle';
 import { resolveShortcuts, matchesKey, matchesModifier, shouldCaptureNudge } from '../../core/keyboard-shortcuts';
 import { isDraggable, isSelectable } from '../../core/node-flags';
 import { attachLongPress } from '../../core/long-press';
-import { getNodesInRect, getNodesFullyInRect } from '../../core/geometry';
+import { getNodesInRect, getNodesFullyInRect, SpatialGrid, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
+import { CORRIDOR_MARGIN } from '../../core/edge-paths/orthogonal';
 import {
   buildNodeMap,
   reconcileChildrenIndex,
   getAbsolutePosition as getAbsolutePositionUtil,
+  toAbsoluteNode,
   toAbsoluteNodes,
   sortNodesTopological,
 } from '../../core/sub-flow';
@@ -367,6 +369,18 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _layoutAnimTick: 0,
     _layoutAnimFrame: 0,
 
+    // ── Shared obstacle cache (Workstream C) ─────────────────────────────
+    /** Spatial index of node id → flow-space rect cells (committed geometry). Non-reactive: operate on it via `Alpine.raw(canvas._spatialGrid)` (raw the NESTED property — `Alpine.raw(canvas)` does NOT unwrap Alpine's merge-scope proxy; see flow-edge.ts). Also maintained for the viewport-culling overhaul (WS E), which will consume it — do not delete as dead code even though only WS C currently reads it. */
+    _spatialGrid: new SpatialGrid(),
+    /** Obstacle rects rebuilt once per commit. In the edge effect read it via `Alpine.raw(canvas._obstacleSnapshot)` (nested-raw) so the edge does NOT subscribe to every node's reactive state. */
+    _obstacleSnapshot: null as Array<{ id: string; x: number; y: number; width: number; height: number }> | null,
+    /** Reactive epoch bumped by _commitNodeGeometry (internal signal; edges must NOT subscribe to it). Reserved for the interaction-degradation/LOD workstream (WS D), which will consume it — do not delete as dead code even though only WS C currently reads it. */
+    _obstacleEpoch: 0,
+    /** REACTIVE Map edge id → tick. Edge effects read key-scoped `.get(edge.id)`; bumped by _markDirtyEdges. */
+    _edgeDirtyTicks: new Map<string, number>(),
+    /** PLAIN Map edge id → endpoint-bbox corridor {minX,minY,maxX,maxY}. Written by edges post-route; read via Alpine.raw. */
+    _edgeCorridors: new Map<string, { minX: number; minY: number; maxX: number; maxY: number }>(),
+
     // ── Auto-Layout ──────────────────────────────────────────────────
     _autoLayoutTimer: null as ReturnType<typeof setTimeout> | null,
     _autoLayoutReady: false,
@@ -449,6 +463,164 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
     _rebuildEdgeMap() {
       this._edgeMap = new Map(this.edges.map((e: FlowEdge) => [e.id, e]));
+    },
+
+    /**
+     * Rebuild the shared obstacle snapshot + SpatialGrid from committed node
+     * geometry. Called imperatively at discrete geometry commit points (drag
+     * end, resize, add/remove nodes, undo/redo, restore) — never inside a
+     * reactive effect.
+     *
+     * `Alpine.raw(this)` does NOT unwrap Alpine's merge-scope proxy (it returns
+     * the same proxy back), so reads go through the NESTED reactive property
+     * instead — `Alpine.raw(this.nodes)` and `Alpine.raw(this._spatialGrid)` —
+     * mirroring the precedent in flow-edge.ts's obstacle-rect computation.
+     * The parent-lookup map is rebuilt from those raw nodes rather than reusing
+     * `_nodeMap`, whose stored node values would still be reactive proxies even
+     * once the Map container is raw. Rebuilds the grid from scratch each commit
+     * (O(nodes); commit points are discrete user actions, not frames), which
+     * also prunes entries for removed/hidden nodes.
+     */
+    _commitNodeGeometry(changedNodeIds?: string[]): void {
+      // Shallow-copied BEFORE this commit mutates the snapshot array (see
+      // below) so _markDirtyEdges can also test a changed node's OLD rect: a
+      // node moving OUT of an edge's corridor must still dirty that edge, or
+      // its route would go stale. The individual rect objects are always
+      // freshly created below (never mutated after creation), so a shallow
+      // array copy fully captures the "before" values.
+      const existingSnapshot = Alpine.raw(this._obstacleSnapshot) as
+        | Array<{ id: string; x: number; y: number; width: number; height: number }>
+        | null;
+      const prevSnapshot = existingSnapshot ? existingSnapshot.slice() : null;
+      const rawNodes = Alpine.raw(this.nodes) as FlowNode[];
+      const rawNodeMap = new Map<string, FlowNode>(rawNodes.map((n): [string, FlowNode] => [n.id, n]));
+      const nodeOrigin = this._config?.nodeOrigin;
+      const grid = Alpine.raw(this._spatialGrid) as SpatialGrid; // nested-raw unwraps the class instance
+      grid.clear();
+      const rects: Array<{ id: string; x: number; y: number; width: number; height: number }> = [];
+      for (const n of rawNodes) {
+        if (n.hidden) continue; // hidden nodes are not obstacles (their own edges are already hidden)
+        const abs = toAbsoluteNode(n, rawNodeMap, nodeOrigin);
+        const rect = {
+          id: n.id,
+          x: abs.position.x,
+          y: abs.position.y,
+          width: abs.dimensions?.width ?? DEFAULT_NODE_WIDTH,
+          height: abs.dimensions?.height ?? DEFAULT_NODE_HEIGHT,
+        };
+        rects.push(rect);
+        grid.insert(n.id, rect.x, rect.y, rect.width, rect.height);
+      }
+      // Keep the SAME array reference across commits (mutate in place)
+      // instead of reassigning `this._obstacleSnapshot` every time. Edges
+      // read this snapshot via `Alpine.raw(canvas._obstacleSnapshot)` — even
+      // wrapped in Alpine.raw(), the property GET on the reactive scope
+      // (evaluated before raw() can unwrap the result) still tracks a
+      // dependency on `_obstacleSnapshot`'s identity. Reassigning it on every
+      // commit would therefore re-run EVERY orthogonal/avoidant edge's effect
+      // on every commit (Vue's reactive `set` trap always triggers on a
+      // changed reference), silently defeating dirty-corridor invalidation.
+      // Mutating the existing array's contents in place instead means the
+      // `set` trap never re-fires after the first commit (same reference in,
+      // same reference out), leaving `_edgeDirtyTicks` as the only per-edge
+      // routing signal edges subscribe to.
+      if (existingSnapshot) {
+        existingSnapshot.length = 0;
+        existingSnapshot.push(...rects);
+      } else {
+        this._obstacleSnapshot = rects; // first commit only: null → array (real assignment)
+      }
+      this._obstacleEpoch++;
+      this._markDirtyEdges(changedNodeIds, prevSnapshot);
+    },
+
+    /**
+     * Dirty exactly the edges whose ROUTE could have changed as a result of
+     * `changedNodeIds` moving/resizing — instead of every avoidant/orthogonal
+     * edge re-routing on every geometry commit.
+     *
+     * An edge is dirtied when either:
+     *  - it directly touches a changed node (source or target), or
+     *  - a changed node's rect (new OR old — see prevSnapshot) intersects
+     *    that edge's last-recorded corridor, expanded by `CORRIDOR_MARGIN`.
+     *    This mirrors `corridorObstacles()` in orthogonal.ts exactly: an
+     *    obstacle outside endpoint-bbox±CORRIDOR_MARGIN is pruned by the
+     *    router itself, so it provably cannot change that edge's route.
+     *
+     * Edges with no recorded corridor yet (never routed, or non-obstacle
+     * edge types that never write one) are dirtied conservatively so routes
+     * never go stale.
+     *
+     * `_edgeDirtyTicks` is bumped via `.set()` on the REACTIVE map (`this`,
+     * not raw) so edge effects reading `_edgeDirtyTicks.get(edge.id)` are
+     * notified; all other reads here go through nested-`Alpine.raw()` so
+     * this method does not itself subscribe to node/edge state.
+     */
+    _markDirtyEdges(
+      changedNodeIds?: string[],
+      prevSnapshot?: Array<{ id: string; x: number; y: number; width: number; height: number }> | null,
+    ): void {
+      const ticks = this._edgeDirtyTicks; // reactive (set() must notify)
+      const rawTicks = Alpine.raw(ticks) as Map<string, number>;
+      const rawEdges = Alpine.raw(this.edges) as FlowEdge[];
+      const corridors = Alpine.raw(this._edgeCorridors) as Map<string, { minX: number; minY: number; maxX: number; maxY: number }>;
+      const newSnap = Alpine.raw(this._obstacleSnapshot) as
+        | Array<{ id: string; x: number; y: number; width: number; height: number }>
+        | null;
+      const bump = (id: string): void => {
+        ticks.set(id, (rawTicks.get(id) ?? 0) + 1);
+      };
+
+      if (!changedNodeIds || changedNodeIds.length === 0) {
+        const liveIds = new Set<string>();
+        for (const e of rawEdges) {
+          liveIds.add(e.id);
+          bump(e.id); // full invalidation (undo/redo/fromObject/init)
+        }
+        // Prune routing state for edges removed outside removeEdges (e.g.
+        // undo/redo/fromObject splice ctx.edges directly, bypassing the
+        // cleanup removeEdges does) — otherwise these Maps leak entries for
+        // churned edge ids over long sessions. Raw deletes: no reactive
+        // trigger needed, the removed edges' effects are already torn down.
+        for (const id of [...rawTicks.keys()]) {
+          if (!liveIds.has(id)) rawTicks.delete(id);
+        }
+        for (const id of [...corridors.keys()]) {
+          if (!liveIds.has(id)) corridors.delete(id);
+        }
+        return;
+      }
+      const changed = new Set(changedNodeIds);
+      // Old-rect correctness: a node moving OUT of a corridor must still
+      // dirty that edge, so test BOTH the node's new rect (post-commit
+      // snapshot) and its old rect (pre-commit prevSnapshot).
+      const changedRects: Array<{ x: number; y: number; width: number; height: number }> = [];
+      for (const id of changed) {
+        const nr = newSnap?.find((o) => o.id === id);
+        if (nr) changedRects.push(nr);
+        const pr = prevSnapshot?.find((o) => o.id === id);
+        if (pr) changedRects.push(pr);
+      }
+      for (const e of rawEdges) {
+        let dirty = changed.has(e.source) || changed.has(e.target);
+        if (!dirty) {
+          const corridor = corridors.get(e.id);
+          if (corridor) {
+            for (const r of changedRects) {
+              if (
+                r.x < corridor.maxX + CORRIDOR_MARGIN && r.x + r.width > corridor.minX - CORRIDOR_MARGIN &&
+                r.y < corridor.maxY + CORRIDOR_MARGIN && r.y + r.height > corridor.minY - CORRIDOR_MARGIN
+              ) {
+                dirty = true;
+                break;
+              }
+            }
+          } else {
+            dirty = true; // never-routed-yet OR non-obstacle edge — conservative; routes never go stale
+          }
+        }
+        if (dirty) bump(e.id);
+      }
     },
 
     /**
@@ -1626,6 +1798,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _resizeObserverInit(): void {
       if (typeof ResizeObserver === 'undefined') return; // SSR / very old browsers
       this._resizeObserver = new ResizeObserver((entries) => {
+        const changedIds = new Set<string>();
         for (const entry of entries) {
           const el = entry.target as HTMLElement;
           const nodeId = el.getAttribute('data-flow-node-id');
@@ -1673,11 +1846,17 @@ export function registerFlowCanvas(Alpine: Alpine) {
             (node as any).maxDimensions,
           );
           node.dimensions = clamped;
+          changedIds.add(nodeId);
 
           // Schedule parent re-layout (deduped per frame).
           if (node.parentId) {
             this._layoutDedup?.safeLayoutChildren(node.parentId);
           }
+        }
+        // Commit once per RO batch (not per entry) so multiple nodes resizing
+        // in the same frame only trigger a single obstacle-grid rebuild.
+        if (changedIds.size > 0) {
+          this._commitNodeGeometry([...changedIds]);
         }
       });
     },
@@ -1736,6 +1915,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
           this.fitView();
         });
       }
+
+      // Populate the shared obstacle snapshot/grid once initial measurement
+      // has settled, so avoidant/orthogonal edges have geometry to read on
+      // their first route.
+      this._commitNodeGeometry();
     },
 
     /** Call setup(canvas) on any addon that provides it. */

@@ -70,6 +70,8 @@ export function createEdgesMixin(ctx: CanvasContext) {
       ctx._rebuildEdgeMap();
       for (const id of idSet) {
         ctx.selectedEdges.delete(id);
+        ctx._edgeDirtyTicks?.delete(id);
+        ctx._edgeCorridors?.delete(id);
       }
       if (removed.length) ctx._emit('edges-change', { type: 'remove', edges: removed });
 
