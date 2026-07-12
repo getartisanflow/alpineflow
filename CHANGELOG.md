@@ -77,6 +77,13 @@ Rebuilds the undo/redo *restore* path (the capture side is Workstream 1). Undo/r
 - Obstacle geometry for avoidant/orthogonal edges is now non-reactive. A node moved by a programmatic data mutation that does not bump `_layoutAnimTick` will not re-route dependent edges until the next tick. Interactive gestures (drag, resize, reorder/reparent) bump the tick, so gesture-driven moves re-route as before.
 - After the Dijkstra rewrite, routes across dense obstacle fields may choose different waypoints among equal-cost shortest paths. Path length and obstacle avoidance are unchanged — only the specific corners of a tie-broken route may differ, so an avoidant edge can render a visually different (but equally short) path.
 
+### Workstream B — small measured wins
+Two low-risk perf touch-ups surfaced by the schema-scale review. Both are pure performance changes — label positions and node ordering are behaviourally identical.
+
+**Performance**
+- Edge labels cache the path length keyed by the `d` attribute. Positioning a center/start/end label previously forced `SVGPathElement.getTotalLength()` up to 5× per edge per effect run (including once inside the center-label helper); the length is now measured at most once while `d` is unchanged, so selection- and label-only re-runs skip all forced SVG geometry. A changed path re-measures.
+- `addNodes` keeps the `nodes` array identity for flat batches. Appending nodes without a `parentId` no longer re-sorts and reassigns `nodes`, so the array reference is stable and effects that read it don't invalidate on every add. A batch that includes a child still sorts topologically — now in place via `splice`, so array identity is preserved even then.
+
 ## v0.2.1-alpha — 2026-04-14
 
 > Companion release: [WireFlow v0.2.1-alpha](https://github.com/getartisanflow/wireflow/blob/main/CHANGELOG.md#v021-alpha--2026-04-14) ships the matching server-side surface (`<x-schema-designer>`, `WithSchemaDesigner`, validator rules, `@connect-validate` bridge) plus the post-Phase-5 `<x-flow>` / `<x-schema-designer>` polish that pairs with the fullscreen + row-select + cascade fixes below.
