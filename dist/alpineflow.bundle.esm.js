@@ -12547,8 +12547,11 @@ function Vg(t) {
         for (const [C, v] of this._edgeSvgElements) {
           const S = this._edgeMap.get(C);
           if (!S) continue;
-          const k = g.has(S.source) || g.has(S.target) || zg(this._edgeCorridors.get(C), u), L = !m.has(C);
-          k !== L && (v.style.display = k ? "" : "none"), k || _.add(C);
+          const k = this._nodeMap.get(S.source)?.hidden, L = this._nodeMap.get(S.target)?.hidden;
+          if (S.hidden || S._hiddenByCollapse || k || L)
+            continue;
+          const $ = g.has(S.source) || g.has(S.target) || zg(this._edgeCorridors.get(C), u), x = !m.has(C);
+          $ !== x && (v.style.display = $ ? "" : "none"), $ || _.add(C);
         }
         this._visibleNodeIds = g, this._culledEdgeIds = _;
       },
@@ -12561,7 +12564,10 @@ function Vg(t) {
        */
       _uncullEverything() {
         for (const s of this._nodeElements.values()) s.style.display = "";
-        for (const s of this._edgeSvgElements.values()) s.style.display = "";
+        for (const s of this._culledEdgeIds) {
+          const l = this._edgeSvgElements.get(s);
+          l && (l.style.display = "");
+        }
         this._visibleNodeIds = /* @__PURE__ */ new Set(), this._culledEdgeIds = /* @__PURE__ */ new Set(), this._cullingWasActive = !1;
       },
       _getVisibleNodeIds() {
