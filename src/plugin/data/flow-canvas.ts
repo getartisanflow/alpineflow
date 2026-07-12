@@ -796,10 +796,24 @@ export function registerFlowCanvas(Alpine: Alpine) {
       const bounds = getVisibleBounds(this.viewport, cw, ch, buffer);
 
       const prev = this._visibleNodeIds;
-      const visible = new Set<string>();
 
-      for (const node of this.nodes as FlowNode[]) {
-        if (node.hidden) continue;
+      // Coarse (cell-granularity) superset of node ids whose committed rects
+      // could overlap `bounds`. The grid is maintained by _commitNodeGeometry
+      // at discrete commit points (C1) — culling only QUERIES it here.
+      const grid = Alpine.raw(this._spatialGrid) as SpatialGrid;
+      const candidates = grid.query(bounds);
+
+      // `_draggingNodeIds` is provided by WS-D (interaction degradation);
+      // read defensively so this branch is correct with or without it. The
+      // grid holds committed geometry, so a node mid-drag has stale cells —
+      // unioning the dragging set prevents culling a node that is being
+      // dragged into view.
+      const dragging = (this as unknown as { _draggingNodeIds?: Set<string> })._draggingNodeIds;
+
+      const visible = new Set<string>();
+      const testCandidate = (id: string) => {
+        const node = this._nodeMap.get(id);
+        if (!node || node.hidden) return;
         const w = node.dimensions?.width ?? 150;
         const h = node.dimensions?.height ?? 50;
         const pos = node.parentId
@@ -811,15 +825,28 @@ export function registerFlowCanvas(Alpine: Alpine) {
           pos.y + h < bounds.minY ||
           pos.y > bounds.maxY
         );
+        if (isVisible) visible.add(id);
+      };
 
-        if (isVisible) visible.add(node.id);
-
-        if (isVisible === prev.has(node.id)) continue; // no transition — no write
-
-        const el = this._nodeElements.get(node.id);
-        if (el) {
-          el.style.display = isVisible ? '' : 'none';
+      for (const id of candidates) testCandidate(id);
+      if (dragging) {
+        for (const id of dragging) {
+          if (!candidates.has(id)) testCandidate(id);
         }
+      }
+
+      // Transition writes via set-difference against `prev` — O(candidates +
+      // prev) instead of O(all nodes), preserving E1's "write only on
+      // visibility transition" guarantee.
+      for (const id of visible) {
+        if (prev.has(id)) continue; // already visible — no write
+        const el = this._nodeElements.get(id);
+        if (el) el.style.display = '';
+      }
+      for (const id of prev) {
+        if (visible.has(id)) continue; // still visible — no write
+        const el = this._nodeElements.get(id);
+        if (el) el.style.display = 'none';
       }
 
       // Edge culling: an edge is visible iff either endpoint node is visible,
