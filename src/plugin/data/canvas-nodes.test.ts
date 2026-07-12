@@ -101,14 +101,52 @@ describe('createNodesMixin — addNodes', () => {
     });
   });
 
-  it('sorts topologically and rebuilds node map', () => {
+  it('sorts topologically and rebuilds node map when a child is added', () => {
+    const ctx = mockCtx();
+    const mixin = createNodesMixin(ctx);
+
+    mixin.addNodes(makeNode('n1', { parentId: 'nonexistent' }));
+
+    expect(sortNodesTopological).toHaveBeenCalledWith(ctx.nodes);
+    expect(ctx._rebuildNodeMap).toHaveBeenCalledOnce();
+  });
+
+  it('rebuilds node map even for a flat batch (no re-sort needed)', () => {
     const ctx = mockCtx();
     const mixin = createNodesMixin(ctx);
 
     mixin.addNodes(makeNode('n1'));
 
-    expect(sortNodesTopological).toHaveBeenCalledWith(ctx.nodes);
     expect(ctx._rebuildNodeMap).toHaveBeenCalledOnce();
+  });
+
+  it('adding a flat node preserves nodes array identity and skips the topological sort', () => {
+    const ctx = mockCtx();
+    const mixin = createNodesMixin(ctx);
+    vi.mocked(sortNodesTopological).mockImplementation((nodes) => [...nodes]); // fresh array => reassign would break identity
+    const ref = ctx.nodes;
+
+    mixin.addNodes([makeNode('x')]);
+
+    expect(ctx.nodes).toBe(ref); // identity preserved
+    expect(sortNodesTopological).not.toHaveBeenCalled(); // flat batch: no re-sort
+
+    vi.mocked(sortNodesTopological).mockImplementation((nodes) => nodes); // restore default identity-passthrough
+  });
+
+  it('adding a child still triggers topological ordering and keeps array identity (in-place)', () => {
+    const ctx = mockCtx();
+    const mixin = createNodesMixin(ctx);
+    mixin.addNodes([makeNode('p1')]); // parent added flat first
+    const ref = ctx.nodes;
+    vi.mocked(sortNodesTopological).mockClear();
+
+    mixin.addNodes([makeNode('child', { parentId: 'p1' })]);
+
+    expect(sortNodesTopological).toHaveBeenCalled(); // child in batch => sort runs
+    expect(ctx.nodes).toBe(ref); // splice keeps identity
+    const ids = ctx.nodes.map((n: FlowNode) => n.id);
+    expect(ids.indexOf('p1')).toBeLessThan(ids.indexOf('child')); // parent before child
   });
 
   it('saves initial dimensions when node has dimensions', () => {

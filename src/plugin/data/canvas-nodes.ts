@@ -104,7 +104,10 @@ export function createNodesMixin(ctx: CanvasContext) {
         }
       }
 
-      ctx.nodes = sortNodesTopological(ctx.nodes);
+      if (arr.some((n) => n.parentId)) {
+        const sorted = sortNodesTopological(ctx.nodes);
+        ctx.nodes.splice(0, ctx.nodes.length, ...sorted);
+      }
       ctx._rebuildNodeMap();
 
       // A3: Install childLayout watchers for any newly added container nodes so
