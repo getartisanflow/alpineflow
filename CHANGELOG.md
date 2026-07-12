@@ -77,6 +77,22 @@ Rebuilds the undo/redo *restore* path (the capture side is Workstream 1). Undo/r
 - Obstacle geometry for avoidant/orthogonal edges is now non-reactive. A node moved by a programmatic data mutation that does not bump `_layoutAnimTick` will not re-route dependent edges until the next tick. Interactive gestures (drag, resize, reorder/reparent) bump the tick, so gesture-driven moves re-route as before.
 - After the Dijkstra rewrite, routes across dense obstacle fields may choose different waypoints among equal-cost shortest paths. Path length and obstacle avoidance are unchanged — only the specific corners of a tie-broken route may differ, so an avoidant edge can render a visually different (but equally short) path.
 
+### Workstream A — connect-drag at scale
+
+Makes drag-to-connect usable at Draftsman scale (~50 schema nodes × 25 fields → ~5,000 handle elements). Behaviour is identical to before — the same validation chain and the same snap results, computed without the per-handle DOM work.
+
+**Performance**
+- Starting a drag-to-connect measured every target handle through `applyValidationClasses`, which ran `isValidConnection` (an O(edges) scan + optional cycle walk) plus `checkHandleLimits` and `runHandleValidators` — each doing container-wide `querySelector`s — for every handle (~10,000 full-DOM queries before the drag line moved). A `HandleIndex` is now built once at drag start (a single read-only measured pass that stores flow-space handle centers) and the validation chain is precomputed once per drag into a `DragValidationContext`, so each handle is classified in O(1) with zero DOM queries. (WS-A · A1/A2)
+- Per-pointermove snap targeting (`findSnapTarget`) no longer runs `querySelectorAll` + per-handle `closest`/`getBoundingClientRect` (~2,500 rect reads per move); it reads the drag-start index instead. Bench (chromium, 2,500 handles): a snap query drops ~1.62 ms → ~0.0099 ms (~163×), with zero `getBoundingClientRect`. (A3)
+
+**Behavior**
+- The handle index is captured once at drag start and reused for the whole gesture. This is exact because node positions do not change during a connect-drag and viewport pan (auto-pan included) does not move flow-space handle centers. Handle connectability and visibility are likewise snapshotted at drag start, so a handle whose connectable/visible state changed mid-gesture would not be re-measured until the next drag — the documented index-validity contract. Non-drag callers of `applyValidationClasses` / `findSnapTarget` are unchanged (they use the existing DOM path).
+
+**Infrastructure**
+- New `buildHandleIndex` (`src/plugin/handle-index.ts`) — read-only measured pass producing `HandleRecord`s (flow-space centers plus a snapshot of the connectable/limit/validator expandos), with a real-handle-preferred `get(nodeId, handleId, type)`.
+- New `buildDragValidationContext` (`src/plugin/drag-validation.ts`) — precomputes the existing-target and cycle-forbidden sets and per-handle edge counts once per drag; `applyValidationClasses` gains an optional `HandleIndex` fast path and keeps the legacy DOM path (`legacyApplyValidationClasses`) for non-drag callers.
+- `findSnapTarget` gains an optional `HandleIndex` param; the connect-drag and reconnect gestures thread a gesture-scoped index, built at gesture start and cleared on every end/cancel path.
+
 ## v0.2.1-alpha — 2026-04-14
 
 > Companion release: [WireFlow v0.2.1-alpha](https://github.com/getartisanflow/wireflow/blob/main/CHANGELOG.md#v021-alpha--2026-04-14) ships the matching server-side surface (`<x-schema-designer>`, `WithSchemaDesigner`, validator rules, `@connect-validate` bridge) plus the post-Phase-5 `<x-flow>` / `<x-schema-designer>` polish that pairs with the fullscreen + row-select + cascade fixes below.
