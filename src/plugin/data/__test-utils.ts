@@ -179,7 +179,10 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _spatialGrid: new SpatialGrid(),
     _obstacleSnapshot: null,
     _obstacleEpoch: 0,
+    _edgeDirtyTicks: new Map<string, number>(),
+    _edgeCorridors: new Map(),
     _commitNodeGeometry: vi.fn(),
+    _markDirtyEdges: vi.fn(),
 
     // === Auto-Layout state ===
     _autoLayoutTimer: null,

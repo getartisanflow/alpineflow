@@ -1008,6 +1008,10 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         // Reactive dependency — bumped each frame during layout animation
         // so edges re-measure DOM handle positions while CSS transitions run.
         void canvas._layoutAnimTick;
+        // Reactive dependency — routing signal. Bumped per-edge by
+        // _markDirtyEdges when a commit affects THIS edge's corridor, so only
+        // the affected edges re-route instead of the whole edge graph.
+        void canvas._edgeDirtyTicks?.get(edge.id);
 
         const rawSource = canvas.getNode(edge.source);
         const rawTarget = canvas.getNode(edge.target);
@@ -1094,42 +1098,76 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
 
         // Compute obstacle rects for orthogonal routing (performance-gated).
         //
-        // Obstacle geometry is deliberately non-reactive: it is read from the
-        // raw node list so this edge effect does NOT subscribe to every other
-        // node's position/dimensions. Without this, a single node write
-        // re-routes the entire edge graph. `_layoutAnimTick` (read at the top of
-        // this effect) is the refresh signal — node drag-end, resize, reorder,
-        // and layout-animation frames bump it, which re-measures routes against
-        // moved obstacles.
+        // Obstacles now come from the shared `_obstacleSnapshot` (built once
+        // per commit by `_commitNodeGeometry`, Workstream C) rather than each
+        // edge rebuilding its own obstacle array per effect run. Re-routing is
+        // triggered per-edge via `_edgeDirtyTicks` (read at the top of this
+        // effect): `_markDirtyEdges` bumps only the edges whose corridor could
+        // actually be affected by the changed node(s), so unaffected edges
+        // don't re-run at all. `_layoutAnimTick` remains only the MEASUREMENT
+        // signal (re-measure handle DOM during layout animation) — it is not a
+        // routing dependency.
         //
         // NB: `canvas` is Alpine's merged-scope proxy, which Alpine.raw() does
-        // not unwrap, so we unwrap the genuine reactive `nodes` array instead.
-        // The parent-lookup map is rebuilt from those raw nodes rather than
-        // reusing `_nodeMap`: Alpine.raw() only unwraps the Map container, whose
-        // stored values would still be reactive proxies, so a parented obstacle
-        // node would otherwise re-subscribe via its parent's position. Reading
-        // `_config.nodeOrigin` tracks a stable key that does not change on moves.
+        // not unwrap, so we unwrap the genuine reactive nested properties
+        // instead (`Alpine.raw(canvas._obstacleSnapshot)` / `Alpine.raw(canvas.nodes)`).
         let obstacleRects: Rect[] | undefined;
         if (resolvedEdgeType === 'orthogonal' || resolvedEdgeType === 'avoidant') {
-          const rawNodes = Alpine.raw(canvas.nodes) as FlowNode[];
-          const rawNodeMap = new Map<string, FlowNode>(rawNodes.map((n): [string, FlowNode] => [n.id, n]));
-          const nodeOrigin = canvas._config?.nodeOrigin;
-          obstacleRects = rawNodes
-            .filter((n: FlowNode) => n.id !== edge.source && n.id !== edge.target)
-            .map((n: FlowNode) => {
-              const abs = toAbsoluteNode(n, rawNodeMap, nodeOrigin);
-              return {
-                x: abs.position.x,
-                y: abs.position.y,
-                width: abs.dimensions?.width ?? DEFAULT_NODE_WIDTH,
-                height: abs.dimensions?.height ?? DEFAULT_NODE_HEIGHT,
-              };
-            });
+          const snapshot = Alpine.raw(canvas._obstacleSnapshot) as
+            | Array<{ id: string; x: number; y: number; width: number; height: number }>
+            | null
+            | undefined;
+          if (snapshot) {
+            // Shared snapshot (built once per commit). Filter out this edge's
+            // own endpoints. Structurally assignable to Rect[] (extra `id` is
+            // ignored by the router). Preserves node order from the snapshot,
+            // which preserves `raw.nodes` order — so the router's VALUE-keyed
+            // route cache still hits (same rects, same order as the legacy
+            // per-edge build) and routes come out unchanged.
+            obstacleRects = snapshot.filter((r) => r.id !== edge.source && r.id !== edge.target);
+          } else {
+            // Fallback for minimal mounts that never triggered a geometry
+            // commit — legacy per-edge build, byte-identical to the prior
+            // behavior so routes are unchanged when no snapshot exists yet.
+            const rawNodes = Alpine.raw(canvas.nodes) as FlowNode[];
+            const rawNodeMap = new Map<string, FlowNode>(rawNodes.map((n): [string, FlowNode] => [n.id, n]));
+            const nodeOrigin = canvas._config?.nodeOrigin;
+            obstacleRects = rawNodes
+              .filter((n: FlowNode) => n.id !== edge.source && n.id !== edge.target)
+              .map((n: FlowNode) => {
+                const abs = toAbsoluteNode(n, rawNodeMap, nodeOrigin);
+                return {
+                  x: abs.position.x,
+                  y: abs.position.y,
+                  width: abs.dimensions?.width ?? DEFAULT_NODE_WIDTH,
+                  height: abs.dimensions?.height ?? DEFAULT_NODE_HEIGHT,
+                };
+              });
+          }
         }
 
         const { path, labelPosition } = getEdgePath(edge, sourceNode, targetNode, sourcePos, targetPos, adjustedSrc, adjustedTgt, canvas._config?.edgeTypes, obstacleRects, canvas._shapeRegistry, canvas._config?.nodeOrigin, canvas._config?.defaultEdgeType);
         pathEl.setAttribute('d', path);
         interactionPath.setAttribute('d', path);
+
+        // Record this edge's endpoint-bbox corridor AFTER routing so
+        // `_markDirtyEdges` can test future changed-node rects against it
+        // (mirrors `corridorObstacles()`'s own CORRIDOR_MARGIN expansion in
+        // orthogonal.ts — an obstacle outside this range is pruned by the
+        // router itself, so it provably cannot change this edge's route).
+        // Non-reactive: written on the raw Map so recording a corridor never
+        // triggers other edges' effects.
+        if (resolvedEdgeType === 'orthogonal' || resolvedEdgeType === 'avoidant') {
+          const rawCorridors = Alpine.raw(canvas._edgeCorridors) as
+            | Map<string, { minX: number; minY: number; maxX: number; maxY: number }>
+            | undefined;
+          rawCorridors?.set(edge.id, {
+            minX: Math.min(adjustedSrc.x, adjustedTgt.x),
+            minY: Math.min(adjustedSrc.y, adjustedTgt.y),
+            maxX: Math.max(adjustedSrc.x, adjustedTgt.x),
+            maxY: Math.max(adjustedSrc.y, adjustedTgt.y),
+          });
+        }
 
         // ── Editable edge control points ──────────────────────────
         const isEditable = resolvedEdgeType === 'editable';

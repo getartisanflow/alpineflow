@@ -419,7 +419,7 @@ function getPathMidpoint(
 // ── Shared routing pipeline ──────────────────────────────────────────────────
 
 /** Flow units beyond the endpoint bounding box that the corridor retains. */
-const CORRIDOR_MARGIN = 200;
+export const CORRIDOR_MARGIN = 200;
 
 /** Test-only diagnostics for the most recent findRoute call. */
 const routeDebug = { gridSize: 0, usedFullSet: false };
