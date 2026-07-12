@@ -78,6 +78,12 @@ function mountEdges(
     selectedEdges: new Set<string>(),
     selectedNodes: new Set<string>(),
     _layoutAnimTick: 0,
+    // ── Interaction degradation (Workstream D) ──────────────────────────
+    // REACTIVE bucketed zoom level, mirroring flow-canvas.ts's `_zoomLevel`
+    // (set by `_applyZoomLevel`). Edge effects read it only when `edgeLod`
+    // is configured (WS-D task D2). Existing tests never read it, so
+    // defaulting to 'close' here is safe.
+    _zoomLevel: 'close' as 'far' | 'medium' | 'close',
     viewport: { x: 0, y: 0, zoom: 1 },
     _config: { ...(opts.config ?? {}) } as Record<string, unknown>,
     _shapeRegistry: undefined as unknown,
@@ -532,6 +538,84 @@ describe('x-flow-edge drag simplification (WS-D)', () => {
     expect(c2.count()).toBe(0); // e2 doesn't touch 'a' — key-scoped, no re-run
     c1.disconnect();
     c2.disconnect();
+  });
+});
+
+describe('x-flow-edge zoom LOD (WS-D)', () => {
+  /** a/b are the edge endpoints; c sits between them and forces a real
+   *  avoidant route around it (same fixture as the drag-simplification
+   *  block above). */
+  function lodFixtureNodes(): MockNode[] {
+    return [
+      { id: 'a', position: { x: 0, y: 0 }, dimensions: { width: 100, height: 60 }, data: {} },
+      { id: 'b', position: { x: 400, y: 0 }, dimensions: { width: 100, height: 60 }, data: {} },
+      { id: 'c', position: { x: 200, y: -20 }, dimensions: { width: 100, height: 100 }, data: {} },
+    ];
+  }
+
+  it('simplifies to a straight path at/under the configured zoom bucket, restores above it', async () => {
+    const { data, groups, visiblePath } = mountEdges(
+      lodFixtureNodes(),
+      [{ id: 'e1', source: 'a', target: 'b', type: 'avoidant' }],
+      { config: { edgeLod: { simplifyAt: 'far' } } },
+    );
+    await flush();
+
+    // Initial render at 'close' — real avoidant routing around obstacle 'c'.
+    const closeD = visiblePath(groups[0]).getAttribute('d');
+    expect(closeD).toContain('C');
+
+    // Drop to 'far' — LOD simplifies to a straight path.
+    data._zoomLevel = 'far';
+    await flush();
+    const farD = visiblePath(groups[0]).getAttribute('d');
+    expect(farD).toContain('L');
+    expect(farD).not.toContain('C');
+    expect(farD).not.toBe(closeD);
+
+    // Back to 'close' — avoidant routing restored.
+    data._zoomLevel = 'close';
+    await flush();
+    expect(visiblePath(groups[0]).getAttribute('d')).toContain('C');
+  });
+
+  it("simplifyAt:'medium' simplifies at both 'medium' and 'far', not 'close'", async () => {
+    const { data, groups, visiblePath } = mountEdges(
+      lodFixtureNodes(),
+      [{ id: 'e1', source: 'a', target: 'b', type: 'avoidant' }],
+      { config: { edgeLod: { simplifyAt: 'medium' } } },
+    );
+    await flush();
+    expect(visiblePath(groups[0]).getAttribute('d')).toContain('C');
+
+    data._zoomLevel = 'medium';
+    await flush();
+    let d = visiblePath(groups[0]).getAttribute('d');
+    expect(d).toContain('L');
+    expect(d).not.toContain('C');
+
+    data._zoomLevel = 'far';
+    await flush();
+    d = visiblePath(groups[0]).getAttribute('d');
+    expect(d).toContain('L');
+    expect(d).not.toContain('C');
+
+    data._zoomLevel = 'close';
+    await flush();
+    expect(visiblePath(groups[0]).getAttribute('d')).toContain('C');
+  });
+
+  it('with edgeLod unset, changing _zoomLevel does NOT re-run the edge effect (zero new deps by default)', async () => {
+    const { data, groups, visiblePath } = mountEdges(lodFixtureNodes(), [
+      { id: 'e1', source: 'a', target: 'b', type: 'avoidant' },
+    ]);
+    await flush();
+
+    const counts = observePathD(visiblePath(groups[0]));
+    data._zoomLevel = 'far';
+    await flush();
+    expect(counts.count()).toBe(0);
+    counts.disconnect();
   });
 });
 

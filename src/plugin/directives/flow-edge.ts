@@ -1011,6 +1011,23 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         // Resolve edge type using fallback: edge.type ?? canvas.defaultEdgeType ?? 'bezier'
         const resolvedEdgeType = edge.type ?? canvas._config?.defaultEdgeType ?? 'bezier';
 
+        // ── WS-D zoom LOD ────────────────────────────────────────────────
+        // Opt-in: at/under the configured zoom bucket, render as a straight
+        // line (skip pathfinding + curvature). Only read `_zoomLevel` when
+        // `edgeLod` is set, so the default path gains no new reactive dep.
+        // `_zoomLevel` is bucketed, so this fires only on threshold crossings.
+        const edgeLod = canvas._config?.edgeLod;
+        let effectiveEdgeType = resolvedEdgeType;
+        if (edgeLod) {
+          const level = canvas._zoomLevel; // reactive, bucketed
+          const simplify = edgeLod.simplifyAt === 'medium'
+            ? (level === 'medium' || level === 'far')
+            : level === 'far';
+          if (simplify) {
+            effectiveEdgeType = 'straight';
+          }
+        }
+
         // Reactive dependency — bumped each frame during layout animation
         // so edges re-measure DOM handle positions while CSS transitions run.
         void canvas._layoutAnimTick;
@@ -1162,7 +1179,10 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           }
         }
 
-        const { path, labelPosition } = getEdgePath(edge, sourceNode, targetNode, sourcePos, targetPos, adjustedSrc, adjustedTgt, canvas._config?.edgeTypes, obstacleRects, canvas._shapeRegistry, canvas._config?.nodeOrigin, canvas._config?.defaultEdgeType);
+        // Only the path geometry uses the LOD-resolved type; everything else
+        // (markers, labels, edge classes) keeps the configured type via `edge`.
+        const pathEdge = effectiveEdgeType === resolvedEdgeType ? edge : { ...edge, type: effectiveEdgeType };
+        const { path, labelPosition } = getEdgePath(pathEdge, sourceNode, targetNode, sourcePos, targetPos, adjustedSrc, adjustedTgt, canvas._config?.edgeTypes, obstacleRects, canvas._shapeRegistry, canvas._config?.nodeOrigin, canvas._config?.defaultEdgeType);
         pathEl.setAttribute('d', path);
         interactionPath.setAttribute('d', path);
 
