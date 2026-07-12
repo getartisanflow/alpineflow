@@ -393,4 +393,40 @@ describe('SpatialGrid-backed visibility parity', () => {
     canvas._applyCulling();
     expect(canvas._getVisibleNodeIds().has('dragged')).toBe(false); // without the union, the stale grid cell culls it (pure grid-query path)
   });
+
+  it('re-shows a node un-hidden BETWEEN geometry commits (grid still holds hidden nodes for culling)', () => {
+    // Regression: E2 sources candidates solely from grid.query(bounds). If the
+    // grid dropped hidden nodes, a node hidden → committed-while-hidden →
+    // un-hidden WITHOUT a fresh commit (collapse→expand, wire showNode) would
+    // be absent from grid.query, so culling's stale inline `display:none`
+    // would never be cleared and the node would stay invisible.
+    const canvas = mountCanvas({
+      viewportCulling: true,
+      nodes: [makeNode('a', { position: { x: 0, y: 0 } })],
+    });
+    const el = document.createElement('div');
+    canvas._nodeElements.set('a', el);
+    canvas._commitNodeGeometry();
+    sizeContainer(canvas);
+
+    // 1) On-screen and visible.
+    canvas._applyCulling();
+    expect(el.style.display).toBe('');
+    expect(canvas._getVisibleNodeIds().has('a')).toBe(true);
+
+    // 2) Hide it, then commit WHILE hidden (a drag/add/undo elsewhere). This
+    //    is the step that, pre-fix, removed 'a' from the grid.
+    canvas.getNode('a').hidden = true;
+    canvas._commitNodeGeometry();
+    canvas._applyCulling();
+    expect(el.style.display).toBe('none');
+    expect(canvas._getVisibleNodeIds().has('a')).toBe(false);
+
+    // 3) Un-hide WITHOUT a fresh commit. The node must become visible again —
+    //    this fails pre-fix (grid lacked 'a') and passes post-fix.
+    canvas.getNode('a').hidden = false;
+    canvas._applyCulling();
+    expect(el.style.display).toBe('');
+    expect(canvas._getVisibleNodeIds().has('a')).toBe(true);
+  });
 });

@@ -521,7 +521,6 @@ export function registerFlowCanvas(Alpine: Alpine) {
       grid.clear();
       const rects: Array<{ id: string; x: number; y: number; width: number; height: number }> = [];
       for (const n of rawNodes) {
-        if (n.hidden) continue; // hidden nodes are not obstacles (their own edges are already hidden)
         const abs = toAbsoluteNode(n, rawNodeMap, nodeOrigin);
         const rect = {
           id: n.id,
@@ -530,8 +529,15 @@ export function registerFlowCanvas(Alpine: Alpine) {
           width: abs.dimensions?.width ?? DEFAULT_NODE_WIDTH,
           height: abs.dimensions?.height ?? DEFAULT_NODE_HEIGHT,
         };
-        rects.push(rect);
+        // Insert EVERY node (hidden included) into the SpatialGrid: viewport
+        // culling (WS-E) sources candidates from the grid and filters hidden
+        // nodes itself, so a node un-hidden BETWEEN geometry commits
+        // (collapse→expand, wire showNode) must still be present in the grid to
+        // be re-shown. Hidden nodes are still excluded from the OBSTACLE
+        // snapshot below — they are not routing obstacles.
         grid.insert(n.id, rect.x, rect.y, rect.width, rect.height);
+        if (n.hidden) continue; // not a routing obstacle
+        rects.push(rect);
       }
       // Keep the SAME array reference across commits (mutate in place)
       // instead of reassigning `this._obstacleSnapshot` every time. Edges

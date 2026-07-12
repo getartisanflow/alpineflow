@@ -100,7 +100,7 @@ describe('_commitNodeGeometry — obstacle snapshot + SpatialGrid', () => {
     ).toBe(300); // contents rebuilt even though the array reference is stable
   });
 
-  it('excludes hidden nodes from the snapshot and grid', () => {
+  it('excludes hidden nodes from the obstacle snapshot but keeps them in the grid (for culling)', () => {
     const canvas = mountCanvas({
       nodes: [
         makeNode('n1', { position: { x: 0, y: 0 } }),
@@ -110,10 +110,14 @@ describe('_commitNodeGeometry — obstacle snapshot + SpatialGrid', () => {
 
     canvas._commitNodeGeometry(['n1', 'n2']);
 
+    // Hidden nodes are NOT routing obstacles → absent from the snapshot.
     expect(canvas._obstacleSnapshot?.some((r: { id: string }) => r.id === 'n2')).toBe(false);
+    // But hidden nodes ARE kept in the SpatialGrid: E2 viewport culling sources
+    // candidates from grid.query and filters hidden itself, so a node un-hidden
+    // between commits must remain a grid candidate to be re-shown.
     expect(
       canvas._spatialGrid.query({ minX: -50, minY: -50, maxX: 600, maxY: 200 }).has('n2'),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       canvas._spatialGrid.query({ minX: -50, minY: -50, maxX: 600, maxY: 200 }).has('n1'),
     ).toBe(true);
