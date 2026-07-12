@@ -191,6 +191,27 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
       let prevStyleProps: string[] = [];
       let lastDragNodeId: string | null = null;
 
+      // Lean position effect — split out of the main node effect below so that a
+      // position change (which fires on every pointermove during a drag) re-runs
+      // ONLY this tiny left/top write, not the full class/dimension/style/rotation
+      // effect. Mirrors the lean `_flushNodePositions` fast-path the animation loop
+      // already uses; fixes the drag sluggishness noted at the drag-recreate guard.
+      effect(() => {
+        if (!el.isConnected) return;
+        const node = evaluate(expression) as FlowNode;
+        if (!node || node.hidden) return;
+        const canvas = Alpine.$data(el.closest('[x-data]') as HTMLElement);
+        if (!canvas?.viewport) return;
+        const absPos = node.parentId
+          ? canvas.getAbsolutePosition(node.id)
+          : (node.position ?? { x: 0, y: 0 });
+        const nodeOrig = node.nodeOrigin ?? canvas._config?.nodeOrigin ?? [0, 0];
+        const nw = node.dimensions?.width ?? 150;
+        const nh = node.dimensions?.height ?? 40;
+        el.style.left = (absPos.x - nw * nodeOrig[0]) + 'px';
+        el.style.top = (absPos.y - nh * nodeOrig[1]) + 'px';
+      });
+
       effect(() => {
         // Bail if the node element was detached (e.g. a Livewire morph after a
         // non-renderless server action) before this reactive effect re-ran.
@@ -296,15 +317,8 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
           el.classList.remove('flow-node-group');
         }
 
-        // Auto-apply position (absolute for child nodes, direct for root)
-        const absPos = node.parentId
-          ? canvas.getAbsolutePosition(node.id)
-          : (node.position ?? { x: 0, y: 0 });
-        const nodeOrig = node.nodeOrigin ?? canvas._config?.nodeOrigin ?? [0, 0];
-        const nw = node.dimensions?.width ?? 150;
-        const nh = node.dimensions?.height ?? 40;
-        el.style.left = (absPos.x - nw * nodeOrig[0]) + 'px';
-        el.style.top = (absPos.y - nh * nodeOrig[1]) + 'px';
+        // Position is written by the dedicated lean effect above (split out so a
+        // drag's per-move position change doesn't re-run this whole effect).
 
         // Auto-apply dimensions when explicitly set.
         // Height is conditional: containers (childLayout), fixed-dim nodes, and

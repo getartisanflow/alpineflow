@@ -4,6 +4,11 @@
 
 Schema-scale performance pass — fixes undo/zoom/edge performance at Draftsman scale (~50 nodes × 25 fields, ~100 edges). Landed as independent workstreams.
 
+### Node drag — split position effect
+
+**Performance**
+- Dragging a node re-ran the *entire* node effect (base / selected / validation / runState / shape / custom classes, dimensions, inline styles, rotation) on **every pointermove**, because the node's `position` was one dependency of that monolithic effect. The `left`/`top` write is now its own lean effect, so a position-only change (i.e. every drag frame) re-positions the element without re-running the heavy effect — matching the lean `_flushNodePositions` fast-path the animation loop already used. Large drag-smoothness win at schema scale; behaviour is otherwise identical.
+
 ### Workstream 1 — history capture hygiene
 Stops the undo/redo stack from filling with no-op snapshots and roughly halves retained history memory. Capture-side only; the undo/redo *restore* path is unchanged.
 
