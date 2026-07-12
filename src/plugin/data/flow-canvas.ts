@@ -810,8 +810,6 @@ export function registerFlowCanvas(Alpine: Alpine) {
       const buffer = config.cullingBuffer ?? 100;
       const bounds = getVisibleBounds(this.viewport, cw, ch, buffer);
 
-      const prev = this._visibleNodeIds;
-
       // Coarse (cell-granularity) superset of node ids whose committed rects
       // could overlap `bounds`. The grid is maintained by _commitNodeGeometry
       // at discrete commit points (C1) — culling only QUERIES it here.
@@ -850,18 +848,17 @@ export function registerFlowCanvas(Alpine: Alpine) {
         }
       }
 
-      // Transition writes via set-difference against `prev` — O(candidates +
-      // prev) instead of O(all nodes), preserving E1's "write only on
-      // visibility transition" guarantee.
-      for (const id of visible) {
-        if (prev.has(id)) continue; // already visible — no write
-        const el = this._nodeElements.get(id);
-        if (el) el.style.display = '';
-      }
-      for (const id of prev) {
-        if (visible.has(id)) continue; // still visible — no write
-        const el = this._nodeElements.get(id);
-        if (el) el.style.display = 'none';
+      // Sync inline display on every registered node element (mirroring the edge
+      // loop below). Iterating `_nodeElements` — not just `candidates ∪ prev` — is
+      // required for correctness: a node that is off-screen at the FIRST cull pass,
+      // or added off-screen while culling is active, is in neither `visible` nor the
+      // previous frame's set, so a set-difference-only diff would leave it rendered.
+      // The write stays transition-only: `el.style.display` is read (a cheap
+      // inline-style read — no reflow) and written only when it actually changes.
+      // The expensive geometry predicate ran only over grid candidates above.
+      for (const [id, el] of this._nodeElements) {
+        const desired = visible.has(id) ? '' : 'none';
+        if (el.style.display !== desired) el.style.display = desired;
       }
 
       // Edge culling: an edge is visible iff either endpoint node is visible,

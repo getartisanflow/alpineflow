@@ -126,6 +126,56 @@ describe('_applyCulling — transition-only node display writes', () => {
   });
 });
 
+describe('_applyCulling — hides nodes never in the visible/prev sets', () => {
+  it('hides a node that is off-screen at the FIRST cull pass', () => {
+    const canvas = mountCanvas({
+      viewportCulling: true,
+      nodes: [
+        makeNode('on', { position: { x: 0, y: 0 } }),
+        makeNode('off', { position: { x: 5000, y: 5000 } }),
+      ],
+    });
+    const onEl = document.createElement('div');
+    const offEl = document.createElement('div');
+    canvas._nodeElements.set('on', onEl);
+    canvas._nodeElements.set('off', offEl);
+    canvas._commitNodeGeometry();
+    sizeContainer(canvas);
+
+    // A SINGLE pass: 'off' is in neither `visible` nor the (empty) previous set,
+    // so the old set-difference diff would leave it rendered (display:'').
+    canvas._applyCulling();
+
+    expect(offEl.style.display).toBe('none');
+    expect(onEl.style.display).toBe('');
+  });
+
+  it('hides a node added off-screen while culling is already active', () => {
+    const canvas = mountCanvas({
+      viewportCulling: true,
+      nodes: [makeNode('on', { position: { x: 0, y: 0 } })],
+    });
+    const onEl = document.createElement('div');
+    canvas._nodeElements.set('on', onEl);
+    canvas._commitNodeGeometry();
+    sizeContainer(canvas);
+
+    canvas._applyCulling(); // 'on' is visible
+    expect(onEl.style.display).toBe('');
+
+    // Add an off-screen node AFTER culling first ran — it enters via neither
+    // `visible` (off-screen) nor `prev` (didn't exist last frame).
+    canvas.nodes = [...(canvas.nodes as FlowNode[]), makeNode('added', { position: { x: 5000, y: 5000 } })];
+    const addedEl = document.createElement('div');
+    canvas._nodeElements.set('added', addedEl);
+    canvas._commitNodeGeometry();
+    canvas._applyCulling();
+
+    expect(addedEl.style.display).toBe('none');
+    expect(onEl.style.display).toBe('');
+  });
+});
+
 describe('_applyCulling — edge SVG culling', () => {
   it('culls an edge svg once both endpoints are off-screen; keeps an on-screen edge shown', () => {
     const canvas = mountCanvas({
