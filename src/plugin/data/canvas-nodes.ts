@@ -192,6 +192,7 @@ export function createNodesMixin(ctx: CanvasContext) {
       }
 
       ctx._scheduleAutoLayout();
+      ctx._commitNodeGeometry?.(arr.map((n: FlowNode) => n.id));
     },
 
     /**
@@ -331,6 +332,7 @@ export function createNodesMixin(ctx: CanvasContext) {
       for (const rid of removeRoots) ctx.layoutChildren?.(rid);
 
       ctx._scheduleAutoLayout();
+      ctx._commitNodeGeometry?.([...idSet]);
     },
 
     /**

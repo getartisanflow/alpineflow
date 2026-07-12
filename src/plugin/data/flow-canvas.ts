@@ -44,11 +44,12 @@ import { clearValidationClasses } from '../directives/flow-handle';
 import { resolveShortcuts, matchesKey, matchesModifier, shouldCaptureNudge } from '../../core/keyboard-shortcuts';
 import { isDraggable, isSelectable } from '../../core/node-flags';
 import { attachLongPress } from '../../core/long-press';
-import { getNodesInRect, getNodesFullyInRect } from '../../core/geometry';
+import { getNodesInRect, getNodesFullyInRect, SpatialGrid, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import {
   buildNodeMap,
   reconcileChildrenIndex,
   getAbsolutePosition as getAbsolutePositionUtil,
+  toAbsoluteNode,
   toAbsoluteNodes,
   sortNodesTopological,
 } from '../../core/sub-flow';
@@ -367,6 +368,14 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _layoutAnimTick: 0,
     _layoutAnimFrame: 0,
 
+    // ── Shared obstacle cache (Workstream C) ─────────────────────────────
+    /** Spatial index of node id → flow-space rect cells (committed geometry). Non-reactive: access via Alpine.raw in hot paths. */
+    _spatialGrid: new SpatialGrid(),
+    /** Obstacle rects rebuilt once per geometry commit; read via Alpine.raw(canvas) in the edge effect. */
+    _obstacleSnapshot: null as Array<{ id: string; x: number; y: number; width: number; height: number }> | null,
+    /** Reactive epoch bumped by _commitNodeGeometry (internal signal; edges must NOT subscribe to it). */
+    _obstacleEpoch: 0,
+
     // ── Auto-Layout ──────────────────────────────────────────────────
     _autoLayoutTimer: null as ReturnType<typeof setTimeout> | null,
     _autoLayoutReady: false,
@@ -449,6 +458,40 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
     _rebuildEdgeMap() {
       this._edgeMap = new Map(this.edges.map((e: FlowEdge) => [e.id, e]));
+    },
+
+    /**
+     * Rebuild the shared obstacle snapshot + SpatialGrid from committed node
+     * geometry. Called imperatively at discrete geometry commit points (drag
+     * end, resize, add/remove nodes, undo/redo, restore) — never inside a
+     * reactive effect.
+     *
+     * Reads via `Alpine.raw(this)` so this method does not itself create
+     * reactive subscriptions. Rebuilds the grid from scratch each commit
+     * (O(nodes); commit points are discrete user actions, not frames), which
+     * also prunes entries for removed/hidden nodes.
+     */
+    _commitNodeGeometry(changedNodeIds?: string[]): void {
+      const raw = Alpine.raw(this) as any;
+      const grid = raw._spatialGrid as SpatialGrid;
+      grid.clear();
+      const rects: Array<{ id: string; x: number; y: number; width: number; height: number }> = [];
+      for (const n of raw.nodes as FlowNode[]) {
+        if (n.hidden) continue; // hidden nodes are not obstacles (their own edges are already hidden)
+        const abs = toAbsoluteNode(n, raw._nodeMap, raw._config?.nodeOrigin);
+        const rect = {
+          id: n.id,
+          x: abs.position.x,
+          y: abs.position.y,
+          width: abs.dimensions?.width ?? DEFAULT_NODE_WIDTH,
+          height: abs.dimensions?.height ?? DEFAULT_NODE_HEIGHT,
+        };
+        rects.push(rect);
+        grid.insert(n.id, rect.x, rect.y, rect.width, rect.height);
+      }
+      this._obstacleSnapshot = rects;
+      this._obstacleEpoch++;
+      this._markDirtyEdges?.(changedNodeIds); // added in C2; optional-chained until then
     },
 
     /**
@@ -1626,6 +1669,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _resizeObserverInit(): void {
       if (typeof ResizeObserver === 'undefined') return; // SSR / very old browsers
       this._resizeObserver = new ResizeObserver((entries) => {
+        const changedIds = new Set<string>();
         for (const entry of entries) {
           const el = entry.target as HTMLElement;
           const nodeId = el.getAttribute('data-flow-node-id');
@@ -1673,11 +1717,17 @@ export function registerFlowCanvas(Alpine: Alpine) {
             (node as any).maxDimensions,
           );
           node.dimensions = clamped;
+          changedIds.add(nodeId);
 
           // Schedule parent re-layout (deduped per frame).
           if (node.parentId) {
             this._layoutDedup?.safeLayoutChildren(node.parentId);
           }
+        }
+        // Commit once per RO batch (not per entry) so multiple nodes resizing
+        // in the same frame only trigger a single obstacle-grid rebuild.
+        if (changedIds.size > 0) {
+          this._commitNodeGeometry([...changedIds]);
         }
       });
     },
@@ -1736,6 +1786,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
           this.fitView();
         });
       }
+
+      // Populate the shared obstacle snapshot/grid once initial measurement
+      // has settled, so avoidant/orthogonal edges have geometry to read on
+      // their first route.
+      this._commitNodeGeometry();
     },
 
     /** Call setup(canvas) on any addon that provides it. */

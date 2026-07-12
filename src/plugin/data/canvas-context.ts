@@ -52,6 +52,7 @@ import type { FlowAnnouncer } from '../../core/announcer';
 import type { ComputeEngine } from '../../core/compute';
 import type { CollapseState } from '../../core/collapse';
 import type { KeyboardShortcuts } from '../../core/keyboard-shortcuts';
+import type { SpatialGrid } from '../../core/geometry';
 
 // ── Active particle entry (shared loop) ─────────────────────────────────────
 
@@ -397,6 +398,13 @@ export interface CanvasContext {
 
   /** rAF handle for layout animation tick */
   _layoutAnimFrame: number;
+
+  // === Shared obstacle cache (Workstream C) ===
+  _spatialGrid: SpatialGrid;
+  _obstacleSnapshot: Array<{ id: string; x: number; y: number; width: number; height: number }> | null;
+  _obstacleEpoch: number;
+  _commitNodeGeometry(changedNodeIds?: string[]): void;
+  _markDirtyEdges?(changedNodeIds?: string[]): void; // optional here; C2 makes it concrete
 
   // === Auto-Layout state ===
 

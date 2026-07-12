@@ -53,7 +53,10 @@ function applyHistorySnapshot(
   // Bump _layoutAnimTick in a rAF so edge effects re-run after node effects
   // have repositioned DOM elements (edges measure handle positions from the
   // DOM via getBoundingClientRect).
-  requestAnimationFrame(() => { ctx._layoutAnimTick++; });
+  requestAnimationFrame(() => {
+    ctx._layoutAnimTick++;
+    ctx._commitNodeGeometry?.();
+  });
   debug('history', `${source} applied`, { nodes: snapshot.nodes.length, edges: snapshot.edges.length });
 }
 
@@ -120,7 +123,10 @@ export function createHistoryMixin(ctx: CanvasContext) {
       ctx._scheduleAutoLayout();
       // Ensure edges re-measure DOM handle positions after node effects
       // have repositioned elements (edges use getBoundingClientRect).
-      requestAnimationFrame(() => { ctx._layoutAnimTick++; });
+      requestAnimationFrame(() => {
+        ctx._layoutAnimTick++;
+        ctx._commitNodeGeometry?.();
+      });
     },
 
     /**
