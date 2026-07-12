@@ -26,7 +26,7 @@ import type {
   PatchableConfig,
 } from '../../core/types';
 import { createPanZoom, type PanZoomInstance } from '../../core/pan-zoom';
-import { screenToFlowPosition, getVisibleBounds } from '../../core/geometry';
+import { screenToFlowPosition, getVisibleBounds, type Bounds } from '../../core/geometry';
 import { setDebugEnabled, debug } from '../../core/debug';
 import { DEFAULT_FIT_PADDING } from '../../core/constants';
 import { FlowHistory } from '../../core/history';
@@ -104,6 +104,26 @@ function bgLayerGradient(variant: BgVariant, color: string): string {
     default:
       return `radial-gradient(circle, ${color} 1px, transparent 1px)`;
   }
+}
+
+// ── Viewport culling helpers (Workstream E) ────────────────────────────────
+/**
+ * AABB test: does an edge's recorded route corridor intersect the visible
+ * bounds? Corridors can extend beyond their endpoint nodes, so an edge with
+ * both endpoints off-screen may still need to render. When no corridor has
+ * been recorded for the edge, treat it as intersecting — never wrongly hide.
+ */
+function corridorIntersectsBounds(
+  corridor: { minX: number; minY: number; maxX: number; maxY: number } | undefined,
+  bounds: Bounds,
+): boolean {
+  if (!corridor) return true;
+  return !(
+    corridor.maxX < bounds.minX ||
+    corridor.minX > bounds.maxX ||
+    corridor.maxY < bounds.minY ||
+    corridor.minY > bounds.maxY
+  );
 }
 
 export function registerFlowCanvas(Alpine: Alpine) {
@@ -390,6 +410,8 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _nodeElements: new Map<string, HTMLElement>(),
     _edgeSvgElements: new Map<string, SVGSVGElement>(),
     _visibleNodeIds: new Set<string>(),
+    /** PLAIN Set of edge ids currently culled (display:none). Used to gate display writes to visibility transitions only. */
+    _culledEdgeIds: new Set<string>(),
 
     // ── Context Menu Auto-Populate ─────────────────────────────────────
     _contextMenuListeners: [] as Array<{ event: string; handler: EventListener }>,
@@ -758,6 +780,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
     /**
      * Toggle CSS display on off-screen nodes and edges.
      * Called from _flushViewportFrame — entirely outside Alpine's reactive system.
+     * Writes are gated to visibility TRANSITIONS only (comparing against the
+     * previous frame's `_visibleNodeIds`/`_culledEdgeIds`) to avoid unconditional
+     * per-frame style writes, which devtools amplifies into mutation-record churn.
      */
     _applyCulling() {
       if (config.viewportCulling !== true) return;
@@ -770,6 +795,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
       const buffer = config.cullingBuffer ?? 100;
       const bounds = getVisibleBounds(this.viewport, cw, ch, buffer);
 
+      const prev = this._visibleNodeIds;
       const visible = new Set<string>();
 
       for (const node of this.nodes as FlowNode[]) {
@@ -788,13 +814,38 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
         if (isVisible) visible.add(node.id);
 
+        if (isVisible === prev.has(node.id)) continue; // no transition — no write
+
         const el = this._nodeElements.get(node.id);
         if (el) {
           el.style.display = isVisible ? '' : 'none';
         }
       }
 
+      // Edge culling: an edge is visible iff either endpoint node is visible,
+      // or its recorded route corridor intersects the visible bounds
+      // (corridors can extend beyond their endpoints). Rebuild the culled set
+      // fresh each frame (mirroring `_visibleNodeIds`) so removed edges — which
+      // `_edgeSvgElements` no longer iterates — never re-enter it: this prevents
+      // unbounded growth of `_culledEdgeIds` under add/remove churn.
+      const prevCulled = this._culledEdgeIds;
+      const culled = new Set<string>();
+      for (const [edgeId, g] of this._edgeSvgElements) {
+        const e = this._edgeMap.get(edgeId);
+        if (!e) continue;
+        const vis =
+          visible.has(e.source) ||
+          visible.has(e.target) ||
+          corridorIntersectsBounds(this._edgeCorridors.get(edgeId), bounds);
+        const was = !prevCulled.has(edgeId);
+        if (vis !== was) {
+          g.style.display = vis ? '' : 'none';
+        }
+        if (!vis) culled.add(edgeId);
+      }
+
       this._visibleNodeIds = visible;
+      this._culledEdgeIds = culled;
     },
 
     _getVisibleNodeIds(): Set<string> {

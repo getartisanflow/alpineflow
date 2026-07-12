@@ -341,6 +341,9 @@ export interface CanvasContext {
   /** Set of node IDs currently visible in the viewport */
   _visibleNodeIds: Set<string>;
 
+  /** Set of edge IDs currently culled (display:none) — tracks prior-frame state for transition-only writes */
+  _culledEdgeIds: Set<string>;
+
   // === Background ===
 
   /** Background config (variant or layer array) */

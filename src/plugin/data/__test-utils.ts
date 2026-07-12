@@ -150,6 +150,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
 
     // === Viewport culling ===
     _visibleNodeIds: new Set<string>(),
+    _culledEdgeIds: new Set<string>(),
 
     // === Background ===
     _background: 'dots',
