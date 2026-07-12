@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import Alpine from 'alpinejs';
 import { registerFlowEdgeDirective } from './flow-edge';
 
@@ -270,5 +270,42 @@ describe('x-flow-edge endpoint lookup refactor (Task 23)', () => {
     const d = visiblePath(groups[0]).getAttribute('d');
     expect(d).toBeTruthy();
     expect(d).toMatchInlineSnapshot(`"M60,60 C60,130 360,130 360,200"`);
+  });
+});
+
+describe('x-flow-edge label path-length caching (Task B1)', () => {
+  it('caches getTotalLength keyed by d — unchanged d does not re-measure; changed d does', async () => {
+    const getTotalLengthSpy = vi.fn(() => 100);
+    const getPointAtLengthSpy = vi.fn(() => ({ x: 5, y: 5 }));
+
+    // This jsdom build doesn't expose SVGPathElement globally (no SVG geometry
+    // interfaces at all), so the prototype can't be patched ahead of mount.
+    // Mount WITHOUT a label first (label block is a no-op, nothing to spy on
+    // yet), grab the real path element, patch geometry methods on that
+    // instance, then turn the label on reactively so the first measurement
+    // happens under the mock.
+    const { data, groups, visiblePath } = mountEdges(flatNodes(), [
+      { id: 'e1', source: 'a', target: 'b' },
+    ]);
+    await flush();
+
+    const pathEl = visiblePath(groups[0]);
+    (pathEl as unknown as { getTotalLength: unknown }).getTotalLength = getTotalLengthSpy;
+    (pathEl as unknown as { getPointAtLength: unknown }).getPointAtLength = getPointAtLengthSpy;
+
+    // run 1 (with geometry now spyable): turning the label on measures + caches.
+    data.getEdge('e1')!.label = 'hi';
+    await flush();
+    getTotalLengthSpy.mockClear();
+
+    // run 2: force an effect re-run WITHOUT changing geometry (toggle selection).
+    data.getEdge('e1')!.selected = true;
+    await flush();
+    expect(getTotalLengthSpy).not.toHaveBeenCalled(); // cache hit: no re-measure
+
+    // change geometry so d changes → must re-measure.
+    data.getNode('a')!.position.x = 80;
+    await flush();
+    expect(getTotalLengthSpy).toHaveBeenCalled(); // re-measured on new d
   });
 });

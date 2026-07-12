@@ -101,14 +101,87 @@ describe('createNodesMixin — addNodes', () => {
     });
   });
 
-  it('sorts topologically and rebuilds node map', () => {
+  it('sorts topologically and rebuilds node map when a child is added', () => {
+    const ctx = mockCtx();
+    const mixin = createNodesMixin(ctx);
+
+    mixin.addNodes(makeNode('n1', { parentId: 'nonexistent' }));
+
+    expect(sortNodesTopological).toHaveBeenCalledWith(ctx.nodes);
+    expect(ctx._rebuildNodeMap).toHaveBeenCalledOnce();
+  });
+
+  it('rebuilds node map even for a flat batch (no re-sort needed)', () => {
     const ctx = mockCtx();
     const mixin = createNodesMixin(ctx);
 
     mixin.addNodes(makeNode('n1'));
 
-    expect(sortNodesTopological).toHaveBeenCalledWith(ctx.nodes);
     expect(ctx._rebuildNodeMap).toHaveBeenCalledOnce();
+  });
+
+  it('adding a flat node preserves nodes array identity and skips the topological sort', () => {
+    const ctx = mockCtx();
+    const mixin = createNodesMixin(ctx);
+    vi.mocked(sortNodesTopological).mockImplementation((nodes) => [...nodes]); // fresh array => reassign would break identity
+    const ref = ctx.nodes;
+
+    mixin.addNodes([makeNode('x')]);
+
+    expect(ctx.nodes).toBe(ref); // identity preserved
+    expect(sortNodesTopological).not.toHaveBeenCalled(); // flat batch: no re-sort
+
+    vi.mocked(sortNodesTopological).mockImplementation((nodes) => nodes); // restore default identity-passthrough
+  });
+
+  it('adding a child still triggers topological ordering and keeps array identity (in-place)', () => {
+    const ctx = mockCtx();
+    const mixin = createNodesMixin(ctx);
+    mixin.addNodes([makeNode('p1')]); // parent added flat first
+    const ref = ctx.nodes;
+    vi.mocked(sortNodesTopological).mockClear();
+
+    mixin.addNodes([makeNode('child', { parentId: 'p1' })]);
+
+    expect(sortNodesTopological).toHaveBeenCalled(); // child in batch => sort runs
+    expect(ctx.nodes).toBe(ref); // splice keeps identity
+    const ids = ctx.nodes.map((n: FlowNode) => n.id);
+    expect(ids.indexOf('p1')).toBeLessThan(ids.indexOf('child')); // parent before child
+  });
+
+  it('re-sorts a flat batch whose node is the parent of an earlier-added child (forward reference)', () => {
+    const ctx = mockCtx();
+    const mixin = createNodesMixin(ctx);
+    // The default mock is a passthrough, so make it actually order parents before their
+    // descendants — otherwise the ordering assertion below could not distinguish sorted
+    // from insertion order.
+    const topoSort = (nodes: FlowNode[]): FlowNode[] => {
+      const byId = new Map(nodes.map((n) => [n.id, n]));
+      const depth = (n: FlowNode): number => {
+        let d = 0;
+        let cur: FlowNode | undefined = n;
+        while (cur?.parentId && byId.get(cur.parentId)) {
+          d++;
+          cur = byId.get(cur.parentId);
+        }
+        return d;
+      };
+      return [...nodes].sort((a, b) => depth(a) - depth(b));
+    };
+    vi.mocked(sortNodesTopological).mockImplementation(topoSort);
+
+    // Child added FIRST, referencing a parent that does not exist yet (accepted with a
+    // then-dangling parentId).
+    mixin.addNodes([makeNode('child', { parentId: 'p1' })]);
+    // Parent added as a flat node in a SEPARATE later call.
+    const ref = ctx.nodes;
+    mixin.addNodes([makeNode('p1')]);
+
+    const ids = ctx.nodes.map((n: FlowNode) => n.id);
+    expect(ids.indexOf('p1')).toBeLessThan(ids.indexOf('child')); // parent must precede its child
+    expect(ctx.nodes).toBe(ref); // in-place splice preserves array identity
+
+    vi.mocked(sortNodesTopological).mockImplementation((nodes) => nodes); // restore default passthrough
   });
 
   it('saves initial dimensions when node has dimensions', () => {
