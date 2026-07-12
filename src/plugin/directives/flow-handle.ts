@@ -1163,6 +1163,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                 getNode: (id: string) => canvas.getNode(id),
                 toFlowPosition: (sx: number, sy: number) => canvas.screenToFlowPosition(sx, sy),
                 connectionMode: canvas._config?.connectionMode,
+                index: dragHandleIndex ?? undefined,
               });
 
               if (snap.element !== snappedHandle) {
@@ -1233,6 +1234,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
               connectionSnapRadius,
               getNode: (id: string) => canvas.getNode(id),
               toFlowPosition: (sx: number, sy: number) => canvas.screenToFlowPosition(sx, sy),
+              index: dragHandleIndex ?? undefined,
             });
 
             if (snap.element !== snappedHandle) {
@@ -1950,6 +1952,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
               connectionSnapRadius,
               getNode: (id: string) => canvas.getNode(id),
               toFlowPosition: (sx: number, sy: number) => canvas.screenToFlowPosition(sx, sy),
+              index: reconnectHandleIndex ?? undefined,
             });
 
             if (snap.element !== snappedHandle) {
