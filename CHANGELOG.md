@@ -77,6 +77,29 @@ Rebuilds the undo/redo *restore* path (the capture side is Workstream 1). Undo/r
 - Obstacle geometry for avoidant/orthogonal edges is now non-reactive. A node moved by a programmatic data mutation that does not bump `_layoutAnimTick` will not re-route dependent edges until the next tick. Interactive gestures (drag, resize, reorder/reparent) bump the tick, so gesture-driven moves re-route as before.
 - After the Dijkstra rewrite, routes across dense obstacle fields may choose different waypoints among equal-cost shortest paths. Path length and obstacle avoidance are unchanged — only the specific corners of a tie-broken route may differ, so an avoidant edge can render a visually different (but equally short) path.
 
+### Workstream A — connect-drag at scale
+
+Makes drag-to-connect usable at Draftsman scale (~50 schema nodes × 25 fields → ~5,000 handle elements). Behaviour is identical to before — the same validation chain and the same snap results, computed without the per-handle DOM work.
+
+**Performance**
+- Starting a drag-to-connect measured every target handle through `applyValidationClasses`, which ran `isValidConnection` (an O(edges) scan + optional cycle walk) plus `checkHandleLimits` and `runHandleValidators` — each doing container-wide `querySelector`s — for every handle (~10,000 full-DOM queries before the drag line moved). A `HandleIndex` is now built once at drag start (a single read-only measured pass that stores flow-space handle centers) and the validation chain is precomputed once per drag into a `DragValidationContext`, so each handle is classified in O(1) with zero DOM queries. (WS-A · A1/A2)
+- Per-pointermove snap targeting (`findSnapTarget`) no longer runs `querySelectorAll` + per-handle `closest`/`getBoundingClientRect` (~2,500 rect reads per move); it reads the drag-start index instead. Bench (chromium, 2,500 handles): a snap query drops ~1.62 ms → ~0.0099 ms (~163×), with zero `getBoundingClientRect`. (A3)
+
+**Behavior**
+- The handle index is captured once at drag start and reused for the whole gesture. This is exact because node positions do not change during a connect-drag and viewport pan (auto-pan included) does not move flow-space handle centers. Handle connectability and visibility are likewise snapshotted at drag start, so a handle whose connectable/visible state changed mid-gesture would not be re-measured until the next drag — the documented index-validity contract. Non-drag callers of `applyValidationClasses` / `findSnapTarget` are unchanged (they use the existing DOM path).
+
+**Infrastructure**
+- New `buildHandleIndex` (`src/plugin/handle-index.ts`) — read-only measured pass producing `HandleRecord`s (flow-space centers plus a snapshot of the connectable/limit/validator expandos), with a real-handle-preferred `get(nodeId, handleId, type)`.
+- New `buildDragValidationContext` (`src/plugin/drag-validation.ts`) — precomputes the existing-target and cycle-forbidden sets and per-handle edge counts once per drag; `applyValidationClasses` gains an optional `HandleIndex` fast path and keeps the legacy DOM path (`legacyApplyValidationClasses`) for non-drag callers.
+- `findSnapTarget` gains an optional `HandleIndex` param; the connect-drag and reconnect gestures thread a gesture-scoped index, built at gesture start and cleared on every end/cancel path.
+
+### Workstream B — small measured wins
+Two low-risk perf touch-ups surfaced by the schema-scale review. Both are pure performance changes — label positions and node ordering are behaviourally identical.
+
+**Performance**
+- Edge labels cache the path length keyed by the `d` attribute. Positioning a center/start/end label previously forced `SVGPathElement.getTotalLength()` up to 5× per edge per effect run (including once inside the center-label helper); the length is now measured at most once while `d` is unchanged, so selection- and label-only re-runs skip the repeated `getTotalLength` measurement (the per-label `getPointAtLength` placement still runs). A changed path re-measures.
+- `addNodes` keeps the `nodes` array identity for flat batches. Appending nodes without a `parentId` no longer re-sorts and reassigns `nodes`, so the array reference is stable and effects that read it don't invalidate on every add. A batch that includes a child — or whose flat node is the parent of a child added in an earlier call (a forward reference) — still sorts topologically, now in place via `splice`, so array identity is preserved even then. Topological ordering stays identical to the previous behaviour in every case.
+
 ### Workstream C — shared router + dirty-corridor invalidation
 
 Builds on Workstream 4. Where WS4 made a single route fast, WS C stops the *whole graph* from redoing obstacle work on every commit: obstacles are built once per geometry commit and shared across edges, and a node move re-routes only the edges whose corridor it actually affects. Routing itself (path selection, cost, tie-breaking, appearance) is unchanged — this is purely a speed pass.
@@ -93,7 +116,7 @@ Builds on Workstream 4. Where WS4 made a single route fast, WS C stops the *whol
 
 **Infrastructure**
 - `flow-canvas`: non-reactive `_obstacleSnapshot` (mutated in place across commits to keep its reactive identity stable) + `_spatialGrid` (`SpatialGrid`), reactive `_obstacleEpoch`, and `_commitNodeGeometry(changedNodeIds?)` wired at every geometry commit point (node drag-end, reorder/reparent, ResizeObserver dimension write, `addNodes` / `removeNodes`, undo/redo, `fromObject`, and once at init).
-- Per-edge dirty tracking: reactive key-scoped `_edgeDirtyTicks` + plain `_edgeCorridors`, driven by `_markDirtyEdges(changedNodeIds?, prevSnapshot?)`. Stale entries are pruned in `removeEdges` and on full invalidation (undo/redo/`fromObject`).
+- Per-edge dirty tracking: reactive key-scoped `_edgeDirtyTicks` + plain `_edgeCorridors`, driven by `_markDirtyEdges(changedNodeIds?, prevSnapshot?)`. Stale entries are pruned in `removeEdges`, in `removeNodes` (cascade edge removal), and on full invalidation (undo/redo/`fromObject`).
 - `CORRIDOR_MARGIN` is now exported from `edge-paths/orthogonal.ts` so the invalidation corridor and the router's obstacle pruning share one constant.
 
 ## v0.2.1-alpha — 2026-04-14

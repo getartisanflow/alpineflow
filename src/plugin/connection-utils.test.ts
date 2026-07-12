@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createConnectionLine, findSnapTarget, startConnectionAutoPan, type ConnectionLineInstance } from './connection-utils';
 import { createAutoPan } from '../core/auto-pan';
+import { buildHandleIndex } from './handle-index';
+import {
+  HANDLE_CONNECTABLE_START_KEY,
+  HANDLE_CONNECTABLE_END_KEY,
+} from './directives/flow-handle-connectable';
+import type { XYPosition } from '../core/types';
 
 // Capture the onPan callback passed to createAutoPan so we can exercise the real
 // delta-measurement logic without driving the rAF loop.
@@ -218,6 +224,350 @@ describe('findSnapTarget', () => {
       targetNodeId: 'b',
     });
     expect(result.element).toBeNull();
+  });
+});
+
+// ============================================================================
+// findSnapTarget — indexed parity (Task A3)
+//
+// The LEGACY branch (querySelectorAll + per-handle getBoundingClientRect) is
+// the ORACLE. Every fixture below runs the SAME DOM through both the legacy
+// call (no `index`) and the indexed call (`index` built from that DOM via
+// buildHandleIndex) and asserts the two return the SAME element and (within
+// float tolerance) the SAME position. If the indexed path diverges on any
+// fixture, the parity assertion fails.
+//
+// `Element.prototype.getBoundingClientRect` is replaced with a single
+// prototype-level mock backed by a WeakMap (rather than stubbing each
+// element's own property, as the older fixture above does) so that ALL rect
+// reads — from both the legacy loop and buildHandleIndex's measuring pass —
+// go through one spy. That is what lets the "zero rect reads" assertion mean
+// anything: an own-property override would be invisible to a prototype spy.
+// ============================================================================
+describe('findSnapTarget — indexed parity (Task A3)', () => {
+  let rectMap: WeakMap<Element, { left: number; top: number; width: number; height: number }>;
+  let rectSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    rectMap = new WeakMap();
+    rectSpy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: Element,
+    ) {
+      const r = rectMap.get(this) ?? { left: 0, top: 0, width: 0, height: 0 };
+      return {
+        left: r.left,
+        top: r.top,
+        width: r.width,
+        height: r.height,
+        right: r.left + r.width,
+        bottom: r.top + r.height,
+        x: r.left,
+        y: r.top,
+        toJSON: () => {},
+      } as DOMRect;
+    });
+  });
+
+  afterEach(() => {
+    rectSpy.mockRestore();
+  });
+
+  function stubRect(
+    el: HTMLElement,
+    rect: { left: number; top: number; width: number; height: number },
+  ): void {
+    rectMap.set(el, rect);
+  }
+
+  interface HandleSpec {
+    type: 'source' | 'target';
+    id?: string; // dataset.flowHandleId; defaults to type
+    rect?: { left: number; top: number; width: number; height: number };
+    connectableStart?: boolean;
+    connectableEnd?: boolean;
+  }
+
+  interface NodeSpec {
+    id: string;
+    connectable?: boolean;
+    handles: HandleSpec[];
+  }
+
+  /** Real DOM node elements carry BOTH markers: legacy resolves via [x-flow-node], the index via [data-flow-node-id]. */
+  function buildDom(nodes: NodeSpec[]): HTMLElement {
+    const container = document.createElement('div');
+
+    for (const n of nodes) {
+      const nodeEl = document.createElement('div');
+      nodeEl.setAttribute('x-flow-node', '');
+      nodeEl.dataset.flowNodeId = n.id;
+
+      for (const h of n.handles) {
+        const el = document.createElement('div');
+        el.dataset.flowHandleType = h.type;
+        el.dataset.flowHandleId = h.id ?? h.type;
+        stubRect(el, h.rect ?? { left: 100, top: 100, width: 10, height: 10 });
+        if (h.connectableStart === false) {
+          el[HANDLE_CONNECTABLE_START_KEY] = false;
+        }
+        if (h.connectableEnd === false) {
+          el[HANDLE_CONNECTABLE_END_KEY] = false;
+        }
+        nodeEl.appendChild(el);
+      }
+
+      container.appendChild(nodeEl);
+    }
+
+    return container;
+  }
+
+  function buildGetNode(nodes: NodeSpec[]) {
+    const nodeMap = new Map(nodes.map((n) => [n.id, { id: n.id, connectable: n.connectable }]));
+    return (id: string) => nodeMap.get(id);
+  }
+
+  /** Identity transform — handle centers only need to be comparable, not converted. */
+  function toFlow(screenX: number, screenY: number): XYPosition {
+    return { x: screenX, y: screenY };
+  }
+
+  function closePos(a: XYPosition, b: XYPosition): void {
+    expect(a.x).toBeCloseTo(b.x, 5);
+    expect(a.y).toBeCloseTo(b.y, 5);
+  }
+
+  /**
+   * Run legacy then indexed against the SAME DOM + params and assert
+   * byte-identical `{element, position}`. Returns the legacy result so
+   * callers can additionally lock the concrete expected outcome (so the
+   * battery can't pass vacuously on both paths agreeing on the wrong answer).
+   */
+  function assertParity(
+    container: HTMLElement,
+    params: Omit<Parameters<typeof findSnapTarget>[0], 'containerEl' | 'index'>,
+  ): { element: HTMLElement | null; position: XYPosition } {
+    const legacy = findSnapTarget({ containerEl: container, ...params });
+    const index = buildHandleIndex(container, toFlow);
+    const indexed = findSnapTarget({ containerEl: container, ...params, index });
+
+    expect(indexed.element).toBe(legacy.element);
+    closePos(indexed.position, legacy.position);
+    return legacy;
+  }
+
+  it('indexed snap returns the same element/position as legacy with ZERO getBoundingClientRect calls', () => {
+    const nodes: NodeSpec[] = [
+      { id: 'a', handles: [{ type: 'target', rect: { left: 100, top: 100, width: 10, height: 10 } }] },
+      { id: 'b', handles: [{ type: 'target', rect: { left: 200, top: 200, width: 10, height: 10 } }] },
+    ];
+    const container = buildDom(nodes);
+    const params = {
+      handleType: 'target' as const,
+      excludeNodeId: 'source',
+      cursorFlowPos: { x: 108, y: 108 },
+      connectionSnapRadius: 50,
+      getNode: buildGetNode(nodes),
+      toFlowPosition: toFlow,
+    };
+
+    const legacy = findSnapTarget({ containerEl: container, ...params });
+    expect(legacy.element).not.toBeNull(); // fixture must actually exercise a real snap, not a vacuous null/null
+
+    const index = buildHandleIndex(container, toFlow);
+    rectSpy.mockClear();
+    const indexed = findSnapTarget({ containerEl: container, ...params, index });
+
+    expect(rectSpy).not.toHaveBeenCalled();
+    expect(indexed.element).toBe(legacy.element);
+    closePos(indexed.position, legacy.position);
+  });
+
+  it('excludeNodeId: index path skips the excluded node exactly like legacy', () => {
+    const nodes: NodeSpec[] = [
+      { id: 'a', handles: [{ type: 'target', rect: { left: 100, top: 100, width: 10, height: 10 } }] },
+      { id: 'b', handles: [{ type: 'target', rect: { left: 200, top: 200, width: 10, height: 10 } }] },
+    ];
+    const container = buildDom(nodes);
+    const legacy = assertParity(container, {
+      handleType: 'target',
+      excludeNodeId: 'a',
+      cursorFlowPos: { x: 105, y: 105 }, // closest to a's handle, but a is excluded
+      connectionSnapRadius: 200,
+      getNode: buildGetNode(nodes),
+      toFlowPosition: toFlow,
+    });
+    expect(legacy.element?.dataset.flowNodeId).toBeUndefined(); // handle el itself has no flowNodeId
+    expect((legacy.element?.closest('[x-flow-node]') as HTMLElement | null)?.dataset.flowNodeId).toBe('b');
+  });
+
+  it('targetNodeId: index path filters to the single target node exactly like legacy', () => {
+    const nodes: NodeSpec[] = [
+      { id: 'a', handles: [{ type: 'target', rect: { left: 100, top: 100, width: 10, height: 10 } }] },
+      { id: 'b', handles: [{ type: 'target', rect: { left: 200, top: 200, width: 10, height: 10 } }] },
+    ];
+    const container = buildDom(nodes);
+    const legacy = assertParity(container, {
+      handleType: 'target',
+      excludeNodeId: 'source',
+      cursorFlowPos: { x: 110, y: 110 }, // closer to a's handle than b's
+      connectionSnapRadius: 200,
+      getNode: buildGetNode(nodes),
+      toFlowPosition: toFlow,
+      targetNodeId: 'b',
+    });
+    expect((legacy.element?.closest('[x-flow-node]') as HTMLElement | null)?.dataset.flowNodeId).toBe('b');
+  });
+
+  it('non-connectable node (getNode → connectable:false): index path skips it exactly like legacy', () => {
+    const nodes: NodeSpec[] = [
+      { id: 'a', connectable: false, handles: [{ type: 'target', rect: { left: 100, top: 100, width: 10, height: 10 } }] },
+      { id: 'b', handles: [{ type: 'target', rect: { left: 200, top: 200, width: 10, height: 10 } }] },
+    ];
+    const container = buildDom(nodes);
+    const legacy = assertParity(container, {
+      handleType: 'target',
+      excludeNodeId: 'source',
+      cursorFlowPos: { x: 105, y: 105 }, // closest to a's handle, but a is non-connectable
+      connectionSnapRadius: 200,
+      getNode: buildGetNode(nodes),
+      toFlowPosition: toFlow,
+    });
+    expect((legacy.element?.closest('[x-flow-node]') as HTMLElement | null)?.dataset.flowNodeId).toBe('b');
+  });
+
+  it('connectableEnd===false (dragging toward a target): index path skips it exactly like legacy', () => {
+    const nodes: NodeSpec[] = [
+      { id: 'a', handles: [{ type: 'target', connectableEnd: false, rect: { left: 100, top: 100, width: 10, height: 10 } }] },
+      { id: 'b', handles: [{ type: 'target', rect: { left: 200, top: 200, width: 10, height: 10 } }] },
+    ];
+    const container = buildDom(nodes);
+    const legacy = assertParity(container, {
+      handleType: 'target', // drag's own handleType is 'target' → guard reads connectableEnd
+      excludeNodeId: 'source',
+      cursorFlowPos: { x: 105, y: 105 },
+      connectionSnapRadius: 200,
+      getNode: buildGetNode(nodes),
+      toFlowPosition: toFlow,
+    });
+    expect((legacy.element?.closest('[x-flow-node]') as HTMLElement | null)?.dataset.flowNodeId).toBe('b');
+  });
+
+  it('connectableStart===false (dragging toward a source): index path skips it exactly like legacy', () => {
+    const nodes: NodeSpec[] = [
+      { id: 'a', handles: [{ type: 'source', connectableStart: false, rect: { left: 100, top: 100, width: 10, height: 10 } }] },
+      { id: 'b', handles: [{ type: 'source', rect: { left: 200, top: 200, width: 10, height: 10 } }] },
+    ];
+    const container = buildDom(nodes);
+    const legacy = assertParity(container, {
+      handleType: 'source', // drag's own handleType is 'source' → guard reads connectableStart
+      excludeNodeId: 'target-node',
+      cursorFlowPos: { x: 105, y: 105 },
+      connectionSnapRadius: 200,
+      getNode: buildGetNode(nodes),
+      toFlowPosition: toFlow,
+    });
+    expect((legacy.element?.closest('[x-flow-node]') as HTMLElement | null)?.dataset.flowNodeId).toBe('b');
+  });
+
+  it('connectionMode "loose": index path (index.all) matches legacy candidates of both types', () => {
+    const nodes: NodeSpec[] = [
+      { id: 'a', handles: [{ type: 'source', rect: { left: 100, top: 100, width: 10, height: 10 } }] },
+      { id: 'b', handles: [{ type: 'target', rect: { left: 300, top: 300, width: 10, height: 10 } }] },
+    ];
+    const container = buildDom(nodes);
+    // Cursor is right on top of the SOURCE handle — dragging a 'target' handle
+    // (looking for targets) would normally never match it in strict mode, but
+    // loose mode snaps to handles of ANY type.
+    const legacy = assertParity(container, {
+      handleType: 'target',
+      excludeNodeId: 'source-node',
+      cursorFlowPos: { x: 105, y: 105 },
+      connectionSnapRadius: 50,
+      getNode: buildGetNode(nodes),
+      toFlowPosition: toFlow,
+      connectionMode: 'loose',
+    });
+    expect((legacy.element?.closest('[x-flow-node]') as HTMLElement | null)?.dataset.flowNodeId).toBe('a');
+  });
+
+  it('connectionMode strict (default): index path (index.byType) matches legacy — same fixture as loose returns null instead', () => {
+    const nodes: NodeSpec[] = [
+      { id: 'a', handles: [{ type: 'source', rect: { left: 100, top: 100, width: 10, height: 10 } }] },
+      { id: 'b', handles: [{ type: 'target', rect: { left: 300, top: 300, width: 10, height: 10 } }] },
+    ];
+    const container = buildDom(nodes);
+    // Same fixture and cursor as the loose-mode test above, but strict mode
+    // only considers 'target' handles — the nearby source handle can't match,
+    // and the target handle at (300,300) is out of radius.
+    const legacy = assertParity(container, {
+      handleType: 'target',
+      excludeNodeId: 'source-node',
+      cursorFlowPos: { x: 105, y: 105 },
+      connectionSnapRadius: 50,
+      getNode: buildGetNode(nodes),
+      toFlowPosition: toFlow,
+    });
+    expect(legacy.element).toBeNull();
+  });
+
+  it('connectionSnapRadius <= 0: both paths short-circuit to {element: null} with ZERO rect reads', () => {
+    const nodes: NodeSpec[] = [
+      { id: 'a', handles: [{ type: 'target', rect: { left: 100, top: 100, width: 10, height: 10 } }] },
+    ];
+    const container = buildDom(nodes);
+    const params = {
+      handleType: 'target' as const,
+      excludeNodeId: 'source',
+      cursorFlowPos: { x: 100, y: 100 },
+      connectionSnapRadius: 0,
+      getNode: buildGetNode(nodes),
+      toFlowPosition: toFlow,
+    };
+
+    rectSpy.mockClear();
+    const legacy = findSnapTarget({ containerEl: container, ...params });
+    expect(legacy).toEqual({ element: null, position: params.cursorFlowPos });
+    expect(rectSpy).not.toHaveBeenCalled();
+
+    const index = buildHandleIndex(container, toFlow);
+    rectSpy.mockClear();
+    const indexed = findSnapTarget({ containerEl: container, ...params, index });
+    expect(indexed).toEqual({ element: null, position: params.cursorFlowPos });
+    expect(rectSpy).not.toHaveBeenCalled();
+  });
+
+  it('snap radius: a handle just OUTSIDE the radius returns null identically on both paths', () => {
+    const nodes: NodeSpec[] = [
+      { id: 'a', handles: [{ type: 'target', rect: { left: 100, top: 100, width: 10, height: 10 } }] }, // center (105,105)
+    ];
+    const container = buildDom(nodes);
+    // Distance from (105, 200) to (105, 105) is exactly 95 — just outside a radius of 94.
+    const legacy = assertParity(container, {
+      handleType: 'target',
+      excludeNodeId: 'source',
+      cursorFlowPos: { x: 105, y: 200 },
+      connectionSnapRadius: 94,
+      getNode: buildGetNode(nodes),
+      toFlowPosition: toFlow,
+    });
+    expect(legacy.element).toBeNull();
+  });
+
+  it('snap radius: the same handle just INSIDE the radius returns it identically on both paths', () => {
+    const nodes: NodeSpec[] = [
+      { id: 'a', handles: [{ type: 'target', rect: { left: 100, top: 100, width: 10, height: 10 } }] }, // center (105,105)
+    ];
+    const container = buildDom(nodes);
+    const legacy = assertParity(container, {
+      handleType: 'target',
+      excludeNodeId: 'source',
+      cursorFlowPos: { x: 105, y: 200 },
+      connectionSnapRadius: 96,
+      getNode: buildGetNode(nodes),
+      toFlowPosition: toFlow,
+    });
+    expect((legacy.element?.closest('[x-flow-node]') as HTMLElement | null)?.dataset.flowNodeId).toBe('a');
   });
 });
 

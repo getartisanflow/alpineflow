@@ -339,8 +339,8 @@ function measureHandleCoords(
 }
 
 
-function getPointAtPercent(pathEl: SVGPathElement, t: number): { x: number; y: number } {
-  const len = pathEl.getTotalLength();
+function getPointAtPercent(pathEl: SVGPathElement, t: number, totalLength?: number): { x: number; y: number } {
+  const len = totalLength ?? pathEl.getTotalLength();
   const pt = pathEl.getPointAtLength(len * Math.max(0, Math.min(1, t)));
   return { x: pt.x, y: pt.y };
 }
@@ -403,6 +403,12 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
       let labelEl: HTMLDivElement | null = null;
       let labelStartEl: HTMLDivElement | null = null;
       let labelEndEl: HTMLDivElement | null = null;
+
+      // Cached label-path length, keyed by the path `d` attribute. getTotalLength()
+      // forces SVG geometry, so avoid re-measuring an unchanged path across effect
+      // re-runs (e.g. selection/label-only updates that don't change routing).
+      let cachedPathD: string | null = null;
+      let cachedTotalLength = 0;
 
       // Dot animation state
       let dotCircle: SVGCircleElement | null = null;
@@ -1453,12 +1459,25 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         const viewport = el.closest('.flow-viewport');
         const labelVis = edge.labelVisibility ?? 'always';
 
+        // Lazily measure + cache the path length, keyed by the `d` attribute set
+        // above. Only called when a label actually needs it, so edges without
+        // labels still never force SVG geometry.
+        const getCachedTotalLength = (): number => {
+          const currentD = pathEl.getAttribute('d') ?? '';
+          if (currentD !== cachedPathD) {
+            cachedPathD = currentD;
+            cachedTotalLength = typeof pathEl.getTotalLength === 'function' ? (pathEl.getTotalLength() || 0) : 0;
+          }
+          return cachedTotalLength;
+        };
+
         // Center label (uses labelPosition percentage or default midpoint)
         labelEl = ensureLabel(labelEl, edge.label, 'flow-edge-label', viewport, edge.id);
         if (labelEl) {
-          if (pathEl.getTotalLength?.()) {
+          const totalLength = getCachedTotalLength();
+          if (totalLength > 0) {
             const t = edge.labelPosition ?? 0.5;
-            const pt = getPointAtPercent(pathEl, t);
+            const pt = getPointAtPercent(pathEl, t, totalLength);
             labelEl.style.left = `${pt.x}px`;
             labelEl.style.top = `${pt.y}px`;
           } else {
@@ -1470,10 +1489,10 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         // Start label (fixed pixel offset from source end)
         labelStartEl = ensureLabel(labelStartEl, edge.labelStart, 'flow-edge-label flow-edge-label-start', viewport, edge.id);
         if (labelStartEl) {
-          if (pathEl.getTotalLength?.()) {
-            const len = pathEl.getTotalLength();
+          const totalLength = getCachedTotalLength();
+          if (totalLength > 0) {
             const offset = edge.labelStartOffset ?? 30;
-            const pt = pathEl.getPointAtLength(Math.min(offset, len / 2));
+            const pt = pathEl.getPointAtLength(Math.min(offset, totalLength / 2));
             labelStartEl.style.left = `${pt.x}px`;
             labelStartEl.style.top = `${pt.y}px`;
           }
@@ -1482,10 +1501,10 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         // End label (fixed pixel offset from target end)
         labelEndEl = ensureLabel(labelEndEl, edge.labelEnd, 'flow-edge-label flow-edge-label-end', viewport, edge.id);
         if (labelEndEl) {
-          if (pathEl.getTotalLength?.()) {
-            const len = pathEl.getTotalLength();
+          const totalLength = getCachedTotalLength();
+          if (totalLength > 0) {
             const offset = edge.labelEndOffset ?? 30;
-            const pt = pathEl.getPointAtLength(Math.max(len - offset, len / 2));
+            const pt = pathEl.getPointAtLength(Math.max(totalLength - offset, totalLength / 2));
             labelEndEl.style.left = `${pt.x}px`;
             labelEndEl.style.top = `${pt.y}px`;
           }
