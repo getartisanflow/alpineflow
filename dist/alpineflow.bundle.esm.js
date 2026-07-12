@@ -5947,93 +5947,100 @@ function nh(t) {
     addNodes(e, n) {
       t._captureHistory();
       let o = Array.isArray(e) ? e : [e];
-      B("init", `Adding ${o.length} node(s)`, o.map((c) => c.id));
+      B("init", `Adding ${o.length} node(s)`, o.map((d) => d.id));
       const i = /* @__PURE__ */ new Map();
       if (n?.center) {
-        for (const c of o)
-          i.set(c.id, { ...c.position });
-        o = o.map((c) => ({ ...c, position: { x: -9999, y: -9999 } }));
+        for (const d of o)
+          i.set(d.id, { ...d.position });
+        o = o.map((d) => ({ ...d, position: { x: -9999, y: -9999 } }));
       }
       const r = [];
-      for (const c of o) {
-        if (c.parentId) {
-          const d = t._getChildValidation(c.parentId);
-          if (d) {
-            const u = t._nodeMap.get(c.parentId);
-            if (u) {
-              const f = [
+      for (const d of o) {
+        if (d.parentId) {
+          const u = t._getChildValidation(d.parentId);
+          if (u) {
+            const f = t._nodeMap.get(d.parentId);
+            if (f) {
+              const h = [
                 ...t.nodes.filter(
-                  (g) => g.parentId === c.parentId
+                  (p) => p.parentId === d.parentId
                 ),
                 ...r.filter(
-                  (g) => g.parentId === c.parentId
+                  (p) => p.parentId === d.parentId
                 )
-              ], h = qr(u, c, f, d);
-              if (!h.valid) {
+              ], g = qr(f, d, h, u);
+              if (!g.valid) {
                 t._config.onChildValidationFail && t._config.onChildValidationFail({
-                  parent: u,
-                  child: c,
+                  parent: f,
+                  child: d,
                   operation: "add",
-                  rule: h.rule,
-                  message: h.message
+                  rule: g.rule,
+                  message: g.message
                 });
                 continue;
               }
             }
           }
         }
-        r.push(c);
+        r.push(d);
       }
       o = r, t.nodes.push(...o);
-      for (const c of o)
-        c.dimensions && t._initialDimensions.set(c.id, { ...c.dimensions });
-      if (o.some((c) => c.parentId)) {
-        const c = Et(t.nodes);
-        t.nodes.splice(0, t.nodes.length, ...c);
+      for (const d of o)
+        d.dimensions && t._initialDimensions.set(d.id, { ...d.dimensions });
+      let s = o.some((d) => d.parentId);
+      if (!s) {
+        const d = new Set(o.map((u) => u.id));
+        s = t.nodes.some(
+          (u) => u.parentId && d.has(u.parentId)
+        );
+      }
+      if (s) {
+        const d = Et(t.nodes);
+        t.nodes.splice(0, t.nodes.length, ...d);
       }
       t._rebuildNodeMap();
-      for (const c of o)
-        if (c.childLayout) {
-          const d = t._nodeMap.get(c.id);
-          d && t._installChildLayoutWatchers(d);
+      for (const d of o)
+        if (d.childLayout) {
+          const u = t._nodeMap.get(d.id);
+          u && t._installChildLayoutWatchers(u);
         }
       t._emit("nodes-change", { type: "add", nodes: o });
-      const s = t._container ? De.get(t._container) : void 0;
-      if (s?.bridge)
-        for (const c of o)
-          s.bridge.pushLocalNodeAdd(c);
+      const l = t._container ? De.get(t._container) : void 0;
+      if (l?.bridge)
+        for (const d of o)
+          l.bridge.pushLocalNodeAdd(d);
       n?.center && requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          for (const [c, d] of i) {
-            const u = t.nodes.find((g) => g.id === c);
-            if (!u) continue;
-            const f = u.dimensions?.width ?? 0, h = u.dimensions?.height ?? 0;
-            u.position.x = d.x - f / 2, u.position.y = d.y - h / 2;
+          for (const [d, u] of i) {
+            const f = t.nodes.find((p) => p.id === d);
+            if (!f) continue;
+            const h = f.dimensions?.width ?? 0, g = f.dimensions?.height ?? 0;
+            f.position.x = u.x - h / 2, f.position.y = u.y - g / 2;
           }
         });
       }), t._recomputeChildValidation();
-      const l = /* @__PURE__ */ new Set();
-      for (const c of o)
-        if (c.parentId && t._nodeMap.get(c.parentId)?.childLayout) {
-          if (c.order == null) {
-            const u = t.nodes.filter(
-              (f) => f.parentId === c.parentId && f.id !== c.id
-            );
-            c.order = u.length > 0 ? Math.max(...u.map((f) => f.order ?? 0)) + 1 : 0;
-          }
-          l.add(c.parentId);
-        }
       const a = /* @__PURE__ */ new Set();
-      for (const c of l) {
-        let d = c, u = t._nodeMap.get(c)?.parentId;
-        for (; u; ) {
-          const f = t._nodeMap.get(u);
-          f?.childLayout && (d = u), u = f?.parentId;
+      for (const d of o)
+        if (d.parentId && t._nodeMap.get(d.parentId)?.childLayout) {
+          if (d.order == null) {
+            const f = t.nodes.filter(
+              (h) => h.parentId === d.parentId && h.id !== d.id
+            );
+            d.order = f.length > 0 ? Math.max(...f.map((h) => h.order ?? 0)) + 1 : 0;
+          }
+          a.add(d.parentId);
         }
-        a.add(d);
+      const c = /* @__PURE__ */ new Set();
+      for (const d of a) {
+        let u = d, f = t._nodeMap.get(d)?.parentId;
+        for (; f; ) {
+          const h = t._nodeMap.get(f);
+          h?.childLayout && (u = f), f = h?.parentId;
+        }
+        c.add(u);
       }
-      for (const c of a)
-        t._layoutDedup ? t._layoutDedup.safeLayoutChildren(c) : t.layoutChildren?.(c);
+      for (const d of c)
+        t._layoutDedup ? t._layoutDedup.safeLayoutChildren(d) : t.layoutChildren?.(d);
       t._scheduleAutoLayout();
     },
     /**
