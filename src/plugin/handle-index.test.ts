@@ -137,7 +137,7 @@ describe('buildHandleIndex', () => {
     expect(record!.isMirror).toBe(false);
   });
 
-  it('get() returns undefined for a handle excluded as zero-size', () => {
+  it('get() falls back to the mirror when the real handle is excluded as zero-size', () => {
     const { container } = createSchemaFixture();
     const index = buildHandleIndex(container, toFlowPosition);
 
@@ -146,6 +146,46 @@ describe('buildHandleIndex', () => {
     const record = index.get('users', 'id', 'target');
     expect(record).toBeDefined();
     expect(record!.isMirror).toBe(true);
+  });
+
+  it('get() returns undefined for a key with neither a real nor a mirror handle', () => {
+    const { container } = createSchemaFixture();
+    const index = buildHandleIndex(container, toFlowPosition);
+
+    expect(index.get('nope', 'nope', 'source')).toBeUndefined();
+  });
+
+  it('get() prefers the real handle even when its mirror is measured FIRST', () => {
+    // Author the mirror BEFORE its real counterpart in document order so the
+    // mirror is inserted into the byKey map first. This is the only shape that
+    // exercises the `existing.isMirror && !record.isMirror` replacement branch;
+    // a naive first-wins map would return the mirror here and fail.
+    const container = document.createElement('div');
+    const node = document.createElement('div');
+    node.setAttribute('x-flow-node', '');
+    node.dataset.flowNodeId = 'orders';
+
+    const mirror = document.createElement('div');
+    mirror.className = 'flow-schema-handle flow-schema-handle--source flow-schema-handle--mirror';
+    mirror.dataset.flowHandleType = 'source';
+    mirror.dataset.flowHandleId = 'total';
+    stubRect(mirror, { left: 100, top: 50, width: 20, height: 10 });
+    node.appendChild(mirror); // mirror first
+
+    const real = document.createElement('div');
+    real.className = 'flow-schema-handle flow-schema-handle--source';
+    real.dataset.flowHandleType = 'source';
+    real.dataset.flowHandleId = 'total';
+    stubRect(real, { left: 300, top: 50, width: 20, height: 10 });
+    node.appendChild(real); // real second
+
+    container.appendChild(node);
+
+    const index = buildHandleIndex(container, toFlowPosition);
+    const record = index.get('orders', 'total', 'source');
+    expect(record).toBeDefined();
+    expect(record!.el).toBe(real);
+    expect(record!.isMirror).toBe(false);
   });
 
   it('computes flowX/flowY from toFlowPosition(rect center)', () => {
