@@ -261,6 +261,25 @@ describe('_markDirtyEdges — selective edge invalidation', () => {
     expect(Alpine.raw(canvas._edgeDirtyTicks).get('e-live')).toBe(2); // bumped by full invalidation, not deleted
     expect(Alpine.raw(canvas._edgeCorridors).has('e-live')).toBe(true);
   });
+
+  it('removeNodes prunes _edgeDirtyTicks/_edgeCorridors for cascade-removed edges', () => {
+    const canvas = mountCanvas({
+      nodes: [
+        makeNode('a', { position: { x: 0, y: 0 } }),
+        makeNode('b', { position: { x: 400, y: 0 } }),
+      ],
+      edges: [makeEdge('e1', 'a', 'b')],
+    });
+
+    // Seed routing state for e1 as if a route had already been computed.
+    canvas._edgeCorridors.set('e1', { minX: 0, minY: 0, maxX: 10, maxY: 10 });
+    canvas._edgeDirtyTicks.set('e1', 1);
+
+    canvas.removeNodes('a'); // cascade-removes e1 (touches 'a') via the node-removal path, not removeEdges
+
+    expect(Alpine.raw(canvas._edgeDirtyTicks).has('e1')).toBe(false);
+    expect(Alpine.raw(canvas._edgeCorridors).has('e1')).toBe(false);
+  });
 });
 
 // ============================================================================

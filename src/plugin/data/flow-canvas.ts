@@ -370,11 +370,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _layoutAnimFrame: 0,
 
     // ── Shared obstacle cache (Workstream C) ─────────────────────────────
-    /** Spatial index of node id → flow-space rect cells (committed geometry). Non-reactive: operate on it via `Alpine.raw(canvas._spatialGrid)` (raw the NESTED property — `Alpine.raw(canvas)` does NOT unwrap Alpine's merge-scope proxy; see flow-edge.ts). */
+    /** Spatial index of node id → flow-space rect cells (committed geometry). Non-reactive: operate on it via `Alpine.raw(canvas._spatialGrid)` (raw the NESTED property — `Alpine.raw(canvas)` does NOT unwrap Alpine's merge-scope proxy; see flow-edge.ts). Also maintained for the viewport-culling overhaul (WS E), which will consume it — do not delete as dead code even though only WS C currently reads it. */
     _spatialGrid: new SpatialGrid(),
     /** Obstacle rects rebuilt once per commit. In the edge effect read it via `Alpine.raw(canvas._obstacleSnapshot)` (nested-raw) so the edge does NOT subscribe to every node's reactive state. */
     _obstacleSnapshot: null as Array<{ id: string; x: number; y: number; width: number; height: number }> | null,
-    /** Reactive epoch bumped by _commitNodeGeometry (internal signal; edges must NOT subscribe to it). */
+    /** Reactive epoch bumped by _commitNodeGeometry (internal signal; edges must NOT subscribe to it). Reserved for the interaction-degradation/LOD workstream (WS D), which will consume it — do not delete as dead code even though only WS C currently reads it. */
     _obstacleEpoch: 0,
     /** REACTIVE Map edge id → tick. Edge effects read key-scoped `.get(edge.id)`; bumped by _markDirtyEdges. */
     _edgeDirtyTicks: new Map<string, number>(),

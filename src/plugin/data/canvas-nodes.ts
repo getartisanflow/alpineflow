@@ -290,6 +290,12 @@ export function createNodesMixin(ctx: CanvasContext) {
         ctx._initialDimensions.delete(id);
         ctx._uninstallChildLayoutWatchers(id);
       }
+      // Prune routing state for cascade-removed edges — mirrors removeEdges'
+      // cleanup, which this path bypasses since it splices ctx.edges directly.
+      for (const edgeId of removedEdgeIds) {
+        ctx._edgeDirtyTicks?.delete(edgeId);
+        ctx._edgeCorridors?.delete(edgeId);
+      }
       if (removed.length) ctx._emit('nodes-change', { type: 'remove', nodes: removed });
       if (reconnected.length) ctx._emit('edges-change', { type: 'add', edges: reconnected });
 

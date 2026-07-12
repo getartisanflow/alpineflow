@@ -83,10 +83,16 @@ function mountEdges(nodes: MockNode[], edges: MockEdge[], opts: { nodeElements?:
     _nodeElements: new Map<string, HTMLElement>(),
     _id: 'test-canvas',
     // ── Workstream C (task C2): shared obstacle snapshot + dirty-corridor
-    // invalidation. This is a faithful, hand-rolled mirror of the real
+    // invalidation. This is a hand-rolled mirror of the real
     // flowCanvas._commitNodeGeometry/_markDirtyEdges pair (flow-canvas.ts) —
     // duplicated here because this harness builds a plain reactive scope
     // rather than mounting the full flowCanvas Alpine.data() factory.
+    // INTENTIONALLY SIMPLIFIED: unlike the real implementation, this mock
+    // omits the hidden-node obstacle filter and the edge-removal/full-
+    // invalidation pruning of _edgeDirtyTicks/_edgeCorridors. The real
+    // methods are covered against a real mounted flowCanvas in
+    // canvas-geometry-commit.test.ts — treat that file as the source of
+    // truth for behavior this mirror doesn't reproduce.
     _obstacleSnapshot: null as Array<{ id: string; x: number; y: number; width: number; height: number }> | null,
     _edgeDirtyTicks: new Map<string, number>(),
     _edgeCorridors: new Map<string, { minX: number; minY: number; maxX: number; maxY: number }>(),
