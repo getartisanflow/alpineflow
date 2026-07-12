@@ -82,7 +82,7 @@ Two low-risk perf touch-ups surfaced by the schema-scale review. Both are pure p
 
 **Performance**
 - Edge labels cache the path length keyed by the `d` attribute. Positioning a center/start/end label previously forced `SVGPathElement.getTotalLength()` up to 5× per edge per effect run (including once inside the center-label helper); the length is now measured at most once while `d` is unchanged, so selection- and label-only re-runs skip the repeated `getTotalLength` measurement (the per-label `getPointAtLength` placement still runs). A changed path re-measures.
-- `addNodes` keeps the `nodes` array identity for flat batches. Appending nodes without a `parentId` no longer re-sorts and reassigns `nodes`, so the array reference is stable and effects that read it don't invalidate on every add. A batch that includes a child still sorts topologically — now in place via `splice`, so array identity is preserved even then.
+- `addNodes` keeps the `nodes` array identity for flat batches. Appending nodes without a `parentId` no longer re-sorts and reassigns `nodes`, so the array reference is stable and effects that read it don't invalidate on every add. A batch that includes a child — or whose flat node is the parent of a child added in an earlier call (a forward reference) — still sorts topologically, now in place via `splice`, so array identity is preserved even then. Topological ordering stays identical to the previous behaviour in every case.
 
 ## v0.2.1-alpha — 2026-04-14
 
