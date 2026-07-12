@@ -412,6 +412,8 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _visibleNodeIds: new Set<string>(),
     /** PLAIN Set of edge ids currently culled (display:none). Used to gate display writes to visibility transitions only. */
     _culledEdgeIds: new Set<string>(),
+    /** Whether `_applyCulling` was active on the previous call — used to detect threshold-crossing-down / config-off so `_uncullEverything` can restore display exactly once. */
+    _cullingWasActive: false,
 
     // ── Context Menu Auto-Populate ─────────────────────────────────────
     _contextMenuListeners: [] as Array<{ event: string; handler: EventListener }>,
@@ -791,7 +793,14 @@ export function registerFlowCanvas(Alpine: Alpine) {
      * per-frame style writes, which devtools amplifies into mutation-record churn.
      */
     _applyCulling() {
-      if (config.viewportCulling !== true) return;
+      const cfg = config.viewportCulling ?? 'auto';
+      const active =
+        cfg === true || (cfg === 'auto' && this.nodes.length >= (config.cullingAutoThreshold ?? 150));
+      if (!active) {
+        if (this._cullingWasActive) this._uncullEverything(); // restore display on threshold-crossing down or config change
+        return;
+      }
+      this._cullingWasActive = true;
       if (!this._container) return;
 
       const cw = this._container.clientWidth;
@@ -879,6 +888,24 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
       this._visibleNodeIds = visible;
       this._culledEdgeIds = culled;
+    },
+
+    /**
+     * Restore CSS display on every element culling could have hidden and
+     * reset the tracking sets, so a future re-activation of `_applyCulling`
+     * starts clean. Called when the `viewportCulling: 'auto'` gate
+     * deactivates (node count drops back below `cullingAutoThreshold`) after
+     * having been active, or when culling is otherwise turned off.
+     */
+    _uncullEverything() {
+      // Clear culling's inline display override on every tracked element; a
+      // `node.hidden` node stays hidden via its `.flow-node-hidden` class (class,
+      // not inline), so deferring to '' correctly re-hides only truly-hidden nodes.
+      for (const el of this._nodeElements.values()) el.style.display = '';
+      for (const g of this._edgeSvgElements.values()) g.style.display = '';
+      this._visibleNodeIds = new Set<string>();
+      this._culledEdgeIds = new Set<string>();
+      this._cullingWasActive = false;
     },
 
     _getVisibleNodeIds(): Set<string> {

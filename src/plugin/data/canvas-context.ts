@@ -344,6 +344,9 @@ export interface CanvasContext {
   /** Set of edge IDs currently culled (display:none) — tracks prior-frame state for transition-only writes */
   _culledEdgeIds: Set<string>;
 
+  /** Whether `_applyCulling` was active on the previous call — used to detect threshold-crossing-down / config-off */
+  _cullingWasActive: boolean;
+
   // === Background ===
 
   /** Background config (variant or layer array) */
@@ -473,6 +476,9 @@ export interface CanvasContext {
 
   /** Toggle CSS display on off-screen nodes/edges (viewport culling) */
   _applyCulling(): void;
+
+  /** Restore display on every element culling could have hidden and reset the tracking sets */
+  _uncullEverything(): void;
 
   /** Get set of currently visible node IDs */
   _getVisibleNodeIds(): Set<string>;

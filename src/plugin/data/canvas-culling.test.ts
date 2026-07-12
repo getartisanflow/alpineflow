@@ -430,3 +430,167 @@ describe('SpatialGrid-backed visibility parity', () => {
     expect(canvas._getVisibleNodeIds().has('a')).toBe(true);
   });
 });
+
+// ============================================================================
+// viewportCulling 'auto' default (Workstream E, task E3)
+//
+// `viewportCulling` gains a third state, `'auto'` (also the new DEFAULT,
+// replacing `false`): culling activates once `this.nodes.length` reaches
+// `cullingAutoThreshold` (default 150). `true`/`false` keep forcing culling
+// unconditionally on/off regardless of node count.
+//
+// Node display-write proof note: `_applyCulling`'s node loop (E1) only WRITES
+// `display:'none'` on a visible -> invisible TRANSITION (it diffs against the
+// previous frame's `_visibleNodeIds`). A node that starts off-screen and has
+// NEVER been visible is therefore never explicitly written to 'none' — there
+// is nothing to transition from. To observe an active gate via a real DOM
+// write (rather than only inspecting `_getVisibleNodeIds()`), these tests
+// first establish a visible baseline (all nodes on-screen, one `_applyCulling`
+// call), then move a node off-screen and re-cull — exercising the same
+// visible->invisible write path the SpatialGrid parity tests above rely on.
+// This does not touch the E1/E2 loops themselves, only how the tests drive them.
+// ============================================================================
+
+describe('viewportCulling auto gate', () => {
+  /** Build N nodes, all positioned on-screen (within the default visible bounds). */
+  function buildNodes(count: number): FlowNode[] {
+    const nodes: FlowNode[] = [];
+    for (let i = 0; i < count; i++) {
+      nodes.push(makeNode(`n${i}`, { position: { x: 0, y: 0 } }));
+    }
+    return nodes;
+  }
+
+  /** Mount, register a DOM element per node, commit geometry, size the container. */
+  function mountAndPrepare(config: FlowCanvasConfig, count: number): { canvas: any; nodes: FlowNode[] } {
+    const nodes = buildNodes(count);
+    const canvas = mountCanvas({ ...config, nodes });
+    for (const node of nodes) {
+      canvas._nodeElements.set(node.id, document.createElement('div'));
+    }
+    canvas._commitNodeGeometry();
+    sizeContainer(canvas);
+    return { canvas, nodes };
+  }
+
+  /** Move a node far off-screen and re-commit its geometry into the grid. */
+  function moveOffscreen(canvas: any, id: string): void {
+    const node = canvas.getNode(id);
+    node.position.x = 5000;
+    node.position.y = 5000;
+    canvas._commitNodeGeometry();
+  }
+
+  it("'auto' + >=150 nodes -> culling active (visible node transitions to display:none off-screen)", () => {
+    const { canvas } = mountAndPrepare({ viewportCulling: 'auto' }, 151);
+    canvas._applyCulling(); // baseline: gate active, all 151 on-screen -> all visible
+    expect(canvas._getVisibleNodeIds().size).toBe(151);
+
+    moveOffscreen(canvas, 'n150');
+    canvas._applyCulling();
+
+    expect(canvas._nodeElements.get('n150').style.display).toBe('none');
+    expect(canvas._getVisibleNodeIds().has('n150')).toBe(false);
+  });
+
+  it("'auto' + <150 nodes -> culling inactive (early return; node never marked visible or culled)", () => {
+    const { canvas } = mountAndPrepare({ viewportCulling: 'auto' }, 50);
+    canvas._applyCulling(); // early return: below threshold
+    expect(canvas._getVisibleNodeIds().size).toBe(0);
+
+    moveOffscreen(canvas, 'n49');
+    canvas._applyCulling(); // still early return
+
+    expect(canvas._nodeElements.get('n49').style.display).toBe('');
+    expect(canvas._getVisibleNodeIds().size).toBe(0);
+  });
+
+  it("default (no viewportCulling key at all) is 'auto' -> active at 151 nodes", () => {
+    const { canvas } = mountAndPrepare({}, 151);
+    canvas._applyCulling();
+    expect(canvas._getVisibleNodeIds().size).toBe(151);
+
+    moveOffscreen(canvas, 'n150');
+    canvas._applyCulling();
+
+    expect(canvas._nodeElements.get('n150').style.display).toBe('none');
+  });
+
+  it("'true' forces culling on below the auto threshold", () => {
+    const { canvas } = mountAndPrepare({ viewportCulling: true }, 3);
+    canvas._applyCulling();
+    expect(canvas._getVisibleNodeIds().size).toBe(3);
+
+    moveOffscreen(canvas, 'n2');
+    canvas._applyCulling();
+
+    expect(canvas._nodeElements.get('n2').style.display).toBe('none');
+  });
+
+  it("'false' forces culling off above the auto threshold", () => {
+    const { canvas } = mountAndPrepare({ viewportCulling: false }, 200);
+    canvas._applyCulling();
+    expect(canvas._getVisibleNodeIds().size).toBe(0);
+
+    moveOffscreen(canvas, 'n199');
+    canvas._applyCulling();
+
+    expect(canvas._nodeElements.get('n199').style.display).toBe('');
+    expect(canvas._getVisibleNodeIds().size).toBe(0);
+  });
+
+  it('cullingAutoThreshold overrides the 150 default', () => {
+    const { canvas: active } = mountAndPrepare({ viewportCulling: 'auto', cullingAutoThreshold: 10 }, 12);
+    active._applyCulling();
+    expect(active._getVisibleNodeIds().size).toBe(12);
+    moveOffscreen(active, 'n11');
+    active._applyCulling();
+    expect(active._nodeElements.get('n11').style.display).toBe('none');
+
+    const { canvas: inactive } = mountAndPrepare({ viewportCulling: 'auto', cullingAutoThreshold: 10 }, 5);
+    inactive._applyCulling();
+    expect(inactive._getVisibleNodeIds().size).toBe(0);
+    moveOffscreen(inactive, 'n4');
+    inactive._applyCulling();
+    expect(inactive._nodeElements.get('n4').style.display).toBe('');
+  });
+
+  it('_uncullEverything restores display and resets tracking sets', () => {
+    const { canvas } = mountAndPrepare({ viewportCulling: 'auto' }, 151);
+    canvas._applyCulling();
+    moveOffscreen(canvas, 'n150');
+    canvas._applyCulling();
+
+    const offEl = canvas._nodeElements.get('n150');
+    expect(offEl.style.display).toBe('none'); // culled
+    expect(canvas._getVisibleNodeIds().size).toBeGreaterThan(0);
+
+    canvas._uncullEverything();
+
+    expect(offEl.style.display).toBe('');
+    expect(canvas._getVisibleNodeIds().size).toBe(0);
+    expect(canvas._culledEdgeIds.size).toBe(0);
+    expect(canvas._cullingWasActive).toBe(false);
+  });
+
+  it('_applyCulling un-culls automatically when node count drops back below the auto threshold', () => {
+    const { canvas } = mountAndPrepare({ viewportCulling: 'auto' }, 151);
+    canvas._applyCulling();
+    moveOffscreen(canvas, 'n150');
+    canvas._applyCulling();
+
+    const offEl = canvas._nodeElements.get('n150');
+    expect(offEl.style.display).toBe('none'); // culling active
+    expect(canvas._cullingWasActive).toBe(true);
+
+    // Drop below threshold — `_applyCulling` must detect the deactivation and
+    // restore display via `_uncullEverything()` rather than leaving stale
+    // `display:none` on nodes culling no longer applies to.
+    canvas.nodes = (canvas.nodes as FlowNode[]).slice(0, 50);
+    canvas._applyCulling();
+
+    expect(offEl.style.display).toBe('');
+    expect(canvas._cullingWasActive).toBe(false);
+    expect(canvas._getVisibleNodeIds().size).toBe(0);
+  });
+});

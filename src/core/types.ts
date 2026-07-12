@@ -912,8 +912,16 @@ export interface FlowCanvasConfig {
   /** Enable zooming. Default: true */
   zoomable?: boolean;
 
-  /** Only render nodes/edges visible in the viewport. Default: false */
-  viewportCulling?: boolean;
+  /**
+   * Viewport culling: only render nodes/edges visible in the viewport (CSS `display` toggled on off-screen elements).
+   * - `'auto'` (default): culling turns on automatically once the node count reaches `cullingAutoThreshold` (150).
+   * - `true`: always on. `false`: always off.
+   * Default: `'auto'`.
+   */
+  viewportCulling?: boolean | 'auto';
+
+  /** Node-count threshold at/above which `viewportCulling: 'auto'` activates culling. Default: 150 */
+  cullingAutoThreshold?: number;
 
   /** Buffer in flow-coordinate pixels around viewport for culling. Default: 100 */
   cullingBuffer?: number;
