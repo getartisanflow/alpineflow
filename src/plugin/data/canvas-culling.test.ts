@@ -662,3 +662,105 @@ describe('viewportCulling auto gate', () => {
     expect(canvas._getVisibleNodeIds().size).toBe(0);
   });
 });
+
+// ============================================================================
+// Edge culling must not fight the hidden/collapse effect (Workstream E, fix 3)
+//
+// flow-viewport.ts owns the inline `display` of edges hidden via
+// `edge.hidden` / `edge._hiddenByCollapse` / a hidden endpoint node. The
+// culling loop (which writes `g.style.display` from endpoint/corridor
+// visibility) must skip those edges entirely, and `_uncullEverything` must
+// restore only edges CULLING hid — otherwise a hidden/collapsed edge that is
+// culled and then panned into view (or deactivation) would be un-hidden.
+// ============================================================================
+
+describe('_applyCulling — does not fight the hidden/collapse effect over edge display', () => {
+  function svgEl(): SVGSVGElement {
+    return document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  }
+
+  it('does not un-hide a hidden edge when its corridor pans into view (culled -> visible transition)', () => {
+    const canvas = mountCanvas({
+      viewportCulling: true,
+      nodes: [
+        makeNode('c', { position: { x: 5000, y: 0 } }),
+        makeNode('d', { position: { x: 5300, y: 0 } }),
+      ],
+    });
+    for (const id of ['c', 'd']) {
+      canvas._nodeElements.set(id, document.createElement('div'));
+    }
+    canvas._commitNodeGeometry();
+    sizeContainer(canvas);
+
+    const hiddenSvg = svgEl();
+    canvas._edgeSvgElements.set('e-hidden', hiddenSvg);
+
+    // Edge marked hidden (as flow-viewport sees it) AND already rendered
+    // display:none by flow-viewport's own writer.
+    const hiddenEdge = makeEdge('e-hidden', 'c', 'd');
+    hiddenEdge.hidden = true;
+    canvas.edges = [hiddenEdge];
+    canvas._rebuildEdgeMap();
+    hiddenSvg.style.display = 'none'; // flow-viewport already hid it
+
+    // First cull: endpoints + corridor off-screen. Culling must SKIP it (owned
+    // by flow-viewport): no write.
+    canvas._edgeCorridors.set('e-hidden', { minX: 5000, minY: -10, maxX: 5300, maxY: 60 });
+    canvas._applyCulling();
+    expect(hiddenSvg.style.display).toBe('none');
+
+    // Corridor now reaches into the viewport (a culled -> visible transition
+    // for a NON-hidden edge). Pre-fix, culling wrote display='' here and the
+    // hidden edge REAPPEARED (this is the primary RED symptom). With the guard
+    // it stays hidden.
+    canvas._edgeCorridors.set('e-hidden', { minX: -50, minY: -10, maxX: 5300, maxY: 60 });
+    canvas._applyCulling();
+    expect(hiddenSvg.style.display).toBe('none'); // STILL hidden — culling deferred to flow-viewport
+
+    // The hidden edge is never tracked as culling-owned either (it was skipped).
+    expect(canvas._culledEdgeIds.has('e-hidden')).toBe(false);
+  });
+
+  it('_uncullEverything restores only culling-hidden edges, leaving flow-viewport-hidden edges hidden', () => {
+    const canvas = mountCanvas({
+      viewportCulling: true,
+      nodes: [
+        makeNode('c', { position: { x: 5000, y: 0 } }),
+        makeNode('d', { position: { x: 5300, y: 0 } }),
+        makeNode('g', { position: { x: 6000, y: 0 } }),
+        makeNode('h', { position: { x: 6300, y: 0 } }),
+      ],
+    });
+    for (const id of ['c', 'd', 'g', 'h']) {
+      canvas._nodeElements.set(id, document.createElement('div'));
+    }
+    canvas._commitNodeGeometry();
+    sizeContainer(canvas);
+
+    // Normal off-screen edge — culling hides it and tracks it in _culledEdgeIds.
+    const normalSvg = svgEl();
+    canvas._edgeSvgElements.set('e-normal', normalSvg);
+    // Hidden edge — flow-viewport already rendered it display:none; culling skips it.
+    const hiddenSvg = svgEl();
+    canvas._edgeSvgElements.set('e-hidden', hiddenSvg);
+    hiddenSvg.style.display = 'none';
+
+    const hiddenEdge = makeEdge('e-hidden', 'g', 'h');
+    hiddenEdge.hidden = true;
+    canvas.edges = [makeEdge('e-normal', 'c', 'd'), hiddenEdge];
+    canvas._rebuildEdgeMap();
+    canvas._edgeCorridors.set('e-normal', { minX: 5000, minY: -10, maxX: 5300, maxY: 60 });
+    canvas._edgeCorridors.set('e-hidden', { minX: 6000, minY: -10, maxX: 6300, maxY: 60 });
+
+    canvas._applyCulling();
+    expect(normalSvg.style.display).toBe('none'); // culled
+    expect(canvas._culledEdgeIds.has('e-normal')).toBe(true); // tracked by culling
+    expect(canvas._culledEdgeIds.has('e-hidden')).toBe(false); // skipped by culling
+
+    canvas._uncullEverything();
+
+    expect(normalSvg.style.display).toBe(''); // culling-hidden edge restored
+    expect(hiddenSvg.style.display).toBe('none'); // flow-viewport-hidden edge left alone
+  });
+});

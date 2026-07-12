@@ -880,6 +880,17 @@ export function registerFlowCanvas(Alpine: Alpine) {
       for (const [edgeId, g] of this._edgeSvgElements) {
         const e = this._edgeMap.get(edgeId);
         if (!e) continue;
+        // Edges hidden by the hidden/collapse effect are owned by flow-viewport
+        // (flow-viewport.ts sets their inline display). Culling must not fight that
+        // writer, or a culled→visible transition would un-hide them. Mirror
+        // flow-viewport's isHidden predicate exactly. (A future `.flow-edge-hidden`
+        // !important class — symmetric with `.flow-node-hidden` — would remove this
+        // coupling; recommended to the owner in the PR.)
+        const srcHidden = this._nodeMap.get(e.source)?.hidden;
+        const tgtHidden = this._nodeMap.get(e.target)?.hidden;
+        if (e.hidden || e._hiddenByCollapse || srcHidden || tgtHidden) {
+          continue; // flow-viewport owns this edge's display
+        }
         const vis =
           visible.has(e.source) ||
           visible.has(e.target) ||
@@ -907,7 +918,13 @@ export function registerFlowCanvas(Alpine: Alpine) {
       // `node.hidden` node stays hidden via its `.flow-node-hidden` class (class,
       // not inline), so deferring to '' correctly re-hides only truly-hidden nodes.
       for (const el of this._nodeElements.values()) el.style.display = '';
-      for (const g of this._edgeSvgElements.values()) g.style.display = '';
+      // Restore only edges CULLING hid; edges hidden by the hidden/collapse effect
+      // are not in `_culledEdgeIds` and must stay hidden (they have no !important
+      // class backstop, unlike nodes).
+      for (const edgeId of this._culledEdgeIds) {
+        const g = this._edgeSvgElements.get(edgeId);
+        if (g) g.style.display = '';
+      }
       this._visibleNodeIds = new Set<string>();
       this._culledEdgeIds = new Set<string>();
       this._cullingWasActive = false;
