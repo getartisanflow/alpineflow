@@ -369,9 +369,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _layoutAnimFrame: 0,
 
     // ── Shared obstacle cache (Workstream C) ─────────────────────────────
-    /** Spatial index of node id → flow-space rect cells (committed geometry). Non-reactive: access via Alpine.raw in hot paths. */
+    /** Spatial index of node id → flow-space rect cells (committed geometry). Non-reactive: operate on it via `Alpine.raw(canvas._spatialGrid)` (raw the NESTED property — `Alpine.raw(canvas)` does NOT unwrap Alpine's merge-scope proxy; see flow-edge.ts). */
     _spatialGrid: new SpatialGrid(),
-    /** Obstacle rects rebuilt once per geometry commit; read via Alpine.raw(canvas) in the edge effect. */
+    /** Obstacle rects rebuilt once per commit. In the edge effect read it via `Alpine.raw(canvas._obstacleSnapshot)` (nested-raw) so the edge does NOT subscribe to every node's reactive state. */
     _obstacleSnapshot: null as Array<{ id: string; x: number; y: number; width: number; height: number }> | null,
     /** Reactive epoch bumped by _commitNodeGeometry (internal signal; edges must NOT subscribe to it). */
     _obstacleEpoch: 0,
@@ -466,19 +466,26 @@ export function registerFlowCanvas(Alpine: Alpine) {
      * end, resize, add/remove nodes, undo/redo, restore) — never inside a
      * reactive effect.
      *
-     * Reads via `Alpine.raw(this)` so this method does not itself create
-     * reactive subscriptions. Rebuilds the grid from scratch each commit
+     * `Alpine.raw(this)` does NOT unwrap Alpine's merge-scope proxy (it returns
+     * the same proxy back), so reads go through the NESTED reactive property
+     * instead — `Alpine.raw(this.nodes)` and `Alpine.raw(this._spatialGrid)` —
+     * mirroring the precedent in flow-edge.ts's obstacle-rect computation.
+     * The parent-lookup map is rebuilt from those raw nodes rather than reusing
+     * `_nodeMap`, whose stored node values would still be reactive proxies even
+     * once the Map container is raw. Rebuilds the grid from scratch each commit
      * (O(nodes); commit points are discrete user actions, not frames), which
      * also prunes entries for removed/hidden nodes.
      */
     _commitNodeGeometry(changedNodeIds?: string[]): void {
-      const raw = Alpine.raw(this) as any;
-      const grid = raw._spatialGrid as SpatialGrid;
+      const rawNodes = Alpine.raw(this.nodes) as FlowNode[];
+      const rawNodeMap = new Map<string, FlowNode>(rawNodes.map((n): [string, FlowNode] => [n.id, n]));
+      const nodeOrigin = this._config?.nodeOrigin;
+      const grid = Alpine.raw(this._spatialGrid) as SpatialGrid; // nested-raw unwraps the class instance
       grid.clear();
       const rects: Array<{ id: string; x: number; y: number; width: number; height: number }> = [];
-      for (const n of raw.nodes as FlowNode[]) {
+      for (const n of rawNodes) {
         if (n.hidden) continue; // hidden nodes are not obstacles (their own edges are already hidden)
-        const abs = toAbsoluteNode(n, raw._nodeMap, raw._config?.nodeOrigin);
+        const abs = toAbsoluteNode(n, rawNodeMap, nodeOrigin);
         const rect = {
           id: n.id,
           x: abs.position.x,
