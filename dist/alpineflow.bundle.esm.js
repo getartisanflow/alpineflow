@@ -6542,7 +6542,7 @@ function xh(t) {
       const l = [];
       t.edges = t.edges.filter((u) => n.has(u.source) || n.has(u.target) ? (l.push(u.id), !1) : !0), s.length && (t.edges.push(...s), q("destroy", `Created ${s.length} reconnection edge(s)`)), t._rebuildEdgeMap(), t.nodes = t.nodes.filter((u) => !n.has(u.id)), t._rebuildNodeMap();
       for (const u of n)
-        t.selectedNodes.delete(u), t._initialDimensions.delete(u), t._uninstallChildLayoutWatchers(u);
+        t.selectedNodes.delete(u), t._initialDimensions.delete(u), t._uninstallChildLayoutWatchers(u), t._draggingNodeIds?.delete(u);
       for (const u of l)
         t._edgeDirtyTicks?.delete(u), t._edgeCorridors?.delete(u);
       r.length && t._emit("nodes-change", { type: "remove", nodes: r }), s.length && t._emit("edges-change", { type: "add", edges: s });
@@ -14153,7 +14153,7 @@ function Kg(t) {
         const P = e.dataset.flowNodeId;
         if (P) {
           const w = t.$data(e.closest("[x-data]"));
-          w?._nodeElements?.delete(P), w?._resizeObserver?.unobserve(e);
+          w?._nodeElements?.delete(P), w?._resizeObserver?.unobserve(e), w?._draggingNodeIds?.delete(P);
         }
       });
     }
