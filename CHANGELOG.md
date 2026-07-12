@@ -93,6 +93,13 @@ Makes drag-to-connect usable at Draftsman scale (~50 schema nodes × 25 fields �
 - New `buildDragValidationContext` (`src/plugin/drag-validation.ts`) — precomputes the existing-target and cycle-forbidden sets and per-handle edge counts once per drag; `applyValidationClasses` gains an optional `HandleIndex` fast path and keeps the legacy DOM path (`legacyApplyValidationClasses`) for non-drag callers.
 - `findSnapTarget` gains an optional `HandleIndex` param; the connect-drag and reconnect gestures thread a gesture-scoped index, built at gesture start and cleared on every end/cancel path.
 
+### Workstream B — small measured wins
+Two low-risk perf touch-ups surfaced by the schema-scale review. Both are pure performance changes — label positions and node ordering are behaviourally identical.
+
+**Performance**
+- Edge labels cache the path length keyed by the `d` attribute. Positioning a center/start/end label previously forced `SVGPathElement.getTotalLength()` up to 5× per edge per effect run (including once inside the center-label helper); the length is now measured at most once while `d` is unchanged, so selection- and label-only re-runs skip the repeated `getTotalLength` measurement (the per-label `getPointAtLength` placement still runs). A changed path re-measures.
+- `addNodes` keeps the `nodes` array identity for flat batches. Appending nodes without a `parentId` no longer re-sorts and reassigns `nodes`, so the array reference is stable and effects that read it don't invalidate on every add. A batch that includes a child — or whose flat node is the parent of a child added in an earlier call (a forward reference) — still sorts topologically, now in place via `splice`, so array identity is preserved even then. Topological ordering stays identical to the previous behaviour in every case.
+
 ## v0.2.1-alpha — 2026-04-14
 
 > Companion release: [WireFlow v0.2.1-alpha](https://github.com/getartisanflow/wireflow/blob/main/CHANGELOG.md#v021-alpha--2026-04-14) ships the matching server-side surface (`<x-schema-designer>`, `WithSchemaDesigner`, validator rules, `@connect-validate` bridge) plus the post-Phase-5 `<x-flow>` / `<x-schema-designer>` polish that pairs with the fullscreen + row-select + cascade fixes below.
