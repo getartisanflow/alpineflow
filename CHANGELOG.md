@@ -134,6 +134,27 @@ Builds on Workstream C. Where WS C stops unaffected edges from re-routing, WS D 
 - `flow-canvas`: reactive `_draggingNodeIds: Set<string>`, populated in `flow-node` `onDragStart` (dragged node + group-drag members) and cleared unconditionally on drag end; the clear and the geometry commit coalesce into a single reactive flush so affected edges re-route exactly once with the final geometry. Also pruned when a dragged node is removed (`removeNodes`) or its directive is torn down mid-gesture, so an interrupted drag (e.g. a collaborator deletes the node, or the node unmounts) can't strand an id and pin a later re-added/undo-restored node's edges to the simplified path.
 - New config flags `avoidantSimplifyOnDrag?: boolean` and `edgeLod?: false | { simplifyAt: 'far' | 'medium' }` on `FlowCanvasConfig`.
 
+### Workstream E — viewport culling overhaul
+
+Reworks viewport culling from an opt-in, per-frame full scan into a grid-backed, transition-only mechanism that also culls edges — and turns it on automatically at scale. Builds on Workstream C's `SpatialGrid`.
+
+**Breaking / Behavior Changes**
+- **`viewportCulling` default changes from `false` to `'auto'`.** Culling now turns on automatically once the canvas reaches `cullingAutoThreshold` nodes (default **150**); below that it stays off. This is a default-behavior change: large diagrams that previously rendered every node/edge now cull off-screen ones out of the box (off-screen nodes and edges get `display: none`). `viewportCulling: true` still forces culling on at any node count and `viewportCulling: false` still forces it off — set `false` to restore the previous always-render behaviour. `cullingBuffer` is unchanged.
+- **Edges are now culled too.** Previously culling only toggled nodes despite documenting "nodes and edges"; an edge's `<svg>` is now hidden when both its endpoints are off-screen *and* its last-routed corridor doesn't intersect the viewport (edges with no recorded corridor are never hidden — conservatively visible).
+
+**Performance**
+- **Transition-only display writes.** Culling no longer writes `el.style.display` unconditionally every viewport frame; a node/edge is written only when it actually crosses the visible/off-screen boundary (guarded by its current inline `display`), eliminating the per-frame mutation-record churn devtools amplifies.
+- **Grid-backed visibility queries.** The per-frame candidate set comes from `_spatialGrid.query(bounds)` (Workstream C's committed-geometry grid) instead of scanning all nodes and running `getAbsolutePosition` per node every frame. The expensive geometry predicate now runs only over the on-screen candidate set; the visible set is byte-identical to the previous linear scan (verified by a 200-node × 20-viewport parity oracle). A node mid-drag is unioned in from the reactive `_draggingNodeIds` set (Workstream D) so its stale committed grid cell never causes it to be culled while dragged into view.
+
+**Fixed**
+- Hidden nodes are now kept in the `SpatialGrid` (they were already excluded from the routing obstacle snapshot and remain so). Because culling sources its candidates from the grid and filters `hidden` itself, a node un-hidden *between* geometry commits (group expand, wire `showNode`) is re-shown correctly instead of being stranded off the candidate set. (Refines Workstream C's `_commitNodeGeometry`: the grid now indexes every node; only the obstacle snapshot excludes hidden nodes.)
+- A node that is off-screen at the first cull pass — or added off-screen while culling is active — is now hidden. The node write syncs every registered element to the computed visible set (mirroring the edge loop) rather than only diffing against the previous frame, so a node present in neither the visible nor the previous set is no longer left rendered.
+- Edge culling no longer fights the hidden/collapse effect: culling skips edges hidden via `hidden`/`_hiddenByCollapse`/hidden-endpoint (which `flow-viewport` renders with inline `display:none`), so a hidden or collapsed edge is not un-hidden when its corridor or endpoint pans into view, and `_uncullEverything` restores only culling-hidden edges.
+
+**Infrastructure**
+- `flow-canvas`: `_applyCulling` gated by `viewportCulling ?? 'auto'` + `cullingAutoThreshold ?? 150`; new `_uncullEverything()` restores display on all tracked elements and resets the tracking sets when culling deactivates (threshold drop or config change), tracked via `_cullingWasActive`. New plain `_culledEdgeIds` set (rebuilt each frame, so removed edges can't leak entries).
+- New config fields `viewportCulling?: boolean | 'auto'` and `cullingAutoThreshold?: number` on `FlowCanvasConfig`; `docs/configuration/viewport.md` and `docs/canvas/viewport.md` updated for the new default.
+
 ## v0.2.1-alpha — 2026-04-14
 
 > Companion release: [WireFlow v0.2.1-alpha](https://github.com/getartisanflow/wireflow/blob/main/CHANGELOG.md#v021-alpha--2026-04-14) ships the matching server-side surface (`<x-schema-designer>`, `WithSchemaDesigner`, validator rules, `@connect-validate` bridge) plus the post-Phase-5 `<x-flow>` / `<x-schema-designer>` polish that pairs with the fullscreen + row-select + cascade fixes below.

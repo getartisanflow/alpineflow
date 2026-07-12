@@ -26,7 +26,7 @@ import type {
   PatchableConfig,
 } from '../../core/types';
 import { createPanZoom, type PanZoomInstance } from '../../core/pan-zoom';
-import { screenToFlowPosition, getVisibleBounds } from '../../core/geometry';
+import { screenToFlowPosition, getVisibleBounds, type Bounds } from '../../core/geometry';
 import { setDebugEnabled, debug } from '../../core/debug';
 import { DEFAULT_FIT_PADDING } from '../../core/constants';
 import { FlowHistory } from '../../core/history';
@@ -104,6 +104,26 @@ function bgLayerGradient(variant: BgVariant, color: string): string {
     default:
       return `radial-gradient(circle, ${color} 1px, transparent 1px)`;
   }
+}
+
+// ── Viewport culling helpers (Workstream E) ────────────────────────────────
+/**
+ * AABB test: does an edge's recorded route corridor intersect the visible
+ * bounds? Corridors can extend beyond their endpoint nodes, so an edge with
+ * both endpoints off-screen may still need to render. When no corridor has
+ * been recorded for the edge, treat it as intersecting — never wrongly hide.
+ */
+function corridorIntersectsBounds(
+  corridor: { minX: number; minY: number; maxX: number; maxY: number } | undefined,
+  bounds: Bounds,
+): boolean {
+  if (!corridor) return true;
+  return !(
+    corridor.maxX < bounds.minX ||
+    corridor.minX > bounds.maxX ||
+    corridor.maxY < bounds.minY ||
+    corridor.minY > bounds.maxY
+  );
 }
 
 export function registerFlowCanvas(Alpine: Alpine) {
@@ -398,6 +418,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _nodeElements: new Map<string, HTMLElement>(),
     _edgeSvgElements: new Map<string, SVGSVGElement>(),
     _visibleNodeIds: new Set<string>(),
+    /** PLAIN Set of edge ids currently culled (display:none). Used to gate display writes to visibility transitions only. */
+    _culledEdgeIds: new Set<string>(),
+    /** Whether `_applyCulling` was active on the previous call — used to detect threshold-crossing-down / config-off so `_uncullEverything` can restore display exactly once. */
+    _cullingWasActive: false,
 
     // ── Context Menu Auto-Populate ─────────────────────────────────────
     _contextMenuListeners: [] as Array<{ event: string; handler: EventListener }>,
@@ -507,7 +531,6 @@ export function registerFlowCanvas(Alpine: Alpine) {
       grid.clear();
       const rects: Array<{ id: string; x: number; y: number; width: number; height: number }> = [];
       for (const n of rawNodes) {
-        if (n.hidden) continue; // hidden nodes are not obstacles (their own edges are already hidden)
         const abs = toAbsoluteNode(n, rawNodeMap, nodeOrigin);
         const rect = {
           id: n.id,
@@ -516,8 +539,15 @@ export function registerFlowCanvas(Alpine: Alpine) {
           width: abs.dimensions?.width ?? DEFAULT_NODE_WIDTH,
           height: abs.dimensions?.height ?? DEFAULT_NODE_HEIGHT,
         };
-        rects.push(rect);
+        // Insert EVERY node (hidden included) into the SpatialGrid: viewport
+        // culling (WS-E) sources candidates from the grid and filters hidden
+        // nodes itself, so a node un-hidden BETWEEN geometry commits
+        // (collapse→expand, wire showNode) must still be present in the grid to
+        // be re-shown. Hidden nodes are still excluded from the OBSTACLE
+        // snapshot below — they are not routing obstacles.
         grid.insert(n.id, rect.x, rect.y, rect.width, rect.height);
+        if (n.hidden) continue; // not a routing obstacle
+        rects.push(rect);
       }
       // Keep the SAME array reference across commits (mutate in place)
       // instead of reassigning `this._obstacleSnapshot` every time. Edges
@@ -766,9 +796,19 @@ export function registerFlowCanvas(Alpine: Alpine) {
     /**
      * Toggle CSS display on off-screen nodes and edges.
      * Called from _flushViewportFrame — entirely outside Alpine's reactive system.
+     * Writes are gated to visibility TRANSITIONS only (comparing against the
+     * previous frame's `_visibleNodeIds`/`_culledEdgeIds`) to avoid unconditional
+     * per-frame style writes, which devtools amplifies into mutation-record churn.
      */
     _applyCulling() {
-      if (config.viewportCulling !== true) return;
+      const cfg = config.viewportCulling ?? 'auto';
+      const active =
+        cfg === true || (cfg === 'auto' && this.nodes.length >= (config.cullingAutoThreshold ?? 150));
+      if (!active) {
+        if (this._cullingWasActive) this._uncullEverything(); // restore display on threshold-crossing down or config change
+        return;
+      }
+      this._cullingWasActive = true;
       if (!this._container) return;
 
       const cw = this._container.clientWidth;
@@ -778,10 +818,23 @@ export function registerFlowCanvas(Alpine: Alpine) {
       const buffer = config.cullingBuffer ?? 100;
       const bounds = getVisibleBounds(this.viewport, cw, ch, buffer);
 
-      const visible = new Set<string>();
+      // Coarse (cell-granularity) superset of node ids whose committed rects
+      // could overlap `bounds`. The grid is maintained by _commitNodeGeometry
+      // at discrete commit points (C1) — culling only QUERIES it here.
+      const grid = Alpine.raw(this._spatialGrid) as SpatialGrid;
+      const candidates = grid.query(bounds);
 
-      for (const node of this.nodes as FlowNode[]) {
-        if (node.hidden) continue;
+      // `_draggingNodeIds` is provided by WS-D (interaction degradation);
+      // read defensively so this branch is correct with or without it. The
+      // grid holds committed geometry, so a node mid-drag has stale cells —
+      // unioning the dragging set prevents culling a node that is being
+      // dragged into view.
+      const dragging = (this as unknown as { _draggingNodeIds?: Set<string> })._draggingNodeIds;
+
+      const visible = new Set<string>();
+      const testCandidate = (id: string) => {
+        const node = this._nodeMap.get(id);
+        if (!node || node.hidden) return;
         const w = node.dimensions?.width ?? 150;
         const h = node.dimensions?.height ?? 50;
         const pos = node.parentId
@@ -793,16 +846,88 @@ export function registerFlowCanvas(Alpine: Alpine) {
           pos.y + h < bounds.minY ||
           pos.y > bounds.maxY
         );
+        if (isVisible) visible.add(id);
+      };
 
-        if (isVisible) visible.add(node.id);
-
-        const el = this._nodeElements.get(node.id);
-        if (el) {
-          el.style.display = isVisible ? '' : 'none';
+      for (const id of candidates) testCandidate(id);
+      if (dragging) {
+        for (const id of dragging) {
+          if (!candidates.has(id)) testCandidate(id);
         }
       }
 
+      // Sync inline display on every registered node element (mirroring the edge
+      // loop below). Iterating `_nodeElements` — not just `candidates ∪ prev` — is
+      // required for correctness: a node that is off-screen at the FIRST cull pass,
+      // or added off-screen while culling is active, is in neither `visible` nor the
+      // previous frame's set, so a set-difference-only diff would leave it rendered.
+      // The write stays transition-only: `el.style.display` is read (a cheap
+      // inline-style read — no reflow) and written only when it actually changes.
+      // The expensive geometry predicate ran only over grid candidates above.
+      for (const [id, el] of this._nodeElements) {
+        const desired = visible.has(id) ? '' : 'none';
+        if (el.style.display !== desired) el.style.display = desired;
+      }
+
+      // Edge culling: an edge is visible iff either endpoint node is visible,
+      // or its recorded route corridor intersects the visible bounds
+      // (corridors can extend beyond their endpoints). Rebuild the culled set
+      // fresh each frame (mirroring `_visibleNodeIds`) so removed edges — which
+      // `_edgeSvgElements` no longer iterates — never re-enter it: this prevents
+      // unbounded growth of `_culledEdgeIds` under add/remove churn.
+      const prevCulled = this._culledEdgeIds;
+      const culled = new Set<string>();
+      for (const [edgeId, g] of this._edgeSvgElements) {
+        const e = this._edgeMap.get(edgeId);
+        if (!e) continue;
+        // Edges hidden by the hidden/collapse effect are owned by flow-viewport
+        // (flow-viewport.ts sets their inline display). Culling must not fight that
+        // writer, or a culled→visible transition would un-hide them. Mirror
+        // flow-viewport's isHidden predicate exactly. (A future `.flow-edge-hidden`
+        // !important class — symmetric with `.flow-node-hidden` — would remove this
+        // coupling; recommended to the owner in the PR.)
+        const srcHidden = this._nodeMap.get(e.source)?.hidden;
+        const tgtHidden = this._nodeMap.get(e.target)?.hidden;
+        if (e.hidden || e._hiddenByCollapse || srcHidden || tgtHidden) {
+          continue; // flow-viewport owns this edge's display
+        }
+        const vis =
+          visible.has(e.source) ||
+          visible.has(e.target) ||
+          corridorIntersectsBounds(this._edgeCorridors.get(edgeId), bounds);
+        const was = !prevCulled.has(edgeId);
+        if (vis !== was) {
+          g.style.display = vis ? '' : 'none';
+        }
+        if (!vis) culled.add(edgeId);
+      }
+
       this._visibleNodeIds = visible;
+      this._culledEdgeIds = culled;
+    },
+
+    /**
+     * Restore CSS display on every element culling could have hidden and
+     * reset the tracking sets, so a future re-activation of `_applyCulling`
+     * starts clean. Called when the `viewportCulling: 'auto'` gate
+     * deactivates (node count drops back below `cullingAutoThreshold`) after
+     * having been active, or when culling is otherwise turned off.
+     */
+    _uncullEverything() {
+      // Clear culling's inline display override on every tracked element; a
+      // `node.hidden` node stays hidden via its `.flow-node-hidden` class (class,
+      // not inline), so deferring to '' correctly re-hides only truly-hidden nodes.
+      for (const el of this._nodeElements.values()) el.style.display = '';
+      // Restore only edges CULLING hid; edges hidden by the hidden/collapse effect
+      // are not in `_culledEdgeIds` and must stay hidden (they have no !important
+      // class backstop, unlike nodes).
+      for (const edgeId of this._culledEdgeIds) {
+        const g = this._edgeSvgElements.get(edgeId);
+        if (g) g.style.display = '';
+      }
+      this._visibleNodeIds = new Set<string>();
+      this._culledEdgeIds = new Set<string>();
+      this._cullingWasActive = false;
     },
 
     _getVisibleNodeIds(): Set<string> {

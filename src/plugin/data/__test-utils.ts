@@ -150,6 +150,8 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
 
     // === Viewport culling ===
     _visibleNodeIds: new Set<string>(),
+    _culledEdgeIds: new Set<string>(),
+    _cullingWasActive: false,
 
     // === Background ===
     _background: 'dots',
@@ -210,6 +212,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _syncAnimationState: vi.fn(),
     _applyBackground: vi.fn(),
     _applyCulling: vi.fn(),
+    _uncullEverything: vi.fn(),
     _getVisibleNodeIds: vi.fn(() => new Set<string>()),
     _applyZoomLevel: vi.fn(),
     getAbsolutePosition: vi.fn((nodeId: string) => ({ x: 0, y: 0 })),

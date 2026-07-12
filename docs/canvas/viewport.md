@@ -359,12 +359,14 @@ Viewport culling skips rendering nodes and edges that are outside the visible ar
 
 ```html
 <div x-data="flowCanvas({
-    viewportCulling: true,
+    viewportCulling: 'auto',
+    cullingAutoThreshold: 150,
     cullingBuffer: 100,
 })">
 ```
 
-- `viewportCulling` -- Enable culling (default `false`). Opt-in for large diagrams.
+- `viewportCulling` -- `'auto'` (default), `true`, or `false`. With `'auto'`, culling activates automatically once the node count reaches `cullingAutoThreshold`. `true`/`false` force it on/off regardless of node count.
+- `cullingAutoThreshold` -- Node count at which `viewportCulling: 'auto'` turns culling on (default `150`).
 - `cullingBuffer` -- Extra pixels beyond the viewport edge before an element is culled (default `100`). A larger buffer prevents pop-in when panning quickly.
 
 ## Auto-pan

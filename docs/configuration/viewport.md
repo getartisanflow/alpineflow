@@ -9,7 +9,8 @@ order: 6
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `translateExtent` | `CoordinateExtent` | — | Viewport pan boundaries `[[minX, minY], [maxX, maxY]]`. |
-| `viewportCulling` | `boolean` | `false` | Only render nodes/edges visible in the viewport. Opt-in for performance on large diagrams. |
+| `viewportCulling` | `boolean \| 'auto'` | `'auto'` | Only render nodes/edges visible in the viewport. `'auto'` turns culling on once the node count reaches `cullingAutoThreshold`; `true`/`false` force it on/off. |
+| `cullingAutoThreshold` | `number` | `150` | Node-count threshold at/above which `viewportCulling: 'auto'` activates culling. |
 | `cullingBuffer` | `number` | `100` | Buffer in flow-space pixels around viewport for culling. |
 | `panOnDrag` | `boolean \| number[]` | `true` | `true` = left button, `false` = disabled, `[0,1,2]` = specific buttons. |
 | `panOnScroll` | `boolean` | `false` | Pan on mouse wheel instead of zooming. Ctrl/Cmd+wheel zooms. |
