@@ -555,6 +555,24 @@ describe('viewportCulling auto gate', () => {
     expect(canvas._getVisibleNodeIds().size).toBe(0);
   });
 
+  it("'auto' boundary is >= threshold: 150 active, 149 inactive", () => {
+    // Exactly at the default threshold (150) -> active (the gate uses `>=`).
+    const { canvas: at } = mountAndPrepare({ viewportCulling: 'auto' }, 150);
+    at._applyCulling();
+    expect(at._getVisibleNodeIds().size).toBe(150);
+    moveOffscreen(at, 'n149');
+    at._applyCulling();
+    expect(at._nodeElements.get('n149').style.display).toBe('none');
+
+    // One below the threshold (149) -> inactive (early return, nothing culled).
+    const { canvas: below } = mountAndPrepare({ viewportCulling: 'auto' }, 149);
+    below._applyCulling();
+    expect(below._getVisibleNodeIds().size).toBe(0);
+    moveOffscreen(below, 'n148');
+    below._applyCulling();
+    expect(below._nodeElements.get('n148').style.display).toBe('');
+  });
+
   it("default (no viewportCulling key at all) is 'auto' -> active at 151 nodes", () => {
     const { canvas } = mountAndPrepare({}, 151);
     canvas._applyCulling();
