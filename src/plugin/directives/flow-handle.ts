@@ -25,6 +25,8 @@ import { HANDLE_CONNECTABLE_START_KEY, HANDLE_CONNECTABLE_END_KEY } from './flow
 import { DRAG_THRESHOLD, CONNECTION_ACTIVE_COLOR, CONNECTION_INVALID_COLOR } from '../../core/constants';
 import { createConnectionLine, findSnapTarget, startConnectionAutoPan, type ConnectionLineInstance } from '../connection-utils';
 import { isConnectable } from '../../core/node-flags';
+import { buildDragValidationContext } from '../drag-validation';
+import { buildHandleIndex, type HandleIndex } from '../handle-index';
 
 let edgeIdCounter = 0;
 
@@ -143,8 +145,108 @@ export function checkHandleLimits(
  * Apply .flow-handle-valid / .flow-handle-invalid classes to all target handles
  * in the container based on the validation chain for a hypothetical connection
  * from the given source.
+ *
+ * When `index` is provided (connect-drag / reconnect gestures build one on
+ * pointerdown), validation runs O(1) per handle off a precomputed context with
+ * ZERO further DOM queries or measurements. Without an index (one-shot callers:
+ * click-to-connect, easy-connect, edge-body reconnect) the legacy container-wide
+ * querySelector sweep runs unchanged. The two paths are behaviorally identical
+ * — see src/plugin/drag-validation.test.ts's characterization battery.
  */
 export function applyValidationClasses(
+  containerEl: HTMLElement,
+  sourceNodeId: string,
+  sourceHandleId: string,
+  canvas: any,
+  excludeEdgeId?: string,
+  index?: HandleIndex,
+): void {
+  if (!index) {
+    legacyApplyValidationClasses(containerEl, sourceNodeId, sourceHandleId, canvas, excludeEdgeId);
+    return;
+  }
+
+  const vctx = buildDragValidationContext(canvas, sourceNodeId, sourceHandleId, excludeEdgeId);
+
+  // Hoist the SOURCE-side limit once: legacy checkHandleLimits checks the source
+  // handle first, so a source already at its limit rejects EVERY target.
+  const srcRec = index.get(sourceNodeId, sourceHandleId, 'source');
+  const sourceLimitHit =
+    srcRec?.limit != null &&
+    (vctx.sourceCounts.get(`${sourceNodeId}|${sourceHandleId}`) ?? 0) >= srcRec.limit;
+
+  // READ every record first, WRITE all classes after — no interleaved DOM
+  // read/write so the browser never re-lays-out mid-loop.
+  const results: Array<{ el: HTMLElement; valid: boolean; limitHit: boolean }> = [];
+
+  for (const rec of index.byType('target')) {
+    // Per-handle connectable guard reads the SPECIFIC element (mirror vs real),
+    // matching legacy's `targetEl[HANDLE_CONNECTABLE_END_KEY] === false`.
+    if (!rec.connectableEnd) {
+      results.push({ el: rec.el, valid: false, limitHit: false });
+      continue;
+    }
+
+    const connection: Connection = {
+      source: sourceNodeId,
+      sourceHandle: sourceHandleId,
+      target: rec.nodeId,
+      targetHandle: rec.handleId,
+    };
+
+    const targetNode = canvas.getNode(rec.nodeId);
+    const builtInValid =
+      targetNode?.connectable !== false &&
+      rec.nodeId !== sourceNodeId &&
+      !vctx.existingTargets.has(`${rec.nodeId}|${rec.handleId}`) &&
+      !vctx.cycleForbidden.has(rec.nodeId);
+
+    // Legacy checkHandleLimits / runHandleValidators re-resolve the target
+    // handle by (nodeId, handleId) via querySelector, which returns the REAL
+    // handle before its mirror. `index.get` applies the same real-preference, so
+    // a mirror record inherits the real handle's limit + validator (its own are
+    // permissive defaults). The connectable guard above intentionally uses the
+    // specific element; only the limit/validator lookups are authoritative.
+    const authoritative = index.get(rec.nodeId, rec.handleId, 'target') ?? rec;
+
+    let limitValid = builtInValid && !sourceLimitHit;
+    if (limitValid && authoritative.limit != null) {
+      limitValid = (vctx.targetCounts.get(`${rec.nodeId}|${rec.handleId}`) ?? 0) < authoritative.limit;
+    }
+
+    let handleValid = limitValid;
+    // Source validator: matches legacy runHandleValidators (rejects on any falsy
+    // return) and is evaluated per-target since the connection carries `target`.
+    if (handleValid && srcRec?.hasValidator) {
+      handleValid = !!srcRec.el[HANDLE_VALIDATE_KEY]!(connection);
+    }
+    if (handleValid && authoritative.hasValidator) {
+      handleValid = !!authoritative.el[HANDLE_VALIDATE_KEY]!(connection);
+    }
+
+    const globalValid =
+      handleValid &&
+      (!canvas._config?.isValidConnection || canvas._config.isValidConnection(connection));
+
+    results.push({ el: rec.el, valid: globalValid, limitHit: builtInValid && !limitValid });
+  }
+
+  for (const r of results) {
+    // classList.toggle(cls, cond) reproduces the legacy add/remove pairs exactly.
+    r.el.classList.toggle('flow-handle-valid', r.valid);
+    r.el.classList.toggle('flow-handle-invalid', !r.valid);
+    r.el.classList.toggle('flow-handle-limit-reached', r.limitHit);
+  }
+}
+
+/**
+ * Legacy container-wide validation sweep — the behavioral ORACLE. Runs one
+ * querySelectorAll over target handles and, per target, a full isValidConnection
+ * + checkHandleLimits + runHandleValidators chain (each doing its own
+ * querySelectors). Retained verbatim as the fallback for one-shot callers that
+ * don't build a HandleIndex.
+ */
+export function legacyApplyValidationClasses(
   containerEl: HTMLElement,
   sourceNodeId: string,
   sourceHandleId: string,
@@ -865,6 +967,12 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
           const connectionSnapRadius = canvas._config?.connectionSnapRadius ?? 20;
           const containerEl = el.closest('.flow-container') as HTMLElement;
 
+          // Handle index for the whole gesture: built once on drag-start (see
+          // initDrag), read O(1) per handle by applyValidationClasses on every
+          // pointermove and, in a follow-up, by findSnapTarget. Nulled on every
+          // end/cancel path so a stale index can't leak into the next gesture.
+          let dragHandleIndex: HandleIndex | null = null;
+
           let sourceX = 0;
           let sourceY = 0;
           let multiConnectMode = false;
@@ -909,7 +1017,17 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
 
             connectAutoPan = startConnectionAutoPan(containerEl, canvas, startX, startY);
 
-            applyValidationClasses(containerEl, sourceNodeId, handleId, canvas);
+            // Measure every handle ONCE for the gesture. Valid for the whole
+            // drag: nodes don't move during a connect-drag and viewport panning
+            // doesn't change flow-space handle centers. If a future feature moves
+            // nodes mid-connect-drag, rebuild this on those moves. The same
+            // screen→flow transform findSnapTarget uses keeps centers consistent.
+            dragHandleIndex = buildHandleIndex(
+              containerEl,
+              (sx: number, sy: number) => canvas.screenToFlowPosition(sx, sy),
+            );
+
+            applyValidationClasses(containerEl, sourceNodeId, handleId, canvas, undefined, dragHandleIndex);
 
             // Create ghost node preview when onEdgeDrop is configured
             if (canvas._config?.onEdgeDrop) {
@@ -1155,6 +1273,11 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             // leaks an orphan `pointercancel` handler on `document`.
             document.removeEventListener('pointercancel', onPointerUp);
             activeConnectionCleanup = null;
+            // The gesture is ending; drop the index before any early return so a
+            // stale one can never leak into a later drag. (A click that never
+            // dragged never built one — it stays null and the click-to-connect
+            // apply below falls through to the legacy path.)
+            dragHandleIndex = null;
 
             // Guard against overlapping drops while an async connectValidator is pending.
             if (canvas._connectValidating) return;
@@ -1258,7 +1381,9 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
                   position: { x: 0, y: 0 },
                 };
                 canvas._container?.classList.add('flow-connecting');
-                applyValidationClasses(containerEl, sourceNodeId, handleId, canvas);
+                // Click-to-connect is a one-shot, not a drag gesture:
+                // dragHandleIndex is null here, so this uses the legacy path.
+                applyValidationClasses(containerEl, sourceNodeId, handleId, canvas, undefined, dragHandleIndex ?? undefined);
               }
               return;
             }
@@ -1458,6 +1583,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             multiConnectMode = false;
             snappedHandle?.classList.remove('flow-handle-active');
             clearValidationClasses(containerEl);
+            dragHandleIndex = null;
             canvas.pendingConnection = null;
             canvas._container?.classList.remove('flow-connecting');
           };
@@ -1732,6 +1858,10 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
           let lastMoveX = startX;
           let lastMoveY = startY;
 
+          // Separate index for this reconnect gesture (its own pointer scope),
+          // built once on drag-start and cleared in cleanupReconnection.
+          let reconnectHandleIndex: HandleIndex | null = null;
+
           const startReconnectionDrag = () => {
             dragging = true;
 
@@ -1785,7 +1915,15 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             // Auto-pan
             connectAutoPan = startConnectionAutoPan(containerEl, canvas, lastMoveX, lastMoveY);
 
-            applyValidationClasses(containerEl, connectedEdge.source, connectedEdge.sourceHandle ?? 'source', canvas, connectedEdge.id);
+            // Measure handles once for this reconnect gesture (same rationale +
+            // transform as the connect-drag path). Excludes the edge being
+            // reconnected from duplicate/limit accounting via its id.
+            reconnectHandleIndex = buildHandleIndex(
+              containerEl,
+              (sx: number, sy: number) => canvas.screenToFlowPosition(sx, sy),
+            );
+
+            applyValidationClasses(containerEl, connectedEdge.source, connectedEdge.sourceHandle ?? 'source', canvas, connectedEdge.id, reconnectHandleIndex);
           };
 
           const onPointerMove = (moveE: PointerEvent) => {
@@ -1854,6 +1992,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
             reconnectLineInstance?.destroy();
             reconnectLineInstance = null;
             tempSvg = null;
+            reconnectHandleIndex = null;
             snappedHandle?.classList.remove('flow-handle-active');
             activeReconnectCleanup = null;
 
