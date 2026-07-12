@@ -407,6 +407,7 @@ export interface CanvasContext {
   _edgeDirtyTicks: Map<string, number>;
   /** PLAIN Map edge id → endpoint-bbox corridor {minX,minY,maxX,maxY}. Written by edges post-route; read via Alpine.raw. */
   _edgeCorridors: Map<string, { minX: number; minY: number; maxX: number; maxY: number }>;
+  _draggingNodeIds: Set<string>;
   _commitNodeGeometry(changedNodeIds?: string[]): void;
   _markDirtyEdges(
     changedNodeIds?: string[],

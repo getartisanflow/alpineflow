@@ -1119,36 +1119,46 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         // instead (`Alpine.raw(canvas._obstacleSnapshot)` / `Alpine.raw(canvas.nodes)`).
         let obstacleRects: Rect[] | undefined;
         if (resolvedEdgeType === 'orthogonal' || resolvedEdgeType === 'avoidant') {
-          const snapshot = Alpine.raw(canvas._obstacleSnapshot) as
-            | Array<{ id: string; x: number; y: number; width: number; height: number }>
-            | null
-            | undefined;
-          if (snapshot) {
-            // Shared snapshot (built once per commit). Filter out this edge's
-            // own endpoints. Structurally assignable to Rect[] (extra `id` is
-            // ignored by the router). Preserves node order from the snapshot,
-            // which preserves `raw.nodes` order — so the router's VALUE-keyed
-            // route cache still hits (same rects, same order as the legacy
-            // per-edge build) and routes come out unchanged.
-            obstacleRects = snapshot.filter((r) => r.id !== edge.source && r.id !== edge.target);
+          // WS-D: while an endpoint node is being dragged, skip pathfinding and
+          // let the router fall back to a bezier curve (empty-obstacle fast
+          // path). `Set.has(id)` is key-scoped, so only edges touching the
+          // dragged node re-run when `_draggingNodeIds` changes.
+          const simplifyingOnDrag = canvas._config?.avoidantSimplifyOnDrag !== false
+            && (canvas._draggingNodeIds?.has(edge.source) || canvas._draggingNodeIds?.has(edge.target));
+          if (simplifyingOnDrag) {
+            obstacleRects = undefined;
           } else {
-            // Fallback for minimal mounts that never triggered a geometry
-            // commit — legacy per-edge build, byte-identical to the prior
-            // behavior so routes are unchanged when no snapshot exists yet.
-            const rawNodes = Alpine.raw(canvas.nodes) as FlowNode[];
-            const rawNodeMap = new Map<string, FlowNode>(rawNodes.map((n): [string, FlowNode] => [n.id, n]));
-            const nodeOrigin = canvas._config?.nodeOrigin;
-            obstacleRects = rawNodes
-              .filter((n: FlowNode) => n.id !== edge.source && n.id !== edge.target)
-              .map((n: FlowNode) => {
-                const abs = toAbsoluteNode(n, rawNodeMap, nodeOrigin);
-                return {
-                  x: abs.position.x,
-                  y: abs.position.y,
-                  width: abs.dimensions?.width ?? DEFAULT_NODE_WIDTH,
-                  height: abs.dimensions?.height ?? DEFAULT_NODE_HEIGHT,
-                };
-              });
+            const snapshot = Alpine.raw(canvas._obstacleSnapshot) as
+              | Array<{ id: string; x: number; y: number; width: number; height: number }>
+              | null
+              | undefined;
+            if (snapshot) {
+              // Shared snapshot (built once per commit). Filter out this edge's
+              // own endpoints. Structurally assignable to Rect[] (extra `id` is
+              // ignored by the router). Preserves node order from the snapshot,
+              // which preserves `raw.nodes` order — so the router's VALUE-keyed
+              // route cache still hits (same rects, same order as the legacy
+              // per-edge build) and routes come out unchanged.
+              obstacleRects = snapshot.filter((r) => r.id !== edge.source && r.id !== edge.target);
+            } else {
+              // Fallback for minimal mounts that never triggered a geometry
+              // commit — legacy per-edge build, byte-identical to the prior
+              // behavior so routes are unchanged when no snapshot exists yet.
+              const rawNodes = Alpine.raw(canvas.nodes) as FlowNode[];
+              const rawNodeMap = new Map<string, FlowNode>(rawNodes.map((n): [string, FlowNode] => [n.id, n]));
+              const nodeOrigin = canvas._config?.nodeOrigin;
+              obstacleRects = rawNodes
+                .filter((n: FlowNode) => n.id !== edge.source && n.id !== edge.target)
+                .map((n: FlowNode) => {
+                  const abs = toAbsoluteNode(n, rawNodeMap, nodeOrigin);
+                  return {
+                    x: abs.position.x,
+                    y: abs.position.y,
+                    width: abs.dimensions?.width ?? DEFAULT_NODE_WIDTH,
+                    height: abs.dimensions?.height ?? DEFAULT_NODE_HEIGHT,
+                  };
+                });
+            }
           }
         }
 

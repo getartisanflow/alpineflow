@@ -609,6 +609,18 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                   }
                 }
               }
+
+              // Mark the dragged node(s) so edges touching them degrade to a
+              // simplified bezier route for the gesture (avoidantSimplifyOnDrag,
+              // WS-D). Mutate the REACTIVE set so key-scoped `.has()` deps on the
+              // touched edges re-run. Group-drag members are included so their
+              // edges degrade too.
+              canvas._draggingNodeIds.add(nodeId);
+              if (groupDragStartPositions) {
+                for (const otherId of groupDragStartPositions.keys()) {
+                  canvas._draggingNodeIds.add(otherId);
+                }
+              }
             }
 
             // Start auto-pan if enabled
@@ -1314,6 +1326,13 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
             const movedIds = groupDragStartPositions
               ? [nodeId, ...groupDragStartPositions.keys()]
               : [nodeId];
+
+            // Gesture over: clear the dragging set so edges touching these nodes
+            // re-route with real obstacles again. Cleared unconditionally (even a
+            // click fired onDragStart). This mutation and the _commitNodeGeometry
+            // commit later in each branch coalesce into ONE reactive flush, so
+            // affected edges re-run exactly once with the final geometry.
+            canvas._draggingNodeIds.clear();
 
             el.classList.remove('flow-node-dragging');
             debug('drag', `Node "${nodeId}" drag end`, position);
