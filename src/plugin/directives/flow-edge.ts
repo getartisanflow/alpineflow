@@ -11,7 +11,7 @@
 import type { Alpine } from 'alpinejs';
 import type { FlowEdge, FlowNode, HandlePosition, HandleType, Rect, Connection, XYPosition, SchemaMetrics } from '../../core/types';
 import type { MarkerType, MarkerConfig } from '../../core/markers';
-import { computeSchemaHandlePoint } from '../../core/schema-geometry';
+import { computeSchemaHandlePoint, schemaFieldIndex } from '../../core/schema-geometry';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { normalizeMarker, getMarkerId } from '../../core/markers';
 import { isConnectable } from '../../core/node-flags';
@@ -262,11 +262,15 @@ interface HandleMeasurement {
 }
 
 /**
- * Can this endpoint's handle center be derived from state instead of measured?
+ * Row index of the field this endpoint's handle names, or `-1` when its handle
+ * center must NOT be derived from state.
  *
- * Every condition here exists because the DOM path would pick up something the
- * state path cannot see. When any of them fails the caller must fall back to
- * `measureHandleCoords` — correctness is never traded for the rect saving.
+ * Doubles as the eligibility check: every condition here exists because the DOM
+ * path would pick up something the state path cannot see, and `-1` sends the
+ * caller to `measureHandleCoords` — correctness is never traded for the rect
+ * saving. Returning the index (rather than a boolean) keeps each endpoint to a
+ * SINGLE scan of `fields`: the caller threads it straight into
+ * `computeSchemaHandlePoint`.
  *
  *  - no `data.fields` array → not a schema node at all
  *  - `hidden` / `collapsed` / `condensed` → the node's rows are not laid out the
@@ -275,26 +279,68 @@ interface HandleMeasurement {
  *  - `rotation` → `getBoundingClientRect` folds in the CSS transform for free;
  *    arithmetic on `node.position` cannot
  *  - no finite `dimensions` → the right-hand handle x is `position.x + width`
- *  - the handle id must name a field EXACTLY. `-l`/`-r` suffixes are the
- *    condensed-node convention: on a rendered schema node no such handle exists,
- *    so the DOM path resolves them through `inferSideFromHandleId` to the node's
- *    first left/right handle (row 0), which is NOT the stripped field's row.
- *    Stripping here would silently disagree with the oracle.
+ *  - not rendered by `x-flow-schema`, or viewport-culled, or non-uniform rows →
+ *    see the three blocks below
+ *  - the handle id must name a field EXACTLY (see `schemaFieldIndex`)
+ *
+ * `nodeEl` is the endpoint's registered node element (`canvas._nodeElements`).
+ * Only its ATTRIBUTES and INLINE STYLE are read here — never a rect — so the fast
+ * path keeps its zero-`getBoundingClientRect` guarantee.
  */
-function isSchemaEligible(node: FlowNode | undefined, handleId: string | undefined): boolean {
-  if (!node || !handleId) return false;
-  if (node.hidden || node.collapsed || node.condensed) return false;
-  if (node.rotation) return false;
+function schemaFieldIndexForEndpoint(
+  node: FlowNode | undefined,
+  handleId: string | undefined,
+  nodeEl: HTMLElement | null | undefined,
+  metrics: SchemaMetrics,
+): number {
+  if (!node || !handleId) return -1;
+  if (node.hidden || node.collapsed || node.condensed) return -1;
+  if (node.rotation) return -1;
+
+  // Rendered by `x-flow-schema`? Only then do the cached `SchemaMetrics` describe
+  // this node's rows. A hand-rolled node (skip the directive, write `x-for` +
+  // handles — a pattern flow-schema.ts's own docs invite) carries the SAME
+  // `data.fields` shape and the same field-keyed handle ids with entirely different
+  // row geometry, and state cannot tell the two apart. The directive stamps the
+  // attribute on the NODE element, which works under both plain-directive and
+  // WireFlow slot markup. No registered element ⇒ ineligible ⇒ DOM path ⇒ safe.
+  if (!nodeEl?.hasAttribute('data-flow-schema-node')) return -1;
+
+  // Viewport-culled? `_applyCulling` writes inline `display: none` on off-screen
+  // node elements, and an edge still renders when only ONE endpoint is visible. The
+  // DOM path DEGRADES on a culled endpoint — its handle rect is 0×0, so
+  // `measureHandleCoords` returns null and the endpoint collapses to the node-edge
+  // midpoint (`getHandleCoords`), with the side inferred from DOM order. The state
+  // path cannot see `display: none` and would emit true row geometry instead, so
+  // every edge crossing the culling boundary would render DIFFERENTLY than it does
+  // today. Matching the degradation is DELIBERATE, not an oversight: this workstream
+  // changes how endpoints are computed, never where they land. (Culling is 'auto' at
+  // ≥150 nodes — precisely the scale this fast path exists for.)
+  if (nodeEl.style.display === 'none') return -1;
 
   const width = node.dimensions?.width;
   const height = node.dimensions?.height;
-  if (typeof width !== 'number' || !Number.isFinite(width)) return false;
-  if (typeof height !== 'number' || !Number.isFinite(height)) return false;
+  if (typeof width !== 'number' || !Number.isFinite(width)) return -1;
+  if (typeof height !== 'number' || !Number.isFinite(height)) return -1;
 
   const fields = (node.data as { fields?: Array<{ name: string }> } | undefined)?.fields;
-  if (!Array.isArray(fields)) return false;
+  if (!Array.isArray(fields)) return -1;
 
-  return fields.some((f) => f?.name === handleId);
+  // Are the rows actually uniform? The metrics are measured ONCE, from the first
+  // schema node to render, and everything downstream assumes every schema node's
+  // rows match them. Nothing enforces that: `.flow-schema-row-name` has no
+  // `white-space: nowrap`, so a consumer who pins `dimensions.width` and writes a
+  // long field name gets a WRAPPED, taller row — and every row below it would have
+  // its endpoint land one row off, silently. `node.dimensions` is the measured
+  // BORDER BOX (flow-canvas reads `borderBoxSize`), so the row model must reproduce
+  // the node's height exactly. Two adds; catches wrapped rows, non-uniform rows and
+  // bespoke markup, all of which fall back to the DOM path — which measures each
+  // handle individually and is immune.
+  const expectedHeight =
+    metrics.insetTop + metrics.headerHeight + fields.length * metrics.rowHeight + metrics.insetBottom;
+  if (Math.abs(expectedHeight - height) > 0.5) return -1;
+
+  return schemaFieldIndex(fields, handleId);
 }
 
 /**
@@ -346,28 +392,41 @@ interface ResolvedEndpoints {
 /**
  * Both endpoints of a schema→schema edge, derived from state — the fast path.
  *
- * Returns `null` whenever the caller must fall back to DOM measurement. The
- * handle box size comes from the metrics rather than being zeroed: `shortenEndpoint`
- * derives its marker offset from `min(handleWidth, handleHeight) / 2`, so zeros
- * would pull every marker'd endpoint ~5px off where the DOM path puts it.
+ * Returns `null` whenever the caller must fall back to DOM measurement: either
+ * endpoint being ineligible (see `schemaFieldIndexForEndpoint`) disqualifies the
+ * whole edge. The handle box size comes from the metrics rather than being zeroed:
+ * `shortenEndpoint` derives its marker offset from
+ * `min(handleWidth, handleHeight) / 2`, so zeros would pull every marker'd endpoint
+ * ~5px off where the DOM path puts it.
  *
  * `sourceNode` / `targetNode` are the ABSOLUTE-position wrappers; `rawSource` /
- * `rawTarget` are the state nodes carrying `data.fields`.
+ * `rawTarget` are the state nodes carrying `data.fields`. `nodeElements` is the
+ * canvas's node-element registry — read for attributes/inline style only, never
+ * for a rect.
  */
 function resolveSchemaEndpoints(
   rawSource: FlowNode,
   rawTarget: FlowNode,
   sourceNode: FlowNode,
   targetNode: FlowNode,
-  sourceHandle: string,
-  targetHandle: string,
+  sourceHandle: string | undefined,
+  targetHandle: string | undefined,
+  nodeElements: Map<string, HTMLElement> | undefined,
   metrics: SchemaMetrics,
 ): ResolvedEndpoints | null {
+  // One scan of `fields` per endpoint: the index resolved by the eligibility check
+  // is the same one the geometry needs. Bail on the source before touching the
+  // target — the common non-schema edge costs a single attribute read.
+  const srcIndex = schemaFieldIndexForEndpoint(rawSource, sourceHandle, nodeElements?.get(rawSource.id), metrics);
+  if (srcIndex < 0) return null;
+  const tgtIndex = schemaFieldIndexForEndpoint(rawTarget, targetHandle, nodeElements?.get(rawTarget.id), metrics);
+  if (tgtIndex < 0) return null;
+
   const srcSide = schemaHandleSide(rawSource, sourceNode.position, 'source', nodeCenterX(targetNode), metrics);
   const tgtSide = schemaHandleSide(rawTarget, targetNode.position, 'target', nodeCenterX(sourceNode), metrics);
 
-  const src = computeSchemaHandlePoint(rawSource, sourceNode.position, sourceHandle, srcSide, metrics);
-  const tgt = computeSchemaHandlePoint(rawTarget, targetNode.position, targetHandle, tgtSide, metrics);
+  const src = computeSchemaHandlePoint(rawSource, sourceNode.position, srcIndex, srcSide, metrics);
+  const tgt = computeSchemaHandlePoint(rawTarget, targetNode.position, tgtIndex, tgtSide, metrics);
   if (!src || !tgt) return null;
 
   const size = { handleWidth: metrics.handleWidth, handleHeight: metrics.handleHeight };
@@ -1199,15 +1258,14 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           && canvas._config?.schemaHandleGeometry !== 'dom'
           && !!schemaMetrics
           && (!configOrigin || (configOrigin[0] === 0 && configOrigin[1] === 0))
-          && isSchemaEligible(rawSource, edge.sourceHandle)
-          && isSchemaEligible(rawTarget, edge.targetHandle)
             ? resolveSchemaEndpoints(
                 rawSource,
                 rawTarget,
                 sourceNode,
                 targetNode,
-                edge.sourceHandle!,
-                edge.targetHandle!,
+                edge.sourceHandle,
+                edge.targetHandle,
+                canvas._nodeElements as Map<string, HTMLElement> | undefined,
                 schemaMetrics,
               )
             : null;

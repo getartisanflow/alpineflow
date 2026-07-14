@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeSchemaHandlePoint } from './schema-geometry';
+import { computeSchemaHandlePoint, schemaFieldIndex } from './schema-geometry';
 import type { SchemaMetrics } from './types';
 
 // Realistic metrics fixture, hand-computed against in each test.
@@ -9,6 +9,7 @@ const metrics: SchemaMetrics = {
   insetLeft: 1,
   insetRight: 1,
   insetTop: 1,
+  insetBottom: 1,
   handleWidth: 10,
   handleHeight: 10,
 };
@@ -24,30 +25,56 @@ const absolutePosition = { x: 100, y: 50 };
 // idx 0 → 50 + 1 + 30 + 0 + 12 = 93
 // idx 3 → 50 + 1 + 30 + 72 + 12 = 165
 
+describe('schemaFieldIndex', () => {
+  it('resolves the row index of the field a handle id names', () => {
+    expect(schemaFieldIndex(node.data.fields, 'id')).toBe(0);
+    expect(schemaFieldIndex(node.data.fields, 'created_at')).toBe(3);
+  });
+
+  it('resolves an EXACT match only — a `-l`/`-r` suffix is never stripped', () => {
+    // The DOM oracle does not strip suffixes: on a rendered schema node no handle
+    // with id `user_id-l` exists, so `measureHandleCoords` falls through to
+    // `inferSideFromHandleId` and lands on the node's FIRST left handle (row 0) —
+    // NOT the stripped field's row. Stripping here would silently disagree with it.
+    expect(schemaFieldIndex([{ name: 'user_id' }], 'user_id-l')).toBe(-1);
+    // And a field genuinely named `email-r` must still resolve to itself.
+    expect(schemaFieldIndex([{ name: 'email-r' }, { name: 'email' }], 'email-r')).toBe(0);
+  });
+
+  it('returns -1 when no field matches', () => {
+    expect(schemaFieldIndex(node.data.fields, 'nonexistent')).toBe(-1);
+  });
+
+  it('returns -1 when fields is missing or not an array', () => {
+    expect(schemaFieldIndex(undefined, 'id')).toBe(-1);
+    expect(schemaFieldIndex('not-an-array' as unknown as Array<{ name: string }>, 'id')).toBe(-1);
+  });
+});
+
 describe('computeSchemaHandlePoint', () => {
   it('computes the left handle point for field index 0', () => {
-    const point = computeSchemaHandlePoint(node, absolutePosition, 'id', 'left', metrics);
+    const point = computeSchemaHandlePoint(node, absolutePosition, 0, 'left', metrics);
     expect(point).toEqual({ x: 101, y: 93, position: 'left' });
   });
 
   it('computes the right handle point for field index 0', () => {
-    const point = computeSchemaHandlePoint(node, absolutePosition, 'id', 'right', metrics);
+    const point = computeSchemaHandlePoint(node, absolutePosition, 0, 'right', metrics);
     expect(point).toEqual({ x: 299, y: 93, position: 'right' });
   });
 
   it('computes the left handle point for field index 3', () => {
-    const point = computeSchemaHandlePoint(node, absolutePosition, 'created_at', 'left', metrics);
+    const point = computeSchemaHandlePoint(node, absolutePosition, 3, 'left', metrics);
     expect(point).toEqual({ x: 101, y: 165, position: 'left' });
   });
 
   it('computes the right handle point for field index 3', () => {
-    const point = computeSchemaHandlePoint(node, absolutePosition, 'created_at', 'right', metrics);
+    const point = computeSchemaHandlePoint(node, absolutePosition, 3, 'right', metrics);
     expect(point).toEqual({ x: 299, y: 165, position: 'right' });
   });
 
   it('sets position to the requested side', () => {
-    const left = computeSchemaHandlePoint(node, absolutePosition, 'name', 'left', metrics);
-    const right = computeSchemaHandlePoint(node, absolutePosition, 'name', 'right', metrics);
+    const left = computeSchemaHandlePoint(node, absolutePosition, 1, 'left', metrics);
+    const right = computeSchemaHandlePoint(node, absolutePosition, 1, 'right', metrics);
     expect(left?.position).toBe('left');
     expect(right?.position).toBe('right');
   });
@@ -62,34 +89,13 @@ describe('computeSchemaHandlePoint', () => {
       data: { fields: [{ name: 'id' }] },
       // No `position` field at all — proves the function can't be reading one.
     };
-    const point = computeSchemaHandlePoint(groupChildNode, absolutePosition, 'id', 'left', metrics);
-    expect(point).toEqual({ x: 101, y: 93, position: 'left' });
-  });
-
-  it('resolves an exact match over a stripped match', () => {
-    const collidingNode = {
-      dimensions: { width: 200, height: 200 },
-      data: { fields: [{ name: 'email-r' }, { name: 'email' }] },
-    };
-    // handleId 'email-r' exactly matches index 0. If exact match were skipped
-    // in favor of stripping first, this would incorrectly resolve to index 1
-    // ('email', after stripping the trailing '-r').
-    const point = computeSchemaHandlePoint(collidingNode, absolutePosition, 'email-r', 'left', metrics);
-    expect(point).toEqual({ x: 101, y: 93, position: 'left' });
-  });
-
-  it('falls back to a stripped match when no exact match exists', () => {
-    const strippedNode = {
-      dimensions: { width: 200, height: 200 },
-      data: { fields: [{ name: 'user_id' }] },
-    };
-    const point = computeSchemaHandlePoint(strippedNode, absolutePosition, 'user_id-l', 'left', metrics);
+    const point = computeSchemaHandlePoint(groupChildNode, absolutePosition, 0, 'left', metrics);
     expect(point).toEqual({ x: 101, y: 93, position: 'left' });
   });
 
   it('returns null when node.data.fields is missing', () => {
     const noFieldsNode = { dimensions: { width: 200, height: 200 }, data: {} };
-    expect(computeSchemaHandlePoint(noFieldsNode, absolutePosition, 'id', 'left', metrics)).toBeNull();
+    expect(computeSchemaHandlePoint(noFieldsNode, absolutePosition, 0, 'left', metrics)).toBeNull();
   });
 
   it('returns null when node.data.fields is not an array', () => {
@@ -97,16 +103,17 @@ describe('computeSchemaHandlePoint', () => {
       dimensions: { width: 200, height: 200 },
       data: { fields: 'not-an-array' as unknown as Array<{ name: string }> },
     };
-    expect(computeSchemaHandlePoint(badFieldsNode, absolutePosition, 'id', 'left', metrics)).toBeNull();
+    expect(computeSchemaHandlePoint(badFieldsNode, absolutePosition, 0, 'left', metrics)).toBeNull();
   });
 
-  it('returns null when no field matches (even after stripping)', () => {
-    expect(computeSchemaHandlePoint(node, absolutePosition, 'nonexistent', 'left', metrics)).toBeNull();
+  it('returns null when the field index is out of range or unresolved', () => {
+    expect(computeSchemaHandlePoint(node, absolutePosition, -1, 'left', metrics)).toBeNull();
+    expect(computeSchemaHandlePoint(node, absolutePosition, 4, 'left', metrics)).toBeNull();
   });
 
   it('returns null when node.dimensions is missing', () => {
     const noDimsNode = { data: { fields: [{ name: 'id' }] } };
-    expect(computeSchemaHandlePoint(noDimsNode, absolutePosition, 'id', 'left', metrics)).toBeNull();
+    expect(computeSchemaHandlePoint(noDimsNode, absolutePosition, 0, 'left', metrics)).toBeNull();
   });
 
   it('returns null when node.dimensions.width is not finite', () => {
@@ -114,7 +121,7 @@ describe('computeSchemaHandlePoint', () => {
       dimensions: { width: NaN, height: 200 },
       data: { fields: [{ name: 'id' }] },
     };
-    expect(computeSchemaHandlePoint(badDimsNode, absolutePosition, 'id', 'left', metrics)).toBeNull();
+    expect(computeSchemaHandlePoint(badDimsNode, absolutePosition, 0, 'left', metrics)).toBeNull();
   });
 
   it('returns null when node.dimensions.height is not finite', () => {
@@ -122,11 +129,11 @@ describe('computeSchemaHandlePoint', () => {
       dimensions: { width: 200, height: Infinity },
       data: { fields: [{ name: 'id' }] },
     };
-    expect(computeSchemaHandlePoint(badDimsNode, absolutePosition, 'id', 'left', metrics)).toBeNull();
+    expect(computeSchemaHandlePoint(badDimsNode, absolutePosition, 0, 'left', metrics)).toBeNull();
   });
 
   it('returns null when a required metric is not finite', () => {
     const badMetrics: SchemaMetrics = { ...metrics, rowHeight: NaN };
-    expect(computeSchemaHandlePoint(node, absolutePosition, 'id', 'left', badMetrics)).toBeNull();
+    expect(computeSchemaHandlePoint(node, absolutePosition, 0, 'left', badMetrics)).toBeNull();
   });
 });

@@ -17,7 +17,29 @@ export interface SchemaHandlePoint {
 }
 
 /**
+ * Row index of the field a handle id names, or `-1` when it names none.
+ *
+ * The match is EXACT — a trailing `-l`/`-r` is never stripped. That suffix is the
+ * CONDENSED-node convention: on a rendered schema node no handle carries it, so the
+ * DOM path (`measureHandleCoords`) finds no matching handle, falls through to
+ * `inferSideFromHandleId`, and lands on the node's FIRST left/right handle — row 0,
+ * not the stripped field's row. Stripping here would silently disagree with that
+ * oracle, so an inexact id resolves to nothing and the caller falls back to the DOM.
+ */
+export function schemaFieldIndex(
+  fields: ReadonlyArray<{ name: string }> | undefined,
+  handleId: string,
+): number {
+  if (!Array.isArray(fields)) return -1;
+  return fields.findIndex((f) => f?.name === handleId);
+}
+
+/**
  * Handle center for a schema field row, derived purely from state.
+ *
+ * `fieldIndex` is the row, already resolved by `schemaFieldIndex` — the caller
+ * needs the index for its own eligibility checks anyway, so threading it in keeps
+ * each endpoint to a single scan of `fields`.
  *
  * Returns `null` when the fast path does not apply — the caller MUST then
  * fall back to DOM measurement. Correctness is never traded for speed.
@@ -28,21 +50,13 @@ export function computeSchemaHandlePoint(
     data?: { fields?: Array<{ name: string }> };
   },
   absolutePosition: XYPosition,
-  handleId: string,
+  fieldIndex: number,
   side: 'left' | 'right',
   metrics: SchemaMetrics,
 ): SchemaHandlePoint | null {
   const fields = node.data?.fields;
   if (!Array.isArray(fields)) return null;
-
-  // Exact match first — a field genuinely named e.g. `email-r` must still
-  // resolve. Only retry with a stripped `-l`/`-r` suffix if that misses.
-  let idx = fields.findIndex((f) => f.name === handleId);
-  if (idx === -1) {
-    const stripped = handleId.replace(/-[lr]$/, '');
-    idx = fields.findIndex((f) => f.name === stripped);
-  }
-  if (idx === -1) return null;
+  if (!Number.isInteger(fieldIndex) || fieldIndex < 0 || fieldIndex >= fields.length) return null;
 
   const { width, height } = node.dimensions ?? {};
   if (typeof width !== 'number' || !Number.isFinite(width)) return null;
@@ -59,7 +73,7 @@ export function computeSchemaHandlePoint(
     return null;
   }
 
-  const y = absolutePosition.y + insetTop + headerHeight + idx * rowHeight + rowHeight / 2;
+  const y = absolutePosition.y + insetTop + headerHeight + fieldIndex * rowHeight + rowHeight / 2;
   const x =
     side === 'left'
       ? absolutePosition.x + insetLeft
