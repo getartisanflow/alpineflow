@@ -78,6 +78,13 @@ interface FixtureNode {
   rotation?: number;
   /** Renders as a plain (non-schema) node with one left target + one right source. */
   plain?: boolean;
+  /**
+   * Renders hand-rolled field rows + field-keyed handles WITHOUT `x-flow-schema`
+   * — the "skip the directive and write x-for + handles manually" pattern that
+   * flow-schema.ts's own docblock invites. Same `data.fields` shape, arbitrary
+   * row geometry.
+   */
+  custom?: boolean;
   [k: string]: unknown;
 }
 
@@ -172,6 +179,14 @@ function installLayout(
     const node = byId(nodeEl?.dataset.flowNodeId);
     if (!nodeEl || !node) return fakeRect(0, 0, 0, 0);
 
+    // A viewport-culled node carries inline `display: none` (flow-canvas
+    // `_applyCulling`). A `display:none` element has no box at all: the browser
+    // returns an all-zero rect for it AND for every descendant. Model that
+    // faithfully — it is precisely what makes the DOM path DEGRADE on a culled
+    // endpoint (0×0 handle rect ⇒ measureHandleCoords returns null ⇒ the endpoint
+    // collapses to the node-edge midpoint), and the state path must match that.
+    if (nodeEl.style.display === 'none') return fakeRect(0, 0, 0, 0);
+
     // Node border box, in screen space. A node with no `dimensions` in state
     // still occupies a box in the browser — the DOM path can measure it, the
     // state path cannot. Hence the fallback default here.
@@ -195,6 +210,12 @@ function installLayout(
 
     if (el.classList.contains('flow-schema-header')) {
       return fakeRect(cLeft, cTop, cWidth, HEADER_H * zoom);
+    }
+
+    // The body stacks directly under the header and is exactly as tall as its rows
+    // (no gap, no padding — see .flow-schema-body / .flow-schema-row in structural.css).
+    if (el.classList.contains('flow-schema-body')) {
+      return fakeRect(cLeft, cTop + HEADER_H * zoom, cWidth, el.children.length * ROW_H * zoom);
     }
 
     const rowTop = (row: HTMLElement): number => {
@@ -297,6 +318,23 @@ function mount(opts: MountOptions) {
       source.className = 'flow-handle';
       source.setAttribute('x-flow-handle:source.right', JSON.stringify('out'));
       nodeEl.appendChild(source);
+    } else if (n.custom) {
+      // Hand-rolled rows: field-keyed handles, no schema directive, so no
+      // `data-flow-schema-node` stamp and no uniform-row guarantee.
+      const fields = (n.data.fields ?? []) as Array<{ name: string }>;
+      for (const field of fields) {
+        const row = document.createElement('div');
+        row.className = 'custom-row';
+        const target = document.createElement('div');
+        target.className = 'flow-handle';
+        target.setAttribute('x-flow-handle:target.left', JSON.stringify(field.name));
+        row.appendChild(target);
+        const source = document.createElement('div');
+        source.className = 'flow-handle';
+        source.setAttribute('x-flow-handle:source.right', JSON.stringify(field.name));
+        row.appendChild(source);
+        nodeEl.appendChild(row);
+      }
     } else if (opts.slot) {
       // WireFlow markup: the schema directive owns a CHILD of the node element.
       const schemaEl = document.createElement('div');
@@ -569,6 +607,47 @@ describe('schema edge geometry — state path vs DOM oracle', () => {
     expect(fast.pathD(0)).toBe(expected);
   });
 
+  it('renders a viewport-culled (display:none) endpoint identically to the DOM path', async () => {
+    // `_applyCulling` writes inline `display: none` on off-screen NODE elements, and
+    // an edge still renders when only ONE of its endpoints is visible. The DOM path
+    // DEGRADES on a culled endpoint: the handle's rect is 0×0, `measureHandleCoords`
+    // returns null, and the endpoint falls back to `getHandleCoords` (the node-edge
+    // midpoint, side inferred from DOM order). The state path cannot see
+    // `display:none` and would happily emit true row geometry — so every edge
+    // crossing the culling boundary would render DIFFERENTLY than it does today.
+    // Culling turns on at ≥150 nodes, i.e. exactly this workstream's target scale.
+    // The fast path must therefore DECLINE a culled endpoint and match the
+    // degradation exactly: this task changes how endpoints are computed, never
+    // where they land.
+    const cull = (h: { data: { _nodeElements: Map<string, HTMLElement> } }): void => {
+      h.data._nodeElements.get('b')!.style.display = 'none';
+    };
+
+    const oracle = await mountSettled({
+      nodes: schemaFixture(),
+      edges: schemaEdges(),
+      config: { schemaHandleGeometry: 'dom' },
+    });
+    cull(oracle);
+    await reroute(oracle.data);
+    const expected = schemaEdges().map((_, i) => oracle.pathD(i));
+    Alpine.destroyTree(oracle.host);
+    oracle.host.remove();
+    mounted.pop();
+    rectSpy?.mockRestore();
+
+    const fast = await mountSettled({ nodes: schemaFixture(), edges: schemaEdges() });
+    cull(fast);
+    fast.spy.mockClear();
+    await reroute(fast.data);
+
+    // The edges touching the culled node must have taken the DOM path.
+    expect(geometryRectCalls(fast.spy)).toBeGreaterThan(0);
+    schemaEdges().forEach((edge, i) => {
+      expect(`${edge.id}: ${fast.pathD(i)}`).toBe(`${edge.id}: ${expected[i]}`);
+    });
+  });
+
   it('re-derives endpoints from state when a node moves', async () => {
     const fast = await mountSettled({ nodes: schemaFixture(), edges: schemaEdges() });
     const before = fast.pathD(0);
@@ -690,6 +769,53 @@ describe('schema edge geometry — fallback contract', () => {
     await reroute(handle.data);
     expect(geometryRectCalls(handle.spy)).toBeGreaterThan(0);
     expect(handle.pathD(0)).toBe(expected);
+  });
+
+  it("falls back when a node's measured height disagrees with the uniform-row model", async () => {
+    // The fast path makes "uniform rows, measured once from the first schema node"
+    // load-bearing. Nothing enforces it: `.flow-schema-row-name` has no
+    // `white-space: nowrap`, so a consumer who pins `dimensions.width` and writes a
+    // long field name gets a WRAPPED, taller row — and every row below it would have
+    // its endpoint land one row off, silently. `node.dimensions` is the measured
+    // BORDER BOX, so the row model must reproduce the node's height exactly:
+    //   insetTop + headerHeight + fields.length × rowHeight + insetBottom
+    // Two adds, and wrapped / non-uniform / bespoke rows all fall back to the DOM
+    // path, which measures each handle and is immune.
+    const nodes = schemaFixture();
+    nodes[1].dimensions!.height += 18; // as if one field name wrapped to two lines
+    const edges: FixtureEdge[] = [
+      { id: 'wrapped', source: 'a', target: 'b', sourceHandle: 'id', targetHandle: 'email', type: 'straight' },
+    ];
+    expect(await readsDom({ nodes, edges })).toBe(true);
+  });
+
+  it('falls back for a hand-rolled node that carries data.fields but no schema directive', async () => {
+    // flow-schema.ts's own docblock invites consumers to skip the directive and write
+    // `x-for` + handles manually. Such a node has the same `data.fields` shape and the
+    // same field-keyed handle ids, but its row geometry is its own business — the
+    // cached SchemaMetrics describe `x-flow-schema`'s layout, not this one. State
+    // alone cannot tell the two apart, so eligibility requires the `data-flow-schema-node`
+    // stamp that the schema directive puts on the node element.
+    const nodes = schemaFixture();
+    nodes.push({
+      id: 'x',
+      position: { x: 900, y: 0 },
+      // Dimensions deliberately AGREE with the schema row model, so this test
+      // isolates the directive check from the height cross-check above.
+      dimensions: { width: 220, height: schemaHeight(FIELDS.length, SYMMETRIC) },
+      data: { label: 'X', fields: schemaFields(FIELDS) },
+      custom: true,
+    });
+    const edges: FixtureEdge[] = [
+      { id: 'hand-rolled', source: 'a', target: 'x', sourceHandle: 'email', targetHandle: 'team_id', type: 'straight' },
+    ];
+
+    const handle = await mountSettled({ nodes, edges });
+    handle.spy.mockClear();
+    await reroute(handle.data);
+
+    expect(geometryRectCalls(handle.spy)).toBeGreaterThan(0);
+    expect(handle.pathD(0)).toMatch(/^M/);
   });
 
   it('falls back when a node has no dimensions in state', async () => {
