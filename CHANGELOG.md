@@ -162,10 +162,17 @@ Replaces the per-handle `pointerdown` listener with a single delegated listener 
 **Performance**
 - **One `pointerdown` listener per canvas instead of one per handle.** Installed on `.flow-viewport` in the capture phase at canvas init; it resolves the pressed handle with `closest('[data-flow-handle-type]')` and starts the same connect / reconnect gesture the per-handle listener used to. Mount and re-stamp no longer pay a listener registration per handle. Keyboard/a11y bindings, hover affordances and click-to-connect stay per-handle — the delegation covers `pointerdown` only.
 
+**Behaviour note — the one semantic delegation does not preserve**
+- A source handle now stops the event during the CAPTURE phase at the viewport, so the `pointerdown` never reaches the handle element or its descendants. Previously the handle's own target-phase listener called `stopPropagation()` (not `stopImmediatePropagation()`), so listeners ON the handle and on its children still fired. **If you put your own `pointerdown` listener on markup inside a source handle, it no longer fires.** Move it outside the handle, or set `delegatedHandleEvents: false`. This is inherent to the capture-phase placement, which is what keeps a handle press from also dragging the node or reordering a schema row.
+
 **Infrastructure**
-- New `src/plugin/handle-delegation.ts` exporting `installHandleDelegation(rootEl, canvas)`; the canvas installs it in `_initHandleDelegation()` and tears it down in `destroy()`.
+- New `src/plugin/handle-delegation.ts` exporting `installHandleDelegation(rootEl, canvas)`; the canvas installs it in `_initHandleDelegation()` and tears it down in `destroy()`. Handle ownership is discriminated on the canvas root (`.flow-container`), so a nested canvas is never driven by its parent's listener while a handle inside a nested plain `[x-data]` scope within a node still works normally.
 - The two pointerdown bodies are extracted to module scope in `flow-handle.ts` as `startSourceHandlePointerInteraction` / `startTargetHandlePointerInteraction`, behind the `startHandlePointerInteraction` dispatcher. Behaviour is unchanged, including the deliberate source/target propagation asymmetry (a target handle with no reconnectable edge still falls through to the node drag) and the capture-phase ordering that keeps an active whiteboard tool ahead of the handles.
-- New config `delegatedHandleEvents?: boolean` (default `true`). Set `false` to restore the per-handle listeners. Read once at init; not runtime-patchable.
+- New config `delegatedHandleEvents?: boolean` (default `true`). Set `false` to restore the per-handle listeners. Read once at init; not runtime-patchable. Documented in `docs/configuration/connections.md`.
+- If the canvas has no `.flow-viewport`, the listener falls back to `.flow-container` and now emits a `debug('init', …)` line — that fallback loses the whiteboard-tool capture-ordering guarantee, so it should be diagnosable rather than silent.
+
+### Fixed
+- **`flowCanvas.destroy()` never ran.** Mixins are applied onto the canvas data object with `Object.defineProperties`, and the animation mixin exposed a method named `destroy()` — which silently OVERWROTE the canvas's own `destroy()`. The entire canvas teardown body was dead code: the global `keydown` listener was never removed, `$store.flow.unregister()` never ran (destroyed canvases accumulated in the store forever), and `_panZoom`, `_minimap`, `_controls`, `_selectionBox`, `_lasso`, `_announcer`, the shared `ResizeObserver` and the collab bridge were never disposed. The animation mixin's method is now `_destroyAnimations()` and the canvas `destroy()` calls it, so both run. Introduced in `9855d68`.
 
 ## v0.2.1-alpha — 2026-04-14
 
