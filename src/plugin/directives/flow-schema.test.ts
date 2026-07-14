@@ -484,16 +484,21 @@ describe('x-flow-schema directive', () => {
       return { target, canvas: (Alpine as any).$data(container) };
     }
 
-    it('measures header/row/handle metrics once, from the first schema node render', () => {
+    it('measures header/row/handle metrics once, from the first schema node render', async () => {
       stubSchemaLayout(1);
       const { canvas } = mountWithCanvas({
         label: 'User',
         fields: [{ name: 'id', type: 'uuid' }],
       });
+      // Measurement is deferred one tick past the render that triggers it
+      // (see the reactivity-safety test below for why): the guard read, the
+      // zoom read, and the `_schemaMetrics` write all run outside the
+      // directive's effect, via `Alpine.nextTick`.
+      await nextFlush();
       expect(canvas._schemaMetrics).toEqual(EXPECTED_METRICS);
     });
 
-    it('leaves _schemaMetrics null when the row has zero height (no layout / jsdom default)', () => {
+    it('leaves _schemaMetrics null when the row has zero height (no layout / jsdom default)', async () => {
       // No stubSchemaLayout() call — jsdom's default getBoundingClientRect
       // returns an all-zero rect, so rowHeight is 0 and caching must bail
       // rather than poison every later edge with zeros.
@@ -501,6 +506,7 @@ describe('x-flow-schema directive', () => {
         label: 'User',
         fields: [{ name: 'id', type: 'uuid' }],
       });
+      await nextFlush();
       expect(canvas._schemaMetrics).toBeNull();
     });
 
@@ -510,6 +516,7 @@ describe('x-flow-schema directive', () => {
         label: 'User',
         fields: [{ name: 'id', type: 'uuid' }],
       });
+      await nextFlush();
       expect(canvas._schemaMetrics).toEqual(EXPECTED_METRICS);
 
       // Simulate the theme/colorMode-change invalidation hook — mirrors the
@@ -521,6 +528,153 @@ describe('x-flow-schema directive', () => {
       await new Promise((r) => setTimeout(r, 20));
 
       expect(canvas._schemaMetrics).toEqual(EXPECTED_METRICS);
+    });
+
+    // ── Reactivity-safety regression ──────────────────────────────────────
+    // `canvas` is Alpine's merge-scope proxy (`Alpine.$data(el)`), and
+    // `Alpine.raw()` does NOT unwrap that proxy — it returns the same proxy
+    // back (flow-canvas.ts:515-517). A property GET/SET through
+    // `Alpine.raw(canvas)` still tracks/triggers the underlying reactive
+    // object when it runs inside an active Alpine effect (flow-edge.ts:
+    // 1134-1136, flow-edge.test.ts:126-132 document the same hazard for
+    // `_obstacleSnapshot`). If `measureSchemaMetrics` ran its guard read,
+    // zoom read, or write synchronously inside the directive's `effect()`,
+    // every mounted schema node's render effect would subscribe to
+    // `_schemaMetrics`, and ANY write to it — including an unrelated node's
+    // first successful measurement, or a colorMode invalidation — would
+    // re-run every one of them. These tests mount TWO schema nodes on one
+    // canvas and assert that doesn't happen.
+
+    /**
+     * Mount TWO schema nodes as siblings under one shared `.flow-container`.
+     * Each node's `node` scope lives on its own wrapper element — mirroring
+     * how a real canvas nests one Alpine scope per `x-flow-node`, distinct
+     * from the canvas root that owns `_schemaMetrics` / `viewport` — so that
+     * mutating one node's data can never be conflated with the other's scope.
+     */
+    function mountTwoSchemaNodes(
+      fieldsA: Array<Record<string, unknown>>,
+      fieldsB: Array<Record<string, unknown>>,
+    ) {
+      clearChildren(document.body);
+      const container = document.createElement('div');
+      container.classList.add('flow-container');
+      container.setAttribute('x-data', `{ _schemaMetrics: null, viewport: { zoom: 1 } }`);
+
+      const wrapperA = document.createElement('div');
+      wrapperA.setAttribute(
+        'x-data',
+        `{ node: { id: 'a', data: { label: 'A', kind: 'entity', fields: ${JSON.stringify(fieldsA)} } } }`,
+      );
+      const targetA = document.createElement('div');
+      targetA.setAttribute('x-flow-schema', '');
+      targetA.className = 'flow-node';
+      targetA.setAttribute('data-flow-node-id', 'a');
+      wrapperA.appendChild(targetA);
+      container.appendChild(wrapperA);
+
+      const wrapperB = document.createElement('div');
+      wrapperB.setAttribute(
+        'x-data',
+        `{ node: { id: 'b', data: { label: 'B', kind: 'entity', fields: ${JSON.stringify(fieldsB)} } } }`,
+      );
+      const targetB = document.createElement('div');
+      targetB.setAttribute('x-flow-schema', '');
+      targetB.className = 'flow-node';
+      targetB.setAttribute('data-flow-node-id', 'b');
+      wrapperB.appendChild(targetB);
+      container.appendChild(wrapperB);
+
+      document.body.appendChild(container);
+      Alpine.initTree(container);
+
+      return {
+        canvas: (Alpine as any).$data(container),
+        targetA,
+        targetB,
+        scopeA: (Alpine as any).$data(wrapperA),
+      };
+    }
+
+    /**
+     * Count `data-flow-schema-kind` attribute writes on a schema node's host.
+     * `render()` unconditionally calls `setAttribute` on every render when
+     * `node.data.kind` is set — regardless of whether the value actually
+     * changed — so, mirroring the `d`-attribute effect-run counter in
+     * flow-edge.test.ts, this counts render-effect re-runs.
+     */
+    function observeAttr(el: Element, attr: string) {
+      let n = 0;
+      const obs = new MutationObserver((records) => {
+        for (const r of records) if (r.attributeName === attr) n++;
+      });
+      obs.observe(el, { attributes: true, attributeFilter: [attr] });
+      return {
+        count(): number {
+          for (const r of obs.takeRecords()) if (r.attributeName === attr) n++;
+          return n;
+        },
+        disconnect(): void {
+          obs.disconnect();
+        },
+      };
+    }
+
+    it("a metrics write from one schema node's measurement does not re-run another node's render effect", async () => {
+      // Both nodes render for the first time with NO layout stub, so their
+      // measurement attempt bails on a zero-height row and `_schemaMetrics`
+      // stays null. In the unfixed code, the guard read still happens
+      // synchronously inside each node's render effect, subscribing BOTH
+      // nodes to `_schemaMetrics` even though neither measurement succeeds.
+      const { canvas, targetA, targetB, scopeA } = mountTwoSchemaNodes(
+        [{ name: 'id', type: 'uuid' }],
+        [{ name: 'id', type: 'uuid' }],
+      );
+      await nextFlush();
+      expect(canvas._schemaMetrics).toBeNull();
+
+      // A real layout becomes available.
+      stubSchemaLayout(1);
+
+      const countsA = observeAttr(targetA, 'data-flow-schema-kind');
+      const countsB = observeAttr(targetB, 'data-flow-schema-kind');
+
+      // Re-render ONLY node A (its own label changes). This is the render
+      // whose measurement succeeds and WRITES `_schemaMetrics`.
+      scopeA.node.data.label = 'A renamed';
+      await nextFlush();
+
+      expect(canvas._schemaMetrics).toEqual(EXPECTED_METRICS);
+      expect(countsA.count()).toBeGreaterThan(0); // A legitimately re-rendered
+      expect(countsB.count()).toBe(0); // B must NOT re-render just because A wrote the cache
+      countsA.disconnect();
+      countsB.disconnect();
+    });
+
+    it('invalidating _schemaMetrics does not re-run unrelated schema nodes\' render effects', async () => {
+      const { canvas, targetA, targetB, scopeA } = mountTwoSchemaNodes(
+        [{ name: 'id', type: 'uuid' }],
+        [{ name: 'id', type: 'uuid' }],
+      );
+      stubSchemaLayout(1);
+      // Let node A actually measure first, so `_schemaMetrics` is non-null
+      // and both nodes have rendered at least once against a real layout.
+      scopeA.node.data.label = 'A renamed';
+      await nextFlush();
+      expect(canvas._schemaMetrics).toEqual(EXPECTED_METRICS);
+
+      const countsA = observeAttr(targetA, 'data-flow-schema-kind');
+      const countsB = observeAttr(targetB, 'data-flow-schema-kind');
+
+      // Invalidation (colorMode change) nulls the cache without touching
+      // either node's own data — neither node's render effect should re-run.
+      canvas._schemaMetrics = null;
+      await nextFlush();
+
+      expect(countsA.count()).toBe(0);
+      expect(countsB.count()).toBe(0);
+      countsA.disconnect();
+      countsB.disconnect();
     });
   });
 });

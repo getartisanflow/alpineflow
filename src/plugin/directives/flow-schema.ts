@@ -96,44 +96,56 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
      * edge-geometry work reads this cache instead of measuring handle DOM
      * per edge. (Task G1 — state-derived schema handle geometry.)
      *
-     * Reads/writes go through `Alpine.raw(canvas)` throughout: `_schemaMetrics`
-     * is a plain, non-reactive field, and this runs inside the directive's own
-     * `effect()` — reading it (or `viewport.zoom`) via the reactive proxy here
-     * would subscribe this effect to their changes, re-rendering every mounted
-     * schema node's DOM on every pan/zoom frame.
+     * `_schemaMetrics` is a plain, non-reactive field, but `canvas` here is
+     * `Alpine.$data(el)` — Alpine's merge-scope proxy — and `Alpine.raw()`
+     * does NOT unwrap that proxy; it returns the same proxy back (see
+     * flow-canvas.ts:515-517 and flow-edge.ts:1134-1136). A property GET
+     * through `Alpine.raw(canvas)` still forwards to the underlying reactive
+     * object and calls Vue's `track()` when read inside an active effect, and
+     * a SET still calls `trigger()`. Safety here does NOT come from
+     * `Alpine.raw()` — it comes from calling this function OUTSIDE the
+     * directive's `effect()`, via `Alpine.nextTick`, so `activeEffect` is
+     * unset by the time the guard read, the `viewport.zoom` read, and the
+     * `_schemaMetrics` write happen; none of them track or retrigger any
+     * mounted schema node's render effect. The deliberate consequence: the
+     * cache lands one tick after the first schema render, not synchronously
+     * within it — edge code (a later task) falls back to the DOM path until
+     * it lands, then upgrades.
      */
     const measureSchemaMetrics = (): void => {
-      const canvas = readCanvas();
-      if (!canvas) return;
-      const raw = Alpine.raw(canvas);
-      if (raw._schemaMetrics != null) return;
+      Alpine.nextTick(() => {
+        const canvas = readCanvas();
+        if (!canvas) return;
+        const raw = Alpine.raw(canvas);
+        if (raw._schemaMetrics != null) return;
 
-      const headerEl = host.querySelector<HTMLElement>(':scope > .flow-schema-header');
-      const rowEl = host.querySelector<HTMLElement>('.flow-schema-row');
-      const handleEl = rowEl?.querySelector<HTMLElement>('.flow-schema-handle');
-      if (!headerEl || !rowEl || !handleEl) return;
+        const headerEl = host.querySelector<HTMLElement>(':scope > .flow-schema-header');
+        const rowEl = host.querySelector<HTMLElement>('.flow-schema-row');
+        const handleEl = rowEl?.querySelector<HTMLElement>('.flow-schema-handle');
+        if (!headerEl || !rowEl || !handleEl) return;
 
-      const zoom = raw.viewport?.zoom || 1;
-      const hostRect = host.getBoundingClientRect();
-      const headerRect = headerEl.getBoundingClientRect();
-      const rowRect = rowEl.getBoundingClientRect();
-      const handleRect = handleEl.getBoundingClientRect();
+        const zoom = raw.viewport?.zoom || 1;
+        const hostRect = host.getBoundingClientRect();
+        const headerRect = headerEl.getBoundingClientRect();
+        const rowRect = rowEl.getBoundingClientRect();
+        const handleRect = handleEl.getBoundingClientRect();
 
-      const rowHeight = rowRect.height / zoom;
-      // A zero-height row means layout hasn't happened (or jsdom) — caching
-      // zeros here would poison every later edge's endpoint geometry.
-      if (rowHeight <= 0) return;
+        const rowHeight = rowRect.height / zoom;
+        // A zero-height row means layout hasn't happened (or jsdom) — caching
+        // zeros here would poison every later edge's endpoint geometry.
+        if (rowHeight <= 0) return;
 
-      const metrics: SchemaMetrics = {
-        headerHeight: headerRect.height / zoom,
-        rowHeight,
-        insetLeft: (rowRect.left - hostRect.left) / zoom,
-        insetRight: (hostRect.right - rowRect.right) / zoom,
-        insetTop: (headerRect.top - hostRect.top) / zoom,
-        handleWidth: handleRect.width / zoom,
-        handleHeight: handleRect.height / zoom,
-      };
-      raw._schemaMetrics = metrics;
+        const metrics: SchemaMetrics = {
+          headerHeight: headerRect.height / zoom,
+          rowHeight,
+          insetLeft: (rowRect.left - hostRect.left) / zoom,
+          insetRight: (hostRect.right - rowRect.right) / zoom,
+          insetTop: (headerRect.top - hostRect.top) / zoom,
+          handleWidth: handleRect.width / zoom,
+          handleHeight: handleRect.height / zoom,
+        };
+        raw._schemaMetrics = metrics;
+      });
     };
 
     host.classList.add('flow-schema-node');

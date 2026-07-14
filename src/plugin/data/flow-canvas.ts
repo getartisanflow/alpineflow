@@ -225,9 +225,13 @@ export function registerFlowCanvas(Alpine: Alpine) {
     /**
      * Cached header/row/handle geometry for `x-flow-schema` nodes, measured
      * once by the first schema node's `render()` (see flow-schema.ts). Plain
-     * (non-reactive) field — edges read it via `Alpine.raw(canvas)`, so
-     * mutating it never re-runs an edge effect. Invalidate (set `null`) on
-     * any theme/colorMode change, same contract as `_bgGapCache` above.
+     * (non-reactive) field. `Alpine.raw(canvas)` does NOT unwrap Alpine's
+     * merge-scope proxy, so a GET/SET through it still tracks/triggers the
+     * underlying reactive object inside an active effect — this field is
+     * safe only because flow-schema.ts reads and writes it OUTSIDE the
+     * directive's `effect()` (deferred via `Alpine.nextTick`), not because of
+     * `Alpine.raw()` itself. Invalidate (set `null`) on any theme/colorMode
+     * change, same contract as `_bgGapCache` above.
      */
     _schemaMetrics: null as SchemaMetrics | null,
 
