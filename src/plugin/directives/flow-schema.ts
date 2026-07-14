@@ -119,9 +119,10 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
         if (raw._schemaMetrics != null) return;
 
         const headerEl = host.querySelector<HTMLElement>(':scope > .flow-schema-header');
+        const schemaBodyEl = host.querySelector<HTMLElement>(':scope > .flow-schema-body');
         const rowEl = host.querySelector<HTMLElement>('.flow-schema-row');
         const handleEl = rowEl?.querySelector<HTMLElement>('.flow-schema-handle');
-        if (!headerEl || !rowEl || !handleEl) return;
+        if (!headerEl || !schemaBodyEl || !rowEl || !handleEl) return;
 
         // Insets are consumed against the NODE's border box — edge code adds them
         // to `node.position` / `node.dimensions`, which describe the `.flow-node`
@@ -136,6 +137,7 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
         const zoom = raw.viewport?.zoom || 1;
         const nodeRect = nodeEl.getBoundingClientRect();
         const headerRect = headerEl.getBoundingClientRect();
+        const bodyRect = schemaBodyEl.getBoundingClientRect();
         const rowRect = rowEl.getBoundingClientRect();
         const handleRect = handleEl.getBoundingClientRect();
 
@@ -150,6 +152,11 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
           insetLeft: (rowRect.left - nodeRect.left) / zoom,
           insetRight: (nodeRect.right - rowRect.right) / zoom,
           insetTop: (headerRect.top - nodeRect.top) / zoom,
+          // Closes the row model: with insetBottom, a consumer can reconstruct the
+          // node's expected border-box height and so DETECT non-uniform rows (a
+          // wrapped field name — nothing in the CSS forces `white-space: nowrap`)
+          // instead of assuming uniformity. See `flow-edge.ts`'s eligibility check.
+          insetBottom: (nodeRect.bottom - bodyRect.bottom) / zoom,
           handleWidth: handleRect.width / zoom,
           handleHeight: handleRect.height / zoom,
         };
@@ -158,6 +165,20 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
     };
 
     host.classList.add('flow-schema-node');
+
+    // Mark the NODE element as schema-rendered, so edge code can tell a node whose
+    // rows THIS directive laid out (uniform header + rows, the layout `SchemaMetrics`
+    // describes) from a hand-rolled node that merely carries the same `data.fields`
+    // shape and field-keyed handles — a pattern this file's own docblock invites, and
+    // one whose row geometry is the consumer's business. State alone cannot tell them
+    // apart, and getting it wrong renders the edge on the wrong row.
+    //
+    // The stamp goes on the NODE element, not on `host`: the two are the same element
+    // under directive markup, but under WireFlow's slot markup `host` is a CHILD of
+    // the node (the same insight behind the metrics-anchor `closest` above). Edge code
+    // looks the element up via `canvas._nodeElements`, which registers node elements.
+    const schemaNodeEl = host.closest('[data-flow-node-id]') as HTMLElement | null;
+    schemaNodeEl?.setAttribute('data-flow-schema-node', '');
 
     // Persistent scaffold + keyed row registry. Reused across renders so that a
     // single tracked change reconciles rows in place instead of tearing down and
@@ -421,6 +442,7 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       headerEl = null;
       bodyEl = null;
       host.classList.remove('flow-schema-node');
+      schemaNodeEl?.removeAttribute('data-flow-schema-node');
     });
   });
 }

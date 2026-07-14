@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Alpine from 'alpinejs';
 import { registerFlowSchemaDirective } from './flow-schema';
 import { registerFlowHandleDirective } from './flow-handle';
+import { registerFlowNodeDirective } from './flow-node';
 
 /**
  * Clear a DOM node without using innerHTML (XSS-safe pattern).
@@ -397,6 +398,7 @@ describe('x-flow-schema directive', () => {
       insetLeft: BORDER,
       insetRight: BORDER,
       insetTop: BORDER,
+      insetBottom: BORDER,
       handleWidth: HANDLE_SIZE,
       handleHeight: HANDLE_SIZE,
     };
@@ -418,13 +420,20 @@ describe('x-flow-schema directive', () => {
     }
 
     /**
-     * Stub `getBoundingClientRect` to emulate a realistic `.flow-schema-node`
-     * layout: a border-box at (0,0), 200px wide, with a 1px border, a 30px
-     * header, uniform 24px rows, and 10x10 handles centered on each row's
-     * left/right edge. jsdom has no layout engine, so this is the only way
-     * to exercise the measurement path in a unit test. Follows the
-     * `getBoundingClientRect` stubbing pattern used by
-     * flow-easy-connect.test.ts / flow-handle-keyboard.test.ts.
+     * Stub `getBoundingClientRect` to emulate a realistic schema-node layout:
+     * a node border-box at (0,0), 200px wide, with a 1px border, a 30px header,
+     * uniform 24px rows, and 10x10 handles centered on each row's left/right
+     * edge. jsdom has no layout engine, so this is the only way to exercise the
+     * measurement path in a unit test. Follows the `getBoundingClientRect`
+     * stubbing pattern used by flow-easy-connect.test.ts /
+     * flow-handle-keyboard.test.ts.
+     *
+     * The NODE border box is keyed on `data-flow-node-id`, not on the
+     * `.flow-schema-node` class — those are the same element under directive
+     * markup (`x-flow-node` + `x-flow-schema`), but under WireFlow's SLOT markup
+     * the schema host is a CHILD of the node element and fills its content box.
+     * Metrics insets are consumed against `node.position`/`node.dimensions`
+     * (the node border box), so both shapes must measure identically.
      */
     function stubSchemaLayout(rowCount: number): void {
       const original = HTMLElement.prototype.getBoundingClientRect;
@@ -432,12 +441,21 @@ describe('x-flow-schema directive', () => {
         HTMLElement.prototype.getBoundingClientRect = original;
       };
       HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement): DOMRect {
-        if (this.classList.contains('flow-schema-node')) {
+        if (this.hasAttribute('data-flow-node-id')) {
           const height = BORDER * 2 + HEADER_HEIGHT + ROW_HEIGHT * rowCount;
           return fakeRect(0, 0, NODE_WIDTH, height);
         }
+        // Only reached in slot markup: the schema host is a block child filling
+        // the node's content box (inside the border).
+        if (this.classList.contains('flow-schema-node')) {
+          return fakeRect(BORDER, BORDER, NODE_WIDTH - BORDER * 2, HEADER_HEIGHT + ROW_HEIGHT * rowCount);
+        }
         if (this.classList.contains('flow-schema-header')) {
           return fakeRect(BORDER, BORDER, NODE_WIDTH - BORDER * 2, HEADER_HEIGHT);
+        }
+        if (this.classList.contains('flow-schema-body')) {
+          const rows = this.children.length;
+          return fakeRect(BORDER, BORDER + HEADER_HEIGHT, NODE_WIDTH - BORDER * 2, ROW_HEIGHT * rows);
         }
         if (this.classList.contains('flow-schema-row')) {
           const siblings = Array.from(this.parentElement?.children ?? []);
@@ -484,6 +502,32 @@ describe('x-flow-schema directive', () => {
       return { target, canvas: (Alpine as any).$data(container) };
     }
 
+    /**
+     * WireFlow's SLOT markup: `x-flow-schema` sits on a CHILD of the `.flow-node`
+     * element (see wireflow's `components/schema-node.blade.php`, and the
+     * `.flow-node:has(> .flow-schema-node)` rule in css/structural.css), not on
+     * the node element itself.
+     */
+    function mountSlotMarkup(data: { label: string; fields: Array<Record<string, unknown>> }) {
+      clearChildren(document.body);
+      const container = document.createElement('div');
+      container.classList.add('flow-container');
+      container.setAttribute(
+        'x-data',
+        `{ _schemaMetrics: null, viewport: { zoom: 1 }, node: { id: 't', data: ${JSON.stringify(data)} } }`,
+      );
+      const nodeEl = document.createElement('div');
+      nodeEl.className = 'flow-node';
+      nodeEl.setAttribute('data-flow-node-id', 't');
+      const target = document.createElement('div');
+      target.setAttribute('x-flow-schema', '');
+      nodeEl.appendChild(target);
+      container.appendChild(nodeEl);
+      document.body.appendChild(container);
+      Alpine.initTree(container);
+      return { nodeEl, target, canvas: (Alpine as any).$data(container) };
+    }
+
     it('measures header/row/handle metrics once, from the first schema node render', async () => {
       stubSchemaLayout(1);
       const { canvas } = mountWithCanvas({
@@ -494,6 +538,76 @@ describe('x-flow-schema directive', () => {
       // (see the reactivity-safety test below for why): the guard read, the
       // zoom read, and the `_schemaMetrics` write all run outside the
       // directive's effect, via `Alpine.nextTick`.
+      await nextFlush();
+      expect(canvas._schemaMetrics).toEqual(EXPECTED_METRICS);
+    });
+
+    it('stamps data-flow-schema-node on the node element under real x-flow-node markup', async () => {
+      // Edge code's schema fast path is gated on this attribute (it is how a node
+      // whose rows THIS directive laid out is told apart from a hand-rolled node
+      // carrying the same `data.fields`). The stamp resolves the node element via
+      // `closest('[data-flow-node-id]')` — and that attribute is written by
+      // `x-flow-node`'s own effect, not by the markup. So the whole fast path silently
+      // becomes a no-op if `x-flow-schema` were ever to initialize FIRST. Nothing else
+      // in the suite mounts the two directives together, so pin the ordering here.
+      registerFlowNodeDirective(Alpine);
+      stubSchemaLayout(1);
+
+      clearChildren(document.body);
+      const container = document.createElement('div');
+      container.className = 'flow-container';
+      container.setAttribute('data-flow-canvas', '');
+      const node = { id: 'n1', position: { x: 0, y: 0 }, data: { label: 'User', fields: [{ name: 'id', type: 'uuid' }] } };
+      (window as any).__schemaStampCanvas = () => ({
+        viewport: { x: 0, y: 0, zoom: 1 },
+        _schemaMetrics: null,
+        _config: {},
+        _nodeMap: new Map(),
+        _nodeElements: new Map(),
+        selectedNodes: new Set(),
+        nodes: [node],
+        getNode(id: string) {
+          return this.nodes.find((n: { id: string }) => n.id === id);
+        },
+      });
+      container.setAttribute('x-data', '__schemaStampCanvas()');
+
+      const nodeEl = document.createElement('div');
+      nodeEl.className = 'flow-node';
+      nodeEl.setAttribute('x-flow-node', 'nodes[0]');
+      nodeEl.setAttribute('x-flow-schema', '');
+      nodeEl.setAttribute('x-data', '{ node: nodes[0] }');
+      container.appendChild(nodeEl);
+      document.body.appendChild(container);
+      Alpine.initTree(container);
+
+      // x-flow-node stamps the id; x-flow-schema must run after it and find it.
+      expect(nodeEl.getAttribute('data-flow-node-id')).toBe('n1');
+      expect(nodeEl.hasAttribute('data-flow-schema-node')).toBe(true);
+
+      // And it is removed when the directive tears down.
+      Alpine.destroyTree(container);
+      expect(nodeEl.hasAttribute('data-flow-schema-node')).toBe(false);
+    });
+
+    it('anchors the insets to the .flow-node border box under WireFlow slot markup', async () => {
+      // The insets are documented — and consumed by edge code — as offsets from the
+      // NODE border box, because they get added to `node.position` / `node.dimensions`,
+      // which describe the `.flow-node` element. Measuring them from the `x-flow-schema`
+      // HOST is only equivalent under directive markup, where host === node element.
+      // Under slot markup the host sits one border-width inside the node, so a
+      // host-anchored measurement yields insetLeft/Right/Top = 0 and shifts every
+      // state-derived endpoint by the node's border. Same node, same layout ⇒ the
+      // metrics must be byte-identical to the directive-markup case.
+      stubSchemaLayout(1);
+      const { target, nodeEl, canvas } = mountSlotMarkup({
+        label: 'User',
+        fields: [{ name: 'id', type: 'uuid' }],
+      });
+      // Precondition: the directive really did bind to a CHILD of the node element.
+      expect(target).not.toBe(nodeEl);
+      expect(target.parentElement).toBe(nodeEl);
+
       await nextFlush();
       expect(canvas._schemaMetrics).toEqual(EXPECTED_METRICS);
     });

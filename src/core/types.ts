@@ -1973,6 +1973,14 @@ export interface SchemaMetrics {
   insetRight: number;
   /** Node border-box top → header top (node border-top + padding-top). */
   insetTop: number;
+  /**
+   * Body/last-row bottom → node border-box bottom (node border-bottom +
+   * padding-bottom). Lets a consumer of the metrics reconstruct a schema node's
+   * expected border-box height — `insetTop + headerHeight + rows × rowHeight +
+   * insetBottom` — and so DETECT a node whose rows are not uniform (a wrapped
+   * field name, bespoke markup) rather than assuming uniformity.
+   */
+  insetBottom: number;
   /** Real handle box size — needed so marker endpoint-shortening matches the DOM path. */
   handleWidth: number;
   handleHeight: number;
