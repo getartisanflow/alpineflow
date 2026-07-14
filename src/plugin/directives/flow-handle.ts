@@ -1832,6 +1832,19 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
         return canvasEl ? Alpine.$data(canvasEl) : null;
       };
 
+      /**
+       * The canvas, resolved ONCE at init and shared by every init-time consumer
+       * below (keyboardConnect, and the two `usesLegacyHandlePointerListeners`
+       * checks). `getCanvas()` costs a `closest('[x-data]')` plus an
+       * `Alpine.$data()` — which mints a fresh `mergeProxies` Proxy — and a
+       * Draftsman-scale schema graph mounts ~5,000 handles, so this is paid 5,000×.
+       * All three read config that cannot change between them.
+       *
+       * The pointer GESTURES still resolve the canvas fresh on every press via
+       * `getCanvas()`; only the init-time reads are hoisted.
+       */
+      const initCanvas = getCanvas();
+
       // ── Keyboard drag-to-connect (a11y, opt-in) ───────────────────────
       // When canvas._config.keyboardConnect is true, make this handle focusable
       // and wire Enter/Space/Escape to drive a connection flow equivalent to
@@ -1841,7 +1854,6 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
       // that haven't opted in.
       let keyboardBindingsCleanup: (() => void) | null = null;
       {
-        const initCanvas = getCanvas();
         if (initCanvas?._config?.keyboardConnect) {
           el.setAttribute('tabindex', '0');
           el.setAttribute('role', 'button');
@@ -1995,7 +2007,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
           startSourceHandlePointerInteraction(el, getCanvas(), e);
         };
 
-        if (usesLegacyHandlePointerListeners(getCanvas())) {
+        if (usesLegacyHandlePointerListeners(initCanvas)) {
           el.addEventListener('pointerdown', onPointerDown);
         }
 
@@ -2190,7 +2202,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
           startTargetHandlePointerInteraction(el, getCanvas(), e);
         };
 
-        if (usesLegacyHandlePointerListeners(getCanvas())) {
+        if (usesLegacyHandlePointerListeners(initCanvas)) {
           el.addEventListener('pointerdown', onTargetPointerDown);
         }
 
