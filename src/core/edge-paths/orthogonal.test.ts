@@ -29,6 +29,35 @@ function routeHitsAny(route: RoutePoint[], obstacles: TestRect[]): boolean {
   return false;
 }
 
+/** Count direction changes (bends) along an orthogonal polyline. */
+function countBends(points: RoutePoint[]): number {
+  if (points.length < 3) return 0;
+  let bends = 0;
+  for (let i = 1; i < points.length - 1; i++) {
+    const dir1 = points[i - 1].x === points[i].x ? 'v' : 'h';
+    const dir2 = points[i].x === points[i + 1].x ? 'v' : 'h';
+    if (dir1 !== dir2) bends++;
+  }
+  return bends;
+}
+
+/** Largest distance any waypoint strays outside the endpoints' bounding box. */
+function maxExcursion(
+  points: RoutePoint[],
+  sx: number, sy: number, tx: number, ty: number,
+): number {
+  const bx0 = Math.min(sx, tx), bx1 = Math.max(sx, tx);
+  const by0 = Math.min(sy, ty), by1 = Math.max(sy, ty);
+  let m = 0;
+  for (const p of points) {
+    const d =
+      Math.max(0, bx0 - p.x) + Math.max(0, p.x - bx1) +
+      Math.max(0, by0 - p.y) + Math.max(0, p.y - by1);
+    if (d > m) m = d;
+  }
+  return m;
+}
+
 // ── getOrthogonalPath ────────────────────────────────────────────────────────
 
 describe('getOrthogonalPath', () => {
@@ -277,5 +306,38 @@ describe('findRoute route cache', () => {
     const first = findRoute(0, 30, 'right', 300, 30, 'left', obstacles);
     const second = findRoute(0, 30, 'right', 300, 30, 'left', obstacles);
     expect(second).toBe(first); // same cached reference
+  });
+});
+
+// ── avoidant routing quality — detour/bend cost (WS-1) ───────────────────────
+describe('avoidant routing quality — detour/bend cost (WS-1)', () => {
+  beforeEach(() => routeCacheStatsForTests().clear());
+
+  const dense: TestRect[] = Array.from({ length: 48 }, (_, i) => ({
+    x: (i % 8) * 150, y: Math.floor(i / 8) * 120, width: 100, height: 80,
+  }));
+  const route = () => findRoute(-50, -50, 'right', 1250, 750, 'left', dense)!;
+
+  // Recorded from the pre-WS-1 router (Task 1 characterization run).
+  const BASELINE_BENDS = 2;
+  const BASELINE_EXCURSION = 0;
+
+  it('preserves Manhattan length on the dense field (never trades length)', () => {
+    expect(manhattanLength(route())).toBe(2100);
+  });
+
+  it('is deterministic — identical waypoints across recomputes', () => {
+    const a = JSON.stringify(route());
+    routeCacheStatsForTests().clear();
+    const b = JSON.stringify(route());
+    expect(b).toBe(a);
+  });
+
+  it('does not increase bends versus the pre-WS-1 baseline', () => {
+    expect(countBends(route())).toBeLessThanOrEqual(BASELINE_BENDS);
+  });
+
+  it('does not increase corridor excursion versus the pre-WS-1 baseline', () => {
+    expect(maxExcursion(route(), -50, -50, 1250, 750)).toBeLessThanOrEqual(BASELINE_EXCURSION);
   });
 });
