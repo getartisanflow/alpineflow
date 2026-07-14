@@ -24,6 +24,7 @@ import type {
   PendingReconnection,
   PendingKeyboardConnect,
   PatchableConfig,
+  SchemaMetrics,
 } from '../../core/types';
 import { createPanZoom, type PanZoomInstance } from '../../core/pan-zoom';
 import { screenToFlowPosition, getVisibleBounds, type Bounds } from '../../core/geometry';
@@ -221,6 +222,19 @@ export function registerFlowCanvas(Alpine: Alpine) {
     /** Last backgroundImage string written to the container — lets `_applyBackground`
      * skip the (per-frame identical) gradient write. */
     _lastBgImage: null as string | null,
+
+    /**
+     * Cached header/row/handle geometry for `x-flow-schema` nodes, measured
+     * once by the first schema node's `render()` (see flow-schema.ts). Plain
+     * (non-reactive) field. `Alpine.raw(canvas)` does NOT unwrap Alpine's
+     * merge-scope proxy, so a GET/SET through it still tracks/triggers the
+     * underlying reactive object inside an active effect — this field is
+     * safe only because flow-schema.ts reads and writes it OUTSIDE the
+     * directive's `effect()` (deferred via `Alpine.nextTick`), not because of
+     * `Alpine.raw()` itself. Invalidate (set `null`) on any theme/colorMode
+     * change, same contract as `_bgGapCache` above.
+     */
+    _schemaMetrics: null as SchemaMetrics | null,
 
     _getBackgroundGap(): number {
       if (this._backgroundGap !== null) {
@@ -1174,6 +1188,13 @@ export function registerFlowCanvas(Alpine: Alpine) {
       // future theme/colorMode-change path that re-applies the background must
       // likewise invalidate `_bgGapCache` before calling `_applyBackground()`.
       this._bgGapCache = null;
+      // Same rationale for schema geometry — border/padding can change with
+      // the active theme, so drop any measurement taken before it was
+      // attached and let the first schema node re-measure. Note: this is the
+      // ONLY invalidation site today (same as `_bgGapCache` above); a runtime
+      // colorMode change via `_applyConfigPatch` (canvas-config.ts) does not
+      // currently invalidate either cache — see Task G1 report.
+      this._schemaMetrics = null;
       this._applyBackground();
 
       // Register with global store so other components can access this instance

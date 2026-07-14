@@ -34,6 +34,7 @@ import type {
   ShapeDefinition,
   ToImageOptions,
   StopOptions,
+  SchemaMetrics,
 } from '../../core/types';
 import type { FlowGroup } from '../../animate/flow-group';
 import type { Transaction } from '../../animate/transaction';
@@ -203,6 +204,20 @@ export interface CanvasContext {
 
   /** Map of edge SVG elements (id -> svg) */
   _edgeSvgElements: Map<string, SVGSVGElement>;
+
+  /**
+   * Cached header/row/handle geometry for `x-flow-schema` nodes, measured
+   * once by the first schema node's `render()`. Plain (non-reactive) field.
+   * `Alpine.raw(canvas)` does NOT unwrap Alpine's merge-scope proxy (it
+   * returns the same proxy back — see flow-canvas.ts:515-517) — a property
+   * GET/SET through it still tracks/triggers the underlying reactive object
+   * when called inside an active effect. This field is safe only because
+   * flow-schema.ts reads and writes it OUTSIDE the directive's `effect()`
+   * (deferred via `Alpine.nextTick`), not because of `Alpine.raw()` itself.
+   * Invalidate (set `null`) on any theme/colorMode change, same as
+   * `_bgGapCache`.
+   */
+  _schemaMetrics: SchemaMetrics | null;
 
   // === Subsystems ===
 

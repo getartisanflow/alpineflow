@@ -155,6 +155,29 @@ Reworks viewport culling from an opt-in, per-frame full scan into a grid-backed,
 - `flow-canvas`: `_applyCulling` gated by `viewportCulling ?? 'auto'` + `cullingAutoThreshold ?? 150`; new `_uncullEverything()` restores display on all tracked elements and resets the tracking sets when culling deactivates (threshold drop or config change), tracked via `_cullingWasActive`. New plain `_culledEdgeIds` set (rebuilt each frame, so removed edges can't leak entries).
 - New config fields `viewportCulling?: boolean | 'auto'` and `cullingAutoThreshold?: number` on `FlowCanvasConfig`; `docs/configuration/viewport.md` and `docs/canvas/viewport.md` updated for the new default.
 
+### Workstream G — state-derived schema handle geometry
+
+A schema edge's endpoints are now DERIVED from state rather than MEASURED from the DOM. `x-flow-schema` renders uniform rows, so once the header/row/handle geometry is measured once per canvas (`SchemaMetrics`), every field handle's center is arithmetic on the node's `position` / `dimensions` / `fields` — no `getBoundingClientRect`, no `querySelectorAll`. Endpoints land in exactly the same place: the legacy DOM path stays untouched as both the fallback and the parity oracle, and a jsdom parity suite plus a real-Chromium one assert the two paths render byte-identical `d` attributes. Routing, path selection and appearance are unchanged.
+
+**Added**
+- **`schemaHandleGeometry: 'auto' | 'dom'` — new, defaults to `'auto'`.** `'auto'` derives schema-edge endpoints from state; `'dom'` restores the legacy per-edge handle measurement as an escape hatch (for layouts whose rows aren't uniform or aren't rendered by `x-flow-schema`). Endpoints are identical either way — only how they are computed changes.
+
+**Behavior / Fallback contract**
+- The fast path applies only when **every** condition holds for **both** endpoints: the edge names a `sourceHandle`/`targetHandle` that matches a `data.fields` entry EXACTLY, both nodes are rendered by `x-flow-schema` (stamped `data-flow-schema-node`), both carry finite measured `dimensions` whose height reproduces the uniform-row model, and neither is `hidden`, `collapsed`, `condensed`, `rotation`-transformed, viewport-culled (`display: none`), nor carrying a non-default `nodeOrigin` (per-node **or** canvas config — the node's own value wins, and `getAbsolutePosition` never folds it in for a root node, so its `position` would not be its painted top-left). Anything else silently falls back to DOM measurement per endpoint. Correctness is never traded for the rect saving.
+- A viewport-culled endpoint is DELIBERATELY declined rather than "fixed": the DOM path degrades on a culled node (0×0 handle rect ⇒ node-edge midpoint), and the state path matches that degradation exactly so no edge crossing the culling boundary changes where it lands.
+
+**Changed (alpha-breaking)**
+- **The exported `SchemaMetrics` type gained required fields.** It now carries `insetLeft` / `insetRight` / `insetTop` / `insetBottom`, `rowHeightLast`, `handleOffsetY`, `handleOffsetYLast`, and `handleWidth` / `handleHeight`; `rowHeight` is now a row **STRIDE** (one row's top to the next row's top), not a row height. Anyone constructing a `SchemaMetrics` by hand must update — reading `canvas._schemaMetrics` is unaffected.
+
+**Fixed**
+- **The last schema row was 1px shorter than the others, and nothing modelled it.** `theme-default.css` gives `.flow-schema-row` a `border-bottom` and drops it again on `:last-child`, so inferring row geometry from a single row height overshot every schema node's real border box by that border. Row geometry is now MEASURED (stride + final-row height + handle offsets) instead of inferred. The same measurement corrects a 0.5px handle-center offset on every NON-final row: `.flow-schema-handle` is `top: 50%`, which resolves against the row's PADDING box, so the row's border-bottom pulls the handle center half a border above the row's box center. (Both were invisible to jsdom, which has no cascade to get wrong; the real-browser parity test caught them.)
+
+**Performance**
+- A 100-edge schema measurement pass is **2.3–3.7× faster** (real-Chromium bench, `tests/bench/schema-handle-geometry.bench.ts`: 50 schema nodes × 6 fields, 100 edges, measurement phase only) — 2.32× on a warm layout tree, 3.67× when the whole node layer has moved and the rect reads would force a reflow. The fast path performs **zero** `getBoundingClientRect` calls (asserted in the parity suite), where the DOM path does ~12 rect reads + 4 `querySelectorAll` per edge. Honest framing: this is not the order of magnitude the plan projected — on a warm tree Chromium's rect reads are cheap and the DOM path's cost is dominated by its `querySelectorAll` calls; the ratio widens only when the layout tree is genuinely dirty, which is the case the fast path exists for.
+
+**Infrastructure**
+- `SchemaMetrics` moved to `core/types` (keeping `core` free of plugin imports); new pure `core/schema-geometry.ts` (`schemaFieldIndex`, `computeSchemaHandlePoint`). `x-flow-schema` measures `canvas._schemaMetrics` once per canvas — deferred out of the render effect via `Alpine.nextTick`, from the first schema node rendering **≥2 rows** (a row stride needs two rows), and invalidated on `colorMode` change. Edges consume it and upgrade from the DOM path to the fast path one tick after the first schema render.
+
 ## v0.2.1-alpha — 2026-04-14
 
 > Companion release: [WireFlow v0.2.1-alpha](https://github.com/getartisanflow/wireflow/blob/main/CHANGELOG.md#v021-alpha--2026-04-14) ships the matching server-side surface (`<x-schema-designer>`, `WithSchemaDesigner`, validator rules, `@connect-validate` bridge) plus the post-Phase-5 `<x-flow>` / `<x-schema-designer>` polish that pairs with the fullscreen + row-select + cascade fixes below.

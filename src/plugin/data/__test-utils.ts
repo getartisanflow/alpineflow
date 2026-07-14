@@ -87,6 +87,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _containerStyles: null,
     _nodeElements: new Map<string, HTMLElement>(),
     _edgeSvgElements: new Map<string, SVGSVGElement>(),
+    _schemaMetrics: null,
 
     // === Subsystems ===
     _panZoom: null,
