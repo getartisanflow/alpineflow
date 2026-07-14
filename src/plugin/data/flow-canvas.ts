@@ -337,6 +337,8 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _edgeMap: new Map<string, FlowEdge>(),
     _viewportEl: null as HTMLElement | null,
     _handleDelegationCleanup: null as (() => void) | null,
+    /** Set in destroy(); read by the deferred install so a dead canvas never installs. */
+    _handleDelegationTornDown: false,
 
     // ── Viewport frame coalescing ─────────────────────────────────────────
     /**
@@ -1213,9 +1215,26 @@ export function registerFlowCanvas(Alpine: Alpine) {
       // not run when init() executes — resolve on the same $nextTick the panZoom
       // fallback uses.
       this.$nextTick(() => {
-        const rootEl = (this._viewportEl
-          ?? (this._container?.querySelector('.flow-viewport') as HTMLElement | null)
-          ?? this._container) as HTMLElement | null;
+        // Alpine's tickStack is global and is NOT drained on component teardown, so
+        // this callback still fires for a canvas destroyed in the meantime. Without
+        // this check it would install a capture listener that destroy() has already
+        // finished cleaning up: a leaked listener holding the dead canvas (nodes,
+        // edges, _nodeMap, spatial grid) alive, and — if the viewport survives a
+        // morph and a fresh canvas mounts on it — one handle press driving both.
+        if (this._handleDelegationTornDown) return;
+
+        const viewportEl = (this._viewportEl
+          ?? (this._container?.querySelector('.flow-viewport') as HTMLElement | null)) as HTMLElement | null;
+
+        if (!viewportEl && this._container) {
+          // Non-standard markup: handles do not exist without a viewport. Falling back
+          // to the container costs the whiteboard-tool ordering guarantee (their capture
+          // listener would land on the SAME element as ours, so suppression degrades to
+          // registration order and we would win). Diagnosable rather than silent.
+          debug('init', `flowCanvas "${this._id}" has no .flow-viewport — delegating handle pointerdown on the container instead; an active whiteboard tool may not suppress handle presses`);
+        }
+
+        const rootEl = (viewportEl ?? this._container) as HTMLElement | null;
         if (!rootEl) return;
         this._handleDelegationCleanup = installHandleDelegation(rootEl, this);
       });
@@ -2259,10 +2278,20 @@ export function registerFlowCanvas(Alpine: Alpine) {
     },
 
     destroy() {
+      // Animations / particles / timelines. Lives in the animation mixin; called
+      // from here because a mixin method named `destroy` would shadow THIS one.
+      (this as any)._destroyAnimations?.();
+
       // Wire bridge cleanup
       (this as any)._wireCleanup?.();
       (this as any)._wireCleanup = null;
 
+      // Alpine's nextTick runs off a global tickStack that component teardown does
+      // NOT cancel. If we were destroyed in the same task init() queued the install
+      // in (x-if flipping false, a Livewire morph, Alpine.destroyTree), the callback
+      // still fires — this flag is what stops it installing a capture listener on
+      // the viewport of a corpse.
+      this._handleDelegationTornDown = true;
       this._handleDelegationCleanup?.();
       this._handleDelegationCleanup = null;
       this._longPressCleanup?.();

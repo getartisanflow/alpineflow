@@ -973,10 +973,15 @@ export function createAnimationMixin(ctx: CanvasContext) {
 
     /**
      * Stop all in-flight animations, particles, and timelines.
-     * Called by the canvas destroy() lifecycle hook when the element is
-     * removed from the DOM.
+     *
+     * Called BY the canvas `destroy()` lifecycle hook when the element is removed
+     * from the DOM — it must not be named `destroy()`. Mixins are applied onto the
+     * canvas with `Object.defineProperties`, so a `destroy` here would OVERWRITE
+     * `flowCanvas`'s own `destroy()` and silently take the entire canvas teardown
+     * (listener removal, panZoom/minimap disposal, store unregistration) out of the
+     * lifecycle. It did exactly that until this rename.
      */
-    destroy(): void {
+    _destroyAnimations(): void {
       if (ctx._animator) {
         ctx._animator.stopAll();
       }
