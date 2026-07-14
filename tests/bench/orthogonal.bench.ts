@@ -13,7 +13,7 @@
  * Pure computation — no DOM/Alpine mount, so no teardown noise.
  */
 import { bench, describe } from 'vitest';
-import { findRoute } from '../../src/core/edge-paths/orthogonal';
+import { findRoute, routeCacheStatsForTests } from '../../src/core/edge-paths/orthogonal';
 
 interface Rect { x: number; y: number; width: number; height: number }
 
@@ -41,6 +41,21 @@ describe('orthogonal findRoute — schema-scale routing', () => {
   bench(
     'full-graph pass: 60 edges across a 100-obstacle field',
     () => {
+      for (let i = 0; i < 60; i++) {
+        findRoute(-50, -60 + i * 4, 'right', 1550, 1200 - i * 3, 'left', field100);
+      }
+    },
+    { iterations: 10 },
+  );
+
+  // WS-1 min-bend router: same full-graph workload but with the memo cache
+  // cleared each iteration, so this measures the RAW (vertex,axis) Dijkstra cost
+  // — the doubled state set — rather than cache hits. Confirms the 2× expansion
+  // stays within the wave-2 perf envelope.
+  bench(
+    'quality router — full-graph pass over 60 edges (WS-1 min-bend)',
+    () => {
+      routeCacheStatsForTests().clear();
       for (let i = 0; i < 60; i++) {
         findRoute(-50, -60 + i * 4, 'right', 1550, 1200 - i * 3, 'left', field100);
       }
