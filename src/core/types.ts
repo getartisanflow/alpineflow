@@ -944,6 +944,18 @@ export interface FlowCanvasConfig {
    *  drags. Default: true. */
   avoidantSimplifyOnDrag?: boolean;
 
+  /** How schema-node edge endpoints are located.
+   *  - `'auto'` (default): derive them from state — the cached `SchemaMetrics`
+   *    plus the node's position/dimensions/fields — so an edge touching two
+   *    schema nodes performs zero `getBoundingClientRect` calls. Any endpoint
+   *    that isn't a plain, unrotated, visible schema node with a matching field
+   *    falls back to DOM measurement automatically.
+   *  - `'dom'`: always measure handle elements. Escape hatch for layouts whose
+   *    rows aren't uniform or aren't rendered by `x-flow-schema`.
+   *  Endpoints are identical either way; only how they're computed changes.
+   *  Default: 'auto'. */
+  schemaHandleGeometry?: 'auto' | 'dom';
+
   /** Opt-in level-of-detail for edges. When set, edges whose configured type is
    *  avoidant/orthogonal/bezier/etc. render as a plain straight line once the
    *  viewport zoom bucket is at or below `simplifyAt` — skipping pathfinding and
@@ -1954,4 +1966,77 @@ export interface SchemaNodeData {
   _hiddenFields?: string[];
   _collapsed?: boolean;
   [key: string]: unknown;
+}
+
+/**
+ * Measured header/row geometry for `x-flow-schema` nodes, captured once from
+ * the first schema node that renders ≥2 rows — schema rows are uniform (bar the
+ * final one; see `rowHeightLast`), so a single measurement covers every schema
+ * node on the canvas. Consumed by edge code to derive handle endpoints from
+ * state instead of measuring handle DOM.
+ */
+export interface SchemaMetrics {
+  /** Header height in flow units (includes its border-bottom). */
+  headerHeight: number;
+  /**
+   * Row STRIDE in flow units — the distance from one row's top to the next row's
+   * top (`row[1].top − row[0].top`), NOT necessarily any row's own height.
+   *
+   * Measured as a stride rather than a height on purpose: it is the only quantity
+   * the row-`i` offset actually needs, and it stays correct however the theme
+   * distributes borders and margins within a row.
+   */
+  rowHeight: number;
+  /**
+   * Border-box height of the FINAL field row in flow units — which is NOT `rowHeight`.
+   *
+   * `css/theme-default.css` gives `.flow-schema-row` a `border-bottom` and then removes
+   * it again on `:last-child`, so the last row of every schema node is exactly one border
+   * shorter than the stride above it. Modelling all N rows as `rowHeight` overshoots the
+   * node's real border box by that border — enough to trip the uniform-row cross-check in
+   * `flow-edge.ts` and disqualify EVERY schema node from the state-derived fast path. Only
+   * used to reconstruct the node's expected height; a theme with no row border simply
+   * reports the same value as `rowHeight`.
+   */
+  rowHeightLast: number;
+  /**
+   * Handle CENTER y, measured from its row's top, in flow units.
+   *
+   * Measured, never derived from `rowHeight`, because a row's handle is NOT centered on
+   * its border box. `.flow-schema-handle` is `top: 50%; translateY(-50%)`, and a
+   * percentage `top` on an absolutely-positioned child resolves against its containing
+   * block's PADDING box — so the theme's `border-bottom` on `.flow-schema-row` pulls every
+   * handle center half a border ABOVE the row's box center. Deriving this as
+   * `rowHeight / 2` puts every endpoint on a non-final row 0.5px off what the browser
+   * paints (found by the real-browser parity test; jsdom has no cascade to get this wrong).
+   */
+  handleOffsetY: number;
+  /**
+   * Handle center y within the FINAL row, measured from that row's top, in flow units.
+   *
+   * Separate from `handleOffsetY` because the last row's padding box is not the same shape
+   * as the others' (it lost its border-bottom). Under the shipped theme the two happen to
+   * come out equal — the border that shrinks the padding box is the same border that makes
+   * the row taller — but that is a coincidence of this stylesheet, not an invariant, so it
+   * is measured rather than assumed.
+   */
+  handleOffsetYLast: number;
+  /** Node border-box left → row left (node border-left + padding-left). */
+  insetLeft: number;
+  /** Row right → node border-box right (node border-right + padding-right). */
+  insetRight: number;
+  /** Node border-box top → header top (node border-top + padding-top). */
+  insetTop: number;
+  /**
+   * Body/last-row bottom → node border-box bottom (node border-bottom +
+   * padding-bottom). Lets a consumer of the metrics reconstruct a schema node's
+   * expected border-box height — `insetTop + headerHeight + (rows − 1) × rowHeight
+   * + rowHeightLast + insetBottom` — and so DETECT a node whose rows are not
+   * uniform (a wrapped field name, bespoke markup) rather than assuming
+   * uniformity.
+   */
+  insetBottom: number;
+  /** Real handle box size — needed so marker endpoint-shortening matches the DOM path. */
+  handleWidth: number;
+  handleHeight: number;
 }
