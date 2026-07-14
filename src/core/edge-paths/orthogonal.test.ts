@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { getOrthogonalPath, OBSTACLE_PADDING, findRoute, __routeDebugForTests, routeCacheStatsForTests, type RoutePoint } from './orthogonal';
+import { getOrthogonalPath, OBSTACLE_PADDING, findRoute, __routeDebugForTests, routeCacheStatsForTests, ROUTE_COST_VERSION, type RoutePoint } from './orthogonal';
 
 interface TestRect { x: number; y: number; width: number; height: number }
 
@@ -306,6 +306,11 @@ describe('findRoute route cache', () => {
     const first = findRoute(0, 30, 'right', 300, 30, 'left', obstacles);
     const second = findRoute(0, 30, 'right', 300, 30, 'left', obstacles);
     expect(second).toBe(first); // same cached reference
+  });
+
+  it('exposes a non-empty cost version for cache keying', () => {
+    expect(typeof ROUTE_COST_VERSION).toBe('string');
+    expect(ROUTE_COST_VERSION.length).toBeGreaterThan(0);
   });
 });
 

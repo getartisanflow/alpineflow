@@ -622,7 +622,7 @@ function routeKey(
   tp: HandlePosition,
   obstacles: Rect[],
 ): string {
-  let key = `${Math.round(sx)},${Math.round(sy)},${sp}|${Math.round(tx)},${Math.round(ty)},${tp}`;
+  let key = `${ROUTE_COST_VERSION}|${Math.round(sx)},${Math.round(sy)},${sp}|${Math.round(tx)},${Math.round(ty)},${tp}`;
   for (const r of obstacles) {
     key += `|${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)},${Math.round(r.height)}`;
   }
