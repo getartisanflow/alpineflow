@@ -7,8 +7,7 @@
 // arithmetic. Consumed by edge code in place of getBoundingClientRect calls.
 // ============================================================================
 
-import type { XYPosition } from './types';
-import type { SchemaMetrics } from '../plugin/data/canvas-context';
+import type { XYPosition, SchemaMetrics } from './types';
 
 /** Resolved center of a schema field row's handle, in flow space. */
 export interface SchemaHandlePoint {

@@ -24,6 +24,7 @@ import type {
   PendingReconnection,
   PendingKeyboardConnect,
   PatchableConfig,
+  SchemaMetrics,
 } from '../../core/types';
 import { createPanZoom, type PanZoomInstance } from '../../core/pan-zoom';
 import { screenToFlowPosition, getVisibleBounds, type Bounds } from '../../core/geometry';
@@ -82,7 +83,7 @@ import { createValidationMixin } from './canvas-validation';
 import { createComputeMixin } from './canvas-compute';
 import { createDomMixin } from './canvas-dom';
 import { createConfigMixin } from './canvas-config';
-import type { CanvasContext, ActiveParticle, SchemaMetrics } from './canvas-context';
+import type { CanvasContext, ActiveParticle } from './canvas-context';
 
 let instanceCounter = 0;
 

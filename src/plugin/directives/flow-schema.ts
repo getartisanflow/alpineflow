@@ -12,8 +12,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
-import type { FlowSchemaField } from '../../core/types';
-import type { SchemaMetrics } from '../data/canvas-context';
+import type { FlowSchemaField, SchemaMetrics } from '../../core/types';
 
 type SchemaData = { label?: string; fields?: FlowSchemaField[]; [k: string]: unknown };
 type NodeRef = { data?: SchemaData } | undefined | null;

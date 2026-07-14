@@ -34,6 +34,7 @@ import type {
   ShapeDefinition,
   ToImageOptions,
   StopOptions,
+  SchemaMetrics,
 } from '../../core/types';
 import type { FlowGroup } from '../../animate/flow-group';
 import type { Transaction } from '../../animate/transaction';
@@ -77,30 +78,6 @@ export interface ContextMenuState {
   edge: FlowEdge | null;
   position: XYPosition | null;
   nodes: FlowNode[] | null;
-}
-
-// ── Schema metrics (state-derived schema handle geometry) ───────────────────
-
-/**
- * Measured header/row geometry for `x-flow-schema` nodes, captured once from
- * the first schema node that renders — schema rows are uniform, so a single
- * measurement covers every schema node on the canvas. Consumed by edge code
- * to derive handle endpoints from state instead of measuring handle DOM.
- */
-export interface SchemaMetrics {
-  /** Header height in flow units (includes its border-bottom). */
-  headerHeight: number;
-  /** One field row's height in flow units. Rows are uniform. */
-  rowHeight: number;
-  /** Node border-box left → row left (node border-left + padding-left). */
-  insetLeft: number;
-  /** Row right → node border-box right (node border-right + padding-right). */
-  insetRight: number;
-  /** Node border-box top → header top (node border-top + padding-top). */
-  insetTop: number;
-  /** Real handle box size — needed so marker endpoint-shortening matches the DOM path. */
-  handleWidth: number;
-  handleHeight: number;
 }
 
 // ── CanvasContext ────────────────────────────────────────────────────────────

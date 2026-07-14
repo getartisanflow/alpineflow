@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeSchemaHandlePoint } from './schema-geometry';
-import type { SchemaMetrics } from '../plugin/data/canvas-context';
+import type { SchemaMetrics } from './types';
 
 // Realistic metrics fixture, hand-computed against in each test.
 const metrics: SchemaMetrics = {
