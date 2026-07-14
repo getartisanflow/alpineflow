@@ -390,11 +390,34 @@ describe('x-flow-schema directive', () => {
     const BORDER = 1;
     const HEADER_HEIGHT = 30;
     const ROW_HEIGHT = 24;
+    /**
+     * `css/theme-default.css` puts a `border-bottom` on `.flow-schema-row` and takes
+     * it off again on `:last-child`, so the final row of every schema node is one
+     * border SHORTER than the rows above it. The stub models that, because the browser
+     * does — and because an earlier uniform-row stub hid a 1px-per-node error in the
+     * row model that disabled the state-derived fast path outright in real Chromium.
+     */
+    const ROW_BORDER = 1;
+    const LAST_ROW_HEIGHT = ROW_HEIGHT - ROW_BORDER;
     const HANDLE_SIZE = 10;
+
+    /** Border-box height of a schema node with `rows` rows under the emulated model. */
+    const nodeHeightFor = (rows: number): number =>
+      BORDER * 2 + HEADER_HEIGHT + (rows - 1) * ROW_HEIGHT + LAST_ROW_HEIGHT;
+    /** Body height — the rows, last one short. */
+    const bodyHeightFor = (rows: number): number =>
+      rows === 0 ? 0 : (rows - 1) * ROW_HEIGHT + LAST_ROW_HEIGHT;
+
+    /** Handle center within a row, measured from the row top — see SchemaMetrics.handleOffsetY. */
+    const HANDLE_OFFSET_Y = (ROW_HEIGHT - ROW_BORDER) / 2;
+    const HANDLE_OFFSET_Y_LAST = LAST_ROW_HEIGHT / 2;
 
     const EXPECTED_METRICS = {
       headerHeight: HEADER_HEIGHT,
       rowHeight: ROW_HEIGHT,
+      rowHeightLast: LAST_ROW_HEIGHT,
+      handleOffsetY: HANDLE_OFFSET_Y,
+      handleOffsetYLast: HANDLE_OFFSET_Y_LAST,
       insetLeft: BORDER,
       insetRight: BORDER,
       insetTop: BORDER,
@@ -442,29 +465,40 @@ describe('x-flow-schema directive', () => {
       };
       HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement): DOMRect {
         if (this.hasAttribute('data-flow-node-id')) {
-          const height = BORDER * 2 + HEADER_HEIGHT + ROW_HEIGHT * rowCount;
-          return fakeRect(0, 0, NODE_WIDTH, height);
+          return fakeRect(0, 0, NODE_WIDTH, nodeHeightFor(rowCount));
         }
         // Only reached in slot markup: the schema host is a block child filling
         // the node's content box (inside the border).
         if (this.classList.contains('flow-schema-node')) {
-          return fakeRect(BORDER, BORDER, NODE_WIDTH - BORDER * 2, HEADER_HEIGHT + ROW_HEIGHT * rowCount);
+          return fakeRect(BORDER, BORDER, NODE_WIDTH - BORDER * 2, HEADER_HEIGHT + bodyHeightFor(rowCount));
         }
         if (this.classList.contains('flow-schema-header')) {
           return fakeRect(BORDER, BORDER, NODE_WIDTH - BORDER * 2, HEADER_HEIGHT);
         }
         if (this.classList.contains('flow-schema-body')) {
-          const rows = this.children.length;
-          return fakeRect(BORDER, BORDER + HEADER_HEIGHT, NODE_WIDTH - BORDER * 2, ROW_HEIGHT * rows);
+          return fakeRect(BORDER, BORDER + HEADER_HEIGHT, NODE_WIDTH - BORDER * 2, bodyHeightFor(this.children.length));
         }
         if (this.classList.contains('flow-schema-row')) {
           const siblings = Array.from(this.parentElement?.children ?? []);
           const index = siblings.indexOf(this);
+          const isLast = index === siblings.length - 1;
           const top = BORDER + HEADER_HEIGHT + index * ROW_HEIGHT;
-          return fakeRect(BORDER, top, NODE_WIDTH - BORDER * 2, ROW_HEIGHT);
+          return fakeRect(BORDER, top, NODE_WIDTH - BORDER * 2, isLast ? LAST_ROW_HEIGHT : ROW_HEIGHT);
         }
         if (this.classList.contains('flow-schema-handle')) {
-          return fakeRect(0, 0, HANDLE_SIZE, HANDLE_SIZE);
+          // The handle is centered on its row's PADDING box (`top: 50%` resolves against
+          // the containing block's padding box), which the row's border-bottom shrinks —
+          // so its center sits half a border ABOVE the row's box center on every row that
+          // still has that border. Positioned properly here because `handleOffsetY` is now
+          // MEASURED off this rect; a (0,0) stub would silently zero it.
+          const row = this.closest('.flow-schema-row');
+          const siblings = Array.from(row?.parentElement?.children ?? []);
+          const index = siblings.indexOf(row as Element);
+          const isLast = index === siblings.length - 1;
+          const rowTop = BORDER + HEADER_HEIGHT + index * ROW_HEIGHT;
+          const paddingBoxHeight = isLast ? LAST_ROW_HEIGHT : ROW_HEIGHT - ROW_BORDER;
+          const cy = rowTop + paddingBoxHeight / 2;
+          return fakeRect(0, cy - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
         }
         return fakeRect(0, 0, 0, 0);
       } as unknown as typeof HTMLElement.prototype.getBoundingClientRect;
@@ -529,10 +563,10 @@ describe('x-flow-schema directive', () => {
     }
 
     it('measures header/row/handle metrics once, from the first schema node render', async () => {
-      stubSchemaLayout(1);
+      stubSchemaLayout(2);
       const { canvas } = mountWithCanvas({
         label: 'User',
-        fields: [{ name: 'id', type: 'uuid' }],
+        fields: [{ name: 'id', type: 'uuid' }, { name: 'email', type: 'text' }],
       });
       // Measurement is deferred one tick past the render that triggers it
       // (see the reactivity-safety test below for why): the guard read, the
@@ -551,13 +585,13 @@ describe('x-flow-schema directive', () => {
       // becomes a no-op if `x-flow-schema` were ever to initialize FIRST. Nothing else
       // in the suite mounts the two directives together, so pin the ordering here.
       registerFlowNodeDirective(Alpine);
-      stubSchemaLayout(1);
+      stubSchemaLayout(2);
 
       clearChildren(document.body);
       const container = document.createElement('div');
       container.className = 'flow-container';
       container.setAttribute('data-flow-canvas', '');
-      const node = { id: 'n1', position: { x: 0, y: 0 }, data: { label: 'User', fields: [{ name: 'id', type: 'uuid' }] } };
+      const node = { id: 'n1', position: { x: 0, y: 0 }, data: { label: 'User', fields: [{ name: 'id', type: 'uuid' }, { name: 'email', type: 'text' }] } };
       (window as any).__schemaStampCanvas = () => ({
         viewport: { x: 0, y: 0, zoom: 1 },
         _schemaMetrics: null,
@@ -602,13 +636,13 @@ describe('x-flow-schema directive', () => {
       // find nothing — the fast path silently degrades forever, with zero
       // signal. This must still stamp, one tick later.
       registerFlowNodeDirective(Alpine);
-      stubSchemaLayout(1);
+      stubSchemaLayout(2);
 
       clearChildren(document.body);
       const container = document.createElement('div');
       container.className = 'flow-container';
       container.setAttribute('data-flow-canvas', '');
-      const node = { id: 'n1', position: { x: 0, y: 0 }, data: { label: 'User', fields: [{ name: 'id', type: 'uuid' }] } };
+      const node = { id: 'n1', position: { x: 0, y: 0 }, data: { label: 'User', fields: [{ name: 'id', type: 'uuid' }, { name: 'email', type: 'text' }] } };
       (window as any).__schemaStampCanvasReversed = () => ({
         viewport: { x: 0, y: 0, zoom: 1 },
         _schemaMetrics: null,
@@ -654,10 +688,10 @@ describe('x-flow-schema directive', () => {
       // host-anchored measurement yields insetLeft/Right/Top = 0 and shifts every
       // state-derived endpoint by the node's border. Same node, same layout ⇒ the
       // metrics must be byte-identical to the directive-markup case.
-      stubSchemaLayout(1);
+      stubSchemaLayout(2);
       const { target, nodeEl, canvas } = mountSlotMarkup({
         label: 'User',
-        fields: [{ name: 'id', type: 'uuid' }],
+        fields: [{ name: 'id', type: 'uuid' }, { name: 'email', type: 'text' }],
       });
       // Precondition: the directive really did bind to a CHILD of the node element.
       expect(target).not.toBe(nodeEl);
@@ -667,10 +701,43 @@ describe('x-flow-schema directive', () => {
       expect(canvas._schemaMetrics).toEqual(EXPECTED_METRICS);
     });
 
-    it('leaves _schemaMetrics null when the row has zero height (no layout / jsdom default)', async () => {
-      // No stubSchemaLayout() call — jsdom's default getBoundingClientRect
-      // returns an all-zero rect, so rowHeight is 0 and caching must bail
-      // rather than poison every later edge with zeros.
+    it('measures rowHeightLast separately — the last row is a border shorter than the rest', async () => {
+      // The theme drops `.flow-schema-row:last-child`'s border-bottom. If both heights
+      // were taken from the same row, the row model would mis-state every schema node's
+      // height by one border — which is exactly what disqualified every node from the
+      // state-derived fast path in a real browser (the model is cross-checked against
+      // `node.dimensions.height` in flow-edge.ts, tolerance 0.5px).
+      stubSchemaLayout(3);
+      const { canvas } = mountWithCanvas({
+        label: 'User',
+        fields: [
+          { name: 'id', type: 'uuid' },
+          { name: 'email', type: 'text' },
+          { name: 'created_at', type: 'ts' },
+        ],
+      });
+      await nextFlush();
+
+      const metrics = canvas._schemaMetrics;
+      expect(metrics.rowHeight).toBe(ROW_HEIGHT);
+      expect(metrics.rowHeightLast).toBe(LAST_ROW_HEIGHT);
+      expect(metrics.rowHeightLast).not.toBe(metrics.rowHeight);
+
+      // The point of the metric: the model must reproduce the node's real border box.
+      const modelled =
+        metrics.insetTop + metrics.headerHeight
+        + 2 * metrics.rowHeight + metrics.rowHeightLast
+        + metrics.insetBottom;
+      expect(modelled).toBe(nodeHeightFor(3));
+    });
+
+    it('does not measure from a single-row node — rowHeight and rowHeightLast would be indistinguishable', async () => {
+      // With one row, that row IS `:last-child`, so it carries the SHORT height and
+      // there is nothing to compare it against. Caching it as `rowHeight` would model
+      // every multi-row node on the canvas one border too short PER ROW. Skip instead;
+      // the next schema node with ≥2 rows lands the cache, and until then edges use the
+      // DOM path (correct, and there was nothing to save at one row a node anyway).
+      stubSchemaLayout(1);
       const { canvas } = mountWithCanvas({
         label: 'User',
         fields: [{ name: 'id', type: 'uuid' }],
@@ -679,11 +746,23 @@ describe('x-flow-schema directive', () => {
       expect(canvas._schemaMetrics).toBeNull();
     });
 
-    it('re-measures on the next render after the cache is nulled (colorMode-change invalidation)', async () => {
-      stubSchemaLayout(1);
+    it('leaves _schemaMetrics null when the row has zero height (no layout / jsdom default)', async () => {
+      // No stubSchemaLayout() call — jsdom's default getBoundingClientRect
+      // returns an all-zero rect, so rowHeight is 0 and caching must bail
+      // rather than poison every later edge with zeros.
       const { canvas } = mountWithCanvas({
         label: 'User',
-        fields: [{ name: 'id', type: 'uuid' }],
+        fields: [{ name: 'id', type: 'uuid' }, { name: 'email', type: 'text' }],
+      });
+      await nextFlush();
+      expect(canvas._schemaMetrics).toBeNull();
+    });
+
+    it('re-measures on the next render after the cache is nulled (colorMode-change invalidation)', async () => {
+      stubSchemaLayout(2);
+      const { canvas } = mountWithCanvas({
+        label: 'User',
+        fields: [{ name: 'id', type: 'uuid' }, { name: 'email', type: 'text' }],
       });
       await nextFlush();
       expect(canvas._schemaMetrics).toEqual(EXPECTED_METRICS);
@@ -796,14 +875,14 @@ describe('x-flow-schema directive', () => {
       // synchronously inside each node's render effect, subscribing BOTH
       // nodes to `_schemaMetrics` even though neither measurement succeeds.
       const { canvas, targetA, targetB, scopeA } = mountTwoSchemaNodes(
-        [{ name: 'id', type: 'uuid' }],
-        [{ name: 'id', type: 'uuid' }],
+        [{ name: 'id', type: 'uuid' }, { name: 'email', type: 'text' }],
+        [{ name: 'id', type: 'uuid' }, { name: 'email', type: 'text' }],
       );
       await nextFlush();
       expect(canvas._schemaMetrics).toBeNull();
 
       // A real layout becomes available.
-      stubSchemaLayout(1);
+      stubSchemaLayout(2);
 
       const countsA = observeAttr(targetA, 'data-flow-schema-kind');
       const countsB = observeAttr(targetB, 'data-flow-schema-kind');
@@ -822,10 +901,10 @@ describe('x-flow-schema directive', () => {
 
     it('invalidating _schemaMetrics does not re-run unrelated schema nodes\' render effects', async () => {
       const { canvas, targetA, targetB, scopeA } = mountTwoSchemaNodes(
-        [{ name: 'id', type: 'uuid' }],
-        [{ name: 'id', type: 'uuid' }],
+        [{ name: 'id', type: 'uuid' }, { name: 'email', type: 'text' }],
+        [{ name: 'id', type: 'uuid' }, { name: 'email', type: 'text' }],
       );
-      stubSchemaLayout(1);
+      stubSchemaLayout(2);
       // Let node A actually measure first, so `_schemaMetrics` is non-null
       // and both nodes have rendered at least once against a real layout.
       scopeA.node.data.label = 'A renamed';

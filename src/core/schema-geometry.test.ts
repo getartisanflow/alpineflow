@@ -2,10 +2,20 @@ import { describe, it, expect } from 'vitest';
 import { computeSchemaHandlePoint, schemaFieldIndex } from './schema-geometry';
 import type { SchemaMetrics } from './types';
 
-// Realistic metrics fixture, hand-computed against in each test.
+// Realistic metrics fixture, hand-computed against in each test. Modelled on the SHIPPED
+// stylesheet, whose row rules are the reason these numbers aren't all round:
+//   - rows carry a 1px border-bottom, dropped on `:last-child` ⇒ the last row's border box
+//     is one border shorter than the stride (rowHeight 24, rowHeightLast 23)
+//   - a handle is `top: 50%` of its row's PADDING box, which that border shrinks ⇒ the
+//     handle center is 11.5 into the row, NOT rowHeight/2 = 12
+// Keeping these distinct is what stops a regression from re-introducing a uniform-row
+// model — which is what disabled the fast path outright in a real browser.
 const metrics: SchemaMetrics = {
   headerHeight: 30,
   rowHeight: 24,
+  rowHeightLast: 23,
+  handleOffsetY: 11.5,
+  handleOffsetYLast: 11.5,
   insetLeft: 1,
   insetRight: 1,
   insetTop: 1,
@@ -21,9 +31,10 @@ const node = {
 
 const absolutePosition = { x: 100, y: 50 };
 
-// y = absolutePosition.y + insetTop + headerHeight + idx * rowHeight + rowHeight / 2
-// idx 0 → 50 + 1 + 30 + 0 + 12 = 93
-// idx 3 → 50 + 1 + 30 + 72 + 12 = 165
+// y = absolutePosition.y + insetTop + headerHeight + idx * rowHeight + offsetY,
+// where offsetY is `handleOffsetYLast` on the FINAL row and `handleOffsetY` on every other.
+// idx 0 → 50 + 1 + 30 +  0 + 11.5 = 92.5
+// idx 3 → 50 + 1 + 30 + 72 + 11.5 = 164.5
 
 describe('schemaFieldIndex', () => {
   it('resolves the row index of the field a handle id names', () => {
@@ -54,22 +65,22 @@ describe('schemaFieldIndex', () => {
 describe('computeSchemaHandlePoint', () => {
   it('computes the left handle point for field index 0', () => {
     const point = computeSchemaHandlePoint(node, absolutePosition, 0, 'left', metrics);
-    expect(point).toEqual({ x: 101, y: 93, position: 'left' });
+    expect(point).toEqual({ x: 101, y: 92.5, position: 'left' });
   });
 
   it('computes the right handle point for field index 0', () => {
     const point = computeSchemaHandlePoint(node, absolutePosition, 0, 'right', metrics);
-    expect(point).toEqual({ x: 299, y: 93, position: 'right' });
+    expect(point).toEqual({ x: 299, y: 92.5, position: 'right' });
   });
 
-  it('computes the left handle point for field index 3', () => {
+  it('computes the left handle point for field index 3 (the LAST row — shorter)', () => {
     const point = computeSchemaHandlePoint(node, absolutePosition, 3, 'left', metrics);
-    expect(point).toEqual({ x: 101, y: 165, position: 'left' });
+    expect(point).toEqual({ x: 101, y: 164.5, position: 'left' });
   });
 
   it('computes the right handle point for field index 3', () => {
     const point = computeSchemaHandlePoint(node, absolutePosition, 3, 'right', metrics);
-    expect(point).toEqual({ x: 299, y: 165, position: 'right' });
+    expect(point).toEqual({ x: 299, y: 164.5, position: 'right' });
   });
 
   it('sets position to the requested side', () => {
@@ -90,7 +101,8 @@ describe('computeSchemaHandlePoint', () => {
       // No `position` field at all — proves the function can't be reading one.
     };
     const point = computeSchemaHandlePoint(groupChildNode, absolutePosition, 0, 'left', metrics);
-    expect(point).toEqual({ x: 101, y: 93, position: 'left' });
+    // y = 50 + 1 + 30 + 0 + handleOffsetYLast(11.5) = 92.5 — one field, so row 0 is last.
+    expect(point).toEqual({ x: 101, y: 92.5, position: 'left' });
   });
 
   it('returns null when node.data.fields is missing', () => {
@@ -135,5 +147,30 @@ describe('computeSchemaHandlePoint', () => {
   it('returns null when a required metric is not finite', () => {
     const badMetrics: SchemaMetrics = { ...metrics, rowHeight: NaN };
     expect(computeSchemaHandlePoint(node, absolutePosition, 0, 'left', badMetrics)).toBeNull();
+  });
+
+  it('returns null when handleOffsetY is not finite', () => {
+    const badMetrics: SchemaMetrics = { ...metrics, handleOffsetY: NaN };
+    expect(computeSchemaHandlePoint(node, absolutePosition, 0, 'left', badMetrics)).toBeNull();
+  });
+
+  it('returns null when handleOffsetYLast is not finite', () => {
+    const badMetrics: SchemaMetrics = { ...metrics, handleOffsetYLast: NaN };
+    expect(computeSchemaHandlePoint(node, absolutePosition, 0, 'left', badMetrics)).toBeNull();
+  });
+
+  it('applies handleOffsetYLast ONLY to the final row, and never to the stride', () => {
+    // The stride between rows is always `rowHeight` — the last row being shorter moves its
+    // own handle, not the rows above it. A model that folded the last row's height into the
+    // stride would drift EVERY row; one that ignored the distinction would put the final
+    // handle half a border low. Drive the two offsets far apart so either mistake shows.
+    const skewed: SchemaMetrics = { ...metrics, handleOffsetY: 11.5, handleOffsetYLast: 4 };
+    // rows 0–2: top = 81 + idx*24, handle 11.5 in
+    expect(computeSchemaHandlePoint(node, absolutePosition, 0, 'left', skewed)!.y).toBe(92.5);
+    expect(computeSchemaHandlePoint(node, absolutePosition, 1, 'left', skewed)!.y).toBe(116.5);
+    expect(computeSchemaHandlePoint(node, absolutePosition, 2, 'left', skewed)!.y).toBe(140.5);
+    // row 3 (last): top is still 81 + 72 = 153 — the stride did NOT change — but the handle
+    // sits only 4 into it.
+    expect(computeSchemaHandlePoint(node, absolutePosition, 3, 'left', skewed)!.y).toBe(157);
   });
 });

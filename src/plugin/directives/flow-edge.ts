@@ -324,7 +324,7 @@ function schemaFieldIndexForEndpoint(
   if (typeof height !== 'number' || !Number.isFinite(height)) return -1;
 
   const fields = (node.data as { fields?: Array<{ name: string }> } | undefined)?.fields;
-  if (!Array.isArray(fields)) return -1;
+  if (!Array.isArray(fields) || fields.length === 0) return -1;
 
   // Are the rows actually uniform? The metrics are measured ONCE, from the first
   // schema node to render, and everything downstream assumes every schema node's
@@ -336,8 +336,18 @@ function schemaFieldIndexForEndpoint(
   // the node's height exactly. Two adds; catches wrapped rows, non-uniform rows and
   // bespoke markup, all of which fall back to the DOM path — which measures each
   // handle individually and is immune.
+  //
+  // The last row is `rowHeightLast`, not `rowHeight` — the theme removes its
+  // border-bottom. Modelling it as `rowHeight` overshoots EVERY schema node's real
+  // border box by that border, which used to fail this very check and disqualify the
+  // whole canvas from the fast path (caught by the real-browser parity test; jsdom has
+  // no stylesheet to be wrong about).
   const expectedHeight =
-    metrics.insetTop + metrics.headerHeight + fields.length * metrics.rowHeight + metrics.insetBottom;
+    metrics.insetTop
+    + metrics.headerHeight
+    + (fields.length - 1) * metrics.rowHeight
+    + metrics.rowHeightLast
+    + metrics.insetBottom;
   if (Math.abs(expectedHeight - height) > 0.5) return -1;
 
   return schemaFieldIndex(fields, handleId);

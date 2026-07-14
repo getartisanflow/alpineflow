@@ -25,8 +25,19 @@ import { registerFlowSchemaDirective } from './flow-schema';
 //   .flow-node       box-sizing: border-box; border: <BORDER>px  (node.dimensions
 //                    is the BORDER-BOX size; node.position is its top-left)
 //   .flow-schema-*   header + body stack vertically inside the node's content
-//                    box, no gaps; rows are uniform ROW_H tall
-//   .flow-schema-handle           top: 50%; translateY(-50%)   → centered on the row's mid-height
+//                    box, no gaps
+//   .flow-schema-row              border-bottom: 1px           (theme-default.css)
+//   .flow-schema-row:last-child   border-bottom: none          → the LAST row is one
+//                    border SHORTER than the rows above it. Modelled here because the
+//                    real browser does it, and an earlier version of this stub — which
+//                    transcribed structural.css only and so made every row uniform —
+//                    was blind to it. That blindness let a 1px-per-node model error
+//                    through this suite; the real-browser parity test
+//                    (tests/integration/schema-handle-geometry-parity.test.ts) caught it.
+//   .flow-schema-handle           top: 50%; translateY(-50%)   → centered on the row's
+//                    PADDING box, which the border-bottom above shrinks. So the handle
+//                    center is NOT the row's box center — it sits half a border higher.
+//                    Same story: invisible to a structural.css-only transcription.
 //   .flow-schema-handle--target   left: 0;  translateX(-50%)   → centered ON the row's left edge
 //   .flow-schema-handle--source   right: 0; translateX(50%)    → centered ON the row's right edge
 //   --mirror variants swap those two sides (invisible, still laid out)
@@ -57,6 +68,9 @@ const CONTAINER_LEFT = 37;
 const CONTAINER_TOP = 19;
 const HEADER_H = 34;
 const ROW_H = 26;
+/** The theme's row border-bottom, dropped on `:last-child` — so the last row is shorter. */
+const ROW_BORDER = 1;
+const LAST_ROW_H = ROW_H - ROW_BORDER;
 const HANDLE = 10;
 
 /** Node border-box → content-box insets. Real CSS is symmetric (border only). */
@@ -131,7 +145,27 @@ function schemaFields(names: string[]): Array<{ name: string; type: string }> {
 
 /** Height a schema node needs for `n` rows under the emulated box model. */
 function schemaHeight(rows: number, insets: Insets): number {
-  return insets.top + HEADER_H + rows * ROW_H + insets.top;
+  return insets.top + HEADER_H + (rows - 1) * ROW_H + LAST_ROW_H + insets.top;
+}
+
+/** Row `index` of `count` is the last one ⇒ it lost its border-bottom ⇒ it's shorter. */
+function rowHeightAt(index: number, count: number): number {
+  return index === count - 1 ? LAST_ROW_H : ROW_H;
+}
+
+/**
+ * Handle center, as an offset from its row's TOP.
+ *
+ * `top: 50%` resolves against the row's PADDING box — border-box minus its borders — so a
+ * row carrying the theme's `border-bottom` centers its handle half a border ABOVE its own
+ * box center. The last row has no border-bottom, so its padding box IS its border box.
+ * Both cases land on the same number under this stylesheet (LAST_ROW_H / 2), which is a
+ * coincidence worth stating explicitly rather than collapsing.
+ */
+function handleOffsetAt(index: number, count: number): number {
+  const isLast = index === count - 1;
+  const paddingBoxH = isLast ? LAST_ROW_H : ROW_H - ROW_BORDER;
+  return paddingBoxH / 2;
 }
 
 const mounted: HTMLElement[] = [];
@@ -213,19 +247,25 @@ function installLayout(
     }
 
     // The body stacks directly under the header and is exactly as tall as its rows
-    // (no gap, no padding — see .flow-schema-body / .flow-schema-row in structural.css).
+    // (no gap, no padding — see .flow-schema-body / .flow-schema-row in structural.css),
+    // with the last row a border shorter (theme-default.css `:last-child`).
     if (el.classList.contains('flow-schema-body')) {
-      return fakeRect(cLeft, cTop + HEADER_H * zoom, cWidth, el.children.length * ROW_H * zoom);
+      const rows = el.children.length;
+      const bodyH = rows === 0 ? 0 : (rows - 1) * ROW_H + LAST_ROW_H;
+      return fakeRect(cLeft, cTop + HEADER_H * zoom, cWidth, bodyH * zoom);
     }
 
-    const rowTop = (row: HTMLElement): number => {
+    /** Row index + sibling count — every row ABOVE the last is a full ROW_H tall. */
+    const rowPos = (row: HTMLElement): { index: number; count: number } => {
       const siblings = Array.from(row.parentElement?.children ?? []);
-      const index = siblings.indexOf(row);
-      return cTop + (HEADER_H + index * ROW_H) * zoom;
+      return { index: siblings.indexOf(row), count: siblings.length };
     };
+    const rowTop = (row: HTMLElement): number =>
+      cTop + (HEADER_H + rowPos(row).index * ROW_H) * zoom;
 
     if (el.classList.contains('flow-schema-row')) {
-      return fakeRect(cLeft, rowTop(el), cWidth, ROW_H * zoom);
+      const { index, count } = rowPos(el);
+      return fakeRect(cLeft, rowTop(el), cWidth, rowHeightAt(index, count) * zoom);
     }
 
     if (el.classList.contains('flow-schema-handle')) {
@@ -237,7 +277,8 @@ function installLayout(
       const isTarget = el.classList.contains('flow-schema-handle--target');
       const onLeft = isTarget !== isMirror;
       const cx = onLeft ? cLeft : cLeft + cWidth;
-      const cy = rowTop(row) + (ROW_H * zoom) / 2;
+      const { index, count } = rowPos(row);
+      const cy = rowTop(row) + handleOffsetAt(index, count) * zoom;
       const size = HANDLE * zoom;
       return fakeRect(cx - size / 2, cy - size / 2, size, size);
     }
@@ -492,7 +533,10 @@ describe('schema edge geometry — state path vs DOM oracle', () => {
     expect(geometryRectCalls(fast.spy)).toBe(0); // these numbers came from state
     const { sx, sy, tx, ty } = straightEndpoints(fast.pathD(2)); // e-tie-down, a → c
 
-    const rowCenter = (idx: number) => SYMMETRIC.top + HEADER_H + idx * ROW_H + ROW_H / 2;
+    // The handle's center, not the row's box center — the row's border-bottom shrinks the
+    // padding box that `top: 50%` resolves against. See `handleOffsetAt`.
+    const rowCenter = (idx: number) =>
+      SYMMETRIC.top + HEADER_H + idx * ROW_H + handleOffsetAt(idx, FIELDS.length);
     const rightX = 220 - SYMMETRIC.right;
     const leftX = SYMMETRIC.left;
     // Marker offset: handle radius (HANDLE/2) + marker padding (12.5 × 1.5 × 5/20 × 0.4).

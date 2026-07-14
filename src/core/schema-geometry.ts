@@ -62,10 +62,13 @@ export function computeSchemaHandlePoint(
   if (typeof width !== 'number' || !Number.isFinite(width)) return null;
   if (typeof height !== 'number' || !Number.isFinite(height)) return null;
 
-  const { headerHeight, rowHeight, insetLeft, insetRight, insetTop } = metrics;
+  const { headerHeight, rowHeight, handleOffsetY, handleOffsetYLast, insetLeft, insetRight, insetTop } =
+    metrics;
   if (
     !Number.isFinite(headerHeight) ||
     !Number.isFinite(rowHeight) ||
+    !Number.isFinite(handleOffsetY) ||
+    !Number.isFinite(handleOffsetYLast) ||
     !Number.isFinite(insetLeft) ||
     !Number.isFinite(insetRight) ||
     !Number.isFinite(insetTop)
@@ -73,7 +76,13 @@ export function computeSchemaHandlePoint(
     return null;
   }
 
-  const y = absolutePosition.y + insetTop + headerHeight + fieldIndex * rowHeight + rowHeight / 2;
+  // Row top = header + `fieldIndex` strides. The handle then sits `handleOffsetY` into
+  // its row — a MEASURED offset, not `rowHeight / 2`: the theme's row border-bottom
+  // shrinks the padding box that the handle's `top: 50%` resolves against, so the handle
+  // center sits half a border above the row's box center. The last row lost that border,
+  // so it gets its own measured offset. See SchemaMetrics.handleOffsetY.
+  const offsetY = fieldIndex === fields.length - 1 ? handleOffsetYLast : handleOffsetY;
+  const y = absolutePosition.y + insetTop + headerHeight + fieldIndex * rowHeight + offsetY;
   const x =
     side === 'left'
       ? absolutePosition.x + insetLeft

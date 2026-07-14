@@ -120,9 +120,25 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
 
         const headerEl = host.querySelector<HTMLElement>(':scope > .flow-schema-header');
         const schemaBodyEl = host.querySelector<HTMLElement>(':scope > .flow-schema-body');
-        const rowEl = host.querySelector<HTMLElement>('.flow-schema-row');
-        const handleEl = rowEl?.querySelector<HTMLElement>('.flow-schema-handle');
-        if (!headerEl || !schemaBodyEl || !rowEl || !handleEl) return;
+        const rows = host.querySelectorAll<HTMLElement>('.flow-schema-row');
+
+        // Measure from a node with ≥2 rows. The stride (`rowHeight`) is the gap between
+        // two consecutive row TOPS, and `rowHeightLast` only means anything next to it —
+        // the theme's `.flow-schema-row:last-child` rule drops the row's border-bottom, so
+        // a SINGLE-row node has nothing to compare against and would report the shortened
+        // height as the stride, modelling every multi-row node on the canvas one border too
+        // short PER ROW. Skipping is free: this runs from every schema node's render, so the
+        // next node with ≥2 rows lands the cache. If NO schema node has 2 rows, metrics
+        // never land and edges keep using the DOM path — correct, and there was nothing to
+        // save at one row a node anyway.
+        if (rows.length < 2) return;
+
+        const rowEl = rows[0];
+        const secondRowEl = rows[1];
+        const lastRowEl = rows[rows.length - 1];
+        const handleEl = rowEl.querySelector<HTMLElement>('.flow-schema-handle');
+        const lastHandleEl = lastRowEl.querySelector<HTMLElement>('.flow-schema-handle');
+        if (!headerEl || !schemaBodyEl || !handleEl || !lastHandleEl) return;
 
         // Insets are consumed against the NODE's border box — edge code adds them
         // to `node.position` / `node.dimensions`, which describe the `.flow-node`
@@ -139,16 +155,30 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
         const headerRect = headerEl.getBoundingClientRect();
         const bodyRect = schemaBodyEl.getBoundingClientRect();
         const rowRect = rowEl.getBoundingClientRect();
+        const secondRowRect = secondRowEl.getBoundingClientRect();
+        const lastRowRect = lastRowEl.getBoundingClientRect();
         const handleRect = handleEl.getBoundingClientRect();
+        const lastHandleRect = lastHandleEl.getBoundingClientRect();
 
-        const rowHeight = rowRect.height / zoom;
-        // A zero-height row means layout hasn't happened (or jsdom) — caching
+        // The STRIDE between rows, not row 0's height — see SchemaMetrics.rowHeight.
+        const rowHeight = (secondRowRect.top - rowRect.top) / zoom;
+        const rowHeightLast = lastRowRect.height / zoom;
+        // A zero stride/height means layout hasn't happened (or jsdom) — caching
         // zeros here would poison every later edge's endpoint geometry.
-        if (rowHeight <= 0) return;
+        if (rowHeight <= 0 || rowHeightLast <= 0) return;
 
         const metrics: SchemaMetrics = {
           headerHeight: headerRect.height / zoom,
           rowHeight,
+          // NOT the same as `rowHeight` under the shipped theme — the last row loses
+          // its border-bottom. See SchemaMetrics.rowHeightLast.
+          rowHeightLast,
+          // Where the handle actually sits inside its row. MEASURED, not `rowHeight / 2`:
+          // `top: 50%` resolves against the row's PADDING box, which the theme's
+          // border-bottom shrinks. See SchemaMetrics.handleOffsetY.
+          handleOffsetY: (handleRect.top + handleRect.height / 2 - rowRect.top) / zoom,
+          handleOffsetYLast:
+            (lastHandleRect.top + lastHandleRect.height / 2 - lastRowRect.top) / zoom,
           insetLeft: (rowRect.left - nodeRect.left) / zoom,
           insetRight: (nodeRect.right - rowRect.right) / zoom,
           insetTop: (headerRect.top - nodeRect.top) / zoom,
