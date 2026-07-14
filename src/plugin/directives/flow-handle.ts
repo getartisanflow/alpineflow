@@ -1359,6 +1359,334 @@ export function startSourceHandlePointerInteraction(
   });
 }
 
+/**
+ * Start the TARGET-handle pointer interaction: drag an existing edge's target
+ * endpoint off this handle to reconnect it elsewhere.
+ *
+ * Extracted verbatim from the per-handle `pointerdown` listener, for the same
+ * reason as the source variant. The propagation asymmetry with the source handler
+ * is DELIBERATE and preserved: this one calls `preventDefault()` +
+ * `stopPropagation()` only AFTER all seven guards pass (primary button, canvas +
+ * node resolved, not animation-locked, `edgesReconnectable`, no reconnect already
+ * in flight, at least one matching edge, that edge is reconnectable at its target
+ * end). A target handle with no reconnectable edge therefore FALLS THROUGH to the
+ * node drag / schema row reorder underneath it — that is how you grab a node by
+ * an unconnected target pip. Do not hoist the propagation calls.
+ */
+export function startTargetHandlePointerInteraction(
+  handleEl: HTMLElement,
+  canvas: any,
+  e: PointerEvent,
+): void {
+  if (e.button !== 0) return;
+
+  const handleId = handleEl.dataset.flowHandleId ?? 'target';
+  const nodeEl = handleEl.closest('[x-flow-node]');
+  const nodeId = nodeEl?.getAttribute('data-flow-node-id') ?? null;
+  if (!canvas || !nodeId) return;
+  if (canvas._animationLocked) return;
+
+  // Global reconnectable guard
+  if (canvas._config?.edgesReconnectable === false) return;
+
+  // Already reconnecting?
+  if (canvas._pendingReconnection) return;
+
+  // Find edge(s) connected to this target handle
+  const matchingEdges = (canvas.edges as FlowEdge[]).filter(
+    (edge: FlowEdge) =>
+      edge.target === nodeId &&
+      (edge.targetHandle ?? 'target') === handleId,
+  );
+  if (matchingEdges.length === 0) return;
+
+  // Prefer the selected edge; if none selected require exactly one match
+  const connectedEdge =
+    matchingEdges.find((edge: FlowEdge) => edge.selected) ??
+    (matchingEdges.length === 1 ? matchingEdges[0] : null);
+  if (!connectedEdge) return;
+
+  // Per-edge reconnectable guard
+  const edgeReconnectable = connectedEdge.reconnectable ?? true;
+  if (edgeReconnectable === false || edgeReconnectable === 'source') return;
+
+  e.preventDefault();
+  e.stopPropagation();
+
+  const startX = e.clientX;
+  const startY = e.clientY;
+  let dragging = false;
+  let reconnectCleanedUp = false;
+  let snappedHandle: HTMLElement | null = null;
+  const connectionSnapRadius = canvas._config?.connectionSnapRadius ?? 20;
+
+  const containerEl = handleEl.closest('.flow-container') as HTMLElement;
+  if (!containerEl) return;
+
+  // Compute source handle (anchor) center in flow coordinates
+  const sourceNodeEl = containerEl.querySelector(
+    `[data-flow-node-id="${CSS.escape(connectedEdge.source)}"]`,
+  ) as HTMLElement | null;
+  const sourceHandleSelector = connectedEdge.sourceHandle
+    ? `[data-flow-handle-id="${CSS.escape(connectedEdge.sourceHandle)}"]`
+    : `[data-flow-handle-type="source"]`;
+  const sourceHandleEl = sourceNodeEl?.querySelector(sourceHandleSelector) as HTMLElement | null;
+
+  const cRect = containerEl.getBoundingClientRect();
+  // Live viewport: reactive `viewport` may lag a frame behind a zoom.
+  const liveVp = canvas._viewportLive ?? canvas.viewport;
+  const initZoom = liveVp?.zoom || 1;
+  const initVpX = liveVp?.x || 0;
+  const initVpY = liveVp?.y || 0;
+
+  let anchorX: number;
+  let anchorY: number;
+  if (sourceHandleEl) {
+    const shRect = sourceHandleEl.getBoundingClientRect();
+    anchorX = (shRect.left + shRect.width / 2 - cRect.left - initVpX) / initZoom;
+    anchorY = (shRect.top + shRect.height / 2 - cRect.top - initVpY) / initZoom;
+  } else {
+    // Fallback: estimate source node bottom-center
+    const sourceNode = canvas.getNode(connectedEdge.source);
+    if (!sourceNode) return;
+    const w = sourceNode.dimensions?.width ?? DEFAULT_NODE_WIDTH;
+    const h = sourceNode.dimensions?.height ?? DEFAULT_NODE_HEIGHT;
+    anchorX = sourceNode.position.x + w / 2;
+    anchorY = sourceNode.position.y + h;
+  }
+
+  let tempSvg: SVGSVGElement | null = null;
+  let reconnectLineInstance: ConnectionLineInstance | null = null;
+  let connectAutoPan: ReturnType<typeof startConnectionAutoPan> = null;
+  let lastMoveX = startX;
+  let lastMoveY = startY;
+
+  // Separate index for this reconnect gesture (its own pointer scope),
+  // built once on drag-start and cleared in cleanupReconnection.
+  let reconnectHandleIndex: HandleIndex | null = null;
+
+  const startReconnectionDrag = () => {
+    dragging = true;
+
+    // Dim the edge via its tagged <g>
+    const edgeGEl = containerEl.querySelector(
+      `[data-flow-edge-id="${connectedEdge.id}"]`,
+    );
+    if (edgeGEl) {
+      edgeGEl.classList.add('flow-edge-reconnecting');
+    }
+
+    canvas._emit('reconnect-start', { edge: connectedEdge, handleType: 'target' as HandleType });
+    debug('reconnect', `Reconnection drag started from target handle on edge "${connectedEdge.id}"`);
+
+    // Create connection line for visual feedback
+    reconnectLineInstance = createConnectionLine({
+      connectionLineType: canvas._config?.connectionLineType,
+      connectionLineStyle: canvas._config?.connectionLineStyle,
+      connectionLine: canvas._config?.connectionLine,
+      containerEl: containerEl!,
+    });
+    tempSvg = reconnectLineInstance.svg;
+
+    const flowPos = canvas.screenToFlowPosition(startX, startY);
+    reconnectLineInstance.update({
+      fromX: anchorX, fromY: anchorY,
+      toX: flowPos.x, toY: flowPos.y,
+      source: connectedEdge.source, sourceHandle: connectedEdge.sourceHandle,
+    });
+
+    const viewportEl = containerEl.querySelector('.flow-viewport');
+    if (viewportEl) {
+      viewportEl.appendChild(tempSvg);
+    }
+
+    // Set pendingConnection for target handle highlighting
+    canvas.pendingConnection = {
+      source: connectedEdge.source,
+      sourceHandle: connectedEdge.sourceHandle,
+      position: flowPos,
+    };
+
+    // Set _pendingReconnection
+    canvas._pendingReconnection = {
+      edge: connectedEdge,
+      draggedEnd: 'target' as HandleType,
+      anchorPosition: { x: anchorX, y: anchorY },
+      position: flowPos,
+    };
+
+    // Auto-pan
+    connectAutoPan = startConnectionAutoPan(containerEl, canvas, lastMoveX, lastMoveY);
+
+    // Measure handles once for this reconnect gesture (same rationale +
+    // transform as the connect-drag path). Excludes the edge being
+    // reconnected from duplicate/limit accounting via its id.
+    reconnectHandleIndex = buildHandleIndex(
+      containerEl,
+      (sx: number, sy: number) => canvas.screenToFlowPosition(sx, sy),
+    );
+
+    applyValidationClasses(containerEl, connectedEdge.source, connectedEdge.sourceHandle ?? 'source', canvas, connectedEdge.id, reconnectHandleIndex);
+  };
+
+  const onPointerMove = (moveE: PointerEvent) => {
+    lastMoveX = moveE.clientX;
+    lastMoveY = moveE.clientY;
+
+    if (!dragging) {
+      const dist = Math.sqrt(
+        (moveE.clientX - startX) ** 2 + (moveE.clientY - startY) ** 2,
+      );
+      if (dist >= DRAG_THRESHOLD) {
+        startReconnectionDrag();
+      }
+      return;
+    }
+
+    const cursorFlowPos = canvas.screenToFlowPosition(moveE.clientX, moveE.clientY);
+
+    const snap = findSnapTarget({
+      containerEl,
+      handleType: 'target',
+      excludeNodeId: connectedEdge.source,
+      cursorFlowPos,
+      connectionSnapRadius,
+      getNode: (id: string) => canvas.getNode(id),
+      toFlowPosition: (sx: number, sy: number) => canvas.screenToFlowPosition(sx, sy),
+      index: reconnectHandleIndex ?? undefined,
+    });
+
+    if (snap.element !== snappedHandle) {
+      snappedHandle?.classList.remove('flow-handle-active');
+      snap.element?.classList.add('flow-handle-active');
+      snappedHandle = snap.element;
+    }
+
+    reconnectLineInstance?.update({
+      fromX: anchorX, fromY: anchorY,
+      toX: snap.position.x, toY: snap.position.y,
+      source: connectedEdge.source, sourceHandle: connectedEdge.sourceHandle,
+    });
+
+    if (canvas.pendingConnection) {
+      canvas.pendingConnection = {
+        ...canvas.pendingConnection,
+        position: snap.position,
+      };
+    }
+    if (canvas._pendingReconnection) {
+      canvas._pendingReconnection = {
+        ...canvas._pendingReconnection,
+        position: snap.position,
+      };
+    }
+
+    connectAutoPan?.updatePointer(moveE.clientX, moveE.clientY);
+  };
+
+  const cleanupReconnection = () => {
+    if (reconnectCleanedUp) return;
+    reconnectCleanedUp = true;
+
+    document.removeEventListener('pointermove', onPointerMove);
+    document.removeEventListener('pointerup', onPointerUp);
+    document.removeEventListener('pointercancel', onPointerUp);
+    connectAutoPan?.stop();
+    connectAutoPan = null;
+    reconnectLineInstance?.destroy();
+    reconnectLineInstance = null;
+    tempSvg = null;
+    reconnectHandleIndex = null;
+    snappedHandle?.classList.remove('flow-handle-active');
+    activeHandleGestureCleanups.delete(handleEl);
+
+    // Undim the edge
+    const edgeGEl = containerEl.querySelector(
+      `[data-flow-edge-id="${connectedEdge.id}"]`,
+    );
+    if (edgeGEl) {
+      edgeGEl.classList.remove('flow-edge-reconnecting');
+    }
+
+    clearValidationClasses(containerEl);
+    canvas.pendingConnection = null;
+    canvas._pendingReconnection = null;
+  };
+
+  const onPointerUp = async (upE: PointerEvent) => {
+    if (!dragging) {
+      cleanupReconnection();
+      return;
+    }
+
+    // Guard against overlapping drops while an async connectValidator is pending.
+    if (canvas._connectValidating) return;
+
+    // Use snapped handle if available, otherwise fall back to elementFromPoint
+    let targetHandleEl: HTMLElement | null = snappedHandle;
+    if (!targetHandleEl) {
+      const dropTarget = document.elementFromPoint(upE.clientX, upE.clientY);
+      targetHandleEl = dropTarget?.closest('[data-flow-handle-type="target"]') as HTMLElement | null;
+    }
+
+    let successful = false;
+
+    if (targetHandleEl) {
+      const targetNodeEl = targetHandleEl.closest('[x-flow-node]') as HTMLElement | null;
+      const dropNodeId = targetNodeEl?.dataset.flowNodeId;
+      const dropHandleId = targetHandleEl.dataset.flowHandleId;
+
+      if (dropNodeId) {
+        const dropNode = canvas.getNode(dropNodeId);
+        if (dropNode?.connectable !== false) {
+          const newConnection: Connection = {
+            source: connectedEdge.source,
+            sourceHandle: connectedEdge.sourceHandle,
+            target: dropNodeId,
+            targetHandle: dropHandleId,
+          };
+
+          const oldEdge = { ...connectedEdge };
+          const reconnectDragLineEl = reconnectLineInstance?.svg ?? null;
+          setDragLineValidating(reconnectDragLineEl, true);
+          let result: { applied: boolean; reason?: string };
+          try {
+            result = await applyReconnectValidation({
+              edge: connectedEdge,
+              newConnection,
+              canvas,
+              containerEl,
+              endpoint: 'target',
+            });
+          } finally {
+            setDragLineValidating(reconnectDragLineEl, false);
+          }
+
+          if (result.applied) {
+            successful = true;
+            debug('reconnect', `Edge "${connectedEdge.id}" reconnected (target)`, newConnection);
+            canvas._emit('reconnect', { oldEdge, newConnection });
+          } else {
+            debug('reconnect', 'Reconnection rejected', { connection: newConnection, reason: result.reason });
+          }
+        }
+      }
+    }
+
+    if (!successful) {
+      debug('reconnect', `Edge "${connectedEdge.id}" reconnection cancelled — snapping back`);
+    }
+
+    canvas._emit('reconnect-end', { edge: connectedEdge, successful });
+    cleanupReconnection();
+  };
+
+  document.addEventListener('pointermove', onPointerMove);
+  document.addEventListener('pointerup', onPointerUp);
+  document.addEventListener('pointercancel', onPointerUp);
+  activeHandleGestureCleanups.set(handleEl, cleanupReconnection);
+}
+
 export function registerFlowHandleDirective(Alpine: Alpine) {
   Alpine.directive(
     'flow-handle',
@@ -1823,321 +2151,19 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
         el.addEventListener('click', onTargetClick);
 
         // ── Target handle: pointerdown for edge reconnection ──────
-        let activeReconnectCleanup: (() => void) | null = null;
-
+        // Body at module scope (startTargetHandlePointerInteraction) so the
+        // delegated canvas-level listener can drive any handle.
         const onTargetPointerDown = (e: PointerEvent) => {
-          if (e.button !== 0) return;
-
-          const canvas = getCanvas();
-          const nodeId = getNodeId();
-          if (!canvas || !nodeId) return;
-          if (canvas._animationLocked) return;
-
-          // Global reconnectable guard
-          if (canvas._config?.edgesReconnectable === false) return;
-
-          // Already reconnecting?
-          if (canvas._pendingReconnection) return;
-
-          // Find edge(s) connected to this target handle
-          const matchingEdges = (canvas.edges as FlowEdge[]).filter(
-            (edge: FlowEdge) =>
-              edge.target === nodeId &&
-              (edge.targetHandle ?? 'target') === handleId,
-          );
-          if (matchingEdges.length === 0) return;
-
-          // Prefer the selected edge; if none selected require exactly one match
-          const connectedEdge =
-            matchingEdges.find((edge: FlowEdge) => edge.selected) ??
-            (matchingEdges.length === 1 ? matchingEdges[0] : null);
-          if (!connectedEdge) return;
-
-          // Per-edge reconnectable guard
-          const edgeReconnectable = connectedEdge.reconnectable ?? true;
-          if (edgeReconnectable === false || edgeReconnectable === 'source') return;
-
-          e.preventDefault();
-          e.stopPropagation();
-
-          const startX = e.clientX;
-          const startY = e.clientY;
-          let dragging = false;
-          let reconnectCleanedUp = false;
-          let snappedHandle: HTMLElement | null = null;
-          const connectionSnapRadius = canvas._config?.connectionSnapRadius ?? 20;
-
-          const containerEl = el.closest('.flow-container') as HTMLElement;
-          if (!containerEl) return;
-
-          // Compute source handle (anchor) center in flow coordinates
-          const sourceNodeEl = containerEl.querySelector(
-            `[data-flow-node-id="${CSS.escape(connectedEdge.source)}"]`,
-          ) as HTMLElement | null;
-          const sourceHandleSelector = connectedEdge.sourceHandle
-            ? `[data-flow-handle-id="${CSS.escape(connectedEdge.sourceHandle)}"]`
-            : `[data-flow-handle-type="source"]`;
-          const sourceHandleEl = sourceNodeEl?.querySelector(sourceHandleSelector) as HTMLElement | null;
-
-          const cRect = containerEl.getBoundingClientRect();
-          // Live viewport: reactive `viewport` may lag a frame behind a zoom.
-          const liveVp = canvas._viewportLive ?? canvas.viewport;
-          const initZoom = liveVp?.zoom || 1;
-          const initVpX = liveVp?.x || 0;
-          const initVpY = liveVp?.y || 0;
-
-          let anchorX: number;
-          let anchorY: number;
-          if (sourceHandleEl) {
-            const shRect = sourceHandleEl.getBoundingClientRect();
-            anchorX = (shRect.left + shRect.width / 2 - cRect.left - initVpX) / initZoom;
-            anchorY = (shRect.top + shRect.height / 2 - cRect.top - initVpY) / initZoom;
-          } else {
-            // Fallback: estimate source node bottom-center
-            const sourceNode = canvas.getNode(connectedEdge.source);
-            if (!sourceNode) return;
-            const w = sourceNode.dimensions?.width ?? DEFAULT_NODE_WIDTH;
-            const h = sourceNode.dimensions?.height ?? DEFAULT_NODE_HEIGHT;
-            anchorX = sourceNode.position.x + w / 2;
-            anchorY = sourceNode.position.y + h;
-          }
-
-          let tempSvg: SVGSVGElement | null = null;
-          let reconnectLineInstance: ConnectionLineInstance | null = null;
-          let connectAutoPan: ReturnType<typeof startConnectionAutoPan> = null;
-          let lastMoveX = startX;
-          let lastMoveY = startY;
-
-          // Separate index for this reconnect gesture (its own pointer scope),
-          // built once on drag-start and cleared in cleanupReconnection.
-          let reconnectHandleIndex: HandleIndex | null = null;
-
-          const startReconnectionDrag = () => {
-            dragging = true;
-
-            // Dim the edge via its tagged <g>
-            const edgeGEl = containerEl.querySelector(
-              `[data-flow-edge-id="${connectedEdge.id}"]`,
-            );
-            if (edgeGEl) {
-              edgeGEl.classList.add('flow-edge-reconnecting');
-            }
-
-            canvas._emit('reconnect-start', { edge: connectedEdge, handleType: 'target' as HandleType });
-            debug('reconnect', `Reconnection drag started from target handle on edge "${connectedEdge.id}"`);
-
-            // Create connection line for visual feedback
-            reconnectLineInstance = createConnectionLine({
-              connectionLineType: canvas._config?.connectionLineType,
-              connectionLineStyle: canvas._config?.connectionLineStyle,
-              connectionLine: canvas._config?.connectionLine,
-              containerEl: containerEl!,
-            });
-            tempSvg = reconnectLineInstance.svg;
-
-            const flowPos = canvas.screenToFlowPosition(startX, startY);
-            reconnectLineInstance.update({
-              fromX: anchorX, fromY: anchorY,
-              toX: flowPos.x, toY: flowPos.y,
-              source: connectedEdge.source, sourceHandle: connectedEdge.sourceHandle,
-            });
-
-            const viewportEl = containerEl.querySelector('.flow-viewport');
-            if (viewportEl) {
-              viewportEl.appendChild(tempSvg);
-            }
-
-            // Set pendingConnection for target handle highlighting
-            canvas.pendingConnection = {
-              source: connectedEdge.source,
-              sourceHandle: connectedEdge.sourceHandle,
-              position: flowPos,
-            };
-
-            // Set _pendingReconnection
-            canvas._pendingReconnection = {
-              edge: connectedEdge,
-              draggedEnd: 'target' as HandleType,
-              anchorPosition: { x: anchorX, y: anchorY },
-              position: flowPos,
-            };
-
-            // Auto-pan
-            connectAutoPan = startConnectionAutoPan(containerEl, canvas, lastMoveX, lastMoveY);
-
-            // Measure handles once for this reconnect gesture (same rationale +
-            // transform as the connect-drag path). Excludes the edge being
-            // reconnected from duplicate/limit accounting via its id.
-            reconnectHandleIndex = buildHandleIndex(
-              containerEl,
-              (sx: number, sy: number) => canvas.screenToFlowPosition(sx, sy),
-            );
-
-            applyValidationClasses(containerEl, connectedEdge.source, connectedEdge.sourceHandle ?? 'source', canvas, connectedEdge.id, reconnectHandleIndex);
-          };
-
-          const onPointerMove = (moveE: PointerEvent) => {
-            lastMoveX = moveE.clientX;
-            lastMoveY = moveE.clientY;
-
-            if (!dragging) {
-              const dist = Math.sqrt(
-                (moveE.clientX - startX) ** 2 + (moveE.clientY - startY) ** 2,
-              );
-              if (dist >= DRAG_THRESHOLD) {
-                startReconnectionDrag();
-              }
-              return;
-            }
-
-            const cursorFlowPos = canvas.screenToFlowPosition(moveE.clientX, moveE.clientY);
-
-            const snap = findSnapTarget({
-              containerEl,
-              handleType: 'target',
-              excludeNodeId: connectedEdge.source,
-              cursorFlowPos,
-              connectionSnapRadius,
-              getNode: (id: string) => canvas.getNode(id),
-              toFlowPosition: (sx: number, sy: number) => canvas.screenToFlowPosition(sx, sy),
-              index: reconnectHandleIndex ?? undefined,
-            });
-
-            if (snap.element !== snappedHandle) {
-              snappedHandle?.classList.remove('flow-handle-active');
-              snap.element?.classList.add('flow-handle-active');
-              snappedHandle = snap.element;
-            }
-
-            reconnectLineInstance?.update({
-              fromX: anchorX, fromY: anchorY,
-              toX: snap.position.x, toY: snap.position.y,
-              source: connectedEdge.source, sourceHandle: connectedEdge.sourceHandle,
-            });
-
-            if (canvas.pendingConnection) {
-              canvas.pendingConnection = {
-                ...canvas.pendingConnection,
-                position: snap.position,
-              };
-            }
-            if (canvas._pendingReconnection) {
-              canvas._pendingReconnection = {
-                ...canvas._pendingReconnection,
-                position: snap.position,
-              };
-            }
-
-            connectAutoPan?.updatePointer(moveE.clientX, moveE.clientY);
-          };
-
-          const cleanupReconnection = () => {
-            if (reconnectCleanedUp) return;
-            reconnectCleanedUp = true;
-
-            document.removeEventListener('pointermove', onPointerMove);
-            document.removeEventListener('pointerup', onPointerUp);
-            document.removeEventListener('pointercancel', onPointerUp);
-            connectAutoPan?.stop();
-            connectAutoPan = null;
-            reconnectLineInstance?.destroy();
-            reconnectLineInstance = null;
-            tempSvg = null;
-            reconnectHandleIndex = null;
-            snappedHandle?.classList.remove('flow-handle-active');
-            activeReconnectCleanup = null;
-
-            // Undim the edge
-            const edgeGEl = containerEl.querySelector(
-              `[data-flow-edge-id="${connectedEdge.id}"]`,
-            );
-            if (edgeGEl) {
-              edgeGEl.classList.remove('flow-edge-reconnecting');
-            }
-
-            clearValidationClasses(containerEl);
-            canvas.pendingConnection = null;
-            canvas._pendingReconnection = null;
-          };
-
-          const onPointerUp = async (upE: PointerEvent) => {
-            if (!dragging) {
-              cleanupReconnection();
-              return;
-            }
-
-            // Guard against overlapping drops while an async connectValidator is pending.
-            if (canvas._connectValidating) return;
-
-            // Use snapped handle if available, otherwise fall back to elementFromPoint
-            let targetHandleEl: HTMLElement | null = snappedHandle;
-            if (!targetHandleEl) {
-              const dropTarget = document.elementFromPoint(upE.clientX, upE.clientY);
-              targetHandleEl = dropTarget?.closest('[data-flow-handle-type="target"]') as HTMLElement | null;
-            }
-
-            let successful = false;
-
-            if (targetHandleEl) {
-              const targetNodeEl = targetHandleEl.closest('[x-flow-node]') as HTMLElement | null;
-              const dropNodeId = targetNodeEl?.dataset.flowNodeId;
-              const dropHandleId = targetHandleEl.dataset.flowHandleId;
-
-              if (dropNodeId) {
-                const dropNode = canvas.getNode(dropNodeId);
-                if (dropNode?.connectable !== false) {
-                  const newConnection: Connection = {
-                    source: connectedEdge.source,
-                    sourceHandle: connectedEdge.sourceHandle,
-                    target: dropNodeId,
-                    targetHandle: dropHandleId,
-                  };
-
-                  const oldEdge = { ...connectedEdge };
-                  const reconnectDragLineEl = reconnectLineInstance?.svg ?? null;
-                  setDragLineValidating(reconnectDragLineEl, true);
-                  let result: { applied: boolean; reason?: string };
-                  try {
-                    result = await applyReconnectValidation({
-                      edge: connectedEdge,
-                      newConnection,
-                      canvas,
-                      containerEl,
-                      endpoint: 'target',
-                    });
-                  } finally {
-                    setDragLineValidating(reconnectDragLineEl, false);
-                  }
-
-                  if (result.applied) {
-                    successful = true;
-                    debug('reconnect', `Edge "${connectedEdge.id}" reconnected (target)`, newConnection);
-                    canvas._emit('reconnect', { oldEdge, newConnection });
-                  } else {
-                    debug('reconnect', 'Reconnection rejected', { connection: newConnection, reason: result.reason });
-                  }
-                }
-              }
-            }
-
-            if (!successful) {
-              debug('reconnect', `Edge "${connectedEdge.id}" reconnection cancelled — snapping back`);
-            }
-
-            canvas._emit('reconnect-end', { edge: connectedEdge, successful });
-            cleanupReconnection();
-          };
-
-          document.addEventListener('pointermove', onPointerMove);
-          document.addEventListener('pointerup', onPointerUp);
-          document.addEventListener('pointercancel', onPointerUp);
-          activeReconnectCleanup = cleanupReconnection;
+          startTargetHandlePointerInteraction(el, getCanvas(), e);
         };
 
         el.addEventListener('pointerdown', onTargetPointerDown);
 
         cleanup(() => {
-          activeReconnectCleanup?.();
+          // Abort any gesture this handle still has in flight (see
+          // `activeHandleGestureCleanups`), then drop its slot.
+          activeHandleGestureCleanups.get(el)?.();
+          activeHandleGestureCleanups.delete(el);
           keyboardBindingsCleanup?.();
           el.removeEventListener('pointerdown', onTargetPointerDown);
           el.removeEventListener('pointerenter', onPointerEnter);
