@@ -590,6 +590,61 @@ describe('x-flow-schema directive', () => {
       expect(nodeEl.hasAttribute('data-flow-schema-node')).toBe(false);
     });
 
+    it('still stamps data-flow-schema-node when x-flow-schema is declared BEFORE x-flow-node on the same element', async () => {
+      // Same-element markup (`<div x-flow-node x-flow-schema>`) is a documented
+      // pattern, but the stamp resolves the node element via
+      // `closest('[data-flow-node-id]')`, and that attribute is written by
+      // `x-flow-node`'s OWN init-time effect — not by the markup. Custom
+      // directives on one element run in attribute-declaration order, so if a
+      // consumer reverses the order (`x-flow-schema` before `x-flow-node`),
+      // `x-flow-schema` resolves BEFORE `x-flow-node`'s effect has stamped
+      // `data-flow-node-id`, and a purely-synchronous `closest()` lookup would
+      // find nothing — the fast path silently degrades forever, with zero
+      // signal. This must still stamp, one tick later.
+      registerFlowNodeDirective(Alpine);
+      stubSchemaLayout(1);
+
+      clearChildren(document.body);
+      const container = document.createElement('div');
+      container.className = 'flow-container';
+      container.setAttribute('data-flow-canvas', '');
+      const node = { id: 'n1', position: { x: 0, y: 0 }, data: { label: 'User', fields: [{ name: 'id', type: 'uuid' }] } };
+      (window as any).__schemaStampCanvasReversed = () => ({
+        viewport: { x: 0, y: 0, zoom: 1 },
+        _schemaMetrics: null,
+        _config: {},
+        _nodeMap: new Map(),
+        _nodeElements: new Map(),
+        selectedNodes: new Set(),
+        nodes: [node],
+        getNode(id: string) {
+          return this.nodes.find((n: { id: string }) => n.id === id);
+        },
+      });
+      container.setAttribute('x-data', '__schemaStampCanvasReversed()');
+
+      const nodeEl = document.createElement('div');
+      nodeEl.className = 'flow-node';
+      // Reversed order relative to the test above: x-flow-schema FIRST.
+      nodeEl.setAttribute('x-flow-schema', '');
+      nodeEl.setAttribute('x-flow-node', 'nodes[0]');
+      nodeEl.setAttribute('x-data', '{ node: nodes[0] }');
+      container.appendChild(nodeEl);
+      document.body.appendChild(container);
+      Alpine.initTree(container);
+
+      // x-flow-node still stamps its own id synchronously (its init-time effect
+      // doesn't depend on x-flow-schema), regardless of declaration order.
+      expect(nodeEl.getAttribute('data-flow-node-id')).toBe('n1');
+
+      await nextFlush();
+      expect(nodeEl.hasAttribute('data-flow-schema-node')).toBe(true);
+
+      // And it is still removed when the directive tears down.
+      Alpine.destroyTree(container);
+      expect(nodeEl.hasAttribute('data-flow-schema-node')).toBe(false);
+    });
+
     it('anchors the insets to the .flow-node border box under WireFlow slot markup', async () => {
       // The insets are documented — and consumed by edge code — as offsets from the
       // NODE border box, because they get added to `node.position` / `node.dimensions`,

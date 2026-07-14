@@ -177,8 +177,32 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
     // under directive markup, but under WireFlow's slot markup `host` is a CHILD of
     // the node (the same insight behind the metrics-anchor `closest` above). Edge code
     // looks the element up via `canvas._nodeElements`, which registers node elements.
-    const schemaNodeEl = host.closest('[data-flow-node-id]') as HTMLElement | null;
-    schemaNodeEl?.setAttribute('data-flow-schema-node', '');
+    //
+    // Resolution order: try synchronously first. That covers WireFlow's slot markup,
+    // where `host` is a CHILD of the node element and Alpine's parent-before-child tree
+    // walk guarantees the ancestor's `data-flow-node-id` is already stamped by the time
+    // this directive initializes. It also covers the common same-element case where
+    // `x-flow-node` happens to run first.
+    //
+    // If synchronous resolution fails, we're in the SAME-ELEMENT case
+    // (`<div x-flow-node x-flow-schema>`) with `x-flow-schema` initializing BEFORE
+    // `x-flow-node`'s own init-time effect has written `data-flow-node-id` — an
+    // attribute-declaration-order dependency, not a markup shape. Defer through
+    // `Alpine.nextTick`, exactly like `measureSchemaMetrics` above: by the next tick
+    // every directive on this element (including `x-flow-node`) has already run, so
+    // attribute order can no longer hide the marker. `destroyed` guards a nextTick
+    // callback that fires after `cleanup()` from leaving a stale marker behind.
+    let schemaNodeEl = host.closest('[data-flow-node-id]') as HTMLElement | null;
+    let destroyed = false;
+    if (schemaNodeEl) {
+      schemaNodeEl.setAttribute('data-flow-schema-node', '');
+    } else {
+      Alpine.nextTick(() => {
+        if (destroyed || !host.isConnected) return;
+        schemaNodeEl = host.closest('[data-flow-node-id]') as HTMLElement | null;
+        schemaNodeEl?.setAttribute('data-flow-schema-node', '');
+      });
+    }
 
     // Persistent scaffold + keyed row registry. Reused across renders so that a
     // single tracked change reconciles rows in place instead of tearing down and
@@ -434,6 +458,7 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
     });
 
     cleanup(() => {
+      destroyed = true;
       for (const row of rowByName.values()) {
         Alpine.destroyTree(row);
       }
