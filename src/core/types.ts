@@ -944,6 +944,18 @@ export interface FlowCanvasConfig {
    *  drags. Default: true. */
   avoidantSimplifyOnDrag?: boolean;
 
+  /** How schema-node edge endpoints are located.
+   *  - `'auto'` (default): derive them from state — the cached `SchemaMetrics`
+   *    plus the node's position/dimensions/fields — so an edge touching two
+   *    schema nodes performs zero `getBoundingClientRect` calls. Any endpoint
+   *    that isn't a plain, unrotated, visible schema node with a matching field
+   *    falls back to DOM measurement automatically.
+   *  - `'dom'`: always measure handle elements. Escape hatch for layouts whose
+   *    rows aren't uniform or aren't rendered by `x-flow-schema`.
+   *  Endpoints are identical either way; only how they're computed changes.
+   *  Default: 'auto'. */
+  schemaHandleGeometry?: 'auto' | 'dom';
+
   /** Opt-in level-of-detail for edges. When set, edges whose configured type is
    *  avoidant/orthogonal/bezier/etc. render as a plain straight line once the
    *  viewport zoom bucket is at or below `simplifyAt` — skipping pathfinding and

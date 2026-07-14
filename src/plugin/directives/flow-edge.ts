@@ -9,8 +9,9 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
-import type { FlowEdge, FlowNode, HandlePosition, HandleType, Rect, Connection, XYPosition } from '../../core/types';
+import type { FlowEdge, FlowNode, HandlePosition, HandleType, Rect, Connection, XYPosition, SchemaMetrics } from '../../core/types';
 import type { MarkerType, MarkerConfig } from '../../core/markers';
+import { computeSchemaHandlePoint } from '../../core/schema-geometry';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { normalizeMarker, getMarkerId } from '../../core/markers';
 import { isConnectable } from '../../core/node-flags';
@@ -258,6 +259,124 @@ interface HandleMeasurement {
   y: number;
   handleWidth: number;
   handleHeight: number;
+}
+
+/**
+ * Can this endpoint's handle center be derived from state instead of measured?
+ *
+ * Every condition here exists because the DOM path would pick up something the
+ * state path cannot see. When any of them fails the caller must fall back to
+ * `measureHandleCoords` — correctness is never traded for the rect saving.
+ *
+ *  - no `data.fields` array → not a schema node at all
+ *  - `hidden` / `collapsed` / `condensed` → the node's rows are not laid out the
+ *    way `SchemaMetrics` describes (condensed nodes swap in a summary view via
+ *    consumer `x-show`, so `data.fields` no longer maps to rendered rows)
+ *  - `rotation` → `getBoundingClientRect` folds in the CSS transform for free;
+ *    arithmetic on `node.position` cannot
+ *  - no finite `dimensions` → the right-hand handle x is `position.x + width`
+ *  - the handle id must name a field EXACTLY. `-l`/`-r` suffixes are the
+ *    condensed-node convention: on a rendered schema node no such handle exists,
+ *    so the DOM path resolves them through `inferSideFromHandleId` to the node's
+ *    first left/right handle (row 0), which is NOT the stripped field's row.
+ *    Stripping here would silently disagree with the oracle.
+ */
+function isSchemaEligible(node: FlowNode | undefined, handleId: string | undefined): boolean {
+  if (!node || !handleId) return false;
+  if (node.hidden || node.collapsed || node.condensed) return false;
+  if (node.rotation) return false;
+
+  const width = node.dimensions?.width;
+  const height = node.dimensions?.height;
+  if (typeof width !== 'number' || !Number.isFinite(width)) return false;
+  if (typeof height !== 'number' || !Number.isFinite(height)) return false;
+
+  const fields = (node.data as { fields?: Array<{ name: string }> } | undefined)?.fields;
+  if (!Array.isArray(fields)) return false;
+
+  return fields.some((f) => f?.name === handleId);
+}
+
+/**
+ * Which side of a schema node an endpoint's handle sits on — replicating
+ * `pickClosestHandle` without touching the DOM.
+ *
+ * Each schema row stamps a real handle plus an invisible mirror on the opposite
+ * side, sharing one (id, type). The DOM path takes whichever is closer to the
+ * OPPOSING endpoint's node-rect center. Both candidates share the row's center
+ * y, so the y term cancels and the decision collapses to a comparison of the
+ * opposing node's center x against the midpoint of this node's two candidate
+ * handle x's.
+ *
+ * The tie-break is ASYMMETRIC on purpose. `pickClosestHandle` uses a strict
+ * `d2 < bestDist`, so an exact tie leaves the FIRST handle in DOM order winning
+ * — and `renderRow` appends the real target (left) before its right mirror, but
+ * the real source (right) before its left mirror. So a tie sends a source right
+ * and a target left. A vertically stacked pair of equal-width nodes hits this
+ * exactly; symmetric rounding would flip the target to the wrong side.
+ */
+function schemaHandleSide(
+  node: FlowNode,
+  absolutePosition: XYPosition,
+  handleType: 'source' | 'target',
+  opposingCenterX: number,
+  metrics: SchemaMetrics,
+): 'left' | 'right' {
+  const width = node.dimensions?.width ?? DEFAULT_NODE_WIDTH;
+  const midX =
+    absolutePosition.x + (metrics.insetLeft + (width - metrics.insetRight)) / 2;
+
+  return handleType === 'source'
+    ? (opposingCenterX >= midX ? 'right' : 'left')  // tie → right (real source is first in DOM)
+    : (opposingCenterX > midX ? 'right' : 'left');  // tie → left  (real target is first in DOM)
+}
+
+/** Flow-space center x of a node — what `rectCenter(nodeEl.getBoundingClientRect())` yields. */
+function nodeCenterX(node: FlowNode): number {
+  return node.position.x + (node.dimensions?.width ?? DEFAULT_NODE_WIDTH) / 2;
+}
+
+interface ResolvedEndpoints {
+  sourcePos: HandlePosition;
+  targetPos: HandlePosition;
+  srcMeasurement: HandleMeasurement;
+  tgtMeasurement: HandleMeasurement;
+}
+
+/**
+ * Both endpoints of a schema→schema edge, derived from state — the fast path.
+ *
+ * Returns `null` whenever the caller must fall back to DOM measurement. The
+ * handle box size comes from the metrics rather than being zeroed: `shortenEndpoint`
+ * derives its marker offset from `min(handleWidth, handleHeight) / 2`, so zeros
+ * would pull every marker'd endpoint ~5px off where the DOM path puts it.
+ *
+ * `sourceNode` / `targetNode` are the ABSOLUTE-position wrappers; `rawSource` /
+ * `rawTarget` are the state nodes carrying `data.fields`.
+ */
+function resolveSchemaEndpoints(
+  rawSource: FlowNode,
+  rawTarget: FlowNode,
+  sourceNode: FlowNode,
+  targetNode: FlowNode,
+  sourceHandle: string,
+  targetHandle: string,
+  metrics: SchemaMetrics,
+): ResolvedEndpoints | null {
+  const srcSide = schemaHandleSide(rawSource, sourceNode.position, 'source', nodeCenterX(targetNode), metrics);
+  const tgtSide = schemaHandleSide(rawTarget, targetNode.position, 'target', nodeCenterX(sourceNode), metrics);
+
+  const src = computeSchemaHandlePoint(rawSource, sourceNode.position, sourceHandle, srcSide, metrics);
+  const tgt = computeSchemaHandlePoint(rawTarget, targetNode.position, targetHandle, tgtSide, metrics);
+  if (!src || !tgt) return null;
+
+  const size = { handleWidth: metrics.handleWidth, handleHeight: metrics.handleHeight };
+  return {
+    sourcePos: src.position,
+    targetPos: tgt.position,
+    srcMeasurement: { x: src.x, y: src.y, ...size },
+    tgtMeasurement: { x: tgt.x, y: tgt.y, ...size },
+  };
 }
 
 /**
@@ -1056,6 +1175,43 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         let srcMeasurement: HandleMeasurement | null;
         let tgtMeasurement: HandleMeasurement | null;
 
+        // ── Schema handle geometry (WS-G) ─────────────────────────────────
+        // Schema rows are uniform, so once `_schemaMetrics` is cached every
+        // handle center on a schema node is arithmetic — no rect reads. Resolved
+        // BEFORE the standard branch so the fast path never touches the DOM.
+        //
+        // Reading `_schemaMetrics` here DOES track a dependency on the property's
+        // identity (Alpine.raw() doesn't unwrap the merge-scope proxy — see the
+        // `_obstacleSnapshot` note below). That is intended: metrics go
+        // null → object exactly once, one tick after the first schema node
+        // renders, so each edge re-runs once and upgrades from the DOM path to
+        // this one. A colorMode change nulls the cache and it re-measures. It is
+        // a one-time transition, not a per-frame dependency.
+        //
+        // `nodeOrigin` is a hard disqualifier: `toAbsoluteNode` only applies it
+        // to nodes with a `parentId`, so under a non-default origin a ROOT node's
+        // rendered top-left is `position − dimensions × origin`, not `position`,
+        // and the arithmetic below would desync from what the browser painted.
+        const schemaMetrics = canvas._schemaMetrics as SchemaMetrics | null | undefined;
+        const configOrigin = canvas._config?.nodeOrigin;
+        const schemaEndpoints =
+          resolvedEdgeType !== 'floating'
+          && canvas._config?.schemaHandleGeometry !== 'dom'
+          && !!schemaMetrics
+          && (!configOrigin || (configOrigin[0] === 0 && configOrigin[1] === 0))
+          && isSchemaEligible(rawSource, edge.sourceHandle)
+          && isSchemaEligible(rawTarget, edge.targetHandle)
+            ? resolveSchemaEndpoints(
+                rawSource,
+                rawTarget,
+                sourceNode,
+                targetNode,
+                edge.sourceHandle!,
+                edge.targetHandle!,
+                schemaMetrics,
+              )
+            : null;
+
         if (resolvedEdgeType === 'floating') {
           // ── Floating: compute endpoints from node geometry ──
           const floating = getFloatingEdgeParams(sourceNode, targetNode);
@@ -1068,6 +1224,14 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
 
           lastSrcCoords = { x: floating.sx, y: floating.sy };
           lastTgtCoords = { x: floating.tx, y: floating.ty };
+        } else if (schemaEndpoints) {
+          // ── Schema fast path (WS-G): endpoints from state, zero rect reads ──
+          sourcePos = schemaEndpoints.sourcePos;
+          targetPos = schemaEndpoints.targetPos;
+          srcMeasurement = schemaEndpoints.srcMeasurement;
+          tgtMeasurement = schemaEndpoints.tgtMeasurement;
+          lastSrcCoords = { x: srcMeasurement.x, y: srcMeasurement.y };
+          lastTgtCoords = { x: tgtMeasurement.x, y: tgtMeasurement.y };
         } else {
           // ── Standard: resolve from handle elements ──
           // Compute screen-space centers of each endpoint node ONCE so the

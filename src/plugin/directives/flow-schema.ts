@@ -123,8 +123,18 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
         const handleEl = rowEl?.querySelector<HTMLElement>('.flow-schema-handle');
         if (!headerEl || !rowEl || !handleEl) return;
 
+        // Insets are consumed against the NODE's border box — edge code adds them
+        // to `node.position` / `node.dimensions`, which describe the `.flow-node`
+        // element. Anchor them there, not on `host`: under WireFlow's slot markup
+        // (`<div class="flow-node"><div x-flow-schema class="flow-schema-node">`)
+        // the two are different elements and `host` sits one border-width inside
+        // the node, which would shift every state-derived endpoint by that border.
+        // In directive markup (`x-flow-node` + `x-flow-schema` on one element)
+        // `closest` returns `host` itself and nothing changes.
+        const nodeEl = (host.closest('[data-flow-node-id]') as HTMLElement | null) ?? host;
+
         const zoom = raw.viewport?.zoom || 1;
-        const hostRect = host.getBoundingClientRect();
+        const nodeRect = nodeEl.getBoundingClientRect();
         const headerRect = headerEl.getBoundingClientRect();
         const rowRect = rowEl.getBoundingClientRect();
         const handleRect = handleEl.getBoundingClientRect();
@@ -137,9 +147,9 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
         const metrics: SchemaMetrics = {
           headerHeight: headerRect.height / zoom,
           rowHeight,
-          insetLeft: (rowRect.left - hostRect.left) / zoom,
-          insetRight: (hostRect.right - rowRect.right) / zoom,
-          insetTop: (headerRect.top - hostRect.top) / zoom,
+          insetLeft: (rowRect.left - nodeRect.left) / zoom,
+          insetRight: (nodeRect.right - rowRect.right) / zoom,
+          insetTop: (headerRect.top - nodeRect.top) / zoom,
           handleWidth: handleRect.width / zoom,
           handleHeight: handleRect.height / zoom,
         };
