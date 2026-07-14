@@ -95,6 +95,20 @@ type MountOptions = {
   edgesReconnectable?: boolean;
   /** Render each node's handles inside an `x-schema-reorderable` row. */
   schemaRows?: boolean;
+  /**
+   * Wrap each node's handles in a nested PLAIN `[x-data]` scope — any Alpine
+   * component a user drops inside a node (a disclosure, a menu, a form). This is
+   * legal, common markup and the handles inside it are still OUR handles: Alpine's
+   * `$data` merges the whole ancestor scope stack, so the directive resolves the
+   * canvas through it. The delegated listener must not disown them.
+   */
+  nestedScope?: boolean;
+  /**
+   * Mount a REAL second canvas (its own `.flow-container` + `.flow-viewport` +
+   * node + handle, driven by its own delegated listener) inside the parent's
+   * viewport. This — not a bare `[x-data]` — is what "nested canvas" means.
+   */
+  nestedCanvas?: boolean;
 };
 
 const teardown: Array<() => void> = [];
@@ -181,6 +195,13 @@ function mount(opts: MountOptions = {}) {
       handleParent = row;
     }
 
+    if (opts.nestedScope) {
+      const scope = document.createElement('div');
+      scope.setAttribute('x-data', '{ open: false }');
+      handleParent.appendChild(scope);
+      handleParent = scope;
+    }
+
     const src = document.createElement('div');
     src.setAttribute('x-flow-handle:source', '');
     src.dataset.flowHandleId = 'source';
@@ -203,6 +224,69 @@ function mount(opts: MountOptions = {}) {
   const a = makeNode('a', 0);
   const b = makeNode('b', 300);
 
+  // ── A REAL nested canvas: its own .flow-container + .flow-viewport ──────────
+  // A second flowCanvas mounted inside the parent's viewport (a sub-flow preview,
+  // a minimap-style inset). Its handles belong to IT, and are driven by ITS own
+  // delegated listener — never by the parent's.
+  let nested: {
+    container: HTMLElement;
+    viewport: HTMLElement;
+    canvas: typeof canvas;
+    source: HTMLElement;
+    capturedEdges: FlowEdge[];
+    emitted: Array<{ event: string; detail: any }>;
+  } | null = null;
+
+  if (opts.nestedCanvas) {
+    const nestedEdges: FlowEdge[] = [];
+    const nestedEmitted: Array<{ event: string; detail: any }> = [];
+
+    const nestedContainer = document.createElement('div');
+    nestedContainer.classList.add('flow-container');
+
+    const nestedCanvas = {
+      ...canvas,
+      edges: nestedEdges,
+      _container: nestedContainer,
+      addEdges(edge: FlowEdge | FlowEdge[]) {
+        for (const e of Array.isArray(edge) ? edge : [edge]) nestedEdges.push(e);
+      },
+      _emit(event: string, detail: any) {
+        nestedEmitted.push({ event, detail });
+      },
+    };
+
+    (window as any).nestedCanvasScope = () => nestedCanvas;
+    nestedContainer.setAttribute('x-data', 'nestedCanvasScope()');
+
+    const nestedViewport = document.createElement('div');
+    nestedViewport.className = 'flow-viewport';
+    nestedContainer.appendChild(nestedViewport);
+
+    const nestedNode = document.createElement('div');
+    nestedNode.setAttribute('x-flow-node', '');
+    nestedNode.setAttribute('data-flow-node-id', 'nested-a');
+
+    const nestedSource = document.createElement('div');
+    nestedSource.setAttribute('x-flow-handle:source', '');
+    nestedSource.dataset.flowHandleId = 'source';
+    nestedNode.appendChild(nestedSource);
+    nestedViewport.appendChild(nestedNode);
+
+    viewport.appendChild(nestedContainer);
+    stubRect(nestedContainer, { left: 500, top: 300, width: 200, height: 200 });
+    stubRect(nestedSource, { left: 520, top: 400, width: 20, height: 10 });
+
+    nested = {
+      container: nestedContainer,
+      viewport: nestedViewport,
+      canvas: nestedCanvas as typeof canvas,
+      source: nestedSource,
+      capturedEdges: nestedEdges,
+      emitted: nestedEmitted,
+    };
+  }
+
   document.body.appendChild(host);
   stubRect(host, { left: 0, top: 0, width: 800, height: 600 });
 
@@ -218,9 +302,13 @@ function mount(opts: MountOptions = {}) {
   Alpine.initTree(host);
 
   // flow-canvas installs this at init; here we do it by hand on the same
-  // element (`.flow-viewport`) and in the same phase (capture).
+  // element (`.flow-viewport`) and in the same phase (capture). A nested canvas
+  // installs its own, exactly as a second flowCanvas instance would.
   if (opts.delegatedHandleEvents !== false) {
     teardown.push(installHandleDelegation(viewport, canvas));
+    if (nested) {
+      teardown.push(installHandleDelegation(nested.viewport, nested.canvas));
+    }
   }
 
   teardown.push(() => {
@@ -229,7 +317,7 @@ function mount(opts: MountOptions = {}) {
   });
 
   return {
-    host, viewport, canvas, capturedEdges, emitted, listeners,
+    host, viewport, canvas, capturedEdges, emitted, listeners, nested,
     nodeA: a.nodeEl, sourceA: a.src, targetA: a.tgt, rowA: a.row,
     nodeB: b.nodeEl, sourceB: b.src, targetB: b.tgt,
   };
@@ -433,28 +521,48 @@ describe('delegatedHandleEvents: false — the revert path', () => {
 });
 
 describe('multi-canvas safety', () => {
-  it('a parent canvas does not drive a handle that belongs to a nested canvas', () => {
-    const h = mount();
+  // Ownership is discriminated on the CANVAS ROOT (`.flow-container`), not on the
+  // nearest `[x-data]`. A nested canvas necessarily has its own container; a plain
+  // Alpine scope inside a node does not. Both tests below have to hold at once —
+  // the second is the one that broke when ownership was keyed off `[x-data]`.
 
-    // Nest a second [x-data] scope inside the parent's viewport and put a handle
-    // in it. The parent's delegated listener must leave it alone.
-    const nested = document.createElement('div');
-    nested.setAttribute('x-data', '{}');
-    const nestedNode = document.createElement('div');
-    nestedNode.setAttribute('x-flow-node', '');
-    nestedNode.setAttribute('data-flow-node-id', 'nested');
-    const nestedHandle = document.createElement('div');
-    nestedHandle.dataset.flowHandleType = 'source';
-    nestedHandle.dataset.flowHandleId = 'source';
-    nestedNode.appendChild(nestedHandle);
-    nested.appendChild(nestedNode);
-    h.viewport.appendChild(nested);
+  it('a parent canvas does not drive a handle that belongs to a nested CANVAS', () => {
+    const h = mount({ nestedCanvas: true });
+    const nested = h.nested!;
 
-    pointer(nestedHandle, 'pointerdown', 10, 105);
-    pointer(document, 'pointermove', 220, 220);
+    pointer(nested.source, 'pointerdown', 530, 405);
+    pointer(document, 'pointermove', 600, 500);
 
+    // The parent's listener saw the press (it is on an ancestor, in capture) and
+    // must have declined it.
     expect(h.canvas.pendingConnection).toBeNull();
     expect(h.emitted).toHaveLength(0);
+
+    // …while the nested canvas's OWN listener drove it. Without this the
+    // assertion above would pass vacuously on a listener that fires for nobody.
+    expect(nested.canvas.pendingConnection).not.toBeNull();
+    expect(nested.emitted.map(e => e.event)).toContain('connect-start');
+
+    pointer(document, 'pointerup', 600, 500);
+  });
+
+  it('DOES drive a handle sitting inside a nested plain [x-data] scope within a node', () => {
+    // <div x-flow-node><div x-data="{ open: false }"><div x-flow-handle:source>
+    // Any Alpine component inside a node. Alpine's $data merges the whole ancestor
+    // scope stack, so this handle has always resolved the canvas and always worked.
+    // Delegation must not make it inert.
+    const h = mount({ nestedScope: true });
+
+    pointer(h.sourceA, 'pointerdown', 10, 105);
+    pointer(document, 'pointermove', 220, 220);
+    pointer(document, 'pointermove', TARGET_B_CENTER.x, TARGET_B_CENTER.y);
+    pointer(document, 'pointerup', TARGET_B_CENTER.x, TARGET_B_CENTER.y);
+
+    expect(h.capturedEdges).toHaveLength(1);
+    expect(h.capturedEdges[0]).toMatchObject({
+      source: 'a', sourceHandle: 'source', target: 'b', targetHandle: 'target',
+    });
+    expect(h.emitted.map(e => e.event)).toContain('connect');
   });
 });
 

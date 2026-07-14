@@ -62,18 +62,24 @@ export function installHandleDelegation(
   rootEl: HTMLElement,
   canvas: any,
 ): () => void {
-  // The canvas element this listener speaks for. A handle whose nearest [x-data]
-  // is some OTHER scope (a nested canvas mounted inside our viewport) belongs to
-  // that scope's listener, not ours — this reproduces the directive's own
-  // `el.closest('[x-data]')` canvas resolution as an ownership check.
-  const canvasEl = rootEl.closest('[x-data]');
-
   const onPointerDown = (event: Event): void => {
     const target = event.target as HTMLElement | null;
     const handleEl = target?.closest?.('[data-flow-handle-type]') as HTMLElement | null;
     if (!handleEl) return;
     if (!rootEl.contains(handleEl)) return;
-    if (canvasEl && handleEl.closest('[x-data]') !== canvasEl) return;
+
+    // Ownership is discriminated on the CANVAS ROOT, not the nearest [x-data].
+    // A nested CANVAS necessarily brings its own `.flow-container`, so its handles
+    // resolve to it and we decline them — a parent must never drive a child's
+    // handles. A plain Alpine scope inside a node (`<div x-data="{ open: false }">`
+    // wrapping a handle) brings no container, so it still resolves to US — which is
+    // correct, and is the whole point: Alpine's `$data` merges the entire ancestor
+    // scope stack, so such a handle has always found this canvas and always worked.
+    // Keying ownership off `closest('[x-data]')` would disown it and leave it inert.
+    //
+    // This is also exactly the element the gesture itself derives as `containerEl`
+    // (`flow-handle.ts`), so the two can never disagree about which canvas is in play.
+    if (canvas?._container && handleEl.closest('.flow-container') !== canvas._container) return;
 
     startHandlePointerInteraction(handleEl, canvas, event as PointerEvent);
   };
