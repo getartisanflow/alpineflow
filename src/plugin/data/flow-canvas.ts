@@ -41,6 +41,7 @@ import { createSelectionBox, type SelectionBoxInstance } from '../../core/select
 import { createLasso, type LassoInstance } from '../../core/lasso';
 import { getNodesInPolygon, getNodesFullyInPolygon, pointInPolygon } from '../../core/lasso-hit-test';
 import { clearValidationClasses } from '../directives/flow-handle';
+import { installHandleDelegation } from '../handle-delegation';
 import { resolveShortcuts, matchesKey, matchesModifier, shouldCaptureNudge } from '../../core/keyboard-shortcuts';
 import { isDraggable, isSelectable } from '../../core/node-flags';
 import { attachLongPress } from '../../core/long-press';
@@ -335,6 +336,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _initialDimensions: new Map<string, Dimensions>(),
     _edgeMap: new Map<string, FlowEdge>(),
     _viewportEl: null as HTMLElement | null,
+    _handleDelegationCleanup: null as (() => void) | null,
 
     // ── Viewport frame coalescing ─────────────────────────────────────────
     /**
@@ -1192,6 +1194,31 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
       // Set up SVG <defs> for edge markers (arrowheads etc.)
       this._setupMarkerDefs();
+    },
+
+    /**
+     * Install the ONE delegated `pointerdown` listener that starts the connect /
+     * reconnect gesture for every handle on this canvas — instead of one listener
+     * per handle, of which a large schema graph has thousands.
+     *
+     * Attached on `.flow-viewport` in the CAPTURE phase. That placement is
+     * load-bearing (it is what keeps a handle press from also dragging the node
+     * or reordering a schema row, while still yielding to an active whiteboard
+     * tool) — the reasoning is in `../handle-delegation.ts`.
+     */
+    _initHandleDelegation() {
+      if (this._config?.delegatedHandleEvents === false) return;
+
+      // `_viewportEl` is registered by the x-flow-viewport directive, which has
+      // not run when init() executes — resolve on the same $nextTick the panZoom
+      // fallback uses.
+      this.$nextTick(() => {
+        const rootEl = (this._viewportEl
+          ?? (this._container?.querySelector('.flow-viewport') as HTMLElement | null)
+          ?? this._container) as HTMLElement | null;
+        if (!rootEl) return;
+        this._handleDelegationCleanup = installHandleDelegation(rootEl, this);
+      });
     },
 
     /** Canvas click handler, context menu handler, long press, touch selection mode, context menu event listeners. */
@@ -2164,6 +2191,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._initAnnouncer();
       this._initCollab();
       this._initPanZoom();
+      this._initHandleDelegation();
       this._initClickHandlers();
       this._initKeyboard();
       this._initMinimap();
@@ -2235,6 +2263,8 @@ export function registerFlowCanvas(Alpine: Alpine) {
       (this as any)._wireCleanup?.();
       (this as any)._wireCleanup = null;
 
+      this._handleDelegationCleanup?.();
+      this._handleDelegationCleanup = null;
       this._longPressCleanup?.();
       this._longPressCleanup = null;
       this._touchSelectionCleanup?.();

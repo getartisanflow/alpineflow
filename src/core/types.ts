@@ -1179,6 +1179,18 @@ export interface FlowCanvasConfig {
    */
   keyboardConnect?: boolean;
 
+  /**
+   * Drive every handle's connect / reconnect gesture from ONE delegated
+   * `pointerdown` listener per canvas instead of one listener per handle.
+   * A large schema graph can hold thousands of handles, so this removes
+   * thousands of listener registrations at mount and on every re-stamp.
+   *
+   * Set to `false` to restore the per-handle listeners. Behaviour is identical
+   * either way; the flag exists as a revert path. Read once at init — patching
+   * it at runtime has no effect. Default: true
+   */
+  delegatedHandleEvents?: boolean;
+
   // ── Connection Line Customization ──────────────────────────────────
   /** Type of path used for the temporary connection drag line.
    *  Default: 'straight' */

@@ -1687,6 +1687,37 @@ export function startTargetHandlePointerInteraction(
   activeHandleGestureCleanups.set(handleEl, cleanupReconnection);
 }
 
+/**
+ * Start whichever pointer interaction the handle's type calls for.
+ *
+ * The entry point the delegated canvas-level listener calls (see
+ * `../handle-delegation.ts`). The branch that used to be taken at directive init
+ * — `if (type === 'source')` — is taken here instead, off the dataset the
+ * directive stamped on the element.
+ */
+export function startHandlePointerInteraction(
+  handleEl: HTMLElement,
+  canvas: any,
+  event: PointerEvent,
+): void {
+  if (handleEl.dataset.flowHandleType === 'source') {
+    startSourceHandlePointerInteraction(handleEl, canvas, event);
+  } else {
+    startTargetHandlePointerInteraction(handleEl, canvas, event);
+  }
+}
+
+/**
+ * Should THIS handle attach its own `pointerdown` listener?
+ *
+ * Only when delegation is switched off. Default is on, so the canvas's single
+ * delegated listener drives every handle; `delegatedHandleEvents: false` is the
+ * revert path and restores the pre-delegation per-handle listeners byte for byte.
+ */
+function usesLegacyHandlePointerListeners(canvas: any): boolean {
+  return canvas?._config?.delegatedHandleEvents === false;
+}
+
 export function registerFlowHandleDirective(Alpine: Alpine) {
   Alpine.directive(
     'flow-handle',
@@ -1964,7 +1995,9 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
           startSourceHandlePointerInteraction(el, getCanvas(), e);
         };
 
-        el.addEventListener('pointerdown', onPointerDown);
+        if (usesLegacyHandlePointerListeners(getCanvas())) {
+          el.addEventListener('pointerdown', onPointerDown);
+        }
 
         // Highlight source handles during source-end reconnection
         const onReconnectPointerEnter = () => {
@@ -2157,7 +2190,9 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
           startTargetHandlePointerInteraction(el, getCanvas(), e);
         };
 
-        el.addEventListener('pointerdown', onTargetPointerDown);
+        if (usesLegacyHandlePointerListeners(getCanvas())) {
+          el.addEventListener('pointerdown', onTargetPointerDown);
+        }
 
         cleanup(() => {
           // Abort any gesture this handle still has in flight (see

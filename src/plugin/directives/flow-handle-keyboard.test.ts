@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import Alpine from 'alpinejs';
 import { registerFlowHandleDirective } from './flow-handle';
+import { installHandleDelegation } from '../handle-delegation';
 import * as handleIndexModule from '../handle-index';
 import type { FlowEdge } from '../../core/types';
 
@@ -29,7 +30,11 @@ function clearChildren(el: HTMLElement): void {
 }
 
 const mountedHosts: HTMLElement[] = [];
+const delegationCleanups: Array<() => void> = [];
 afterEach(() => {
+  while (delegationCleanups.length > 0) {
+    delegationCleanups.pop()?.();
+  }
   while (mountedHosts.length > 0) {
     const el = mountedHosts.pop();
     el?.remove();
@@ -121,6 +126,13 @@ function mount(opts: MountOptions = {}) {
   mountedHosts.push(host);
 
   Alpine.initTree(host);
+
+  // Handles no longer attach their own pointerdown listener — the canvas owns a
+  // single delegated one (flow-canvas `_initHandleDelegation`). This harness has
+  // no `.flow-viewport`, so it goes on the container, which is what flow-canvas
+  // falls back to as well. The pointer connect-drag tests below therefore run
+  // against the delegated path, unchanged.
+  delegationCleanups.push(installHandleDelegation(host, canvas));
 
   return {
     host,

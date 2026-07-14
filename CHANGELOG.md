@@ -155,6 +155,18 @@ Reworks viewport culling from an opt-in, per-frame full scan into a grid-backed,
 - `flow-canvas`: `_applyCulling` gated by `viewportCulling ?? 'auto'` + `cullingAutoThreshold ?? 150`; new `_uncullEverything()` restores display on all tracked elements and resets the tracking sets when culling deactivates (threshold drop or config change), tracked via `_cullingWasActive`. New plain `_culledEdgeIds` set (rebuilt each frame, so removed edges can't leak entries).
 - New config fields `viewportCulling?: boolean | 'auto'` and `cullingAutoThreshold?: number` on `FlowCanvasConfig`; `docs/configuration/viewport.md` and `docs/canvas/viewport.md` updated for the new default.
 
+### Workstream F — delegated handle pointer listeners
+
+Replaces the per-handle `pointerdown` listener with a single delegated listener per canvas. A schema graph at Draftsman scale carries ~5,000 handles, so the old scheme registered ~5,000 listeners at mount and re-registered them on every schema row re-stamp.
+
+**Performance**
+- **One `pointerdown` listener per canvas instead of one per handle.** Installed on `.flow-viewport` in the capture phase at canvas init; it resolves the pressed handle with `closest('[data-flow-handle-type]')` and starts the same connect / reconnect gesture the per-handle listener used to. Mount and re-stamp no longer pay a listener registration per handle. Keyboard/a11y bindings, hover affordances and click-to-connect stay per-handle — the delegation covers `pointerdown` only.
+
+**Infrastructure**
+- New `src/plugin/handle-delegation.ts` exporting `installHandleDelegation(rootEl, canvas)`; the canvas installs it in `_initHandleDelegation()` and tears it down in `destroy()`.
+- The two pointerdown bodies are extracted to module scope in `flow-handle.ts` as `startSourceHandlePointerInteraction` / `startTargetHandlePointerInteraction`, behind the `startHandlePointerInteraction` dispatcher. Behaviour is unchanged, including the deliberate source/target propagation asymmetry (a target handle with no reconnectable edge still falls through to the node drag) and the capture-phase ordering that keeps an active whiteboard tool ahead of the handles.
+- New config `delegatedHandleEvents?: boolean` (default `true`). Set `false` to restore the per-handle listeners. Read once at init; not runtime-patchable.
+
 ## v0.2.1-alpha — 2026-04-14
 
 > Companion release: [WireFlow v0.2.1-alpha](https://github.com/getartisanflow/wireflow/blob/main/CHANGELOG.md#v021-alpha--2026-04-14) ships the matching server-side surface (`<x-schema-designer>`, `WithSchemaDesigner`, validator rules, `@connect-validate` bridge) plus the post-Phase-5 `<x-flow>` / `<x-schema-designer>` polish that pairs with the fullscreen + row-select + cascade fixes below.
