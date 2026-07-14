@@ -1232,14 +1232,14 @@ describe('animate — respectReducedMotion', () => {
 // destroy
 // ═══════════════════════════════════════════════════════════════════════════════
 
-describe('createAnimationMixin — destroy()', () => {
+describe('createAnimationMixin — _destroyAnimations()', () => {
   it('stops all active animations on destroy', () => {
     const ctx = mockCtx();
     const stopAll = vi.fn();
     ctx._animator = { animate: vi.fn(), stopAll } as any;
     const mixin = createAnimationMixin(ctx);
 
-    mixin.destroy();
+    mixin._destroyAnimations();
 
     expect(stopAll).toHaveBeenCalledOnce();
   });
@@ -1249,7 +1249,7 @@ describe('createAnimationMixin — destroy()', () => {
     ctx._animator = null;
     const mixin = createAnimationMixin(ctx);
 
-    expect(() => mixin.destroy()).not.toThrow();
+    expect(() => mixin._destroyAnimations()).not.toThrow();
   });
 
   it('destroys all active particles on destroy', () => {
@@ -1258,7 +1258,7 @@ describe('createAnimationMixin — destroy()', () => {
     ctx._particleEngineHandle = { stop: stopHandle } as any;
     const mixin = createAnimationMixin(ctx);
 
-    mixin.destroy();
+    mixin._destroyAnimations();
 
     // destroyParticles() stops the engine handle and clears active particles
     expect(stopHandle).toHaveBeenCalledOnce();
@@ -1274,7 +1274,7 @@ describe('createAnimationMixin — destroy()', () => {
     ctx._activeTimelines.add(tl1);
     ctx._activeTimelines.add(tl2);
 
-    mixin.destroy();
+    mixin._destroyAnimations();
 
     expect(tl1.stop).toHaveBeenCalledOnce();
     expect(tl2.stop).toHaveBeenCalledOnce();
@@ -1285,7 +1285,7 @@ describe('createAnimationMixin — destroy()', () => {
     const mixin = createAnimationMixin(ctx);
     ctx._activeTimelines.add({ stop: vi.fn(), locked: false } as any);
 
-    mixin.destroy();
+    mixin._destroyAnimations();
 
     expect(ctx._activeTimelines.size).toBe(0);
   });

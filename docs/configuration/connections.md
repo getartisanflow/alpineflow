@@ -60,6 +60,32 @@ Drag from a source handle to connect — the snap radius highlights valid target
 | `onProximityConnect` | `(detail) => boolean \| void` | — | Validate or reject a proximity connection. |
 | `preventCycles` | `boolean` | `false` | Reject connections that would create directed cycles. |
 | `connectionRules` | `ConnectionRules` | — | Declarative type-based connection filtering. See [Connection rules](#connection-rules) below. |
+| `delegatedHandleEvents` | `boolean` | `true` | Start connect/reconnect gestures from ONE delegated `pointerdown` listener per canvas instead of one per handle. See [Handle event delegation](#handle-event-delegation) below. |
+
+## Handle event delegation
+
+By default the canvas installs a single `pointerdown` listener that starts the
+connect / reconnect gesture for every handle on it. A schema graph with thousands
+of handles therefore pays for one listener, not thousands — at mount and again on
+every row re-stamp.
+
+Only `pointerdown` is delegated. Hover (`pointerenter` / `pointerleave`),
+click-to-connect, and all keyboard/a11y handlers stay per-handle, so nothing about
+the handle's own behaviour changes.
+
+Set `delegatedHandleEvents: false` to restore the pre-delegation per-handle
+listeners. It is read once at canvas init — patching it at runtime has no effect.
+
+```js
+flowCanvas({
+    delegatedHandleEvents: false,   // opt out; one pointerdown listener per handle
+})
+```
+
+> **Note:** under delegation the source-handle gesture stops the event during the
+> capture phase, so a `pointerdown` listener you attach to your own markup *inside*
+> a source handle will not fire. Put such listeners on an element outside the handle,
+> or opt out with `delegatedHandleEvents: false`.
 
 ## Connection rules
 
