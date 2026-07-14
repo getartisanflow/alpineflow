@@ -278,6 +278,8 @@ interface HandleMeasurement {
  *    consumer `x-show`, so `data.fields` no longer maps to rendered rows)
  *  - `rotation` → `getBoundingClientRect` folds in the CSS transform for free;
  *    arithmetic on `node.position` cannot
+ *  - a non-default per-node `nodeOrigin` → the node's painted top-left is not its
+ *    position; see the block below
  *  - no finite `dimensions` → the right-hand handle x is `position.x + width`
  *  - not rendered by `x-flow-schema`, or viewport-culled, or non-uniform rows →
  *    see the three blocks below
@@ -296,6 +298,20 @@ function schemaFieldIndexForEndpoint(
   if (!node || !handleId) return -1;
   if (node.hidden || node.collapsed || node.condensed) return -1;
   if (node.rotation) return -1;
+
+  // `nodeOrigin` is a PER-NODE property as well as a canvas config, and the node's own
+  // value WINS: `flow-node` places the element at `absPos − dimensions × (node.nodeOrigin
+  // ?? config.nodeOrigin ?? [0,0])`. `toAbsoluteNode` returns a ROOT node unchanged and
+  // `getAbsolutePosition` folds in only the PARENTS' origins — never the node's own — so
+  // under a per-node origin `node.position` is NOT the rendered border-box top-left, and
+  // every state-derived endpoint on this node would land `dimensions × origin` away from
+  // where the browser painted the handle. The canvas-level gate at the call site checks
+  // only `config.nodeOrigin`, which a node carrying its own origin sails straight past.
+  // Checking here covers BOTH endpoints — a node's own geometry AND its role as the
+  // opposing node in `schemaHandleSide` (whose `nodeCenterX` reads the same unshifted
+  // position, so an unguarded origin can flip the side too).
+  const origin = node.nodeOrigin;
+  if (origin && (origin[0] !== 0 || origin[1] !== 0)) return -1;
 
   // Rendered by `x-flow-schema`? Only then do the cached `SchemaMetrics` describe
   // this node's rows. A hand-rolled node (skip the directive, write `x-for` +

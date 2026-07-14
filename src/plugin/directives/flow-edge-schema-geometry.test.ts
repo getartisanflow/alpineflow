@@ -90,6 +90,8 @@ interface FixtureNode {
   collapsed?: boolean;
   condensed?: boolean;
   rotation?: number;
+  /** Per-node anchor override. The renderer shifts the element by `dimensions × origin`. */
+  nodeOrigin?: [number, number];
   /** Renders as a plain (non-schema) node with one left target + one right source. */
   plain?: boolean;
   /**
@@ -197,6 +199,7 @@ function installLayout(
   insets: Insets,
   zoom: number,
   viewport: { x: number; y: number },
+  configOrigin: [number, number] | undefined,
 ): ReturnType<typeof vi.spyOn> {
   const byId = (id: string | undefined): FixtureNode | undefined =>
     nodes.find((n) => n.id === id);
@@ -225,8 +228,14 @@ function installLayout(
     // still occupies a box in the browser — the DOM path can measure it, the
     // state path cannot. Hence the fallback default here.
     const dims = node.dimensions ?? { width: 220, height: schemaHeight(FIELDS.length, insets) };
-    const nx = CONTAINER_LEFT + viewport.x + node.position.x * zoom;
-    const ny = CONTAINER_TOP + viewport.y + node.position.y * zoom;
+    // `nodeOrigin` moves the painted box, not `node.position`: the renderer writes
+    // `left = absPos.x − width × origin[0]` (flow-node.ts), and the node's OWN origin
+    // wins over the canvas config's. `toAbsoluteNode` does not undo that for a root
+    // node, so under a non-default origin `node.position` is no longer the border-box
+    // top-left — which is exactly why such a node is ineligible for the state path.
+    const origin = node.nodeOrigin ?? configOrigin ?? [0, 0];
+    const nx = CONTAINER_LEFT + viewport.x + (node.position.x - dims.width * origin[0]) * zoom;
+    const ny = CONTAINER_TOP + viewport.y + (node.position.y - dims.height * origin[1]) * zoom;
     const nw = dims.width * zoom;
     const nh = dims.height * zoom;
     if (el === nodeEl) return fakeRect(nx, ny, nw, nh);
@@ -303,7 +312,9 @@ function mount(opts: MountOptions) {
   const zoom = opts.zoom ?? 1;
   const viewport = opts.viewport ?? { x: 11, y: -7 };
 
-  rectSpy = installLayout(opts.nodes, insets, zoom, viewport);
+  const configOrigin = (opts.config?.nodeOrigin as [number, number] | undefined) ?? undefined;
+
+  rectSpy = installLayout(opts.nodes, insets, zoom, viewport, configOrigin);
 
   const canvas = {
     nodes: opts.nodes,
@@ -454,14 +465,22 @@ function geometryRectCalls(spy: ReturnType<typeof vi.spyOn>): number {
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
 const FIELDS = ['id', 'email', 'team_id', 'created_at'];
+/** Node `d`'s single field — its only row is also its last row. */
+const SINGLE_FIELD = ['uuid'];
 
 /**
- * 3 schema nodes × 4 fields.
+ * 3 schema nodes × 4 fields, plus a ONE-row node.
  *   a → b   b is to the RIGHT of a
  *   c       is directly BELOW a: identical x, identical width ⇒ the two candidate
  *           handle x's straddle the opposing node's center x EXACTLY, so
  *           `pickClosestHandle`'s strict `<` tie-break decides the side. Source
  *           ties right, target ties left (DOM order in `renderRow`).
+ *   d       has a SINGLE field. Its only row is also `:last-child`, so it lost its
+ *           border-bottom: `rowHeightLast` / `handleOffsetYLast` are the ones that
+ *           apply and the `(n − 1) × rowHeight` stride term is zero. The metrics can
+ *           never be measured FROM such a node (a stride needs two rows), so a 1-row
+ *           node is only ever a CONSUMER of another node's metrics — the most
+ *           delicate invariant on this path, hence a fixture node of its own.
  */
 function schemaFixture(insets: Insets = SYMMETRIC): FixtureNode[] {
   const h = schemaHeight(FIELDS.length, insets);
@@ -469,6 +488,7 @@ function schemaFixture(insets: Insets = SYMMETRIC): FixtureNode[] {
     { id: 'a', position: { x: 0, y: 0 }, dimensions: { width: 220, height: h }, data: { label: 'A', fields: schemaFields(FIELDS) } },
     { id: 'b', position: { x: 500, y: 40 }, dimensions: { width: 220, height: h }, data: { label: 'B', fields: schemaFields(FIELDS) } },
     { id: 'c', position: { x: 0, y: 400 }, dimensions: { width: 220, height: h }, data: { label: 'C', fields: schemaFields(FIELDS) } },
+    { id: 'd', position: { x: 500, y: 420 }, dimensions: { width: 220, height: schemaHeight(1, insets) }, data: { label: 'D', fields: schemaFields(SINGLE_FIELD) } },
   ];
 }
 
@@ -488,6 +508,9 @@ function schemaEdges(): FixtureEdge[] {
     { id: 'e-tie-up', source: 'c', target: 'a', sourceHandle: 'created_at', targetHandle: 'created_at', type: 'smoothstep' },
     // Routing must be untouched by this task.
     { id: 'e-avoidant', source: 'a', target: 'b', sourceHandle: 'team_id', targetHandle: 'email', type: 'avoidant' },
+    // The 1-row boundary: d's only row is its last row. Marked, so `d` also exposes
+    // the post-`shortenEndpoint` coords on a single-row endpoint.
+    { id: 'e-single-row', source: 'a', target: 'd', sourceHandle: 'created_at', targetHandle: 'uuid', type: 'straight', markerEnd: 'arrow' },
   ];
 }
 
@@ -569,6 +592,39 @@ describe('schema edge geometry — state path vs DOM oracle', () => {
     const offset = HANDLE / 2 + 12.5 * 1.5 * (5 / 20) * 0.4;
     expect(marked.sx - bare.sx).toBeCloseTo(offset, 6);
     expect(marked.tx - bare.tx).toBeCloseTo(-offset, 6);
+  });
+
+  it('lands the only handle of a SINGLE-row schema node exactly where the DOM path does', async () => {
+    // The 1-row boundary. A one-field node's only row is also `:last-child`, so it
+    // carries no border-bottom: `rowHeightLast` and `handleOffsetYLast` are the terms
+    // that apply, and the `(n − 1) × rowHeight` stride term is zero. Metrics can never
+    // be measured from such a node (a stride needs two rows — flow-schema.ts skips
+    // 1-row nodes), so it is purely a CONSUMER of another node's metrics: the row-count
+    // arithmetic, the uniform-height cross-check and the last-row offset all have to
+    // hold at n = 1 without a single measurement of their own. The big parity test above
+    // already compares `e-single-row` against the oracle; this one pins the numbers to
+    // the box model directly, so a regression names itself instead of just "paths differ".
+    const fast = await mountSettled({ nodes: schemaFixture(), edges: schemaEdges() });
+    fast.spy.mockClear();
+    await reroute(fast.data);
+    expect(geometryRectCalls(fast.spy)).toBe(0); // these numbers came from state
+
+    const { sx, sy, tx, ty } = straightEndpoints(fast.pathD(5)); // e-single-row, a → d
+    const offset = HANDLE / 2 + 12.5 * 1.5 * (5 / 20) * 0.4; // markerEnd shortening
+
+    // source: node a, field `created_at` — a's LAST row (index 3 of 4) ⇒ handleOffsetYLast.
+    // d is to the right of a, so the source sits on a's RIGHT edge. Unmarked end.
+    expect(sx).toBeCloseTo(220 - SYMMETRIC.right, 6);
+    expect(sy).toBeCloseTo(
+      SYMMETRIC.top + HEADER_H + 3 * ROW_H + handleOffsetAt(3, FIELDS.length),
+      6,
+    );
+
+    // target: node d (500, 420), its ONLY field — row 0 AND the last row, so the stride
+    // term vanishes and the last-row offset applies. a is to d's left ⇒ d's LEFT edge,
+    // pushed further left by markerEnd.
+    expect(tx).toBeCloseTo(500 + SYMMETRIC.left - offset, 6);
+    expect(ty).toBeCloseTo(420 + SYMMETRIC.top + HEADER_H + handleOffsetAt(0, 1), 6);
   });
 
   it('matches the DOM oracle under a non-unit zoom', async () => {
@@ -765,6 +821,50 @@ describe('schema edge geometry — fallback contract', () => {
     ).toBe(true);
   });
 
+  it('falls back when a NODE sets a non-default nodeOrigin, and renders identically', async () => {
+    // `nodeOrigin` is a PER-NODE property as well as a canvas config (FlowNode.nodeOrigin),
+    // and the node's own value WINS over the config's: the renderer places the element at
+    // `absPos − dimensions × (node.nodeOrigin ?? config.nodeOrigin ?? [0,0])` (flow-node.ts).
+    // `toAbsoluteNode` returns a ROOT node unchanged and `getAbsolutePosition` applies only
+    // the PARENTS' origins — never the node's own — so under a per-node origin `node.position`
+    // is NOT the rendered border-box top-left, and every state-derived endpoint on that node
+    // would land `dimensions × origin` away from where the browser painted the handle (110px
+    // / 55px for a 220 × 110 node at [0.5, 0.5]). The node-center x that decides the SIDE is
+    // read from the same unshifted position, so the side pick can flip too — which is why the
+    // guard lives in `schemaFieldIndexForEndpoint`: both endpoints pass through it, so one
+    // check covers the node's own geometry AND its role as the opposing node in the side pick.
+    // Checking only `config.nodeOrigin` (as the canvas-level gate does) misses this entirely:
+    // under a default config, such a node clears every other gate — unrotated, visible,
+    // stamped, uniform rows.
+    const patched = (): FixtureNode[] => {
+      const nodes = schemaFixture();
+      nodes[1].nodeOrigin = [0.5, 0.5];
+      return nodes;
+    };
+
+    const oracle = await mountSettled({
+      nodes: patched(),
+      edges: schemaEdges(),
+      config: { schemaHandleGeometry: 'dom' },
+    });
+    const expected = schemaEdges().map((_, i) => oracle.pathD(i));
+    Alpine.destroyTree(oracle.host);
+    oracle.host.remove();
+    mounted.pop();
+    rectSpy?.mockRestore();
+
+    const handle = await mountSettled({ nodes: patched(), edges: schemaEdges() });
+    handle.spy.mockClear();
+    await reroute(handle.data);
+
+    // Every edge touching the origin-shifted node must have taken the DOM path…
+    expect(geometryRectCalls(handle.spy)).toBeGreaterThan(0);
+    // …and landed exactly where the oracle puts it.
+    schemaEdges().forEach((edge, i) => {
+      expect(`${edge.id}: ${handle.pathD(i)}`).toBe(`${edge.id}: ${expected[i]}`);
+    });
+  });
+
   it('falls back for a plain (non-schema) endpoint but still renders the edge', async () => {
     const nodes = schemaFixture();
     nodes.push({
@@ -822,9 +922,12 @@ describe('schema edge geometry — fallback contract', () => {
     // long field name gets a WRAPPED, taller row — and every row below it would have
     // its endpoint land one row off, silently. `node.dimensions` is the measured
     // BORDER BOX, so the row model must reproduce the node's height exactly:
-    //   insetTop + headerHeight + fields.length × rowHeight + insetBottom
-    // Two adds, and wrapped / non-uniform / bespoke rows all fall back to the DOM
-    // path, which measures each handle and is immune.
+    //   insetTop + headerHeight + (n − 1) × rowHeight + rowHeightLast + insetBottom
+    // `rowHeight` is a row STRIDE and the LAST row is shorter (the theme drops its
+    // border-bottom on `:last-child`), so the last row gets its own measured term —
+    // modelling it as `rowHeight` overshoots every schema node by that border. A few
+    // adds, and wrapped / non-uniform / bespoke rows all fall back to the DOM path,
+    // which measures each handle and is immune.
     const nodes = schemaFixture();
     nodes[1].dimensions!.height += 18; // as if one field name wrapped to two lines
     const edges: FixtureEdge[] = [

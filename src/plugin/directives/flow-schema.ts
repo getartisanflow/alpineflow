@@ -90,10 +90,18 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
 
     /**
      * Measure header/row/handle geometry once per canvas, from the first
-     * schema node that successfully renders ≥1 row. Schema rows are uniform,
-     * so a single measurement covers every schema node on the canvas — later
-     * edge-geometry work reads this cache instead of measuring handle DOM
-     * per edge. (Task G1 — state-derived schema handle geometry.)
+     * schema node that successfully renders **≥2 rows**. Two rows is the
+     * minimum because `rowHeight` is a row STRIDE — the gap between two
+     * consecutive row TOPS — and a single row gives nothing to stride
+     * against: the theme drops `border-bottom` on `.flow-schema-row:last-child`,
+     * so a lone row is one border SHORTER than a normal row and would be
+     * mistaken for the stride, modelling every multi-row node on the canvas
+     * one border too short per row. See the guard below.
+     *
+     * Schema rows are otherwise uniform, so a single measurement covers every
+     * schema node on the canvas — later edge-geometry work reads this cache
+     * instead of measuring handle DOM per edge. (Task G1 — state-derived
+     * schema handle geometry.)
      *
      * `_schemaMetrics` is a plain, non-reactive field, but `canvas` here is
      * `Alpine.$data(el)` — Alpine's merge-scope proxy — and `Alpine.raw()`
