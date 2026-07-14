@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Alpine from 'alpinejs';
 import { registerFlowSchemaDirective } from './flow-schema';
 import { registerFlowHandleDirective } from './flow-handle';
@@ -376,5 +376,151 @@ describe('x-flow-schema directive', () => {
     expect(target.querySelectorAll('.flow-schema-row').length).toBe(0);
     expect(target.querySelector('.flow-schema-header')).toBeNull();
     destroySpy.mockRestore();
+  });
+
+  // ── Task G1: schema metrics cache ───────────────────────────────────────
+  // Field row `i`'s handle centers are a deterministic offset of the node.
+  // The canvas needs this geometry measured ONCE, from the first schema node
+  // that renders, so later edge-geometry work can derive endpoints from
+  // state instead of measuring handle DOM per edge.
+
+  describe('schema metrics cache (Task G1)', () => {
+    const NODE_WIDTH = 200;
+    const BORDER = 1;
+    const HEADER_HEIGHT = 30;
+    const ROW_HEIGHT = 24;
+    const HANDLE_SIZE = 10;
+
+    const EXPECTED_METRICS = {
+      headerHeight: HEADER_HEIGHT,
+      rowHeight: ROW_HEIGHT,
+      insetLeft: BORDER,
+      insetRight: BORDER,
+      insetTop: BORDER,
+      handleWidth: HANDLE_SIZE,
+      handleHeight: HANDLE_SIZE,
+    };
+
+    let restoreRect: (() => void) | null = null;
+
+    function fakeRect(left: number, top: number, width: number, height: number): DOMRect {
+      return {
+        left,
+        top,
+        width,
+        height,
+        right: left + width,
+        bottom: top + height,
+        x: left,
+        y: top,
+        toJSON: () => {},
+      } as DOMRect;
+    }
+
+    /**
+     * Stub `getBoundingClientRect` to emulate a realistic `.flow-schema-node`
+     * layout: a border-box at (0,0), 200px wide, with a 1px border, a 30px
+     * header, uniform 24px rows, and 10x10 handles centered on each row's
+     * left/right edge. jsdom has no layout engine, so this is the only way
+     * to exercise the measurement path in a unit test. Follows the
+     * `getBoundingClientRect` stubbing pattern used by
+     * flow-easy-connect.test.ts / flow-handle-keyboard.test.ts.
+     */
+    function stubSchemaLayout(rowCount: number): void {
+      const original = HTMLElement.prototype.getBoundingClientRect;
+      restoreRect = () => {
+        HTMLElement.prototype.getBoundingClientRect = original;
+      };
+      HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement): DOMRect {
+        if (this.classList.contains('flow-schema-node')) {
+          const height = BORDER * 2 + HEADER_HEIGHT + ROW_HEIGHT * rowCount;
+          return fakeRect(0, 0, NODE_WIDTH, height);
+        }
+        if (this.classList.contains('flow-schema-header')) {
+          return fakeRect(BORDER, BORDER, NODE_WIDTH - BORDER * 2, HEADER_HEIGHT);
+        }
+        if (this.classList.contains('flow-schema-row')) {
+          const siblings = Array.from(this.parentElement?.children ?? []);
+          const index = siblings.indexOf(this);
+          const top = BORDER + HEADER_HEIGHT + index * ROW_HEIGHT;
+          return fakeRect(BORDER, top, NODE_WIDTH - BORDER * 2, ROW_HEIGHT);
+        }
+        if (this.classList.contains('flow-schema-handle')) {
+          return fakeRect(0, 0, HANDLE_SIZE, HANDLE_SIZE);
+        }
+        return fakeRect(0, 0, 0, 0);
+      } as unknown as typeof HTMLElement.prototype.getBoundingClientRect;
+    }
+
+    afterEach(() => {
+      restoreRect?.();
+      restoreRect = null;
+    });
+
+    /**
+     * Mount a schema node inside a `.flow-container` scope carrying
+     * `_schemaMetrics` + `viewport`, mirroring the harness used by
+     * `keyboard-nav.test.ts` for `_config` resolution — the schema
+     * directive resolves the canvas the same way for both.
+     */
+    function mountWithCanvas(
+      data: { label: string; fields: Array<Record<string, unknown>> },
+      zoom = 1,
+    ) {
+      clearChildren(document.body);
+      const container = document.createElement('div');
+      container.classList.add('flow-container');
+      container.setAttribute(
+        'x-data',
+        `{ _schemaMetrics: null, viewport: { zoom: ${zoom} }, node: { id: 't', data: ${JSON.stringify(data)} } }`,
+      );
+      const target = document.createElement('div');
+      target.setAttribute('x-flow-schema', '');
+      target.className = 'flow-node';
+      target.setAttribute('data-flow-node-id', 't');
+      container.appendChild(target);
+      document.body.appendChild(container);
+      Alpine.initTree(container);
+      return { target, canvas: (Alpine as any).$data(container) };
+    }
+
+    it('measures header/row/handle metrics once, from the first schema node render', () => {
+      stubSchemaLayout(1);
+      const { canvas } = mountWithCanvas({
+        label: 'User',
+        fields: [{ name: 'id', type: 'uuid' }],
+      });
+      expect(canvas._schemaMetrics).toEqual(EXPECTED_METRICS);
+    });
+
+    it('leaves _schemaMetrics null when the row has zero height (no layout / jsdom default)', () => {
+      // No stubSchemaLayout() call — jsdom's default getBoundingClientRect
+      // returns an all-zero rect, so rowHeight is 0 and caching must bail
+      // rather than poison every later edge with zeros.
+      const { canvas } = mountWithCanvas({
+        label: 'User',
+        fields: [{ name: 'id', type: 'uuid' }],
+      });
+      expect(canvas._schemaMetrics).toBeNull();
+    });
+
+    it('re-measures on the next render after the cache is nulled (colorMode-change invalidation)', async () => {
+      stubSchemaLayout(1);
+      const { canvas } = mountWithCanvas({
+        label: 'User',
+        fields: [{ name: 'id', type: 'uuid' }],
+      });
+      expect(canvas._schemaMetrics).toEqual(EXPECTED_METRICS);
+
+      // Simulate the theme/colorMode-change invalidation hook — mirrors the
+      // `_bgGapCache` contract (see flow-canvas.ts canvas init).
+      canvas._schemaMetrics = null;
+
+      // Force a reactive re-render.
+      canvas.node.data.label = 'Users';
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(canvas._schemaMetrics).toEqual(EXPECTED_METRICS);
+    });
   });
 });

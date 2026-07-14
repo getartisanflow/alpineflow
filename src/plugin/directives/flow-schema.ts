@@ -13,6 +13,7 @@
 
 import type { Alpine } from 'alpinejs';
 import type { FlowSchemaField } from '../../core/types';
+import type { SchemaMetrics } from '../data/canvas-context';
 
 type SchemaData = { label?: string; fields?: FlowSchemaField[]; [k: string]: unknown };
 type NodeRef = { data?: SchemaData } | undefined | null;
@@ -72,6 +73,67 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       } catch {
         return false;
       }
+    };
+
+    /**
+     * Resolve the owning canvas Alpine scope (or null). Same `.flow-container`
+     * walk as `readRowsReorderable` / `readKeyboardNav`.
+     */
+    const readCanvas = (): any | null => {
+      try {
+        const canvasEl = host.closest('.flow-container') as HTMLElement | null;
+        if (!canvasEl) return null;
+        return (Alpine as any).$data?.(canvasEl) ?? null;
+      } catch {
+        return null;
+      }
+    };
+
+    /**
+     * Measure header/row/handle geometry once per canvas, from the first
+     * schema node that successfully renders ≥1 row. Schema rows are uniform,
+     * so a single measurement covers every schema node on the canvas — later
+     * edge-geometry work reads this cache instead of measuring handle DOM
+     * per edge. (Task G1 — state-derived schema handle geometry.)
+     *
+     * Reads/writes go through `Alpine.raw(canvas)` throughout: `_schemaMetrics`
+     * is a plain, non-reactive field, and this runs inside the directive's own
+     * `effect()` — reading it (or `viewport.zoom`) via the reactive proxy here
+     * would subscribe this effect to their changes, re-rendering every mounted
+     * schema node's DOM on every pan/zoom frame.
+     */
+    const measureSchemaMetrics = (): void => {
+      const canvas = readCanvas();
+      if (!canvas) return;
+      const raw = Alpine.raw(canvas);
+      if (raw._schemaMetrics != null) return;
+
+      const headerEl = host.querySelector<HTMLElement>(':scope > .flow-schema-header');
+      const rowEl = host.querySelector<HTMLElement>('.flow-schema-row');
+      const handleEl = rowEl?.querySelector<HTMLElement>('.flow-schema-handle');
+      if (!headerEl || !rowEl || !handleEl) return;
+
+      const zoom = raw.viewport?.zoom || 1;
+      const hostRect = host.getBoundingClientRect();
+      const headerRect = headerEl.getBoundingClientRect();
+      const rowRect = rowEl.getBoundingClientRect();
+      const handleRect = handleEl.getBoundingClientRect();
+
+      const rowHeight = rowRect.height / zoom;
+      // A zero-height row means layout hasn't happened (or jsdom) — caching
+      // zeros here would poison every later edge's endpoint geometry.
+      if (rowHeight <= 0) return;
+
+      const metrics: SchemaMetrics = {
+        headerHeight: headerRect.height / zoom,
+        rowHeight,
+        insetLeft: (rowRect.left - hostRect.left) / zoom,
+        insetRight: (hostRect.right - rowRect.right) / zoom,
+        insetTop: (headerRect.top - hostRect.top) / zoom,
+        handleWidth: handleRect.width / zoom,
+        handleHeight: handleRect.height / zoom,
+      };
+      raw._schemaMetrics = metrics;
     };
 
     host.classList.add('flow-schema-node');
@@ -168,6 +230,8 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
           bodyEl!.insertBefore(row, cursor);
         }
       }
+
+      measureSchemaMetrics();
     };
 
     /**

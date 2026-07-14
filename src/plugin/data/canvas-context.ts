@@ -79,6 +79,30 @@ export interface ContextMenuState {
   nodes: FlowNode[] | null;
 }
 
+// ── Schema metrics (state-derived schema handle geometry) ───────────────────
+
+/**
+ * Measured header/row geometry for `x-flow-schema` nodes, captured once from
+ * the first schema node that renders — schema rows are uniform, so a single
+ * measurement covers every schema node on the canvas. Consumed by edge code
+ * to derive handle endpoints from state instead of measuring handle DOM.
+ */
+export interface SchemaMetrics {
+  /** Header height in flow units (includes its border-bottom). */
+  headerHeight: number;
+  /** One field row's height in flow units. Rows are uniform. */
+  rowHeight: number;
+  /** Node border-box left → row left (node border-left + padding-left). */
+  insetLeft: number;
+  /** Row right → node border-box right (node border-right + padding-right). */
+  insetRight: number;
+  /** Node border-box top → header top (node border-top + padding-top). */
+  insetTop: number;
+  /** Real handle box size — needed so marker endpoint-shortening matches the DOM path. */
+  handleWidth: number;
+  handleHeight: number;
+}
+
 // ── CanvasContext ────────────────────────────────────────────────────────────
 
 export interface CanvasContext {
@@ -203,6 +227,15 @@ export interface CanvasContext {
 
   /** Map of edge SVG elements (id -> svg) */
   _edgeSvgElements: Map<string, SVGSVGElement>;
+
+  /**
+   * Cached header/row/handle geometry for `x-flow-schema` nodes, measured
+   * once by the first schema node's `render()`. Plain (non-reactive) field —
+   * always read/write via `Alpine.raw(canvas)` so touching it never adds a
+   * reactive dependency to an unrelated effect. Invalidate (set `null`) on
+   * any theme/colorMode change, same as `_bgGapCache`.
+   */
+  _schemaMetrics: SchemaMetrics | null;
 
   // === Subsystems ===
 

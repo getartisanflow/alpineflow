@@ -82,7 +82,7 @@ import { createValidationMixin } from './canvas-validation';
 import { createComputeMixin } from './canvas-compute';
 import { createDomMixin } from './canvas-dom';
 import { createConfigMixin } from './canvas-config';
-import type { CanvasContext, ActiveParticle } from './canvas-context';
+import type { CanvasContext, ActiveParticle, SchemaMetrics } from './canvas-context';
 
 let instanceCounter = 0;
 
@@ -221,6 +221,15 @@ export function registerFlowCanvas(Alpine: Alpine) {
     /** Last backgroundImage string written to the container — lets `_applyBackground`
      * skip the (per-frame identical) gradient write. */
     _lastBgImage: null as string | null,
+
+    /**
+     * Cached header/row/handle geometry for `x-flow-schema` nodes, measured
+     * once by the first schema node's `render()` (see flow-schema.ts). Plain
+     * (non-reactive) field — edges read it via `Alpine.raw(canvas)`, so
+     * mutating it never re-runs an edge effect. Invalidate (set `null`) on
+     * any theme/colorMode change, same contract as `_bgGapCache` above.
+     */
+    _schemaMetrics: null as SchemaMetrics | null,
 
     _getBackgroundGap(): number {
       if (this._backgroundGap !== null) {
@@ -1174,6 +1183,13 @@ export function registerFlowCanvas(Alpine: Alpine) {
       // future theme/colorMode-change path that re-applies the background must
       // likewise invalidate `_bgGapCache` before calling `_applyBackground()`.
       this._bgGapCache = null;
+      // Same rationale for schema geometry — border/padding can change with
+      // the active theme, so drop any measurement taken before it was
+      // attached and let the first schema node re-measure. Note: this is the
+      // ONLY invalidation site today (same as `_bgGapCache` above); a runtime
+      // colorMode change via `_applyConfigPatch` (canvas-config.ts) does not
+      // currently invalidate either cache — see Task G1 report.
+      this._schemaMetrics = null;
       this._applyBackground();
 
       // Register with global store so other components can access this instance
