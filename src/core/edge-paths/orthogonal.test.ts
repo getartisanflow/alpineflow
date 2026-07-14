@@ -340,4 +340,15 @@ describe('avoidant routing quality — detour/bend cost (WS-1)', () => {
   it('does not increase corridor excursion versus the pre-WS-1 baseline', () => {
     expect(maxExcursion(route(), -50, -50, 1250, 750)).toBeLessThanOrEqual(BASELINE_EXCURSION);
   });
+
+  it('prefers the in-corridor route over an equal-length excursion', () => {
+    // Endpoints level on y=100; one obstacle sits ABOVE the line. The shortest
+    // routes hug just under it; the router must not arc far above the endpoints.
+    const obs: TestRect[] = [{ x: 150, y: 40, width: 100, height: 40 }];
+    const r = findRoute(0, 100, 'right', 400, 100, 'left', obs)!;
+    expect(r).not.toBeNull();
+    // No waypoint strays more than a small margin above the endpoint band.
+    const maxAbove = Math.max(...r.map((p) => 100 - p.y));
+    expect(maxAbove).toBeLessThanOrEqual(OBSTACLE_PADDING + 2);
+  });
 });
