@@ -176,6 +176,78 @@ describe('flowCanvas — delegated handle listener teardown', () => {
   });
 });
 
+describe('flowCanvas — the delegated listener follows a REPLACED viewport', () => {
+  // The listener binds ONE element for the canvas's life. If the `.flow-viewport` node
+  // is ever replaced wholesale (rather than patched in place), the listener is left on
+  // the detached original while handles render inside the new one — and every handle in
+  // the canvas goes permanently inert. Silent and total, with no per-handle fallback:
+  // pre-delegation, handles re-attached their own listener on every re-stamp, so this
+  // case used to repair itself.
+  it('re-binds to the new element, and handles inside it still work', async () => {
+    const { canvas } = mountCanvas();
+    await Alpine.nextTick();
+
+    const original = canvas._viewportEl as HTMLElement;
+    expect(canvas._handleDelegationEl).toBe(original);
+    expect(pointerdown(sourceHandle()).defaultPrevented).toBe(true); // control
+    document.dispatchEvent(new PointerEvent('pointerup', { clientX: 10, clientY: 10 }));
+
+    // Swap the viewport out from under the live canvas: same markup, new node.
+    const container = canvas._container as HTMLElement;
+    const replacement = document.createElement('div');
+    replacement.setAttribute('x-flow-viewport', '');
+    replacement.innerHTML = `
+      <template x-for="node in nodes" :key="node.id">
+        <div x-flow-node="node">
+          <div x-flow-handle:source></div>
+          <div x-flow-handle:target></div>
+        </div>
+      </template>
+    `;
+    Alpine.destroyTree(original);
+    original.remove();
+    container.appendChild(replacement);
+    Alpine.initTree(replacement);
+    await Alpine.nextTick();
+
+    expect(canvas._viewportEl).toBe(replacement);
+    expect(canvas._handleDelegationEl).toBe(replacement); // it MOVED, it did not stay put
+
+    // The real assertion: a press on a handle in the NEW viewport still drives the
+    // gesture. Without the re-bind the listener is on the detached node and this is
+    // a dead click.
+    const handle = replacement.querySelector('[data-flow-handle-type="source"]') as HTMLElement | null;
+    if (!handle) throw new Error('the replacement viewport stamped no handles — the test markup is wrong');
+    expect(pointerdown(handle).defaultPrevented).toBe(true);
+
+    document.dispatchEvent(new PointerEvent('pointerup', { clientX: 10, clientY: 10 }));
+  });
+
+  it('leaves exactly one listener installed — the old one is removed, not just orphaned', async () => {
+    const { canvas } = mountCanvas();
+    await Alpine.nextTick();
+
+    const original = canvas._viewportEl as HTMLElement;
+
+    // Re-register the SAME element (a no-op re-init): must not stack a second listener.
+    canvas._registerViewportEl(original);
+    expect(canvas._handleDelegationEl).toBe(original);
+
+    // One listener → ONE gesture per press. A doubled listener would run the whole
+    // connect gesture twice for a single press, which `defaultPrevented` cannot see —
+    // so count `connect-start` instead. It is emitted from initDrag(), i.e. on the
+    // first pointermove past DRAG_THRESHOLD, so the press has to be driven that far.
+    let connectStarts = 0;
+    canvas._container.addEventListener('flow-connect-start', () => { connectStarts += 1; });
+
+    pointerdown(sourceHandle());
+    document.dispatchEvent(new PointerEvent('pointermove', { clientX: 200, clientY: 200, bubbles: true }));
+    expect(connectStarts).toBe(1);
+
+    document.dispatchEvent(new PointerEvent('pointerup', { clientX: 200, clientY: 200 }));
+  });
+});
+
 describe('flowCanvas — destroy() is the CANVAS destroy, not a mixin override', () => {
   // Mixins are applied onto the canvas with `Object.defineProperties`, so ANY mixin
   // method named `destroy` overwrites `flowCanvas`'s own. The animation mixin had

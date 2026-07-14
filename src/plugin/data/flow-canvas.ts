@@ -337,6 +337,14 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _edgeMap: new Map<string, FlowEdge>(),
     _viewportEl: null as HTMLElement | null,
     _handleDelegationCleanup: null as (() => void) | null,
+    /**
+     * The element the delegated handle listener is CURRENTLY installed on, or null
+     * when nothing is installed. Tracked separately from `_viewportEl` because the
+     * two can diverge: `_viewportEl` is re-pointed the instant a replacement viewport
+     * registers, while the listener stays on whatever node it was attached to until
+     * `_registerViewportEl()` moves it. Comparing the two is what detects the move.
+     */
+    _handleDelegationEl: null as HTMLElement | null,
     /** Set in destroy(); read by the deferred install so a dead canvas never installs. */
     _handleDelegationTornDown: false,
 
@@ -1237,7 +1245,46 @@ export function registerFlowCanvas(Alpine: Alpine) {
         const rootEl = (viewportEl ?? this._container) as HTMLElement | null;
         if (!rootEl) return;
         this._handleDelegationCleanup = installHandleDelegation(rootEl, this);
+        this._handleDelegationEl = rootEl;
       });
+    },
+
+    /**
+     * Register the `.flow-viewport` element with the canvas. Called by the
+     * `x-flow-viewport` directive every time it initialises — which includes a RE-init
+     * on a DIFFERENT element, if the viewport node is ever replaced wholesale rather
+     * than patched in place after the canvas mounted.
+     *
+     * INVARIANT (load-bearing): while the delegated handle listener is installed, it
+     * is bound to exactly one element, and that element MUST be the current viewport.
+     * Break it and the listener is left on a detached node while handles render inside
+     * the new one — so every handle in the canvas goes permanently inert. That failure
+     * is silent and total, and delegation removed the safety net that used to cover it:
+     * pre-delegation each handle re-attached its own listener on every re-stamp, so a
+     * swapped viewport repaired itself. Hence: if delegation is already installed on a
+     * different element, move it to the new one.
+     *
+     * A canvas that never installed (delegation off via `delegatedHandleEvents: false`,
+     * or the deferred install has not run yet) has a null `_handleDelegationEl` and
+     * falls out at the first guard — this only ever MOVES an existing listener, it
+     * never creates one that `_initHandleDelegation` decided against.
+     */
+    _registerViewportEl(el: HTMLElement) {
+      this._viewportEl = el;
+
+      const installedOn = this._handleDelegationEl;
+      if (!installedOn || installedOn === el) return;
+
+      this._handleDelegationCleanup?.();
+      this._handleDelegationCleanup = null;
+      this._handleDelegationEl = null;
+
+      // Destroyed canvas: take the stale listener off, put no new one on.
+      if (this._handleDelegationTornDown) return;
+
+      this._handleDelegationCleanup = installHandleDelegation(el, this);
+      this._handleDelegationEl = el;
+      debug('init', `flowCanvas "${this._id}" re-bound its delegated handle pointerdown listener to a replaced .flow-viewport`);
     },
 
     /** Canvas click handler, context menu handler, long press, touch selection mode, context menu event listeners. */
@@ -2294,11 +2341,29 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._handleDelegationTornDown = true;
       this._handleDelegationCleanup?.();
       this._handleDelegationCleanup = null;
+      this._handleDelegationEl = null;
       this._longPressCleanup?.();
       this._longPressCleanup = null;
       this._touchSelectionCleanup?.();
       this._touchSelectionCleanup = null;
-      this._emit('destroy');
+
+      // Alpine invokes destroy() UNWRAPPED, inside cleanupAttributes() — there is no
+      // try/catch around it. A throw escaping this method aborts Alpine's own cleanup
+      // loop mid-way: the remaining directive undo()s never run and `_x_dataStack`
+      // leaks. This `_emit` is the ONLY point in teardown that hands control to USER
+      // code — `config.onDestroy` (invoked by _emit) and `config.formatAnnouncement`
+      // (via the announcer inside _emit) — so it is the one boundary that has to be
+      // sealed. A consumer's throwing callback must not corrupt Alpine's teardown.
+      // (The DOM CustomEvent _emit dispatches is not a concern: dispatchEvent reports
+      // listener exceptions to the global error handler rather than rethrowing.)
+      try {
+        this._emit('destroy');
+      } catch (err) {
+        console.error(
+          `[AlpineFlow] a destroy callback threw while destroying flowCanvas "${this._id}"; teardown continued`,
+          err,
+        );
+      }
       debug('destroy', `flowCanvas "${this._id}" destroying`);
       if (this._onCanvasClick && this._container) {
         this._container.removeEventListener('click', this._onCanvasClick);
@@ -2360,15 +2425,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._followHandle?.stop();
       this._followHandle = null;
 
-      // Stop all active timelines
-      for (const tl of this._activeTimelines) { tl.stop(); }
-      this._activeTimelines.clear();
-
-      // Stop animator
-      if (this._animator) {
-        Alpine.raw(this._animator).stopAll();
-        this._animator = null;
-      }
+      // Animator/timeline/particle teardown already ran at the top of this method,
+      // in `_destroyAnimations()` (stopAll + destroyParticles + stop-and-clear every
+      // active timeline). Only the reference drop is left to do here.
+      this._animator = null;
 
       // Cancel pending layout animation frame
       if (this._layoutAnimFrame) {
@@ -2388,7 +2448,15 @@ export function registerFlowCanvas(Alpine: Alpine) {
         this._colorModeHandle = null;
       }
 
-      // Collab cleanup — objects live in the module-scoped collabStore WeakMap
+      // Collab cleanup — objects live in the module-scoped collabStore WeakMap.
+      //
+      // OWNERSHIP RULE: the canvas disposes only what the canvas CONSTRUCTED —
+      // the bridge, the awareness instance and the cursor layer. It deliberately
+      // does NOT destroy `config.collab.provider`: the app constructed that and
+      // passed it in, and nothing stops it sharing one provider across several
+      // canvases. Destroying it here would kill collaboration on every OTHER
+      // canvas still mounted on the same provider. If a caller wants the provider
+      // torn down with the canvas, it destroys it itself.
       if (this._container) {
         const collabEntry = collabStore.get(this._container);
         if (collabEntry) {
@@ -2397,9 +2465,6 @@ export function registerFlowCanvas(Alpine: Alpine) {
           if (collabEntry.cursorCleanup) collabEntry.cursorCleanup();
           collabStore.delete(this._container);
         }
-      }
-      if (config.collab) {
-        (config.collab as CollabConfig).provider.destroy();
       }
 
       if (this._container) {
