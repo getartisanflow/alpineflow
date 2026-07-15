@@ -25,6 +25,7 @@ import type {
   PendingKeyboardConnect,
   PatchableConfig,
   SchemaMetrics,
+  EndpointSpreadGrouping,
 } from '../../core/types';
 import { createPanZoom, type PanZoomInstance } from '../../core/pan-zoom';
 import { screenToFlowPosition, getVisibleBounds, type Bounds } from '../../core/geometry';
@@ -48,6 +49,7 @@ import { isDraggable, isSelectable } from '../../core/node-flags';
 import { attachLongPress } from '../../core/long-press';
 import { getNodesInRect, getNodesFullyInRect, SpatialGrid, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { CORRIDOR_MARGIN } from '../../core/edge-paths/orthogonal';
+import { resolveSpreadSpacing } from '../../core/endpoint-spread';
 import {
   buildNodeMap,
   reconcileChildrenIndex,
@@ -420,6 +422,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _spatialGrid: new SpatialGrid(),
     /** Obstacle rects rebuilt once per commit. In the edge effect read it via `Alpine.raw(canvas._obstacleSnapshot)` (nested-raw) so the edge does NOT subscribe to every node's reactive state. */
     _obstacleSnapshot: null as Array<{ id: string; x: number; y: number; width: number; height: number }> | null,
+
+    /** WS-2 endpoint-spread lanes; null until first computed. Mutated in place (see _obstacleSnapshot). */
+    _endpointSpreadGrouping: null as EndpointSpreadGrouping | null,
     /** Reactive epoch bumped by _commitNodeGeometry (internal signal; edges must NOT subscribe to it). Reserved for the interaction-degradation/LOD workstream (WS D), which will consume it — do not delete as dead code even though only WS C currently reads it. */
     _obstacleEpoch: 0,
     /** REACTIVE Map edge id → tick. Edge effects read key-scoped `.get(edge.id)`; bumped by _markDirtyEdges. */
@@ -596,6 +601,88 @@ export function registerFlowCanvas(Alpine: Alpine) {
       }
       this._obstacleEpoch++;
       this._markDirtyEdges(changedNodeIds, prevSnapshot);
+
+      // WS-2: recompute endpoint-spread lanes (node moves reorder lanes) and
+      // dirty exactly the edges whose lane changed so they re-route.
+      const relaned = this._computeEndpointGrouping();
+      if (relaned.size > 0) this._markEdgesDirtyById(relaned);
+    },
+
+    /**
+     * WS-2: assign each avoidant/orthogonal edge a lane index per shared
+     * `(node, handleId)`, ordered by the opposite endpoint's position so the
+     * fan-in doesn't self-cross. No-op (empty grouping) when spread is disabled
+     * everywhere. Returns the set of edge ids whose lane/group membership
+     * changed since the last run, so the caller can dirty exactly those. The
+     * grouping Map is mutated in place (same reference) so reading it in the
+     * edge effect doesn't re-run every edge — mirrors `_obstacleSnapshot`.
+     */
+    _computeEndpointGrouping(): Set<string> {
+      const changed = new Set<string>();
+      const canvasSpread = resolveSpreadSpacing(this._config?.avoidantEndpointSpread);
+      const rawNodes = Alpine.raw(this.nodes) as FlowNode[];
+      const nodeMap = new Map<string, FlowNode>(rawNodes.map((n): [string, FlowNode] => [n.id, n]));
+      const nodeOrigin = this._config?.nodeOrigin;
+      const center = (id: string): number => {
+        const n = nodeMap.get(id);
+        if (!n) return 0;
+        const abs = toAbsoluteNode(n, nodeMap, nodeOrigin);
+        // sort axis = Y (left/right schema handles fan vertically). T/B handles
+        // are rare for schema; ordering by Y is still deterministic for them.
+        return abs.position.y + (abs.dimensions?.height ?? 0) / 2;
+      };
+      const perNodeEnabled = (id: string): boolean => {
+        const v = nodeMap.get(id)?.endpointSpread;
+        return v !== undefined ? resolveSpreadSpacing(v) !== null : canvasSpread !== null;
+      };
+
+      // Bucket edges per (node, handle), recording the opposite endpoint's sort coord.
+      const buckets = new Map<string, Array<{ edgeId: string; sortKey: number }>>();
+      const add = (nodeId: string, handleId: string | undefined, edgeId: string, oppId: string): void => {
+        if (!perNodeEnabled(nodeId)) return; // only bucket spread-enabled endpoints
+        const key = `${nodeId}|${handleId ?? ''}`;
+        let b = buckets.get(key);
+        if (!b) { b = []; buckets.set(key, b); }
+        b.push({ edgeId, sortKey: center(oppId) });
+      };
+      const rawEdges = Alpine.raw(this.edges) as FlowEdge[];
+      for (const e of rawEdges) {
+        const t = e.type ?? this._config?.defaultEdgeType;
+        if (t !== 'avoidant' && t !== 'orthogonal') continue; // only routed edges spread
+        add(e.source, e.sourceHandle, e.id, e.target);
+        add(e.target, e.targetHandle, e.id, e.source);
+      }
+
+      // Build the new grouping; diff against the old (raw) for the dirty set.
+      const old = Alpine.raw(this._endpointSpreadGrouping) as EndpointSpreadGrouping | null;
+      const next: EndpointSpreadGrouping = new Map();
+      for (const [key, list] of buckets) {
+        list.sort((p, q) => p.sortKey - q.sortKey || (p.edgeId < q.edgeId ? -1 : 1)); // deterministic
+        const lanes = new Map<string, number>();
+        list.forEach((item, i) => lanes.set(item.edgeId, i));
+        next.set(key, { count: list.length, lanes });
+        const oldEntry = old?.get(key);
+        for (const [edgeId, lane] of lanes) {
+          if (!oldEntry || oldEntry.count !== list.length || oldEntry.lanes.get(edgeId) !== lane) {
+            changed.add(edgeId);
+          }
+        }
+      }
+      // Edges that were in a group before but aren't now (group shrank/removed) also changed.
+      if (old) {
+        for (const [key, entry] of old) {
+          if (!next.has(key)) { for (const edgeId of entry.lanes.keys()) changed.add(edgeId); }
+        }
+      }
+
+      // Mutate the raw Map in place to preserve the reference (see _obstacleSnapshot).
+      if (old) {
+        old.clear();
+        for (const [k, v] of next) old.set(k, v);
+      } else {
+        this._endpointSpreadGrouping = next; // first commit only: null → Map (real assignment)
+      }
+      return changed;
     },
 
     /**
@@ -684,6 +771,19 @@ export function registerFlowCanvas(Alpine: Alpine) {
           }
         }
         if (dirty) bump(e.id);
+      }
+    },
+
+    /**
+     * Bump the routing dirty tick for a specific set of edge ids (WS-2 re-lane).
+     * Reuses the SAME tick-bump `_markDirtyEdges` uses: `.set()` on the REACTIVE
+     * Map so edge effects reading `_edgeDirtyTicks.get(edge.id)` are notified.
+     */
+    _markEdgesDirtyById(ids: Set<string>): void {
+      const ticks = this._edgeDirtyTicks; // reactive (set() must notify)
+      const rawTicks = Alpine.raw(ticks) as Map<string, number>;
+      for (const id of ids) {
+        ticks.set(id, (rawTicks.get(id) ?? 0) + 1);
       }
     },
 

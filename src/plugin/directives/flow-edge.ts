@@ -9,9 +9,10 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
-import type { FlowEdge, FlowNode, HandlePosition, HandleType, Rect, Connection, XYPosition, SchemaMetrics } from '../../core/types';
+import type { FlowEdge, FlowNode, HandlePosition, HandleType, Rect, Connection, XYPosition, SchemaMetrics, EndpointSpreadGrouping } from '../../core/types';
 import type { MarkerType, MarkerConfig } from '../../core/markers';
 import { computeSchemaHandlePoint, schemaFieldIndex } from '../../core/schema-geometry';
+import { laneOffset, applyLaneOffset, resolveSpreadSpacing } from '../../core/endpoint-spread';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { normalizeMarker, getMarkerId } from '../../core/markers';
 import { isConnectable } from '../../core/node-flags';
@@ -1360,8 +1361,36 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         }
 
         // Shorten endpoints so markers sit outside the handle boundary
-        const adjustedSrc = shortenEndpoint(srcMeasurement ?? lastSrcCoords!, sourcePos, srcMeasurement, edge.markerStart);
-        const adjustedTgt = shortenEndpoint(tgtMeasurement ?? lastTgtCoords!, targetPos, tgtMeasurement, edge.markerEnd);
+        let adjustedSrc = shortenEndpoint(srcMeasurement ?? lastSrcCoords!, sourcePos, srcMeasurement, edge.markerStart);
+        let adjustedTgt = shortenEndpoint(tgtMeasurement ?? lastTgtCoords!, targetPos, tgtMeasurement, edge.markerEnd);
+
+        // WS-2: fan edges that share an endpoint handle across the row extent.
+        // Gated: no-op unless spread is enabled for the endpoint's node. The lane
+        // index/count come from the canvas grouping pass; the offset shifts the
+        // attach point (and thus the route-cache key) so routing stays correct.
+        if (resolvedEdgeType === 'orthogonal' || resolvedEdgeType === 'avoidant') {
+          const grouping = Alpine.raw(canvas._endpointSpreadGrouping) as EndpointSpreadGrouping | null | undefined;
+          if (grouping) {
+            const srcSpacing = resolveSpreadSpacing(rawSource.endpointSpread ?? canvas._config?.avoidantEndpointSpread);
+            if (srcSpacing !== null) {
+              const g = grouping.get(`${edge.source}|${edge.sourceHandle ?? ''}`);
+              const lane = g?.lanes.get(edge.id);
+              if (g && lane !== undefined && g.count > 1) {
+                const srcExtent = canvas._schemaMetrics?.rowHeight ?? srcMeasurement?.handleHeight ?? 0;
+                adjustedSrc = applyLaneOffset(adjustedSrc, sourcePos, laneOffset(lane, g.count, srcExtent, srcSpacing));
+              }
+            }
+            const tgtSpacing = resolveSpreadSpacing(rawTarget.endpointSpread ?? canvas._config?.avoidantEndpointSpread);
+            if (tgtSpacing !== null) {
+              const g = grouping.get(`${edge.target}|${edge.targetHandle ?? ''}`);
+              const lane = g?.lanes.get(edge.id);
+              if (g && lane !== undefined && g.count > 1) {
+                const tgtExtent = canvas._schemaMetrics?.rowHeight ?? tgtMeasurement?.handleHeight ?? 0;
+                adjustedTgt = applyLaneOffset(adjustedTgt, targetPos, laneOffset(lane, g.count, tgtExtent, tgtSpacing));
+              }
+            }
+          }
+        }
 
         // Cache visible endpoints for reconnection hit-detection
         lastVisibleSrcCoords = adjustedSrc;

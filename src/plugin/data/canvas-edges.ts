@@ -40,6 +40,11 @@ export function createEdgesMixin(ctx: CanvasContext) {
       debug('edge', `Adding ${arr.length} edge(s)`, arr.map((e) => e.id));
       ctx.edges.push(...arr);
       ctx._rebuildEdgeMap();
+      // WS-2: adding edges changes shared-handle membership → re-lane the
+      // affected groups and dirty exactly those edges. No-op when spread is off
+      // (grouping stays empty → empty change set).
+      const relaned = ctx._computeEndpointGrouping();
+      if (relaned.size > 0) ctx._markEdgesDirtyById(relaned);
       ctx._emit('edges-change', { type: 'add', edges: arr });
 
       const collab = ctx._container ? collabStore.get(ctx._container) : undefined;
@@ -73,6 +78,10 @@ export function createEdgesMixin(ctx: CanvasContext) {
         ctx._edgeDirtyTicks?.delete(id);
         ctx._edgeCorridors?.delete(id);
       }
+      // WS-2: removing edges changes shared-handle membership → re-lane the
+      // surviving group members and dirty exactly those. No-op when spread is off.
+      const relaned = ctx._computeEndpointGrouping();
+      if (relaned.size > 0) ctx._markEdgesDirtyById(relaned);
       if (removed.length) ctx._emit('edges-change', { type: 'remove', edges: removed });
 
       const collab = ctx._container ? collabStore.get(ctx._container) : undefined;

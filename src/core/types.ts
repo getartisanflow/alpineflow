@@ -176,6 +176,9 @@ export interface FlowNode<T = Record<string, any>> {
   /** Rotation angle in degrees. CSS transform applied by x-flow-node. Default: 0 */
   rotation?: number;
 
+  /** Override `FlowCanvasConfig.avoidantEndpointSpread` for edges attaching to this node. */
+  endpointSpread?: EndpointSpreadConfig;
+
   /** When true, this node accepts other nodes dropped onto it as children. */
   droppable?: boolean;
 
@@ -876,6 +879,16 @@ export interface ConvergingHandle {
 
 // ─── Flow Canvas Config ─────────────────────────────────────────────────────
 
+/** Endpoint-spread setting: `true` uses the default spacing; an object tunes it. */
+export type EndpointSpreadConfig = boolean | { spacing?: number };
+
+/**
+ * Per-canvas endpoint-spread lane assignment, keyed by `"${nodeId}|${handleId}"`.
+ * `count` is the number of edges sharing that handle; `lanes` maps each edge id
+ * to its lane index (0-based, order = ascending opposite-endpoint position).
+ */
+export type EndpointSpreadGrouping = Map<string, { count: number; lanes: Map<string, number> }>;
+
 export interface FlowCanvasConfig {
   nodes?: FlowNode[];
   edges?: FlowEdge[];
@@ -963,6 +976,15 @@ export interface FlowCanvasConfig {
    *  markers, labels and CSS classes are unaffected; only the path geometry
    *  simplifies. Default: false (no LOD). */
   edgeLod?: false | { simplifyAt: 'far' | 'medium' };
+
+  /**
+   * Fan edges that share an endpoint handle across that handle's row extent
+   * instead of stacking them on the exact centre. `true` uses the default lane
+   * spacing; `{ spacing }` tunes it. Never changes row height — at high fan-in
+   * the fan condenses within the row. Per-node override via `FlowNode.endpointSpread`.
+   * Default: unset (off) — routes are byte-identical to spread-off.
+   */
+  avoidantEndpointSpread?: EndpointSpreadConfig;
 
   /** When true, pairs of reciprocal edges (A→B + B→A) render as a single
    *  dual-marker path. The mirror edge is hidden from rendering; the primary

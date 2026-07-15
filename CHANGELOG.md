@@ -223,6 +223,17 @@ and route length are unchanged.
 - Route cache key is now versioned by the cost constants so tuned/config-driven cost can't
   return stale cached routes.
 
+### Workstream — avoidant routing quality: endpoint bundling (WS-2)
+
+New opt-in `avoidantEndpointSpread` (canvas `boolean | { spacing }`, default off) with a
+per-node `endpointSpread` override. When on, edges sharing an endpoint handle (e.g. many FKs →
+`users.id`) fan across that handle's **row extent** into deterministic lanes ordered by the
+opposite endpoint's position, instead of stacking on the exact centre. **Row height never
+changes** — a fan wider than the row condenses to fit. Off (the default) is byte-identical to
+WS-1; a single-edge handle is untouched even when on. Lanes are computed once per commit
+(`_computeEndpointGrouping`, mirroring the obstacle snapshot) and only the re-laned edges
+re-route.
+
 ## v0.2.1-alpha — 2026-04-14
 
 > Companion release: [WireFlow v0.2.1-alpha](https://github.com/getartisanflow/wireflow/blob/main/CHANGELOG.md#v021-alpha--2026-04-14) ships the matching server-side surface (`<x-schema-designer>`, `WithSchemaDesigner`, validator rules, `@connect-validate` bridge) plus the post-Phase-5 `<x-flow>` / `<x-schema-designer>` polish that pairs with the fullscreen + row-select + cascade fixes below.

@@ -187,6 +187,9 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _draggingNodeIds: new Set<string>(),
     _commitNodeGeometry: vi.fn(),
     _markDirtyEdges: vi.fn(),
+    _endpointSpreadGrouping: null,
+    _computeEndpointGrouping: vi.fn(() => new Set<string>()),
+    _markEdgesDirtyById: vi.fn(),
 
     // === Auto-Layout state ===
     _autoLayoutTimer: null,
