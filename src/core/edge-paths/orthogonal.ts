@@ -27,6 +27,17 @@ export interface OrthogonalPathParams {
  *  so the offset point is guaranteed to land outside the padded source/target rect. */
 const HANDLE_OFFSET = OBSTACLE_PADDING + 1;
 
+/** Secondary-cost weights for route quality. These live ONLY in the lexicographic
+ *  tie-break — they never affect the primary Manhattan length, so a route is never
+ *  made longer to save a bend or reduce deviation. Tunable (see spec §3.3). */
+const BEND_WEIGHT = 1;
+const DEVIATION_WEIGHT = 0.5;
+
+/** Signature of the cost constants, folded into the route cache key so tuning the
+ *  weights (or a future routing config) can't serve routes computed under the old
+ *  cost. See {@link routeKey}. */
+export const ROUTE_COST_VERSION = `b${BEND_WEIGHT}d${DEVIATION_WEIGHT}`;
+
 function getDirection(position: HandlePosition): { x: number; y: number } {
   switch (position) {
     case 'top':
@@ -163,15 +174,14 @@ function buildVisibilityGraph(
 // ── Dijkstra ─────────────────────────────────────────────────────────────────
 
 /**
- * Binary min-heap keyed by an external distance array. Indices (into
- * `graphPoints`) are stored; ordering reads `dist[index]`. Decrease-key is
- * emulated with lazy insertion — a node may appear multiple times, and stale
- * entries are skipped via the caller's `visited` set on pop.
+ * Binary min-heap of indices ordered by a caller-supplied `less` comparator.
+ * Decrease-key is emulated with lazy insertion — a node may appear multiple
+ * times; stale entries are skipped via the caller's `visited` set on pop.
  */
 class MinHeap {
   private items: number[] = [];
 
-  constructor(private dist: Float64Array) {}
+  constructor(private less: (a: number, b: number) => boolean) {}
 
   get size(): number {
     return this.items.length;
@@ -182,7 +192,7 @@ class MinHeap {
     let c = this.items.length - 1;
     while (c > 0) {
       const p = (c - 1) >> 1;
-      if (this.dist[this.items[p]] <= this.dist[this.items[c]]) break;
+      if (!this.less(this.items[c], this.items[p])) break;
       [this.items[p], this.items[c]] = [this.items[c], this.items[p]];
       c = p;
     }
@@ -200,8 +210,8 @@ class MinHeap {
         const l = 2 * p + 1;
         const r = l + 1;
         let m = p;
-        if (l < this.items.length && this.dist[this.items[l]] < this.dist[this.items[m]]) m = l;
-        if (r < this.items.length && this.dist[this.items[r]] < this.dist[this.items[m]]) m = r;
+        if (l < this.items.length && this.less(this.items[l], this.items[m])) m = l;
+        if (r < this.items.length && this.less(this.items[r], this.items[m])) m = r;
         if (m === p) break;
         [this.items[p], this.items[m]] = [this.items[m], this.items[p]];
         p = m;
@@ -276,52 +286,93 @@ function dijkstra(
   obstacles: Rect[],
 ): RoutePoint[] | null {
   const n = graphPoints.length;
-  const dist = new Float64Array(n).fill(Infinity);
-  const prev = new Int32Array(n).fill(-1);
-  const visited = new Uint8Array(n);
+  // Two arrival-axis states per vertex: state s = axis * n + vertexIndex,
+  // where axis 0 = arrived on a horizontal segment, 1 = arrived on a vertical one.
+  const S = 2 * n;
+  const len = new Float64Array(S).fill(Infinity); // primary cost: Manhattan length
+  const tie = new Float64Array(S).fill(Infinity); // secondary cost: bends + deviation
+  const prev = new Int32Array(S).fill(-1);        // predecessor STATE index
+  const visited = new Uint8Array(S);
 
   const adj = buildAdjacency(graphPoints, obstacles);
 
-  dist[source.index] = 0;
-  const heap = new MinHeap(dist);
-  heap.push(source.index);
+  // Endpoint bounding box for the corridor-deviation term.
+  const bx0 = Math.min(source.x, target.x);
+  const bx1 = Math.max(source.x, target.x);
+  const by0 = Math.min(source.y, target.y);
+  const by1 = Math.max(source.y, target.y);
+  const outOfBox = (p: RoutePoint): number =>
+    Math.max(0, bx0 - p.x) + Math.max(0, p.x - bx1) +
+    Math.max(0, by0 - p.y) + Math.max(0, p.y - by1);
 
+  // Lexicographic order: primary Manhattan length, then secondary tie cost.
+  const less = (a: number, b: number): boolean =>
+    len[a] < len[b] || (len[a] === len[b] && tie[a] < tie[b]);
+  const heap = new MinHeap(less);
+
+  // Seed both arrival axes at the source so the first move is bend-free.
+  for (let axis = 0; axis < 2; axis++) {
+    const s = axis * n + source.index;
+    len[s] = 0;
+    tie[s] = 0;
+    heap.push(s);
+  }
+
+  const stateNode = (s: number): number => s % n;
+  const stateAxis = (s: number): number => (s < n ? 0 : 1);
+
+  let bestTarget = -1;
   while (heap.size > 0) {
-    const uIdx = heap.pop()!;
+    const s = heap.pop()!;
+    if (visited[s]) continue;
+    visited[s] = 1;
 
-    if (visited[uIdx]) continue;
-    visited[uIdx] = 1;
+    const uIdx = stateNode(s);
+    if (uIdx === target.index) {
+      bestTarget = s; // first target state popped is lexicographically optimal
+      break;
+    }
 
-    if (uIdx === target.index) break;
-
+    const axisIn = stateAxis(s);
     const u = graphPoints[uIdx];
-    const du = dist[uIdx];
 
     for (const vIdx of adj[uIdx]) {
-      if (visited[vIdx]) continue;
-
       const v = graphPoints[vIdx];
-      const weight = Math.abs(v.x - u.x) + Math.abs(v.y - u.y);
-      const newDist = du + weight;
+      const moveAxis = u.x === v.x ? 1 : 0; // vertical move shares x
+      const t = moveAxis * n + vIdx;
+      if (visited[t]) continue;
 
-      if (newDist < dist[vIdx]) {
-        dist[vIdx] = newDist;
-        prev[vIdx] = uIdx;
-        heap.push(vIdx); // lazy decrease-key; the visited skip drops stale pops
+      const stepLen = Math.abs(v.x - u.x) + Math.abs(v.y - u.y);
+      const bend = axisIn === moveAxis ? 0 : 1;
+      const stepTie = BEND_WEIGHT * bend + DEVIATION_WEIGHT * outOfBox(v);
+
+      const newLen = len[s] + stepLen;
+      const newTie = tie[s] + stepTie;
+
+      if (newLen < len[t] || (newLen === len[t] && newTie < tie[t])) {
+        len[t] = newLen;
+        tie[t] = newTie;
+        prev[t] = s;
+        heap.push(t);
       }
     }
   }
 
-  if (dist[target.index] === Infinity) return null;
-
-  // Reconstruct path
-  const path: RoutePoint[] = [];
-  let current = target.index;
-  while (current !== -1) {
-    path.unshift(graphPoints[current]);
-    current = prev[current];
+  if (bestTarget === -1) {
+    // Target never popped → unreachable in both axis states.
+    const s0 = target.index;
+    const s1 = n + target.index;
+    if (len[s0] === Infinity && len[s1] === Infinity) return null;
+    bestTarget = less(s0, s1) ? s0 : s1;
   }
 
+  // Reconstruct path (state indices → vertices).
+  const path: RoutePoint[] = [];
+  let cur = bestTarget;
+  while (cur !== -1) {
+    path.unshift(graphPoints[stateNode(cur)]);
+    cur = prev[cur];
+  }
   return path;
 }
 
@@ -571,7 +622,7 @@ function routeKey(
   tp: HandlePosition,
   obstacles: Rect[],
 ): string {
-  let key = `${Math.round(sx)},${Math.round(sy)},${sp}|${Math.round(tx)},${Math.round(ty)},${tp}`;
+  let key = `${ROUTE_COST_VERSION}|${Math.round(sx)},${Math.round(sy)},${sp}|${Math.round(tx)},${Math.round(ty)},${tp}`;
   for (const r of obstacles) {
     key += `|${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)},${Math.round(r.height)}`;
   }

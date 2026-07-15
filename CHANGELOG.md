@@ -206,6 +206,19 @@ A schema edge's endpoints are now DERIVED from state rather than MEASURED from t
 **Infrastructure**
 - `SchemaMetrics` moved to `core/types` (keeping `core` free of plugin imports); new pure `core/schema-geometry.ts` (`schemaFieldIndex`, `computeSchemaHandlePoint`). `x-flow-schema` measures `canvas._schemaMetrics` once per canvas — deferred out of the render effect via `Alpine.nextTick`, from the first schema node rendering **≥2 rows** (a row stride needs two rows), and invalidated on `colorMode` change. Edges consume it and upgrade from the DOM path to the fast path one tick after the first schema render.
 
+### Workstream — avoidant routing quality: detours (WS-1)
+
+Improves `avoidant` (and `orthogonal`) route **quality** without changing route length. The
+router's Dijkstra now runs over `(vertex, arrival-axis)` state and orders routes
+**lexicographically**: primary Manhattan length (unchanged — never traded), secondary a
+`bend + corridor-deviation` cost. Among equal-length routes it now picks the one with the
+fewest corners that stays closest to the direct corridor, deterministically. This is an
+**always-on** quality change (no config); endpoints, obstacle avoidance, fallback behavior,
+and route length are unchanged.
+
+- Route cache key is now versioned by the cost constants so tuned/config-driven cost can't
+  return stale cached routes.
+
 ## v0.2.1-alpha — 2026-04-14
 
 > Companion release: [WireFlow v0.2.1-alpha](https://github.com/getartisanflow/wireflow/blob/main/CHANGELOG.md#v021-alpha--2026-04-14) ships the matching server-side surface (`<x-schema-designer>`, `WithSchemaDesigner`, validator rules, `@connect-validate` bridge) plus the post-Phase-5 `<x-flow>` / `<x-schema-designer>` polish that pairs with the fullscreen + row-select + cascade fixes below.
