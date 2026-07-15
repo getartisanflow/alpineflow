@@ -1,15 +1,15 @@
-let Oo = null;
-function Ha(t) {
-  Oo = t;
+let zo = null;
+function za(t) {
+  zo = t;
 }
 function Ce() {
-  if (!Oo)
+  if (!zo)
     throw new Error("[AlpineFlow] Alpine not initialized. Ensure Alpine.plugin(AlpineFlow) was called.");
-  return Oo;
+  return zo;
 }
-var Ra = { value: () => {
+var Va = { value: () => {
 } };
-function ho() {
+function go() {
   for (var t = 0, e = arguments.length, n = {}, o; t < e; ++t) {
     if (!(o = arguments[t] + "") || o in n || /[\s.]/.test(o)) throw new Error("illegal type: " + o);
     n[o] = [];
@@ -19,25 +19,25 @@ function ho() {
 function On(t) {
   this._ = t;
 }
-function Fa(t, e) {
+function Ba(t, e) {
   return t.trim().split(/^|\s+/).map(function(n) {
     var o = "", i = n.indexOf(".");
     if (i >= 0 && (o = n.slice(i + 1), n = n.slice(0, i)), n && !e.hasOwnProperty(n)) throw new Error("unknown type: " + n);
     return { type: n, name: o };
   });
 }
-On.prototype = ho.prototype = {
+On.prototype = go.prototype = {
   constructor: On,
   on: function(t, e) {
-    var n = this._, o = Fa(t + "", n), i, r = -1, s = o.length;
+    var n = this._, o = Ba(t + "", n), i, r = -1, s = o.length;
     if (arguments.length < 2) {
-      for (; ++r < s; ) if ((i = (t = o[r]).type) && (i = Oa(n[i], t.name))) return i;
+      for (; ++r < s; ) if ((i = (t = o[r]).type) && (i = qa(n[i], t.name))) return i;
       return;
     }
     if (e != null && typeof e != "function") throw new Error("invalid callback: " + e);
     for (; ++r < s; )
-      if (i = (t = o[r]).type) n[i] = $i(n[i], t.name, e);
-      else if (e == null) for (i in n) n[i] = $i(n[i], t.name, null);
+      if (i = (t = o[r]).type) n[i] = Di(n[i], t.name, e);
+      else if (e == null) for (i in n) n[i] = Di(n[i], t.name, null);
     return this;
   },
   copy: function() {
@@ -55,129 +55,129 @@ On.prototype = ho.prototype = {
     for (var o = this._[t], i = 0, r = o.length; i < r; ++i) o[i].value.apply(e, n);
   }
 };
-function Oa(t, e) {
+function qa(t, e) {
   for (var n = 0, o = t.length, i; n < o; ++n)
     if ((i = t[n]).name === e)
       return i.value;
 }
-function $i(t, e, n) {
+function Di(t, e, n) {
   for (var o = 0, i = t.length; o < i; ++o)
     if (t[o].name === e) {
-      t[o] = Ra, t = t.slice(0, o).concat(t.slice(o + 1));
+      t[o] = Va, t = t.slice(0, o).concat(t.slice(o + 1));
       break;
     }
   return n != null && t.push({ name: e, value: n }), t;
 }
-var zo = "http://www.w3.org/1999/xhtml";
-const Di = {
+var Vo = "http://www.w3.org/1999/xhtml";
+const Hi = {
   svg: "http://www.w3.org/2000/svg",
-  xhtml: zo,
+  xhtml: Vo,
   xlink: "http://www.w3.org/1999/xlink",
   xml: "http://www.w3.org/XML/1998/namespace",
   xmlns: "http://www.w3.org/2000/xmlns/"
 };
-function go(t) {
+function po(t) {
   var e = t += "", n = e.indexOf(":");
-  return n >= 0 && (e = t.slice(0, n)) !== "xmlns" && (t = t.slice(n + 1)), Di.hasOwnProperty(e) ? { space: Di[e], local: t } : t;
+  return n >= 0 && (e = t.slice(0, n)) !== "xmlns" && (t = t.slice(n + 1)), Hi.hasOwnProperty(e) ? { space: Hi[e], local: t } : t;
 }
-function za(t) {
+function Ya(t) {
   return function() {
     var e = this.ownerDocument, n = this.namespaceURI;
-    return n === zo && e.documentElement.namespaceURI === zo ? e.createElement(t) : e.createElementNS(n, t);
+    return n === Vo && e.documentElement.namespaceURI === Vo ? e.createElement(t) : e.createElementNS(n, t);
   };
 }
-function Va(t) {
+function Xa(t) {
   return function() {
     return this.ownerDocument.createElementNS(t.space, t.local);
   };
 }
-function nr(t) {
-  var e = go(t);
-  return (e.local ? Va : za)(e);
+function rr(t) {
+  var e = po(t);
+  return (e.local ? Xa : Ya)(e);
 }
-function Ba() {
+function Wa() {
 }
-function ci(t) {
-  return t == null ? Ba : function() {
+function di(t) {
+  return t == null ? Wa : function() {
     return this.querySelector(t);
   };
 }
-function qa(t) {
-  typeof t != "function" && (t = ci(t));
+function ja(t) {
+  typeof t != "function" && (t = di(t));
   for (var e = this._groups, n = e.length, o = new Array(n), i = 0; i < n; ++i)
     for (var r = e[i], s = r.length, a = o[i] = new Array(s), l, c, d = 0; d < s; ++d)
       (l = r[d]) && (c = t.call(l, l.__data__, d, r)) && ("__data__" in l && (c.__data__ = l.__data__), a[d] = c);
   return new Fe(o, this._parents);
 }
-function Ya(t) {
+function Ua(t) {
   return t == null ? [] : Array.isArray(t) ? t : Array.from(t);
 }
-function Xa() {
+function Ga() {
   return [];
 }
-function or(t) {
-  return t == null ? Xa : function() {
+function ar(t) {
+  return t == null ? Ga : function() {
     return this.querySelectorAll(t);
   };
 }
-function Wa(t) {
+function Za(t) {
   return function() {
-    return Ya(t.apply(this, arguments));
+    return Ua(t.apply(this, arguments));
   };
 }
-function ja(t) {
-  typeof t == "function" ? t = Wa(t) : t = or(t);
+function Ka(t) {
+  typeof t == "function" ? t = Za(t) : t = ar(t);
   for (var e = this._groups, n = e.length, o = [], i = [], r = 0; r < n; ++r)
     for (var s = e[r], a = s.length, l, c = 0; c < a; ++c)
       (l = s[c]) && (o.push(t.call(l, l.__data__, c, s)), i.push(l));
   return new Fe(o, i);
 }
-function ir(t) {
+function lr(t) {
   return function() {
     return this.matches(t);
   };
 }
-function sr(t) {
+function cr(t) {
   return function(e) {
     return e.matches(t);
   };
 }
-var Ua = Array.prototype.find;
-function Za(t) {
-  return function() {
-    return Ua.call(this.children, t);
-  };
-}
-function Ga() {
-  return this.firstElementChild;
-}
-function Ka(t) {
-  return this.select(t == null ? Ga : Za(typeof t == "function" ? t : sr(t)));
-}
-var Ja = Array.prototype.filter;
-function Qa() {
-  return Array.from(this.children);
-}
-function el(t) {
+var Ja = Array.prototype.find;
+function Qa(t) {
   return function() {
     return Ja.call(this.children, t);
   };
 }
-function tl(t) {
-  return this.selectAll(t == null ? Qa : el(typeof t == "function" ? t : sr(t)));
+function el() {
+  return this.firstElementChild;
 }
-function nl(t) {
-  typeof t != "function" && (t = ir(t));
+function tl(t) {
+  return this.select(t == null ? el : Qa(typeof t == "function" ? t : cr(t)));
+}
+var nl = Array.prototype.filter;
+function ol() {
+  return Array.from(this.children);
+}
+function il(t) {
+  return function() {
+    return nl.call(this.children, t);
+  };
+}
+function sl(t) {
+  return this.selectAll(t == null ? ol : il(typeof t == "function" ? t : cr(t)));
+}
+function rl(t) {
+  typeof t != "function" && (t = lr(t));
   for (var e = this._groups, n = e.length, o = new Array(n), i = 0; i < n; ++i)
     for (var r = e[i], s = r.length, a = o[i] = [], l, c = 0; c < s; ++c)
       (l = r[c]) && t.call(l, l.__data__, c, r) && a.push(l);
   return new Fe(o, this._parents);
 }
-function rr(t) {
+function dr(t) {
   return new Array(t.length);
 }
-function ol() {
-  return new Fe(this._enter || this._groups.map(rr), this._parents);
+function al() {
+  return new Fe(this._enter || this._groups.map(dr), this._parents);
 }
 function Yn(t, e) {
   this.ownerDocument = t.ownerDocument, this.namespaceURI = t.namespaceURI, this._next = null, this._parent = t, this.__data__ = e;
@@ -197,18 +197,18 @@ Yn.prototype = {
     return this._parent.querySelectorAll(t);
   }
 };
-function il(t) {
+function ll(t) {
   return function() {
     return t;
   };
 }
-function sl(t, e, n, o, i, r) {
+function cl(t, e, n, o, i, r) {
   for (var s = 0, a, l = e.length, c = r.length; s < c; ++s)
     (a = e[s]) ? (a.__data__ = r[s], o[s] = a) : n[s] = new Yn(t, r[s]);
   for (; s < l; ++s)
     (a = e[s]) && (i[s] = a);
 }
-function rl(t, e, n, o, i, r, s) {
+function dl(t, e, n, o, i, r, s) {
   var a, l, c = /* @__PURE__ */ new Map(), d = e.length, u = r.length, f = new Array(d), h;
   for (a = 0; a < d; ++a)
     (l = e[a]) && (f[a] = h = s.call(l, l.__data__, a, e) + "", c.has(h) ? i[a] = l : c.set(h, l));
@@ -217,35 +217,35 @@ function rl(t, e, n, o, i, r, s) {
   for (a = 0; a < d; ++a)
     (l = e[a]) && c.get(f[a]) === l && (i[a] = l);
 }
-function al(t) {
+function ul(t) {
   return t.__data__;
 }
-function ll(t, e) {
-  if (!arguments.length) return Array.from(this, al);
-  var n = e ? rl : sl, o = this._parents, i = this._groups;
-  typeof t != "function" && (t = il(t));
+function fl(t, e) {
+  if (!arguments.length) return Array.from(this, ul);
+  var n = e ? dl : cl, o = this._parents, i = this._groups;
+  typeof t != "function" && (t = ll(t));
   for (var r = i.length, s = new Array(r), a = new Array(r), l = new Array(r), c = 0; c < r; ++c) {
-    var d = o[c], u = i[c], f = u.length, h = cl(t.call(d, d && d.__data__, c, o)), g = h.length, p = a[c] = new Array(g), m = s[c] = new Array(g), y = l[c] = new Array(f);
+    var d = o[c], u = i[c], f = u.length, h = hl(t.call(d, d && d.__data__, c, o)), g = h.length, p = a[c] = new Array(g), m = s[c] = new Array(g), y = l[c] = new Array(f);
     n(d, u, p, m, y, h, e);
-    for (var x = 0, P = 0, _, b; x < g; ++x)
-      if (_ = p[x]) {
-        for (x >= P && (P = x + 1); !(b = m[P]) && ++P < g; ) ;
-        _._next = b || null;
+    for (var _ = 0, S = 0, b, x; _ < g; ++_)
+      if (b = p[_]) {
+        for (_ >= S && (S = _ + 1); !(x = m[S]) && ++S < g; ) ;
+        b._next = x || null;
       }
   }
   return s = new Fe(s, o), s._enter = a, s._exit = l, s;
 }
-function cl(t) {
+function hl(t) {
   return typeof t == "object" && "length" in t ? t : Array.from(t);
 }
-function dl() {
-  return new Fe(this._exit || this._groups.map(rr), this._parents);
+function gl() {
+  return new Fe(this._exit || this._groups.map(dr), this._parents);
 }
-function ul(t, e, n) {
+function pl(t, e, n) {
   var o = this.enter(), i = this, r = this.exit();
   return typeof t == "function" ? (o = t(o), o && (o = o.selection())) : o = o.append(t + ""), e != null && (i = e(i), i && (i = i.selection())), n == null ? r.remove() : n(r), o && i ? o.merge(i).order() : i;
 }
-function fl(t) {
+function ml(t) {
   for (var e = t.selection ? t.selection() : t, n = this._groups, o = e._groups, i = n.length, r = o.length, s = Math.min(i, r), a = new Array(i), l = 0; l < s; ++l)
     for (var c = n[l], d = o[l], u = c.length, f = a[l] = new Array(u), h, g = 0; g < u; ++g)
       (h = c[g] || d[g]) && (f[g] = h);
@@ -253,14 +253,14 @@ function fl(t) {
     a[l] = n[l];
   return new Fe(a, this._parents);
 }
-function hl() {
+function yl() {
   for (var t = this._groups, e = -1, n = t.length; ++e < n; )
     for (var o = t[e], i = o.length - 1, r = o[i], s; --i >= 0; )
       (s = o[i]) && (r && s.compareDocumentPosition(r) ^ 4 && r.parentNode.insertBefore(s, r), r = s);
   return this;
 }
-function gl(t) {
-  t || (t = pl);
+function wl(t) {
+  t || (t = vl);
   function e(u, f) {
     return u && f ? t(u.__data__, f.__data__) : !u - !f;
   }
@@ -271,17 +271,17 @@ function gl(t) {
   }
   return new Fe(i, this._parents).order();
 }
-function pl(t, e) {
+function vl(t, e) {
   return t < e ? -1 : t > e ? 1 : t >= e ? 0 : NaN;
 }
-function ml() {
+function _l() {
   var t = arguments[0];
   return arguments[0] = this, t.apply(null, arguments), this;
 }
-function yl() {
+function bl() {
   return Array.from(this);
 }
-function wl() {
+function xl() {
   for (var t = this._groups, e = 0, n = t.length; e < n; ++e)
     for (var o = t[e], i = 0, r = o.length; i < r; ++i) {
       var s = o[i];
@@ -289,114 +289,114 @@ function wl() {
     }
   return null;
 }
-function vl() {
+function El() {
   let t = 0;
   for (const e of this) ++t;
   return t;
 }
-function _l() {
+function Cl() {
   return !this.node();
 }
-function bl(t) {
+function Sl(t) {
   for (var e = this._groups, n = 0, o = e.length; n < o; ++n)
     for (var i = e[n], r = 0, s = i.length, a; r < s; ++r)
       (a = i[r]) && t.call(a, a.__data__, r, i);
   return this;
 }
-function xl(t) {
+function kl(t) {
   return function() {
     this.removeAttribute(t);
   };
 }
-function El(t) {
+function Ll(t) {
   return function() {
     this.removeAttributeNS(t.space, t.local);
   };
 }
-function Cl(t, e) {
+function Pl(t, e) {
   return function() {
     this.setAttribute(t, e);
   };
 }
-function Sl(t, e) {
+function Ml(t, e) {
   return function() {
     this.setAttributeNS(t.space, t.local, e);
   };
 }
-function kl(t, e) {
+function Tl(t, e) {
   return function() {
     var n = e.apply(this, arguments);
     n == null ? this.removeAttribute(t) : this.setAttribute(t, n);
   };
 }
-function Ll(t, e) {
+function Al(t, e) {
   return function() {
     var n = e.apply(this, arguments);
     n == null ? this.removeAttributeNS(t.space, t.local) : this.setAttributeNS(t.space, t.local, n);
   };
 }
-function Pl(t, e) {
-  var n = go(t);
+function Nl(t, e) {
+  var n = po(t);
   if (arguments.length < 2) {
     var o = this.node();
     return n.local ? o.getAttributeNS(n.space, n.local) : o.getAttribute(n);
   }
-  return this.each((e == null ? n.local ? El : xl : typeof e == "function" ? n.local ? Ll : kl : n.local ? Sl : Cl)(n, e));
+  return this.each((e == null ? n.local ? Ll : kl : typeof e == "function" ? n.local ? Al : Tl : n.local ? Ml : Pl)(n, e));
 }
-function ar(t) {
+function ur(t) {
   return t.ownerDocument && t.ownerDocument.defaultView || t.document && t || t.defaultView;
 }
-function Ml(t) {
+function Il(t) {
   return function() {
     this.style.removeProperty(t);
   };
 }
-function Tl(t, e, n) {
+function $l(t, e, n) {
   return function() {
     this.style.setProperty(t, e, n);
   };
 }
-function Al(t, e, n) {
+function Dl(t, e, n) {
   return function() {
     var o = e.apply(this, arguments);
     o == null ? this.style.removeProperty(t) : this.style.setProperty(t, o, n);
   };
 }
-function Nl(t, e, n) {
-  return arguments.length > 1 ? this.each((e == null ? Ml : typeof e == "function" ? Al : Tl)(t, e, n ?? "")) : Vt(this.node(), t);
+function Hl(t, e, n) {
+  return arguments.length > 1 ? this.each((e == null ? Il : typeof e == "function" ? Dl : $l)(t, e, n ?? "")) : Vt(this.node(), t);
 }
 function Vt(t, e) {
-  return t.style.getPropertyValue(e) || ar(t).getComputedStyle(t, null).getPropertyValue(e);
+  return t.style.getPropertyValue(e) || ur(t).getComputedStyle(t, null).getPropertyValue(e);
 }
-function Il(t) {
+function Rl(t) {
   return function() {
     delete this[t];
   };
 }
-function $l(t, e) {
+function Fl(t, e) {
   return function() {
     this[t] = e;
   };
 }
-function Dl(t, e) {
+function Ol(t, e) {
   return function() {
     var n = e.apply(this, arguments);
     n == null ? delete this[t] : this[t] = n;
   };
 }
-function Hl(t, e) {
-  return arguments.length > 1 ? this.each((e == null ? Il : typeof e == "function" ? Dl : $l)(t, e)) : this.node()[t];
+function zl(t, e) {
+  return arguments.length > 1 ? this.each((e == null ? Rl : typeof e == "function" ? Ol : Fl)(t, e)) : this.node()[t];
 }
-function lr(t) {
+function fr(t) {
   return t.trim().split(/^|\s+/);
 }
-function di(t) {
-  return t.classList || new cr(t);
+function ui(t) {
+  return t.classList || new hr(t);
 }
-function cr(t) {
-  this._node = t, this._names = lr(t.getAttribute("class") || "");
+function hr(t) {
+  this._node = t, this._names = fr(t.getAttribute("class") || "");
 }
-cr.prototype = {
+hr.prototype = {
   add: function(t) {
     var e = this._names.indexOf(t);
     e < 0 && (this._names.push(t), this._node.setAttribute("class", this._names.join(" ")));
@@ -409,129 +409,129 @@ cr.prototype = {
     return this._names.indexOf(t) >= 0;
   }
 };
-function dr(t, e) {
-  for (var n = di(t), o = -1, i = e.length; ++o < i; ) n.add(e[o]);
+function gr(t, e) {
+  for (var n = ui(t), o = -1, i = e.length; ++o < i; ) n.add(e[o]);
 }
-function ur(t, e) {
-  for (var n = di(t), o = -1, i = e.length; ++o < i; ) n.remove(e[o]);
+function pr(t, e) {
+  for (var n = ui(t), o = -1, i = e.length; ++o < i; ) n.remove(e[o]);
 }
-function Rl(t) {
+function Vl(t) {
   return function() {
-    dr(this, t);
+    gr(this, t);
   };
-}
-function Fl(t) {
-  return function() {
-    ur(this, t);
-  };
-}
-function Ol(t, e) {
-  return function() {
-    (e.apply(this, arguments) ? dr : ur)(this, t);
-  };
-}
-function zl(t, e) {
-  var n = lr(t + "");
-  if (arguments.length < 2) {
-    for (var o = di(this.node()), i = -1, r = n.length; ++i < r; ) if (!o.contains(n[i])) return !1;
-    return !0;
-  }
-  return this.each((typeof e == "function" ? Ol : e ? Rl : Fl)(n, e));
-}
-function Vl() {
-  this.textContent = "";
 }
 function Bl(t) {
   return function() {
-    this.textContent = t;
+    pr(this, t);
   };
 }
-function ql(t) {
+function ql(t, e) {
   return function() {
-    var e = t.apply(this, arguments);
-    this.textContent = e ?? "";
+    (e.apply(this, arguments) ? gr : pr)(this, t);
   };
 }
-function Yl(t) {
-  return arguments.length ? this.each(t == null ? Vl : (typeof t == "function" ? ql : Bl)(t)) : this.node().textContent;
+function Yl(t, e) {
+  var n = fr(t + "");
+  if (arguments.length < 2) {
+    for (var o = ui(this.node()), i = -1, r = n.length; ++i < r; ) if (!o.contains(n[i])) return !1;
+    return !0;
+  }
+  return this.each((typeof e == "function" ? ql : e ? Vl : Bl)(n, e));
 }
 function Xl() {
-  this.innerHTML = "";
+  this.textContent = "";
 }
 function Wl(t) {
   return function() {
-    this.innerHTML = t;
+    this.textContent = t;
   };
 }
 function jl(t) {
   return function() {
     var e = t.apply(this, arguments);
-    this.innerHTML = e ?? "";
+    this.textContent = e ?? "";
   };
 }
 function Ul(t) {
-  return arguments.length ? this.each(t == null ? Xl : (typeof t == "function" ? jl : Wl)(t)) : this.node().innerHTML;
-}
-function Zl() {
-  this.nextSibling && this.parentNode.appendChild(this);
+  return arguments.length ? this.each(t == null ? Xl : (typeof t == "function" ? jl : Wl)(t)) : this.node().textContent;
 }
 function Gl() {
-  return this.each(Zl);
+  this.innerHTML = "";
 }
-function Kl() {
+function Zl(t) {
+  return function() {
+    this.innerHTML = t;
+  };
+}
+function Kl(t) {
+  return function() {
+    var e = t.apply(this, arguments);
+    this.innerHTML = e ?? "";
+  };
+}
+function Jl(t) {
+  return arguments.length ? this.each(t == null ? Gl : (typeof t == "function" ? Kl : Zl)(t)) : this.node().innerHTML;
+}
+function Ql() {
+  this.nextSibling && this.parentNode.appendChild(this);
+}
+function ec() {
+  return this.each(Ql);
+}
+function tc() {
   this.previousSibling && this.parentNode.insertBefore(this, this.parentNode.firstChild);
 }
-function Jl() {
-  return this.each(Kl);
+function nc() {
+  return this.each(tc);
 }
-function Ql(t) {
-  var e = typeof t == "function" ? t : nr(t);
+function oc(t) {
+  var e = typeof t == "function" ? t : rr(t);
   return this.select(function() {
     return this.appendChild(e.apply(this, arguments));
   });
 }
-function ec() {
+function ic() {
   return null;
 }
-function tc(t, e) {
-  var n = typeof t == "function" ? t : nr(t), o = e == null ? ec : typeof e == "function" ? e : ci(e);
+function sc(t, e) {
+  var n = typeof t == "function" ? t : rr(t), o = e == null ? ic : typeof e == "function" ? e : di(e);
   return this.select(function() {
     return this.insertBefore(n.apply(this, arguments), o.apply(this, arguments) || null);
   });
 }
-function nc() {
+function rc() {
   var t = this.parentNode;
   t && t.removeChild(this);
 }
-function oc() {
-  return this.each(nc);
+function ac() {
+  return this.each(rc);
 }
-function ic() {
+function lc() {
   var t = this.cloneNode(!1), e = this.parentNode;
   return e ? e.insertBefore(t, this.nextSibling) : t;
 }
-function sc() {
+function cc() {
   var t = this.cloneNode(!0), e = this.parentNode;
   return e ? e.insertBefore(t, this.nextSibling) : t;
 }
-function rc(t) {
-  return this.select(t ? sc : ic);
+function dc(t) {
+  return this.select(t ? cc : lc);
 }
-function ac(t) {
+function uc(t) {
   return arguments.length ? this.property("__data__", t) : this.node().__data__;
 }
-function lc(t) {
+function fc(t) {
   return function(e) {
     t.call(this, e, this.__data__);
   };
 }
-function cc(t) {
+function hc(t) {
   return t.trim().split(/^|\s+/).map(function(e) {
     var n = "", o = e.indexOf(".");
     return o >= 0 && (n = e.slice(o + 1), e = e.slice(0, o)), { type: e, name: n };
   });
 }
-function dc(t) {
+function gc(t) {
   return function() {
     var e = this.__on;
     if (e) {
@@ -541,9 +541,9 @@ function dc(t) {
     }
   };
 }
-function uc(t, e, n) {
+function pc(t, e, n) {
   return function() {
-    var o = this.__on, i, r = lc(e);
+    var o = this.__on, i, r = fc(e);
     if (o) {
       for (var s = 0, a = o.length; s < a; ++s)
         if ((i = o[s]).type === t.type && i.name === t.name) {
@@ -554,8 +554,8 @@ function uc(t, e, n) {
     this.addEventListener(t.type, r, n), i = { type: t.type, name: t.name, value: e, listener: r, options: n }, o ? o.push(i) : this.__on = [i];
   };
 }
-function fc(t, e, n) {
-  var o = cc(t + ""), i, r = o.length, s;
+function mc(t, e, n) {
+  var o = hc(t + ""), i, r = o.length, s;
   if (arguments.length < 2) {
     var a = this.node().__on;
     if (a) {
@@ -566,89 +566,89 @@ function fc(t, e, n) {
     }
     return;
   }
-  for (a = e ? uc : dc, i = 0; i < r; ++i) this.each(a(o[i], e, n));
+  for (a = e ? pc : gc, i = 0; i < r; ++i) this.each(a(o[i], e, n));
   return this;
 }
-function fr(t, e, n) {
-  var o = ar(t), i = o.CustomEvent;
+function mr(t, e, n) {
+  var o = ur(t), i = o.CustomEvent;
   typeof i == "function" ? i = new i(e, n) : (i = o.document.createEvent("Event"), n ? (i.initEvent(e, n.bubbles, n.cancelable), i.detail = n.detail) : i.initEvent(e, !1, !1)), t.dispatchEvent(i);
 }
-function hc(t, e) {
+function yc(t, e) {
   return function() {
-    return fr(this, t, e);
+    return mr(this, t, e);
   };
 }
-function gc(t, e) {
+function wc(t, e) {
   return function() {
-    return fr(this, t, e.apply(this, arguments));
+    return mr(this, t, e.apply(this, arguments));
   };
 }
-function pc(t, e) {
-  return this.each((typeof e == "function" ? gc : hc)(t, e));
+function vc(t, e) {
+  return this.each((typeof e == "function" ? wc : yc)(t, e));
 }
-function* mc() {
+function* _c() {
   for (var t = this._groups, e = 0, n = t.length; e < n; ++e)
     for (var o = t[e], i = 0, r = o.length, s; i < r; ++i)
       (s = o[i]) && (yield s);
 }
-var hr = [null];
+var yr = [null];
 function Fe(t, e) {
   this._groups = t, this._parents = e;
 }
 function xn() {
-  return new Fe([[document.documentElement]], hr);
+  return new Fe([[document.documentElement]], yr);
 }
-function yc() {
+function bc() {
   return this;
 }
 Fe.prototype = xn.prototype = {
   constructor: Fe,
-  select: qa,
-  selectAll: ja,
-  selectChild: Ka,
-  selectChildren: tl,
-  filter: nl,
-  data: ll,
-  enter: ol,
-  exit: dl,
-  join: ul,
-  merge: fl,
-  selection: yc,
-  order: hl,
-  sort: gl,
-  call: ml,
-  nodes: yl,
-  node: wl,
-  size: vl,
-  empty: _l,
-  each: bl,
-  attr: Pl,
-  style: Nl,
-  property: Hl,
-  classed: zl,
-  text: Yl,
-  html: Ul,
-  raise: Gl,
-  lower: Jl,
-  append: Ql,
-  insert: tc,
-  remove: oc,
-  clone: rc,
-  datum: ac,
-  on: fc,
-  dispatch: pc,
-  [Symbol.iterator]: mc
+  select: ja,
+  selectAll: Ka,
+  selectChild: tl,
+  selectChildren: sl,
+  filter: rl,
+  data: fl,
+  enter: al,
+  exit: gl,
+  join: pl,
+  merge: ml,
+  selection: bc,
+  order: yl,
+  sort: wl,
+  call: _l,
+  nodes: bl,
+  node: xl,
+  size: El,
+  empty: Cl,
+  each: Sl,
+  attr: Nl,
+  style: Hl,
+  property: zl,
+  classed: Yl,
+  text: Ul,
+  html: Jl,
+  raise: ec,
+  lower: nc,
+  append: oc,
+  insert: sc,
+  remove: ac,
+  clone: dc,
+  datum: uc,
+  on: mc,
+  dispatch: vc,
+  [Symbol.iterator]: _c
 };
 function Ye(t) {
-  return typeof t == "string" ? new Fe([[document.querySelector(t)]], [document.documentElement]) : new Fe([[t]], hr);
+  return typeof t == "string" ? new Fe([[document.querySelector(t)]], [document.documentElement]) : new Fe([[t]], yr);
 }
-function wc(t) {
+function xc(t) {
   let e;
   for (; e = t.sourceEvent; ) t = e;
   return t;
 }
 function Qe(t, e) {
-  if (t = wc(t), e === void 0 && (e = t.currentTarget), e) {
+  if (t = xc(t), e === void 0 && (e = t.currentTarget), e) {
     var n = e.ownerSVGElement || e;
     if (n.createSVGPoint) {
       var o = n.createSVGPoint();
@@ -661,25 +661,25 @@ function Qe(t, e) {
   }
   return [t.pageX, t.pageY];
 }
-const vc = { passive: !1 }, fn = { capture: !0, passive: !1 };
-function xo(t) {
+const Ec = { passive: !1 }, fn = { capture: !0, passive: !1 };
+function Eo(t) {
   t.stopImmediatePropagation();
 }
 function Rt(t) {
   t.preventDefault(), t.stopImmediatePropagation();
 }
-function gr(t) {
+function wr(t) {
   var e = t.document.documentElement, n = Ye(t).on("dragstart.drag", Rt, fn);
   "onselectstart" in e ? n.on("selectstart.drag", Rt, fn) : (e.__noselect = e.style.MozUserSelect, e.style.MozUserSelect = "none");
 }
-function pr(t, e) {
+function vr(t, e) {
   var n = t.document.documentElement, o = Ye(t).on("dragstart.drag", null);
   e && (o.on("click.drag", Rt, fn), setTimeout(function() {
     o.on("click.drag", null);
   }, 0)), "onselectstart" in n ? o.on("selectstart.drag", null) : (n.style.MozUserSelect = n.__noselect, delete n.__noselect);
 }
 const Pn = (t) => () => t;
-function Vo(t, {
+function Bo(t, {
   sourceEvent: e,
   subject: n,
   target: o,
@@ -705,65 +705,65 @@ function Vo(t, {
     _: { value: d }
   });
 }
-Vo.prototype.on = function() {
+Bo.prototype.on = function() {
   var t = this._.on.apply(this._, arguments);
   return t === this._ ? this : t;
 };
-function _c(t) {
+function Cc(t) {
   return !t.ctrlKey && !t.button;
 }
-function bc() {
+function Sc() {
   return this.parentNode;
 }
-function xc(t, e) {
+function kc(t, e) {
   return e ?? { x: t.x, y: t.y };
 }
-function Ec() {
+function Lc() {
   return navigator.maxTouchPoints || "ontouchstart" in this;
 }
-function Cc() {
-  var t = _c, e = bc, n = xc, o = Ec, i = {}, r = ho("start", "drag", "end"), s = 0, a, l, c, d, u = 0;
-  function f(_) {
-    _.on("mousedown.drag", h).filter(o).on("touchstart.drag", m).on("touchmove.drag", y, vc).on("touchend.drag touchcancel.drag", x).style("touch-action", "none").style("-webkit-tap-highlight-color", "rgba(0,0,0,0)");
+function Pc() {
+  var t = Cc, e = Sc, n = kc, o = Lc, i = {}, r = go("start", "drag", "end"), s = 0, a, l, c, d, u = 0;
+  function f(b) {
+    b.on("mousedown.drag", h).filter(o).on("touchstart.drag", m).on("touchmove.drag", y, Ec).on("touchend.drag touchcancel.drag", _).style("touch-action", "none").style("-webkit-tap-highlight-color", "rgba(0,0,0,0)");
   }
-  function h(_, b) {
-    if (!(d || !t.call(this, _, b))) {
-      var C = P(this, e.call(this, _, b), _, b, "mouse");
-      C && (Ye(_.view).on("mousemove.drag", g, fn).on("mouseup.drag", p, fn), gr(_.view), xo(_), c = !1, a = _.clientX, l = _.clientY, C("start", _));
+  function h(b, x) {
+    if (!(d || !t.call(this, b, x))) {
+      var C = S(this, e.call(this, b, x), b, x, "mouse");
+      C && (Ye(b.view).on("mousemove.drag", g, fn).on("mouseup.drag", p, fn), wr(b.view), Eo(b), c = !1, a = b.clientX, l = b.clientY, C("start", b));
     }
   }
-  function g(_) {
-    if (Rt(_), !c) {
-      var b = _.clientX - a, C = _.clientY - l;
-      c = b * b + C * C > u;
+  function g(b) {
+    if (Rt(b), !c) {
+      var x = b.clientX - a, C = b.clientY - l;
+      c = x * x + C * C > u;
     }
-    i.mouse("drag", _);
+    i.mouse("drag", b);
   }
-  function p(_) {
-    Ye(_.view).on("mousemove.drag mouseup.drag", null), pr(_.view, c), Rt(_), i.mouse("end", _);
+  function p(b) {
+    Ye(b.view).on("mousemove.drag mouseup.drag", null), vr(b.view, c), Rt(b), i.mouse("end", b);
   }
-  function m(_, b) {
-    if (t.call(this, _, b)) {
-      var C = _.changedTouches, E = e.call(this, _, b), T = C.length, $, L;
+  function m(b, x) {
+    if (t.call(this, b, x)) {
+      var C = b.changedTouches, E = e.call(this, b, x), T = C.length, $, M;
       for ($ = 0; $ < T; ++$)
-        (L = P(this, E, _, b, C[$].identifier, C[$])) && (xo(_), L("start", _, C[$]));
+        (M = S(this, E, b, x, C[$].identifier, C[$])) && (Eo(b), M("start", b, C[$]));
     }
   }
-  function y(_) {
-    var b = _.changedTouches, C = b.length, E, T;
+  function y(b) {
+    var x = b.changedTouches, C = x.length, E, T;
     for (E = 0; E < C; ++E)
-      (T = i[b[E].identifier]) && (Rt(_), T("drag", _, b[E]));
+      (T = i[x[E].identifier]) && (Rt(b), T("drag", b, x[E]));
   }
-  function x(_) {
-    var b = _.changedTouches, C = b.length, E, T;
+  function _(b) {
+    var x = b.changedTouches, C = x.length, E, T;
     for (d && clearTimeout(d), d = setTimeout(function() {
       d = null;
     }, 500), E = 0; E < C; ++E)
-      (T = i[b[E].identifier]) && (xo(_), T("end", _, b[E]));
+      (T = i[x[E].identifier]) && (Eo(b), T("end", b, x[E]));
   }
-  function P(_, b, C, E, T, $) {
-    var L = r.copy(), A = Qe($ || C, b), k, v, w;
-    if ((w = n.call(_, new Vo("beforestart", {
+  function S(b, x, C, E, T, $) {
+    var M = r.copy(), A = Qe($ || C, x), P, v, w;
+    if ((w = n.call(b, new Bo("beforestart", {
       sourceEvent: C,
       target: f,
       identifier: T,
@@ -772,11 +772,11 @@ function Cc() {
       y: A[1],
       dx: 0,
       dy: 0,
-      dispatch: L
+      dispatch: M
     }), E)) != null)
-      return k = w.x - A[0] || 0, v = w.y - A[1] || 0, function N(S, R, O) {
+      return P = w.x - A[0] || 0, v = w.y - A[1] || 0, function N(k, R, O) {
         var q = A, D;
-        switch (S) {
+        switch (k) {
           case "start":
             i[T] = N, D = s++;
             break;
@@ -784,54 +784,54 @@ function Cc() {
             delete i[T], --s;
           // falls through
           case "drag":
-            A = Qe(O || R, b), D = s;
+            A = Qe(O || R, x), D = s;
             break;
         }
-        L.call(
-          S,
-          _,
-          new Vo(S, {
+        M.call(
+          k,
+          b,
+          new Bo(k, {
             sourceEvent: R,
             subject: w,
             target: f,
             identifier: T,
             active: D,
-            x: A[0] + k,
+            x: A[0] + P,
             y: A[1] + v,
             dx: A[0] - q[0],
             dy: A[1] - q[1],
-            dispatch: L
+            dispatch: M
           }),
           E
         );
       };
   }
-  return f.filter = function(_) {
-    return arguments.length ? (t = typeof _ == "function" ? _ : Pn(!!_), f) : t;
-  }, f.container = function(_) {
-    return arguments.length ? (e = typeof _ == "function" ? _ : Pn(_), f) : e;
-  }, f.subject = function(_) {
-    return arguments.length ? (n = typeof _ == "function" ? _ : Pn(_), f) : n;
-  }, f.touchable = function(_) {
-    return arguments.length ? (o = typeof _ == "function" ? _ : Pn(!!_), f) : o;
+  return f.filter = function(b) {
+    return arguments.length ? (t = typeof b == "function" ? b : Pn(!!b), f) : t;
+  }, f.container = function(b) {
+    return arguments.length ? (e = typeof b == "function" ? b : Pn(b), f) : e;
+  }, f.subject = function(b) {
+    return arguments.length ? (n = typeof b == "function" ? b : Pn(b), f) : n;
+  }, f.touchable = function(b) {
+    return arguments.length ? (o = typeof b == "function" ? b : Pn(!!b), f) : o;
   }, f.on = function() {
-    var _ = r.on.apply(r, arguments);
-    return _ === r ? f : _;
-  }, f.clickDistance = function(_) {
-    return arguments.length ? (u = (_ = +_) * _, f) : Math.sqrt(u);
+    var b = r.on.apply(r, arguments);
+    return b === r ? f : b;
+  }, f.clickDistance = function(b) {
+    return arguments.length ? (u = (b = +b) * b, f) : Math.sqrt(u);
   }, f;
 }
-function ui(t, e, n) {
+function fi(t, e, n) {
   t.prototype = e.prototype = n, n.constructor = t;
 }
-function mr(t, e) {
+function _r(t, e) {
   var n = Object.create(t.prototype);
   for (var o in e) n[o] = e[o];
   return n;
 }
 function En() {
 }
-var hn = 0.7, Xn = 1 / hn, Ft = "\\s*([+-]?\\d+)\\s*", gn = "\\s*([+-]?(?:\\d*\\.)?\\d+(?:[eE][+-]?\\d+)?)\\s*", Ge = "\\s*([+-]?(?:\\d*\\.)?\\d+(?:[eE][+-]?\\d+)?)%\\s*", Sc = /^#([0-9a-f]{3,8})$/, kc = new RegExp(`^rgb\\(${Ft},${Ft},${Ft}\\)$`), Lc = new RegExp(`^rgb\\(${Ge},${Ge},${Ge}\\)$`), Pc = new RegExp(`^rgba\\(${Ft},${Ft},${Ft},${gn}\\)$`), Mc = new RegExp(`^rgba\\(${Ge},${Ge},${Ge},${gn}\\)$`), Tc = new RegExp(`^hsl\\(${gn},${Ge},${Ge}\\)$`), Ac = new RegExp(`^hsla\\(${gn},${Ge},${Ge},${gn}\\)$`), Hi = {
+var hn = 0.7, Xn = 1 / hn, Ft = "\\s*([+-]?\\d+)\\s*", gn = "\\s*([+-]?(?:\\d*\\.)?\\d+(?:[eE][+-]?\\d+)?)\\s*", Ze = "\\s*([+-]?(?:\\d*\\.)?\\d+(?:[eE][+-]?\\d+)?)%\\s*", Mc = /^#([0-9a-f]{3,8})$/, Tc = new RegExp(`^rgb\\(${Ft},${Ft},${Ft}\\)$`), Ac = new RegExp(`^rgb\\(${Ze},${Ze},${Ze}\\)$`), Nc = new RegExp(`^rgba\\(${Ft},${Ft},${Ft},${gn}\\)$`), Ic = new RegExp(`^rgba\\(${Ze},${Ze},${Ze},${gn}\\)$`), $c = new RegExp(`^hsl\\(${gn},${Ze},${Ze}\\)$`), Dc = new RegExp(`^hsla\\(${gn},${Ze},${Ze},${gn}\\)$`), Ri = {
   aliceblue: 15792383,
   antiquewhite: 16444375,
   aqua: 65535,
@@ -981,53 +981,53 @@ var hn = 0.7, Xn = 1 / hn, Ft = "\\s*([+-]?\\d+)\\s*", gn = "\\s*([+-]?(?:\\d*\\
   yellow: 16776960,
   yellowgreen: 10145074
 };
-ui(En, pn, {
+fi(En, pn, {
   copy(t) {
     return Object.assign(new this.constructor(), this, t);
   },
   displayable() {
     return this.rgb().displayable();
   },
-  hex: Ri,
+  hex: Fi,
   // Deprecated! Use color.formatHex.
-  formatHex: Ri,
-  formatHex8: Nc,
-  formatHsl: Ic,
-  formatRgb: Fi,
-  toString: Fi
+  formatHex: Fi,
+  formatHex8: Hc,
+  formatHsl: Rc,
+  formatRgb: Oi,
+  toString: Oi
 });
-function Ri() {
+function Fi() {
   return this.rgb().formatHex();
 }
-function Nc() {
+function Hc() {
   return this.rgb().formatHex8();
 }
-function Ic() {
-  return yr(this).formatHsl();
+function Rc() {
+  return br(this).formatHsl();
 }
-function Fi() {
+function Oi() {
   return this.rgb().formatRgb();
 }
 function pn(t) {
   var e, n;
-  return t = (t + "").trim().toLowerCase(), (e = Sc.exec(t)) ? (n = e[1].length, e = parseInt(e[1], 16), n === 6 ? Oi(e) : n === 3 ? new Ne(e >> 8 & 15 | e >> 4 & 240, e >> 4 & 15 | e & 240, (e & 15) << 4 | e & 15, 1) : n === 8 ? Mn(e >> 24 & 255, e >> 16 & 255, e >> 8 & 255, (e & 255) / 255) : n === 4 ? Mn(e >> 12 & 15 | e >> 8 & 240, e >> 8 & 15 | e >> 4 & 240, e >> 4 & 15 | e & 240, ((e & 15) << 4 | e & 15) / 255) : null) : (e = kc.exec(t)) ? new Ne(e[1], e[2], e[3], 1) : (e = Lc.exec(t)) ? new Ne(e[1] * 255 / 100, e[2] * 255 / 100, e[3] * 255 / 100, 1) : (e = Pc.exec(t)) ? Mn(e[1], e[2], e[3], e[4]) : (e = Mc.exec(t)) ? Mn(e[1] * 255 / 100, e[2] * 255 / 100, e[3] * 255 / 100, e[4]) : (e = Tc.exec(t)) ? Bi(e[1], e[2] / 100, e[3] / 100, 1) : (e = Ac.exec(t)) ? Bi(e[1], e[2] / 100, e[3] / 100, e[4]) : Hi.hasOwnProperty(t) ? Oi(Hi[t]) : t === "transparent" ? new Ne(NaN, NaN, NaN, 0) : null;
+  return t = (t + "").trim().toLowerCase(), (e = Mc.exec(t)) ? (n = e[1].length, e = parseInt(e[1], 16), n === 6 ? zi(e) : n === 3 ? new Ne(e >> 8 & 15 | e >> 4 & 240, e >> 4 & 15 | e & 240, (e & 15) << 4 | e & 15, 1) : n === 8 ? Mn(e >> 24 & 255, e >> 16 & 255, e >> 8 & 255, (e & 255) / 255) : n === 4 ? Mn(e >> 12 & 15 | e >> 8 & 240, e >> 8 & 15 | e >> 4 & 240, e >> 4 & 15 | e & 240, ((e & 15) << 4 | e & 15) / 255) : null) : (e = Tc.exec(t)) ? new Ne(e[1], e[2], e[3], 1) : (e = Ac.exec(t)) ? new Ne(e[1] * 255 / 100, e[2] * 255 / 100, e[3] * 255 / 100, 1) : (e = Nc.exec(t)) ? Mn(e[1], e[2], e[3], e[4]) : (e = Ic.exec(t)) ? Mn(e[1] * 255 / 100, e[2] * 255 / 100, e[3] * 255 / 100, e[4]) : (e = $c.exec(t)) ? qi(e[1], e[2] / 100, e[3] / 100, 1) : (e = Dc.exec(t)) ? qi(e[1], e[2] / 100, e[3] / 100, e[4]) : Ri.hasOwnProperty(t) ? zi(Ri[t]) : t === "transparent" ? new Ne(NaN, NaN, NaN, 0) : null;
 }
-function Oi(t) {
+function zi(t) {
   return new Ne(t >> 16 & 255, t >> 8 & 255, t & 255, 1);
 }
 function Mn(t, e, n, o) {
   return o <= 0 && (t = e = n = NaN), new Ne(t, e, n, o);
 }
-function $c(t) {
+function Fc(t) {
   return t instanceof En || (t = pn(t)), t ? (t = t.rgb(), new Ne(t.r, t.g, t.b, t.opacity)) : new Ne();
 }
-function Bo(t, e, n, o) {
-  return arguments.length === 1 ? $c(t) : new Ne(t, e, n, o ?? 1);
+function qo(t, e, n, o) {
+  return arguments.length === 1 ? Fc(t) : new Ne(t, e, n, o ?? 1);
 }
 function Ne(t, e, n, o) {
   this.r = +t, this.g = +e, this.b = +n, this.opacity = +o;
 }
-ui(Ne, Bo, mr(En, {
+fi(Ne, qo, _r(En, {
   brighter(t) {
     return t = t == null ? Xn : Math.pow(Xn, t), new Ne(this.r * t, this.g * t, this.b * t, this.opacity);
   },
@@ -1038,41 +1038,41 @@ ui(Ne, Bo, mr(En, {
     return this;
   },
   clamp() {
-    return new Ne(Ct(this.r), Ct(this.g), Ct(this.b), Wn(this.opacity));
+    return new Ne(St(this.r), St(this.g), St(this.b), Wn(this.opacity));
   },
   displayable() {
     return -0.5 <= this.r && this.r < 255.5 && -0.5 <= this.g && this.g < 255.5 && -0.5 <= this.b && this.b < 255.5 && 0 <= this.opacity && this.opacity <= 1;
   },
-  hex: zi,
+  hex: Vi,
   // Deprecated! Use color.formatHex.
-  formatHex: zi,
-  formatHex8: Dc,
-  formatRgb: Vi,
-  toString: Vi
+  formatHex: Vi,
+  formatHex8: Oc,
+  formatRgb: Bi,
+  toString: Bi
 }));
-function zi() {
-  return `#${Et(this.r)}${Et(this.g)}${Et(this.b)}`;
-}
-function Dc() {
-  return `#${Et(this.r)}${Et(this.g)}${Et(this.b)}${Et((isNaN(this.opacity) ? 1 : this.opacity) * 255)}`;
-}
 function Vi() {
+  return `#${Ct(this.r)}${Ct(this.g)}${Ct(this.b)}`;
+}
+function Oc() {
+  return `#${Ct(this.r)}${Ct(this.g)}${Ct(this.b)}${Ct((isNaN(this.opacity) ? 1 : this.opacity) * 255)}`;
+}
+function Bi() {
   const t = Wn(this.opacity);
-  return `${t === 1 ? "rgb(" : "rgba("}${Ct(this.r)}, ${Ct(this.g)}, ${Ct(this.b)}${t === 1 ? ")" : `, ${t})`}`;
+  return `${t === 1 ? "rgb(" : "rgba("}${St(this.r)}, ${St(this.g)}, ${St(this.b)}${t === 1 ? ")" : `, ${t})`}`;
 }
 function Wn(t) {
   return isNaN(t) ? 1 : Math.max(0, Math.min(1, t));
 }
-function Ct(t) {
+function St(t) {
   return Math.max(0, Math.min(255, Math.round(t) || 0));
 }
-function Et(t) {
-  return t = Ct(t), (t < 16 ? "0" : "") + t.toString(16);
+function Ct(t) {
+  return t = St(t), (t < 16 ? "0" : "") + t.toString(16);
 }
-function Bi(t, e, n, o) {
+function qi(t, e, n, o) {
   return o <= 0 ? t = e = n = NaN : n <= 0 || n >= 1 ? t = e = NaN : e <= 0 && (t = NaN), new Xe(t, e, n, o);
 }
-function yr(t) {
+function br(t) {
   if (t instanceof Xe) return new Xe(t.h, t.s, t.l, t.opacity);
   if (t instanceof En || (t = pn(t)), !t) return new Xe();
   if (t instanceof Xe) return t;
@@ -1080,13 +1080,13 @@ function yr(t) {
   var e = t.r / 255, n = t.g / 255, o = t.b / 255, i = Math.min(e, n, o), r = Math.max(e, n, o), s = NaN, a = r - i, l = (r + i) / 2;
   return a ? (e === r ? s = (n - o) / a + (n < o) * 6 : n === r ? s = (o - e) / a + 2 : s = (e - n) / a + 4, a /= l < 0.5 ? r + i : 2 - r - i, s *= 60) : a = l > 0 && l < 1 ? 0 : s, new Xe(s, a, l, t.opacity);
 }
-function Hc(t, e, n, o) {
-  return arguments.length === 1 ? yr(t) : new Xe(t, e, n, o ?? 1);
+function zc(t, e, n, o) {
+  return arguments.length === 1 ? br(t) : new Xe(t, e, n, o ?? 1);
 }
 function Xe(t, e, n, o) {
   this.h = +t, this.s = +e, this.l = +n, this.opacity = +o;
 }
-ui(Xe, Hc, mr(En, {
+fi(Xe, zc, _r(En, {
   brighter(t) {
     return t = t == null ? Xn : Math.pow(Xn, t), new Xe(this.h, this.s, this.l * t, this.opacity);
   },
@@ -1096,56 +1096,56 @@ ui(Xe, Hc, mr(En, {
   rgb() {
     var t = this.h % 360 + (this.h < 0) * 360, e = isNaN(t) || isNaN(this.s) ? 0 : this.s, n = this.l, o = n + (n < 0.5 ? n : 1 - n) * e, i = 2 * n - o;
     return new Ne(
-      Eo(t >= 240 ? t - 240 : t + 120, i, o),
-      Eo(t, i, o),
-      Eo(t < 120 ? t + 240 : t - 120, i, o),
+      Co(t >= 240 ? t - 240 : t + 120, i, o),
+      Co(t, i, o),
+      Co(t < 120 ? t + 240 : t - 120, i, o),
       this.opacity
     );
   },
   clamp() {
-    return new Xe(qi(this.h), Tn(this.s), Tn(this.l), Wn(this.opacity));
+    return new Xe(Yi(this.h), Tn(this.s), Tn(this.l), Wn(this.opacity));
   },
   displayable() {
     return (0 <= this.s && this.s <= 1 || isNaN(this.s)) && 0 <= this.l && this.l <= 1 && 0 <= this.opacity && this.opacity <= 1;
   },
   formatHsl() {
     const t = Wn(this.opacity);
-    return `${t === 1 ? "hsl(" : "hsla("}${qi(this.h)}, ${Tn(this.s) * 100}%, ${Tn(this.l) * 100}%${t === 1 ? ")" : `, ${t})`}`;
+    return `${t === 1 ? "hsl(" : "hsla("}${Yi(this.h)}, ${Tn(this.s) * 100}%, ${Tn(this.l) * 100}%${t === 1 ? ")" : `, ${t})`}`;
   }
 }));
-function qi(t) {
+function Yi(t) {
   return t = (t || 0) % 360, t < 0 ? t + 360 : t;
 }
 function Tn(t) {
   return Math.max(0, Math.min(1, t || 0));
 }
-function Eo(t, e, n) {
+function Co(t, e, n) {
   return (t < 60 ? e + (n - e) * t / 60 : t < 180 ? n : t < 240 ? e + (n - e) * (240 - t) / 60 : e) * 255;
 }
-const wr = (t) => () => t;
-function Rc(t, e) {
+const xr = (t) => () => t;
+function Vc(t, e) {
   return function(n) {
     return t + n * e;
   };
 }
-function Fc(t, e, n) {
+function Bc(t, e, n) {
   return t = Math.pow(t, n), e = Math.pow(e, n) - t, n = 1 / n, function(o) {
     return Math.pow(t + o * e, n);
   };
 }
-function Oc(t) {
-  return (t = +t) == 1 ? vr : function(e, n) {
-    return n - e ? Fc(e, n, t) : wr(isNaN(e) ? n : e);
+function qc(t) {
+  return (t = +t) == 1 ? Er : function(e, n) {
+    return n - e ? Bc(e, n, t) : xr(isNaN(e) ? n : e);
   };
 }
-function vr(t, e) {
+function Er(t, e) {
   var n = e - t;
-  return n ? Rc(t, n) : wr(isNaN(t) ? e : t);
+  return n ? Vc(t, n) : xr(isNaN(t) ? e : t);
 }
-const qo = (function t(e) {
-  var n = Oc(e);
+const Yo = (function t(e) {
+  var n = qc(e);
   function o(i, r) {
-    var s = n((i = Bo(i)).r, (r = Bo(r)).r), a = n(i.g, r.g), l = n(i.b, r.b), c = vr(i.opacity, r.opacity);
+    var s = n((i = qo(i)).r, (r = qo(r)).r), a = n(i.g, r.g), l = n(i.b, r.b), c = Er(i.opacity, r.opacity);
     return function(d) {
       return i.r = s(d), i.g = a(d), i.b = l(d), i.opacity = c(d), i + "";
     };
@@ -1157,27 +1157,27 @@ function dt(t, e) {
     return t * (1 - n) + e * n;
   };
 }
-var Yo = /[-+]?(?:\d+\.?\d*|\.?\d+)(?:[eE][-+]?\d+)?/g, Co = new RegExp(Yo.source, "g");
-function zc(t) {
+var Xo = /[-+]?(?:\d+\.?\d*|\.?\d+)(?:[eE][-+]?\d+)?/g, So = new RegExp(Xo.source, "g");
+function Yc(t) {
   return function() {
     return t;
   };
 }
-function Vc(t) {
+function Xc(t) {
   return function(e) {
     return t(e) + "";
   };
 }
-function Bc(t, e) {
-  var n = Yo.lastIndex = Co.lastIndex = 0, o, i, r, s = -1, a = [], l = [];
-  for (t = t + "", e = e + ""; (o = Yo.exec(t)) && (i = Co.exec(e)); )
-    (r = i.index) > n && (r = e.slice(n, r), a[s] ? a[s] += r : a[++s] = r), (o = o[0]) === (i = i[0]) ? a[s] ? a[s] += i : a[++s] = i : (a[++s] = null, l.push({ i: s, x: dt(o, i) })), n = Co.lastIndex;
-  return n < e.length && (r = e.slice(n), a[s] ? a[s] += r : a[++s] = r), a.length < 2 ? l[0] ? Vc(l[0].x) : zc(e) : (e = l.length, function(c) {
+function Wc(t, e) {
+  var n = Xo.lastIndex = So.lastIndex = 0, o, i, r, s = -1, a = [], l = [];
+  for (t = t + "", e = e + ""; (o = Xo.exec(t)) && (i = So.exec(e)); )
+    (r = i.index) > n && (r = e.slice(n, r), a[s] ? a[s] += r : a[++s] = r), (o = o[0]) === (i = i[0]) ? a[s] ? a[s] += i : a[++s] = i : (a[++s] = null, l.push({ i: s, x: dt(o, i) })), n = So.lastIndex;
+  return n < e.length && (r = e.slice(n), a[s] ? a[s] += r : a[++s] = r), a.length < 2 ? l[0] ? Xc(l[0].x) : Yc(e) : (e = l.length, function(c) {
     for (var d = 0, u; d < e; ++d) a[(u = l[d]).i] = u.x(c);
     return a.join("");
   });
 }
-var Yi = 180 / Math.PI, Xo = {
+var Xi = 180 / Math.PI, Wo = {
   translateX: 0,
   translateY: 0,
   rotate: 0,
@@ -1185,26 +1185,26 @@ var Yi = 180 / Math.PI, Xo = {
   scaleX: 1,
   scaleY: 1
 };
-function _r(t, e, n, o, i, r) {
+function Cr(t, e, n, o, i, r) {
   var s, a, l;
   return (s = Math.sqrt(t * t + e * e)) && (t /= s, e /= s), (l = t * n + e * o) && (n -= t * l, o -= e * l), (a = Math.sqrt(n * n + o * o)) && (n /= a, o /= a, l /= a), t * o < e * n && (t = -t, e = -e, l = -l, s = -s), {
     translateX: i,
     translateY: r,
-    rotate: Math.atan2(e, t) * Yi,
-    skewX: Math.atan(l) * Yi,
+    rotate: Math.atan2(e, t) * Xi,
+    skewX: Math.atan(l) * Xi,
     scaleX: s,
     scaleY: a
   };
 }
 var An;
-function qc(t) {
+function jc(t) {
   const e = new (typeof DOMMatrix == "function" ? DOMMatrix : WebKitCSSMatrix)(t + "");
-  return e.isIdentity ? Xo : _r(e.a, e.b, e.c, e.d, e.e, e.f);
+  return e.isIdentity ? Wo : Cr(e.a, e.b, e.c, e.d, e.e, e.f);
 }
-function Yc(t) {
-  return t == null || (An || (An = document.createElementNS("http://www.w3.org/2000/svg", "g")), An.setAttribute("transform", t), !(t = An.transform.baseVal.consolidate())) ? Xo : (t = t.matrix, _r(t.a, t.b, t.c, t.d, t.e, t.f));
+function Uc(t) {
+  return t == null || (An || (An = document.createElementNS("http://www.w3.org/2000/svg", "g")), An.setAttribute("transform", t), !(t = An.transform.baseVal.consolidate())) ? Wo : (t = t.matrix, Cr(t.a, t.b, t.c, t.d, t.e, t.f));
 }
-function br(t, e, n, o) {
+function Sr(t, e, n, o) {
   function i(c) {
     return c.length ? c.pop() + " " : "";
   }
@@ -1234,20 +1234,20 @@ function br(t, e, n, o) {
     };
   };
 }
-var Xc = br(qc, "px, ", "px)", "deg)"), Wc = br(Yc, ", ", ")", ")"), jc = 1e-12;
-function Xi(t) {
+var Gc = Sr(jc, "px, ", "px)", "deg)"), Zc = Sr(Uc, ", ", ")", ")"), Kc = 1e-12;
+function Wi(t) {
   return ((t = Math.exp(t)) + 1 / t) / 2;
 }
-function Uc(t) {
+function Jc(t) {
   return ((t = Math.exp(t)) - 1 / t) / 2;
 }
-function Zc(t) {
+function Qc(t) {
   return ((t = Math.exp(2 * t)) - 1) / (t + 1);
 }
-const Gc = (function t(e, n, o) {
+const ed = (function t(e, n, o) {
   function i(r, s) {
     var a = r[0], l = r[1], c = r[2], d = s[0], u = s[1], f = s[2], h = d - a, g = u - l, p = h * h + g * g, m, y;
-    if (p < jc)
+    if (p < Kc)
       y = Math.log(f / c) / e, m = function(E) {
         return [
           a + E * h,
@@ -1256,13 +1256,13 @@ const Gc = (function t(e, n, o) {
         ];
       };
     else {
-      var x = Math.sqrt(p), P = (f * f - c * c + o * p) / (2 * c * n * x), _ = (f * f - c * c - o * p) / (2 * f * n * x), b = Math.log(Math.sqrt(P * P + 1) - P), C = Math.log(Math.sqrt(_ * _ + 1) - _);
-      y = (C - b) / e, m = function(E) {
-        var T = E * y, $ = Xi(b), L = c / (n * x) * ($ * Zc(e * T + b) - Uc(b));
+      var _ = Math.sqrt(p), S = (f * f - c * c + o * p) / (2 * c * n * _), b = (f * f - c * c - o * p) / (2 * f * n * _), x = Math.log(Math.sqrt(S * S + 1) - S), C = Math.log(Math.sqrt(b * b + 1) - b);
+      y = (C - x) / e, m = function(E) {
+        var T = E * y, $ = Wi(x), M = c / (n * _) * ($ * Qc(e * T + x) - Jc(x));
         return [
-          a + L * h,
-          l + L * g,
-          c * $ / Xi(e * T + b)
+          a + M * h,
+          l + M * g,
+          c * $ / Wi(e * T + x)
         ];
       };
     }
@@ -1273,92 +1273,92 @@ const Gc = (function t(e, n, o) {
     return t(s, a, l);
   }, i;
 })(Math.SQRT2, 2, 4);
-var Bt = 0, rn = 0, Qt = 0, xr = 1e3, jn, an, Un = 0, Lt = 0, po = 0, mn = typeof performance == "object" && performance.now ? performance : Date, Er = typeof window == "object" && window.requestAnimationFrame ? window.requestAnimationFrame.bind(window) : function(t) {
+var Bt = 0, rn = 0, Qt = 0, kr = 1e3, jn, an, Un = 0, Lt = 0, mo = 0, mn = typeof performance == "object" && performance.now ? performance : Date, Lr = typeof window == "object" && window.requestAnimationFrame ? window.requestAnimationFrame.bind(window) : function(t) {
   setTimeout(t, 17);
 };
-function fi() {
-  return Lt || (Er(Kc), Lt = mn.now() + po);
+function hi() {
+  return Lt || (Lr(td), Lt = mn.now() + mo);
 }
-function Kc() {
+function td() {
   Lt = 0;
 }
-function Zn() {
+function Gn() {
   this._call = this._time = this._next = null;
 }
-Zn.prototype = Cr.prototype = {
-  constructor: Zn,
+Gn.prototype = Pr.prototype = {
+  constructor: Gn,
   restart: function(t, e, n) {
     if (typeof t != "function") throw new TypeError("callback is not a function");
-    n = (n == null ? fi() : +n) + (e == null ? 0 : +e), !this._next && an !== this && (an ? an._next = this : jn = this, an = this), this._call = t, this._time = n, Wo();
+    n = (n == null ? hi() : +n) + (e == null ? 0 : +e), !this._next && an !== this && (an ? an._next = this : jn = this, an = this), this._call = t, this._time = n, jo();
   },
   stop: function() {
-    this._call && (this._call = null, this._time = 1 / 0, Wo());
+    this._call && (this._call = null, this._time = 1 / 0, jo());
   }
 };
-function Cr(t, e, n) {
-  var o = new Zn();
+function Pr(t, e, n) {
+  var o = new Gn();
   return o.restart(t, e, n), o;
 }
-function Jc() {
-  fi(), ++Bt;
+function nd() {
+  hi(), ++Bt;
   for (var t = jn, e; t; )
     (e = Lt - t._time) >= 0 && t._call.call(void 0, e), t = t._next;
   --Bt;
 }
-function Wi() {
-  Lt = (Un = mn.now()) + po, Bt = rn = 0;
+function ji() {
+  Lt = (Un = mn.now()) + mo, Bt = rn = 0;
   try {
-    Jc();
+    nd();
   } finally {
-    Bt = 0, ed(), Lt = 0;
+    Bt = 0, id(), Lt = 0;
   }
 }
-function Qc() {
+function od() {
   var t = mn.now(), e = t - Un;
-  e > xr && (po -= e, Un = t);
+  e > kr && (mo -= e, Un = t);
 }
-function ed() {
+function id() {
   for (var t, e = jn, n, o = 1 / 0; e; )
     e._call ? (o > e._time && (o = e._time), t = e, e = e._next) : (n = e._next, e._next = null, e = t ? t._next = n : jn = n);
-  an = t, Wo(o);
+  an = t, jo(o);
 }
-function Wo(t) {
+function jo(t) {
   if (!Bt) {
     rn && (rn = clearTimeout(rn));
     var e = t - Lt;
-    e > 24 ? (t < 1 / 0 && (rn = setTimeout(Wi, t - mn.now() - po)), Qt && (Qt = clearInterval(Qt))) : (Qt || (Un = mn.now(), Qt = setInterval(Qc, xr)), Bt = 1, Er(Wi));
+    e > 24 ? (t < 1 / 0 && (rn = setTimeout(ji, t - mn.now() - mo)), Qt && (Qt = clearInterval(Qt))) : (Qt || (Un = mn.now(), Qt = setInterval(od, kr)), Bt = 1, Lr(ji));
   }
 }
-function ji(t, e, n) {
-  var o = new Zn();
+function Ui(t, e, n) {
+  var o = new Gn();
   return e = e == null ? 0 : +e, o.restart((i) => {
     o.stop(), t(i + e);
   }, e, n), o;
 }
-var td = ho("start", "end", "cancel", "interrupt"), nd = [], Sr = 0, Ui = 1, jo = 2, zn = 3, Zi = 4, Uo = 5, Vn = 6;
-function mo(t, e, n, o, i, r) {
+var sd = go("start", "end", "cancel", "interrupt"), rd = [], Mr = 0, Gi = 1, Uo = 2, zn = 3, Zi = 4, Go = 5, Vn = 6;
+function yo(t, e, n, o, i, r) {
   var s = t.__transition;
   if (!s) t.__transition = {};
   else if (n in s) return;
-  od(t, n, {
+  ad(t, n, {
     name: e,
     index: o,
     // For context during callback.
     group: i,
     // For context during callback.
-    on: td,
-    tween: nd,
+    on: sd,
+    tween: rd,
     time: r.time,
     delay: r.delay,
     duration: r.duration,
     ease: r.ease,
     timer: null,
-    state: Sr
+    state: Mr
   });
 }
-function hi(t, e) {
+function gi(t, e) {
   var n = je(t, e);
-  if (n.state > Sr) throw new Error("too late; already scheduled");
+  if (n.state > Mr) throw new Error("too late; already scheduled");
   return n;
 }
 function Ke(t, e) {
@@ -1371,32 +1371,32 @@ function je(t, e) {
   if (!n || !(n = n[e])) throw new Error("transition not found");
   return n;
 }
-function od(t, e, n) {
+function ad(t, e, n) {
   var o = t.__transition, i;
-  o[e] = n, n.timer = Cr(r, 0, n.time);
+  o[e] = n, n.timer = Pr(r, 0, n.time);
   function r(c) {
-    n.state = Ui, n.timer.restart(s, n.delay, n.time), n.delay <= c && s(c - n.delay);
+    n.state = Gi, n.timer.restart(s, n.delay, n.time), n.delay <= c && s(c - n.delay);
   }
   function s(c) {
     var d, u, f, h;
-    if (n.state !== Ui) return l();
+    if (n.state !== Gi) return l();
     for (d in o)
       if (h = o[d], h.name === n.name) {
-        if (h.state === zn) return ji(s);
+        if (h.state === zn) return Ui(s);
         h.state === Zi ? (h.state = Vn, h.timer.stop(), h.on.call("interrupt", t, t.__data__, h.index, h.group), delete o[d]) : +d < e && (h.state = Vn, h.timer.stop(), h.on.call("cancel", t, t.__data__, h.index, h.group), delete o[d]);
       }
-    if (ji(function() {
+    if (Ui(function() {
       n.state === zn && (n.state = Zi, n.timer.restart(a, n.delay, n.time), a(c));
-    }), n.state = jo, n.on.call("start", t, t.__data__, n.index, n.group), n.state === jo) {
+    }), n.state = Uo, n.on.call("start", t, t.__data__, n.index, n.group), n.state === Uo) {
       for (n.state = zn, i = new Array(f = n.tween.length), d = 0, u = -1; d < f; ++d)
         (h = n.tween[d].value.call(t, t.__data__, n.index, n.group)) && (i[++u] = h);
       i.length = u + 1;
     }
   }
   function a(c) {
-    for (var d = c < n.duration ? n.ease.call(null, c / n.duration) : (n.timer.restart(l), n.state = Uo, 1), u = -1, f = i.length; ++u < f; )
+    for (var d = c < n.duration ? n.ease.call(null, c / n.duration) : (n.timer.restart(l), n.state = Go, 1), u = -1, f = i.length; ++u < f; )
       i[u].call(t, d);
-    n.state === Uo && (n.on.call("end", t, t.__data__, n.index, n.group), l());
+    n.state === Go && (n.on.call("end", t, t.__data__, n.index, n.group), l());
   }
   function l() {
     n.state = Vn, n.timer.stop(), delete o[e];
@@ -1413,17 +1413,17 @@ function Bn(t, e) {
         r = !1;
         continue;
       }
-      i = o.state > jo && o.state < Uo, o.state = Vn, o.timer.stop(), o.on.call(i ? "interrupt" : "cancel", t, t.__data__, o.index, o.group), delete n[s];
+      i = o.state > Uo && o.state < Go, o.state = Vn, o.timer.stop(), o.on.call(i ? "interrupt" : "cancel", t, t.__data__, o.index, o.group), delete n[s];
     }
     r && delete t.__transition;
   }
 }
-function id(t) {
+function ld(t) {
   return this.each(function() {
     Bn(this, t);
   });
 }
-function sd(t, e) {
+function cd(t, e) {
   var n, o;
   return function() {
     var i = Ke(this, t), r = i.tween;
@@ -1438,7 +1438,7 @@ function sd(t, e) {
     i.tween = o;
   };
 }
-function rd(t, e, n) {
+function dd(t, e, n) {
   var o, i;
   if (typeof n != "function") throw new Error();
   return function() {
@@ -1455,7 +1455,7 @@ function rd(t, e, n) {
     r.tween = i;
   };
 }
-function ad(t, e) {
+function ud(t, e) {
   var n = this._id;
   if (t += "", arguments.length < 2) {
     for (var o = je(this.node(), n).tween, i = 0, r = o.length, s; i < r; ++i)
@@ -1463,9 +1463,9 @@ function ad(t, e) {
         return s.value;
     return null;
   }
-  return this.each((e == null ? sd : rd)(n, t, e));
+  return this.each((e == null ? cd : dd)(n, t, e));
 }
-function gi(t, e, n) {
+function pi(t, e, n) {
   var o = t._id;
   return t.each(function() {
     var i = Ke(this, o);
@@ -1474,143 +1474,143 @@ function gi(t, e, n) {
     return je(i, o).value[e];
   };
 }
-function kr(t, e) {
+function Tr(t, e) {
   var n;
-  return (typeof e == "number" ? dt : e instanceof pn ? qo : (n = pn(e)) ? (e = n, qo) : Bc)(t, e);
+  return (typeof e == "number" ? dt : e instanceof pn ? Yo : (n = pn(e)) ? (e = n, Yo) : Wc)(t, e);
 }
-function ld(t) {
+function fd(t) {
   return function() {
     this.removeAttribute(t);
   };
 }
-function cd(t) {
+function hd(t) {
   return function() {
     this.removeAttributeNS(t.space, t.local);
   };
 }
-function dd(t, e, n) {
+function gd(t, e, n) {
   var o, i = n + "", r;
   return function() {
     var s = this.getAttribute(t);
     return s === i ? null : s === o ? r : r = e(o = s, n);
   };
 }
-function ud(t, e, n) {
+function pd(t, e, n) {
   var o, i = n + "", r;
   return function() {
     var s = this.getAttributeNS(t.space, t.local);
     return s === i ? null : s === o ? r : r = e(o = s, n);
   };
 }
-function fd(t, e, n) {
+function md(t, e, n) {
   var o, i, r;
   return function() {
     var s, a = n(this), l;
     return a == null ? void this.removeAttribute(t) : (s = this.getAttribute(t), l = a + "", s === l ? null : s === o && l === i ? r : (i = l, r = e(o = s, a)));
   };
 }
-function hd(t, e, n) {
+function yd(t, e, n) {
   var o, i, r;
   return function() {
     var s, a = n(this), l;
     return a == null ? void this.removeAttributeNS(t.space, t.local) : (s = this.getAttributeNS(t.space, t.local), l = a + "", s === l ? null : s === o && l === i ? r : (i = l, r = e(o = s, a)));
   };
 }
-function gd(t, e) {
-  var n = go(t), o = n === "transform" ? Wc : kr;
-  return this.attrTween(t, typeof e == "function" ? (n.local ? hd : fd)(n, o, gi(this, "attr." + t, e)) : e == null ? (n.local ? cd : ld)(n) : (n.local ? ud : dd)(n, o, e));
+function wd(t, e) {
+  var n = po(t), o = n === "transform" ? Zc : Tr;
+  return this.attrTween(t, typeof e == "function" ? (n.local ? yd : md)(n, o, pi(this, "attr." + t, e)) : e == null ? (n.local ? hd : fd)(n) : (n.local ? pd : gd)(n, o, e));
 }
-function pd(t, e) {
+function vd(t, e) {
   return function(n) {
     this.setAttribute(t, e.call(this, n));
   };
 }
-function md(t, e) {
+function _d(t, e) {
   return function(n) {
     this.setAttributeNS(t.space, t.local, e.call(this, n));
   };
 }
-function yd(t, e) {
+function bd(t, e) {
   var n, o;
   function i() {
     var r = e.apply(this, arguments);
-    return r !== o && (n = (o = r) && md(t, r)), n;
+    return r !== o && (n = (o = r) && _d(t, r)), n;
   }
   return i._value = e, i;
 }
-function wd(t, e) {
+function xd(t, e) {
   var n, o;
   function i() {
     var r = e.apply(this, arguments);
-    return r !== o && (n = (o = r) && pd(t, r)), n;
+    return r !== o && (n = (o = r) && vd(t, r)), n;
   }
   return i._value = e, i;
 }
-function vd(t, e) {
+function Ed(t, e) {
   var n = "attr." + t;
   if (arguments.length < 2) return (n = this.tween(n)) && n._value;
   if (e == null) return this.tween(n, null);
   if (typeof e != "function") throw new Error();
-  var o = go(t);
-  return this.tween(n, (o.local ? yd : wd)(o, e));
+  var o = po(t);
+  return this.tween(n, (o.local ? bd : xd)(o, e));
 }
-function _d(t, e) {
+function Cd(t, e) {
   return function() {
-    hi(this, t).delay = +e.apply(this, arguments);
+    gi(this, t).delay = +e.apply(this, arguments);
   };
 }
-function bd(t, e) {
+function Sd(t, e) {
   return e = +e, function() {
-    hi(this, t).delay = e;
+    gi(this, t).delay = e;
   };
 }
-function xd(t) {
+function kd(t) {
   var e = this._id;
-  return arguments.length ? this.each((typeof t == "function" ? _d : bd)(e, t)) : je(this.node(), e).delay;
+  return arguments.length ? this.each((typeof t == "function" ? Cd : Sd)(e, t)) : je(this.node(), e).delay;
 }
-function Ed(t, e) {
+function Ld(t, e) {
   return function() {
     Ke(this, t).duration = +e.apply(this, arguments);
   };
 }
-function Cd(t, e) {
+function Pd(t, e) {
   return e = +e, function() {
     Ke(this, t).duration = e;
   };
 }
-function Sd(t) {
+function Md(t) {
   var e = this._id;
-  return arguments.length ? this.each((typeof t == "function" ? Ed : Cd)(e, t)) : je(this.node(), e).duration;
+  return arguments.length ? this.each((typeof t == "function" ? Ld : Pd)(e, t)) : je(this.node(), e).duration;
 }
-function kd(t, e) {
+function Td(t, e) {
   if (typeof e != "function") throw new Error();
   return function() {
     Ke(this, t).ease = e;
   };
 }
-function Ld(t) {
+function Ad(t) {
   var e = this._id;
-  return arguments.length ? this.each(kd(e, t)) : je(this.node(), e).ease;
+  return arguments.length ? this.each(Td(e, t)) : je(this.node(), e).ease;
 }
-function Pd(t, e) {
+function Nd(t, e) {
   return function() {
     var n = e.apply(this, arguments);
     if (typeof n != "function") throw new Error();
     Ke(this, t).ease = n;
   };
 }
-function Md(t) {
+function Id(t) {
   if (typeof t != "function") throw new Error();
-  return this.each(Pd(this._id, t));
+  return this.each(Nd(this._id, t));
 }
-function Td(t) {
-  typeof t != "function" && (t = ir(t));
+function $d(t) {
+  typeof t != "function" && (t = lr(t));
   for (var e = this._groups, n = e.length, o = new Array(n), i = 0; i < n; ++i)
     for (var r = e[i], s = r.length, a = o[i] = [], l, c = 0; c < s; ++c)
       (l = r[c]) && t.call(l, l.__data__, c, r) && a.push(l);
   return new rt(o, this._parents, this._name, this._id);
 }
-function Ad(t) {
+function Dd(t) {
   if (t._id !== this._id) throw new Error();
   for (var e = this._groups, n = t._groups, o = e.length, i = n.length, r = Math.min(o, i), s = new Array(o), a = 0; a < r; ++a)
     for (var l = e[a], c = n[a], d = l.length, u = s[a] = new Array(d), f, h = 0; h < d; ++h)
@@ -1619,154 +1619,154 @@ function Ad(t) {
     s[a] = e[a];
   return new rt(s, this._parents, this._name, this._id);
 }
-function Nd(t) {
+function Hd(t) {
   return (t + "").trim().split(/^|\s+/).every(function(e) {
     var n = e.indexOf(".");
     return n >= 0 && (e = e.slice(0, n)), !e || e === "start";
   });
 }
-function Id(t, e, n) {
-  var o, i, r = Nd(e) ? hi : Ke;
+function Rd(t, e, n) {
+  var o, i, r = Hd(e) ? gi : Ke;
   return function() {
     var s = r(this, t), a = s.on;
     a !== o && (i = (o = a).copy()).on(e, n), s.on = i;
   };
 }
-function $d(t, e) {
+function Fd(t, e) {
   var n = this._id;
-  return arguments.length < 2 ? je(this.node(), n).on.on(t) : this.each(Id(n, t, e));
+  return arguments.length < 2 ? je(this.node(), n).on.on(t) : this.each(Rd(n, t, e));
 }
-function Dd(t) {
+function Od(t) {
   return function() {
     var e = this.parentNode;
     for (var n in this.__transition) if (+n !== t) return;
     e && e.removeChild(this);
   };
 }
-function Hd() {
-  return this.on("end.remove", Dd(this._id));
+function zd() {
+  return this.on("end.remove", Od(this._id));
 }
-function Rd(t) {
+function Vd(t) {
   var e = this._name, n = this._id;
-  typeof t != "function" && (t = ci(t));
+  typeof t != "function" && (t = di(t));
   for (var o = this._groups, i = o.length, r = new Array(i), s = 0; s < i; ++s)
     for (var a = o[s], l = a.length, c = r[s] = new Array(l), d, u, f = 0; f < l; ++f)
-      (d = a[f]) && (u = t.call(d, d.__data__, f, a)) && ("__data__" in d && (u.__data__ = d.__data__), c[f] = u, mo(c[f], e, n, f, c, je(d, n)));
+      (d = a[f]) && (u = t.call(d, d.__data__, f, a)) && ("__data__" in d && (u.__data__ = d.__data__), c[f] = u, yo(c[f], e, n, f, c, je(d, n)));
   return new rt(r, this._parents, e, n);
 }
-function Fd(t) {
+function Bd(t) {
   var e = this._name, n = this._id;
-  typeof t != "function" && (t = or(t));
+  typeof t != "function" && (t = ar(t));
   for (var o = this._groups, i = o.length, r = [], s = [], a = 0; a < i; ++a)
     for (var l = o[a], c = l.length, d, u = 0; u < c; ++u)
       if (d = l[u]) {
         for (var f = t.call(d, d.__data__, u, l), h, g = je(d, n), p = 0, m = f.length; p < m; ++p)
-          (h = f[p]) && mo(h, e, n, p, f, g);
+          (h = f[p]) && yo(h, e, n, p, f, g);
         r.push(f), s.push(d);
       }
   return new rt(r, s, e, n);
 }
-var Od = xn.prototype.constructor;
-function zd() {
-  return new Od(this._groups, this._parents);
+var qd = xn.prototype.constructor;
+function Yd() {
+  return new qd(this._groups, this._parents);
 }
-function Vd(t, e) {
+function Xd(t, e) {
   var n, o, i;
   return function() {
     var r = Vt(this, t), s = (this.style.removeProperty(t), Vt(this, t));
     return r === s ? null : r === n && s === o ? i : i = e(n = r, o = s);
   };
 }
-function Lr(t) {
+function Ar(t) {
   return function() {
     this.style.removeProperty(t);
   };
 }
-function Bd(t, e, n) {
+function Wd(t, e, n) {
   var o, i = n + "", r;
   return function() {
     var s = Vt(this, t);
     return s === i ? null : s === o ? r : r = e(o = s, n);
   };
 }
-function qd(t, e, n) {
+function jd(t, e, n) {
   var o, i, r;
   return function() {
     var s = Vt(this, t), a = n(this), l = a + "";
     return a == null && (l = a = (this.style.removeProperty(t), Vt(this, t))), s === l ? null : s === o && l === i ? r : (i = l, r = e(o = s, a));
   };
 }
-function Yd(t, e) {
+function Ud(t, e) {
   var n, o, i, r = "style." + e, s = "end." + r, a;
   return function() {
-    var l = Ke(this, t), c = l.on, d = l.value[r] == null ? a || (a = Lr(e)) : void 0;
+    var l = Ke(this, t), c = l.on, d = l.value[r] == null ? a || (a = Ar(e)) : void 0;
     (c !== n || i !== d) && (o = (n = c).copy()).on(s, i = d), l.on = o;
   };
 }
-function Xd(t, e, n) {
-  var o = (t += "") == "transform" ? Xc : kr;
-  return e == null ? this.styleTween(t, Vd(t, o)).on("end.style." + t, Lr(t)) : typeof e == "function" ? this.styleTween(t, qd(t, o, gi(this, "style." + t, e))).each(Yd(this._id, t)) : this.styleTween(t, Bd(t, o, e), n).on("end.style." + t, null);
+function Gd(t, e, n) {
+  var o = (t += "") == "transform" ? Gc : Tr;
+  return e == null ? this.styleTween(t, Xd(t, o)).on("end.style." + t, Ar(t)) : typeof e == "function" ? this.styleTween(t, jd(t, o, pi(this, "style." + t, e))).each(Ud(this._id, t)) : this.styleTween(t, Wd(t, o, e), n).on("end.style." + t, null);
 }
-function Wd(t, e, n) {
+function Zd(t, e, n) {
   return function(o) {
     this.style.setProperty(t, e.call(this, o), n);
   };
 }
-function jd(t, e, n) {
+function Kd(t, e, n) {
   var o, i;
   function r() {
     var s = e.apply(this, arguments);
-    return s !== i && (o = (i = s) && Wd(t, s, n)), o;
+    return s !== i && (o = (i = s) && Zd(t, s, n)), o;
   }
   return r._value = e, r;
 }
-function Ud(t, e, n) {
+function Jd(t, e, n) {
   var o = "style." + (t += "");
   if (arguments.length < 2) return (o = this.tween(o)) && o._value;
   if (e == null) return this.tween(o, null);
   if (typeof e != "function") throw new Error();
-  return this.tween(o, jd(t, e, n ?? ""));
+  return this.tween(o, Kd(t, e, n ?? ""));
 }
-function Zd(t) {
+function Qd(t) {
   return function() {
     this.textContent = t;
   };
 }
-function Gd(t) {
+function eu(t) {
   return function() {
     var e = t(this);
     this.textContent = e ?? "";
   };
 }
-function Kd(t) {
-  return this.tween("text", typeof t == "function" ? Gd(gi(this, "text", t)) : Zd(t == null ? "" : t + ""));
+function tu(t) {
+  return this.tween("text", typeof t == "function" ? eu(pi(this, "text", t)) : Qd(t == null ? "" : t + ""));
 }
-function Jd(t) {
+function nu(t) {
   return function(e) {
     this.textContent = t.call(this, e);
   };
 }
-function Qd(t) {
+function ou(t) {
   var e, n;
   function o() {
     var i = t.apply(this, arguments);
-    return i !== n && (e = (n = i) && Jd(i)), e;
+    return i !== n && (e = (n = i) && nu(i)), e;
   }
   return o._value = t, o;
 }
-function eu(t) {
+function iu(t) {
   var e = "text";
   if (arguments.length < 1) return (e = this.tween(e)) && e._value;
   if (t == null) return this.tween(e, null);
   if (typeof t != "function") throw new Error();
-  return this.tween(e, Qd(t));
+  return this.tween(e, ou(t));
 }
-function tu() {
-  for (var t = this._name, e = this._id, n = Pr(), o = this._groups, i = o.length, r = 0; r < i; ++r)
+function su() {
+  for (var t = this._name, e = this._id, n = Nr(), o = this._groups, i = o.length, r = 0; r < i; ++r)
     for (var s = o[r], a = s.length, l, c = 0; c < a; ++c)
       if (l = s[c]) {
         var d = je(l, e);
-        mo(l, t, n, c, s, {
+        yo(l, t, n, c, s, {
           time: d.time + d.delay + d.duration,
           delay: 0,
           duration: d.duration,
@@ -1775,7 +1775,7 @@ function tu() {
       }
   return new rt(o, this._parents, t, n);
 }
-function nu() {
+function ru() {
   var t, e, n = this, o = n._id, i = n.size();
   return new Promise(function(r, s) {
     var a = { value: s }, l = { value: function() {
@@ -1787,179 +1787,179 @@ function nu() {
     }), i === 0 && r();
   });
 }
-var ou = 0;
+var au = 0;
 function rt(t, e, n, o) {
   this._groups = t, this._parents = e, this._name = n, this._id = o;
 }
-function Pr() {
-  return ++ou;
+function Nr() {
+  return ++au;
 }
 var Je = xn.prototype;
 rt.prototype = {
   constructor: rt,
-  select: Rd,
-  selectAll: Fd,
+  select: Vd,
+  selectAll: Bd,
   selectChild: Je.selectChild,
   selectChildren: Je.selectChildren,
-  filter: Td,
-  merge: Ad,
-  selection: zd,
-  transition: tu,
+  filter: $d,
+  merge: Dd,
+  selection: Yd,
+  transition: su,
   call: Je.call,
   nodes: Je.nodes,
   node: Je.node,
   size: Je.size,
   empty: Je.empty,
   each: Je.each,
-  on: $d,
-  attr: gd,
-  attrTween: vd,
-  style: Xd,
-  styleTween: Ud,
-  text: Kd,
-  textTween: eu,
-  remove: Hd,
-  tween: ad,
-  delay: xd,
-  duration: Sd,
-  ease: Ld,
-  easeVarying: Md,
-  end: nu,
+  on: Fd,
+  attr: wd,
+  attrTween: Ed,
+  style: Gd,
+  styleTween: Jd,
+  text: tu,
+  textTween: iu,
+  remove: zd,
+  tween: ud,
+  delay: kd,
+  duration: Md,
+  ease: Ad,
+  easeVarying: Id,
+  end: ru,
   [Symbol.iterator]: Je[Symbol.iterator]
 };
-const iu = (t) => +t;
-function su(t) {
+const lu = (t) => +t;
+function cu(t) {
   return t * t;
 }
-function ru(t) {
+function du(t) {
   return t * (2 - t);
 }
-function au(t) {
+function uu(t) {
   return ((t *= 2) <= 1 ? t * t : --t * (2 - t) + 1) / 2;
 }
-function lu(t) {
+function fu(t) {
   return t * t * t;
 }
-function cu(t) {
+function hu(t) {
   return --t * t * t + 1;
 }
-function Mr(t) {
+function Ir(t) {
   return ((t *= 2) <= 1 ? t * t * t : (t -= 2) * t * t + 2) / 2;
 }
-var Tr = Math.PI, Ar = Tr / 2;
-function du(t) {
-  return +t == 1 ? 1 : 1 - Math.cos(t * Ar);
-}
-function uu(t) {
-  return Math.sin(t * Ar);
-}
-function fu(t) {
-  return (1 - Math.cos(Tr * t)) / 2;
-}
-function vt(t) {
-  return (Math.pow(2, -10 * t) - 9765625e-10) * 1.0009775171065494;
-}
-function hu(t) {
-  return vt(1 - +t);
-}
+var $r = Math.PI, Dr = $r / 2;
 function gu(t) {
-  return 1 - vt(t);
+  return +t == 1 ? 1 : 1 - Math.cos(t * Dr);
 }
 function pu(t) {
-  return ((t *= 2) <= 1 ? vt(1 - t) : 2 - vt(t - 1)) / 2;
+  return Math.sin(t * Dr);
 }
 function mu(t) {
-  return 1 - Math.sqrt(1 - t * t);
+  return (1 - Math.cos($r * t)) / 2;
+}
+function _t(t) {
+  return (Math.pow(2, -10 * t) - 9765625e-10) * 1.0009775171065494;
 }
 function yu(t) {
-  return Math.sqrt(1 - --t * t);
+  return _t(1 - +t);
 }
 function wu(t) {
+  return 1 - _t(t);
+}
+function vu(t) {
+  return ((t *= 2) <= 1 ? _t(1 - t) : 2 - _t(t - 1)) / 2;
+}
+function _u(t) {
+  return 1 - Math.sqrt(1 - t * t);
+}
+function bu(t) {
+  return Math.sqrt(1 - --t * t);
+}
+function xu(t) {
   return ((t *= 2) <= 1 ? 1 - Math.sqrt(1 - t * t) : Math.sqrt(1 - (t -= 2) * t) + 1) / 2;
 }
-var Zo = 4 / 11, vu = 6 / 11, _u = 8 / 11, bu = 3 / 4, xu = 9 / 11, Eu = 10 / 11, Cu = 15 / 16, Su = 21 / 22, ku = 63 / 64, Nn = 1 / Zo / Zo;
-function Lu(t) {
-  return 1 - Gn(1 - t);
+var Zo = 4 / 11, Eu = 6 / 11, Cu = 8 / 11, Su = 3 / 4, ku = 9 / 11, Lu = 10 / 11, Pu = 15 / 16, Mu = 21 / 22, Tu = 63 / 64, Nn = 1 / Zo / Zo;
+function Au(t) {
+  return 1 - Zn(1 - t);
 }
-function Gn(t) {
-  return (t = +t) < Zo ? Nn * t * t : t < _u ? Nn * (t -= vu) * t + bu : t < Eu ? Nn * (t -= xu) * t + Cu : Nn * (t -= Su) * t + ku;
+function Zn(t) {
+  return (t = +t) < Zo ? Nn * t * t : t < Cu ? Nn * (t -= Eu) * t + Su : t < Lu ? Nn * (t -= ku) * t + Pu : Nn * (t -= Mu) * t + Tu;
 }
-function Pu(t) {
-  return ((t *= 2) <= 1 ? 1 - Gn(1 - t) : Gn(t - 1) + 1) / 2;
+function Nu(t) {
+  return ((t *= 2) <= 1 ? 1 - Zn(1 - t) : Zn(t - 1) + 1) / 2;
 }
-var pi = 1.70158, Mu = (function t(e) {
+var mi = 1.70158, Iu = (function t(e) {
   e = +e;
   function n(o) {
     return (o = +o) * o * (e * (o - 1) + o);
   }
   return n.overshoot = t, n;
-})(pi), Tu = (function t(e) {
+})(mi), $u = (function t(e) {
   e = +e;
   function n(o) {
     return --o * o * ((o + 1) * e + o) + 1;
   }
   return n.overshoot = t, n;
-})(pi), Au = (function t(e) {
+})(mi), Du = (function t(e) {
   e = +e;
   function n(o) {
     return ((o *= 2) < 1 ? o * o * ((e + 1) * o - e) : (o -= 2) * o * ((e + 1) * o + e) + 2) / 2;
   }
   return n.overshoot = t, n;
-})(pi), qt = 2 * Math.PI, mi = 1, yi = 0.3, Nu = (function t(e, n) {
+})(mi), qt = 2 * Math.PI, yi = 1, wi = 0.3, Hu = (function t(e, n) {
   var o = Math.asin(1 / (e = Math.max(1, e))) * (n /= qt);
   function i(r) {
-    return e * vt(- --r) * Math.sin((o - r) / n);
+    return e * _t(- --r) * Math.sin((o - r) / n);
   }
   return i.amplitude = function(r) {
     return t(r, n * qt);
   }, i.period = function(r) {
     return t(e, r);
   }, i;
-})(mi, yi), Iu = (function t(e, n) {
+})(yi, wi), Ru = (function t(e, n) {
   var o = Math.asin(1 / (e = Math.max(1, e))) * (n /= qt);
   function i(r) {
-    return 1 - e * vt(r = +r) * Math.sin((r + o) / n);
+    return 1 - e * _t(r = +r) * Math.sin((r + o) / n);
   }
   return i.amplitude = function(r) {
     return t(r, n * qt);
   }, i.period = function(r) {
     return t(e, r);
   }, i;
-})(mi, yi), $u = (function t(e, n) {
+})(yi, wi), Fu = (function t(e, n) {
   var o = Math.asin(1 / (e = Math.max(1, e))) * (n /= qt);
   function i(r) {
-    return ((r = r * 2 - 1) < 0 ? e * vt(-r) * Math.sin((o - r) / n) : 2 - e * vt(r) * Math.sin((o + r) / n)) / 2;
+    return ((r = r * 2 - 1) < 0 ? e * _t(-r) * Math.sin((o - r) / n) : 2 - e * _t(r) * Math.sin((o + r) / n)) / 2;
   }
   return i.amplitude = function(r) {
     return t(r, n * qt);
   }, i.period = function(r) {
     return t(e, r);
   }, i;
-})(mi, yi), Du = {
+})(yi, wi), Ou = {
   time: null,
   // Set on use.
   delay: 0,
   duration: 250,
-  ease: Mr
+  ease: Ir
 };
-function Hu(t, e) {
+function zu(t, e) {
   for (var n; !(n = t.__transition) || !(n = n[e]); )
     if (!(t = t.parentNode))
       throw new Error(`transition ${e} not found`);
   return n;
 }
-function Ru(t) {
+function Vu(t) {
   var e, n;
-  t instanceof rt ? (e = t._id, t = t._name) : (e = Pr(), (n = Du).time = fi(), t = t == null ? null : t + "");
+  t instanceof rt ? (e = t._id, t = t._name) : (e = Nr(), (n = Ou).time = hi(), t = t == null ? null : t + "");
   for (var o = this._groups, i = o.length, r = 0; r < i; ++r)
     for (var s = o[r], a = s.length, l, c = 0; c < a; ++c)
-      (l = s[c]) && mo(l, t, e, c, s, n || Hu(l, e));
+      (l = s[c]) && yo(l, t, e, c, s, n || zu(l, e));
   return new rt(o, this._parents, t, e);
 }
-xn.prototype.interrupt = id;
-xn.prototype.transition = Ru;
+xn.prototype.interrupt = ld;
+xn.prototype.transition = Vu;
 const In = (t) => () => t;
-function Fu(t, {
+function Bu(t, {
   sourceEvent: e,
   target: n,
   transform: o,
@@ -2014,100 +2014,100 @@ et.prototype = {
 };
 var Kn = new et(1, 0, 0);
 et.prototype;
-function So(t) {
+function ko(t) {
   t.stopImmediatePropagation();
 }
 function en(t) {
   t.preventDefault(), t.stopImmediatePropagation();
 }
-function Ou(t) {
+function qu(t) {
   return (!t.ctrlKey || t.type === "wheel") && !t.button;
 }
-function zu() {
+function Yu() {
   var t = this;
   return t instanceof SVGElement ? (t = t.ownerSVGElement || t, t.hasAttribute("viewBox") ? (t = t.viewBox.baseVal, [[t.x, t.y], [t.x + t.width, t.y + t.height]]) : [[0, 0], [t.width.baseVal.value, t.height.baseVal.value]]) : [[0, 0], [t.clientWidth, t.clientHeight]];
 }
-function Gi() {
+function Ki() {
   return this.__zoom || Kn;
 }
-function Vu(t) {
+function Xu(t) {
   return -t.deltaY * (t.deltaMode === 1 ? 0.05 : t.deltaMode ? 1 : 2e-3) * (t.ctrlKey ? 10 : 1);
 }
-function Bu() {
+function Wu() {
   return navigator.maxTouchPoints || "ontouchstart" in this;
 }
-function qu(t, e, n) {
+function ju(t, e, n) {
   var o = t.invertX(e[0][0]) - n[0][0], i = t.invertX(e[1][0]) - n[1][0], r = t.invertY(e[0][1]) - n[0][1], s = t.invertY(e[1][1]) - n[1][1];
   return t.translate(
     i > o ? (o + i) / 2 : Math.min(0, o) || Math.max(0, i),
     s > r ? (r + s) / 2 : Math.min(0, r) || Math.max(0, s)
   );
 }
-function Yu() {
-  var t = Ou, e = zu, n = qu, o = Vu, i = Bu, r = [0, 1 / 0], s = [[-1 / 0, -1 / 0], [1 / 0, 1 / 0]], a = 250, l = Gc, c = ho("start", "zoom", "end"), d, u, f, h = 500, g = 150, p = 0, m = 10;
+function Uu() {
+  var t = qu, e = Yu, n = ju, o = Xu, i = Wu, r = [0, 1 / 0], s = [[-1 / 0, -1 / 0], [1 / 0, 1 / 0]], a = 250, l = ed, c = go("start", "zoom", "end"), d, u, f, h = 500, g = 150, p = 0, m = 10;
   function y(w) {
-    w.property("__zoom", Gi).on("wheel.zoom", T, { passive: !1 }).on("mousedown.zoom", $).on("dblclick.zoom", L).filter(i).on("touchstart.zoom", A).on("touchmove.zoom", k).on("touchend.zoom touchcancel.zoom", v).style("-webkit-tap-highlight-color", "rgba(0,0,0,0)");
+    w.property("__zoom", Ki).on("wheel.zoom", T, { passive: !1 }).on("mousedown.zoom", $).on("dblclick.zoom", M).filter(i).on("touchstart.zoom", A).on("touchmove.zoom", P).on("touchend.zoom touchcancel.zoom", v).style("-webkit-tap-highlight-color", "rgba(0,0,0,0)");
   }
-  y.transform = function(w, N, S, R) {
+  y.transform = function(w, N, k, R) {
     var O = w.selection ? w.selection() : w;
-    O.property("__zoom", Gi), w !== O ? b(w, N, S, R) : O.interrupt().each(function() {
+    O.property("__zoom", Ki), w !== O ? x(w, N, k, R) : O.interrupt().each(function() {
       C(this, arguments).event(R).start().zoom(null, typeof N == "function" ? N.apply(this, arguments) : N).end();
     });
-  }, y.scaleBy = function(w, N, S, R) {
+  }, y.scaleBy = function(w, N, k, R) {
     y.scaleTo(w, function() {
       var O = this.__zoom.k, q = typeof N == "function" ? N.apply(this, arguments) : N;
       return O * q;
-    }, S, R);
-  }, y.scaleTo = function(w, N, S, R) {
+    }, k, R);
+  }, y.scaleTo = function(w, N, k, R) {
     y.transform(w, function() {
-      var O = e.apply(this, arguments), q = this.__zoom, D = S == null ? _(O) : typeof S == "function" ? S.apply(this, arguments) : S, M = q.invert(D), I = typeof N == "function" ? N.apply(this, arguments) : N;
-      return n(P(x(q, I), D, M), O, s);
-    }, S, R);
-  }, y.translateBy = function(w, N, S, R) {
+      var O = e.apply(this, arguments), q = this.__zoom, D = k == null ? b(O) : typeof k == "function" ? k.apply(this, arguments) : k, L = q.invert(D), I = typeof N == "function" ? N.apply(this, arguments) : N;
+      return n(S(_(q, I), D, L), O, s);
+    }, k, R);
+  }, y.translateBy = function(w, N, k, R) {
     y.transform(w, function() {
       return n(this.__zoom.translate(
         typeof N == "function" ? N.apply(this, arguments) : N,
-        typeof S == "function" ? S.apply(this, arguments) : S
+        typeof k == "function" ? k.apply(this, arguments) : k
       ), e.apply(this, arguments), s);
     }, null, R);
-  }, y.translateTo = function(w, N, S, R, O) {
+  }, y.translateTo = function(w, N, k, R, O) {
     y.transform(w, function() {
-      var q = e.apply(this, arguments), D = this.__zoom, M = R == null ? _(q) : typeof R == "function" ? R.apply(this, arguments) : R;
-      return n(Kn.translate(M[0], M[1]).scale(D.k).translate(
+      var q = e.apply(this, arguments), D = this.__zoom, L = R == null ? b(q) : typeof R == "function" ? R.apply(this, arguments) : R;
+      return n(Kn.translate(L[0], L[1]).scale(D.k).translate(
         typeof N == "function" ? -N.apply(this, arguments) : -N,
-        typeof S == "function" ? -S.apply(this, arguments) : -S
+        typeof k == "function" ? -k.apply(this, arguments) : -k
       ), q, s);
     }, R, O);
   };
-  function x(w, N) {
+  function _(w, N) {
     return N = Math.max(r[0], Math.min(r[1], N)), N === w.k ? w : new et(N, w.x, w.y);
   }
-  function P(w, N, S) {
-    var R = N[0] - S[0] * w.k, O = N[1] - S[1] * w.k;
+  function S(w, N, k) {
+    var R = N[0] - k[0] * w.k, O = N[1] - k[1] * w.k;
     return R === w.x && O === w.y ? w : new et(w.k, R, O);
   }
-  function _(w) {
+  function b(w) {
     return [(+w[0][0] + +w[1][0]) / 2, (+w[0][1] + +w[1][1]) / 2];
   }
-  function b(w, N, S, R) {
+  function x(w, N, k, R) {
     w.on("start.zoom", function() {
       C(this, arguments).event(R).start();
     }).on("interrupt.zoom end.zoom", function() {
       C(this, arguments).event(R).end();
     }).tween("zoom", function() {
-      var O = this, q = arguments, D = C(O, q).event(R), M = e.apply(O, q), I = S == null ? _(M) : typeof S == "function" ? S.apply(O, q) : S, F = Math.max(M[1][0] - M[0][0], M[1][1] - M[0][1]), K = O.__zoom, ne = typeof N == "function" ? N.apply(O, q) : N, Z = l(K.invert(I).concat(F / K.k), ne.invert(I).concat(F / ne.k));
+      var O = this, q = arguments, D = C(O, q).event(R), L = e.apply(O, q), I = k == null ? b(L) : typeof k == "function" ? k.apply(O, q) : k, F = Math.max(L[1][0] - L[0][0], L[1][1] - L[0][1]), K = O.__zoom, ne = typeof N == "function" ? N.apply(O, q) : N, G = l(K.invert(I).concat(F / K.k), ne.invert(I).concat(F / ne.k));
       return function(B) {
         if (B === 1) B = ne;
         else {
-          var z = Z(B), Y = F / z[2];
+          var z = G(B), Y = F / z[2];
           B = new et(Y, I[0] - z[0] * Y, I[1] - z[1] * Y);
         }
         D.zoom(null, B);
       };
     });
   }
-  function C(w, N, S) {
-    return !S && w.__zooming || new E(w, N);
+  function C(w, N, k) {
+    return !k && w.__zooming || new E(w, N);
   }
   function E(w, N) {
     this.that = w, this.args = N, this.active = 0, this.sourceEvent = null, this.extent = e.apply(w, N), this.taps = 0;
@@ -2130,7 +2130,7 @@ function Yu() {
       c.call(
         w,
         this.that,
-        new Fu(w, {
+        new Bu(w, {
           sourceEvent: this.sourceEvent,
           target: y,
           transform: this.that.__zoom,
@@ -2142,73 +2142,73 @@ function Yu() {
   };
   function T(w, ...N) {
     if (!t.apply(this, arguments)) return;
-    var S = C(this, N).event(w), R = this.__zoom, O = Math.max(r[0], Math.min(r[1], R.k * Math.pow(2, o.apply(this, arguments)))), q = Qe(w);
-    if (S.wheel)
-      (S.mouse[0][0] !== q[0] || S.mouse[0][1] !== q[1]) && (S.mouse[1] = R.invert(S.mouse[0] = q)), clearTimeout(S.wheel);
+    var k = C(this, N).event(w), R = this.__zoom, O = Math.max(r[0], Math.min(r[1], R.k * Math.pow(2, o.apply(this, arguments)))), q = Qe(w);
+    if (k.wheel)
+      (k.mouse[0][0] !== q[0] || k.mouse[0][1] !== q[1]) && (k.mouse[1] = R.invert(k.mouse[0] = q)), clearTimeout(k.wheel);
     else {
       if (R.k === O) return;
-      S.mouse = [q, R.invert(q)], Bn(this), S.start();
+      k.mouse = [q, R.invert(q)], Bn(this), k.start();
     }
-    en(w), S.wheel = setTimeout(D, g), S.zoom("mouse", n(P(x(R, O), S.mouse[0], S.mouse[1]), S.extent, s));
+    en(w), k.wheel = setTimeout(D, g), k.zoom("mouse", n(S(_(R, O), k.mouse[0], k.mouse[1]), k.extent, s));
     function D() {
-      S.wheel = null, S.end();
+      k.wheel = null, k.end();
     }
   }
   function $(w, ...N) {
     if (f || !t.apply(this, arguments)) return;
-    var S = w.currentTarget, R = C(this, N, !0).event(w), O = Ye(w.view).on("mousemove.zoom", I, !0).on("mouseup.zoom", F, !0), q = Qe(w, S), D = w.clientX, M = w.clientY;
-    gr(w.view), So(w), R.mouse = [q, this.__zoom.invert(q)], Bn(this), R.start();
+    var k = w.currentTarget, R = C(this, N, !0).event(w), O = Ye(w.view).on("mousemove.zoom", I, !0).on("mouseup.zoom", F, !0), q = Qe(w, k), D = w.clientX, L = w.clientY;
+    wr(w.view), ko(w), R.mouse = [q, this.__zoom.invert(q)], Bn(this), R.start();
     function I(K) {
       if (en(K), !R.moved) {
-        var ne = K.clientX - D, Z = K.clientY - M;
-        R.moved = ne * ne + Z * Z > p;
+        var ne = K.clientX - D, G = K.clientY - L;
+        R.moved = ne * ne + G * G > p;
       }
-      R.event(K).zoom("mouse", n(P(R.that.__zoom, R.mouse[0] = Qe(K, S), R.mouse[1]), R.extent, s));
+      R.event(K).zoom("mouse", n(S(R.that.__zoom, R.mouse[0] = Qe(K, k), R.mouse[1]), R.extent, s));
     }
     function F(K) {
-      O.on("mousemove.zoom mouseup.zoom", null), pr(K.view, R.moved), en(K), R.event(K).end();
+      O.on("mousemove.zoom mouseup.zoom", null), vr(K.view, R.moved), en(K), R.event(K).end();
     }
   }
-  function L(w, ...N) {
+  function M(w, ...N) {
     if (t.apply(this, arguments)) {
-      var S = this.__zoom, R = Qe(w.changedTouches ? w.changedTouches[0] : w, this), O = S.invert(R), q = S.k * (w.shiftKey ? 0.5 : 2), D = n(P(x(S, q), R, O), e.apply(this, N), s);
-      en(w), a > 0 ? Ye(this).transition().duration(a).call(b, D, R, w) : Ye(this).call(y.transform, D, R, w);
+      var k = this.__zoom, R = Qe(w.changedTouches ? w.changedTouches[0] : w, this), O = k.invert(R), q = k.k * (w.shiftKey ? 0.5 : 2), D = n(S(_(k, q), R, O), e.apply(this, N), s);
+      en(w), a > 0 ? Ye(this).transition().duration(a).call(x, D, R, w) : Ye(this).call(y.transform, D, R, w);
     }
   }
   function A(w, ...N) {
     if (t.apply(this, arguments)) {
-      var S = w.touches, R = S.length, O = C(this, N, w.changedTouches.length === R).event(w), q, D, M, I;
-      for (So(w), D = 0; D < R; ++D)
-        M = S[D], I = Qe(M, this), I = [I, this.__zoom.invert(I), M.identifier], O.touch0 ? !O.touch1 && O.touch0[2] !== I[2] && (O.touch1 = I, O.taps = 0) : (O.touch0 = I, q = !0, O.taps = 1 + !!d);
+      var k = w.touches, R = k.length, O = C(this, N, w.changedTouches.length === R).event(w), q, D, L, I;
+      for (ko(w), D = 0; D < R; ++D)
+        L = k[D], I = Qe(L, this), I = [I, this.__zoom.invert(I), L.identifier], O.touch0 ? !O.touch1 && O.touch0[2] !== I[2] && (O.touch1 = I, O.taps = 0) : (O.touch0 = I, q = !0, O.taps = 1 + !!d);
       d && (d = clearTimeout(d)), q && (O.taps < 2 && (u = I[0], d = setTimeout(function() {
         d = null;
       }, h)), Bn(this), O.start());
     }
   }
-  function k(w, ...N) {
+  function P(w, ...N) {
     if (this.__zooming) {
-      var S = C(this, N).event(w), R = w.changedTouches, O = R.length, q, D, M, I;
+      var k = C(this, N).event(w), R = w.changedTouches, O = R.length, q, D, L, I;
       for (en(w), q = 0; q < O; ++q)
-        D = R[q], M = Qe(D, this), S.touch0 && S.touch0[2] === D.identifier ? S.touch0[0] = M : S.touch1 && S.touch1[2] === D.identifier && (S.touch1[0] = M);
-      if (D = S.that.__zoom, S.touch1) {
-        var F = S.touch0[0], K = S.touch0[1], ne = S.touch1[0], Z = S.touch1[1], B = (B = ne[0] - F[0]) * B + (B = ne[1] - F[1]) * B, z = (z = Z[0] - K[0]) * z + (z = Z[1] - K[1]) * z;
-        D = x(D, Math.sqrt(B / z)), M = [(F[0] + ne[0]) / 2, (F[1] + ne[1]) / 2], I = [(K[0] + Z[0]) / 2, (K[1] + Z[1]) / 2];
-      } else if (S.touch0) M = S.touch0[0], I = S.touch0[1];
+        D = R[q], L = Qe(D, this), k.touch0 && k.touch0[2] === D.identifier ? k.touch0[0] = L : k.touch1 && k.touch1[2] === D.identifier && (k.touch1[0] = L);
+      if (D = k.that.__zoom, k.touch1) {
+        var F = k.touch0[0], K = k.touch0[1], ne = k.touch1[0], G = k.touch1[1], B = (B = ne[0] - F[0]) * B + (B = ne[1] - F[1]) * B, z = (z = G[0] - K[0]) * z + (z = G[1] - K[1]) * z;
+        D = _(D, Math.sqrt(B / z)), L = [(F[0] + ne[0]) / 2, (F[1] + ne[1]) / 2], I = [(K[0] + G[0]) / 2, (K[1] + G[1]) / 2];
+      } else if (k.touch0) L = k.touch0[0], I = k.touch0[1];
       else return;
-      S.zoom("touch", n(P(D, M, I), S.extent, s));
+      k.zoom("touch", n(S(D, L, I), k.extent, s));
     }
   }
   function v(w, ...N) {
     if (this.__zooming) {
-      var S = C(this, N).event(w), R = w.changedTouches, O = R.length, q, D;
-      for (So(w), f && clearTimeout(f), f = setTimeout(function() {
+      var k = C(this, N).event(w), R = w.changedTouches, O = R.length, q, D;
+      for (ko(w), f && clearTimeout(f), f = setTimeout(function() {
         f = null;
       }, h), q = 0; q < O; ++q)
-        D = R[q], S.touch0 && S.touch0[2] === D.identifier ? delete S.touch0 : S.touch1 && S.touch1[2] === D.identifier && delete S.touch1;
-      if (S.touch1 && !S.touch0 && (S.touch0 = S.touch1, delete S.touch1), S.touch0) S.touch0[1] = this.__zoom.invert(S.touch0[0]);
-      else if (S.end(), S.taps === 2 && (D = Qe(D, this), Math.hypot(u[0] - D[0], u[1] - D[1]) < m)) {
-        var M = Ye(this).on("dblclick.zoom");
-        M && M.apply(this, arguments);
+        D = R[q], k.touch0 && k.touch0[2] === D.identifier ? delete k.touch0 : k.touch1 && k.touch1[2] === D.identifier && delete k.touch1;
+      if (k.touch1 && !k.touch0 && (k.touch0 = k.touch1, delete k.touch1), k.touch0) k.touch0[1] = this.__zoom.invert(k.touch0[0]);
+      else if (k.end(), k.taps === 2 && (D = Qe(D, this), Math.hypot(u[0] - D[0], u[1] - D[1]) < m)) {
+        var L = Ye(this).on("dblclick.zoom");
+        L && L.apply(this, arguments);
       }
     }
   }
@@ -2239,7 +2239,7 @@ function Yu() {
     return arguments.length ? (m = +w, y) : m;
   }, y;
 }
-function Ki(t) {
+function Ji(t) {
   const { pannable: e, zoomable: n, isLocked: o, noPanClassName: i, noWheelClassName: r, isTouchSelectionMode: s, isPanKeyHeld: a, panOnDrag: l } = t;
   return (c) => {
     if (o?.() || i && c.target?.closest?.("." + i) || c.type === "wheel" && r && c.target?.closest?.("." + r) || !n && c.type === "wheel") return !1;
@@ -2257,7 +2257,7 @@ function Ki(t) {
     return !0;
   };
 }
-function Xu(t, e) {
+function Gu(t, e) {
   const {
     onTransformChange: n,
     minZoom: o = 0.5,
@@ -2274,21 +2274,21 @@ function Xu(t, e) {
     l = !1, t.style.cursor = "";
   };
   c && (window.addEventListener("keydown", d), window.addEventListener("keyup", u), window.addEventListener("blur", f));
-  const h = Yu().scaleExtent([o, i]).on("start", (E) => {
+  const h = Uu().scaleExtent([o, i]).on("start", (E) => {
     if (!E.sourceEvent) return;
     l && (t.style.cursor = "grabbing");
-    const { x: T, y: $, k: L } = E.transform;
-    e.onMoveStart?.({ x: T, y: $, zoom: L });
+    const { x: T, y: $, k: M } = E.transform;
+    e.onMoveStart?.({ x: T, y: $, zoom: M });
   }).on("zoom", (E) => {
-    const { x: T, y: $, k: L } = E.transform;
-    n({ x: T, y: $, zoom: L }), E.sourceEvent && e.onMove?.({ x: T, y: $, zoom: L });
+    const { x: T, y: $, k: M } = E.transform;
+    n({ x: T, y: $, zoom: M }), E.sourceEvent && e.onMove?.({ x: T, y: $, zoom: M });
   }).on("end", (E) => {
     if (!E.sourceEvent) return;
     l && (t.style.cursor = "grab");
-    const { x: T, y: $, k: L } = E.transform;
-    e.onMoveEnd?.({ x: T, y: $, zoom: L });
+    const { x: T, y: $, k: M } = E.transform;
+    e.onMoveEnd?.({ x: T, y: $, zoom: M });
   });
-  e.translateExtent && h.translateExtent(e.translateExtent), h.filter(Ki({
+  e.translateExtent && h.translateExtent(e.translateExtent), h.filter(Ji({
     pannable: r,
     zoomable: s,
     isLocked: e.isLocked,
@@ -2299,27 +2299,27 @@ function Xu(t, e) {
     panOnDrag: e.panOnDrag
   })), a.call(h), e.zoomOnDoubleClick === !1 && a.on("dblclick.zoom", null);
   let g = e.panOnScroll ?? !1, p = e.panOnScrollDirection ?? "both", m = e.panOnScrollSpeed ?? 1, y = !1;
-  const x = e.zoomActivationKeyCode !== void 0 ? e.zoomActivationKeyCode : null, P = (E) => {
-    x && E.code === x && (y = !0);
-  }, _ = (E) => {
-    x && E.code === x && (y = !1);
-  }, b = () => {
+  const _ = e.zoomActivationKeyCode !== void 0 ? e.zoomActivationKeyCode : null, S = (E) => {
+    _ && E.code === _ && (y = !0);
+  }, b = (E) => {
+    _ && E.code === _ && (y = !1);
+  }, x = () => {
     y = !1;
   };
-  x && (window.addEventListener("keydown", P), window.addEventListener("keyup", _), window.addEventListener("blur", b));
+  _ && (window.addEventListener("keydown", S), window.addEventListener("keyup", b), window.addEventListener("blur", x));
   const C = (E) => {
     if (e.isLocked?.()) return;
     const T = E.ctrlKey || E.metaKey || y;
     if (!(g ? !T : E.shiftKey)) return;
     E.preventDefault(), E.stopPropagation();
-    const L = m;
-    let A = 0, k = 0;
-    p !== "horizontal" && (k = -E.deltaY * L), p !== "vertical" && (A = -E.deltaX * L, E.shiftKey && E.deltaX === 0 && p === "both" && (A = -E.deltaY * L, k = 0)), e.onScrollPan?.(A, k);
+    const M = m;
+    let A = 0, P = 0;
+    p !== "horizontal" && (P = -E.deltaY * M), p !== "vertical" && (A = -E.deltaX * M, E.shiftKey && E.deltaX === 0 && p === "both" && (A = -E.deltaY * M, P = 0)), e.onScrollPan?.(A, P);
   };
   return t.addEventListener("wheel", C, { passive: !1, capture: !0 }), {
     setViewport(E, T) {
-      const $ = T?.duration ?? 0, L = Kn.translate(E.x ?? 0, E.y ?? 0).scale(E.zoom ?? 1);
-      $ > 0 ? a.transition().duration($).call(h.transform, L) : a.call(h.transform, L);
+      const $ = T?.duration ?? 0, M = Kn.translate(E.x ?? 0, E.y ?? 0).scale(E.zoom ?? 1);
+      $ > 0 ? a.transition().duration($).call(h.transform, M) : a.call(h.transform, M);
     },
     getTransform() {
       return t.__zoom ?? Kn;
@@ -2330,7 +2330,7 @@ function Xu(t, e) {
         E.maxZoom ?? i
       ]), E.pannable !== void 0 || E.zoomable !== void 0) {
         const T = E.pannable ?? r, $ = E.zoomable ?? s;
-        h.filter(Ki({
+        h.filter(Ji({
           pannable: T,
           zoomable: $,
           isLocked: e.isLocked,
@@ -2344,24 +2344,24 @@ function Xu(t, e) {
       E.panOnScroll !== void 0 && (g = E.panOnScroll), E.panOnScrollDirection !== void 0 && (p = E.panOnScrollDirection), E.panOnScrollSpeed !== void 0 && (m = E.panOnScrollSpeed);
     },
     destroy() {
-      t.removeEventListener("wheel", C, { capture: !0 }), c && (window.removeEventListener("keydown", d), window.removeEventListener("keyup", u), window.removeEventListener("blur", f)), x && (window.removeEventListener("keydown", P), window.removeEventListener("keyup", _), window.removeEventListener("blur", b)), a.on(".zoom", null);
+      t.removeEventListener("wheel", C, { capture: !0 }), c && (window.removeEventListener("keydown", d), window.removeEventListener("keyup", u), window.removeEventListener("blur", f)), _ && (window.removeEventListener("keydown", S), window.removeEventListener("keyup", b), window.removeEventListener("blur", x)), a.on(".zoom", null);
     }
   };
 }
-function Nr(t, e, n, o) {
+function Hr(t, e, n, o) {
   return {
     x: (t - o.left - n.x) / n.zoom,
     y: (e - o.top - n.y) / n.zoom
   };
 }
-function Wu(t, e, n, o) {
+function Zu(t, e, n, o) {
   return {
     x: t * n.zoom + n.x + o.left,
     y: e * n.zoom + n.y + o.top
   };
 }
 const we = 150, _e = 50;
-function yo(t, e, n, o, i) {
+function wo(t, e, n, o, i) {
   if (i % 360 === 0) return { x: t, y: e, width: n, height: o };
   const r = i * Math.PI / 180, s = Math.abs(Math.cos(r)), a = Math.abs(Math.sin(r)), l = n * s + o * a, c = n * a + o * s, d = t + n / 2, u = e + o / 2;
   return { x: d - l / 2, y: u - c / 2, width: l, height: c };
@@ -2371,7 +2371,7 @@ function Yt(t, e) {
     return { x: 0, y: 0, width: 0, height: 0 };
   let n = 1 / 0, o = 1 / 0, i = -1 / 0, r = -1 / 0;
   for (const s of t) {
-    const a = s.dimensions?.width ?? we, l = s.dimensions?.height ?? _e, c = Zt(s, e), d = s.rotation ? yo(c.x, c.y, a, l, s.rotation) : { x: c.x, y: c.y, width: a, height: l };
+    const a = s.dimensions?.width ?? we, l = s.dimensions?.height ?? _e, c = Gt(s, e), d = s.rotation ? wo(c.x, c.y, a, l, s.rotation) : { x: c.x, y: c.y, width: a, height: l };
     n = Math.min(n, d.x), o = Math.min(o, d.y), i = Math.max(i, d.x + d.width), r = Math.max(r, d.y + d.height);
   }
   return {
@@ -2381,17 +2381,17 @@ function Yt(t, e) {
     height: r - o
   };
 }
-function ju(t, e, n) {
+function Ku(t, e, n) {
   const o = e.x + e.width, i = e.y + e.height;
   return t.filter((r) => {
-    const s = r.dimensions?.width ?? we, a = r.dimensions?.height ?? _e, l = Zt(r, n), c = r.rotation ? yo(l.x, l.y, s, a, r.rotation) : { x: l.x, y: l.y, width: s, height: a }, d = c.x + c.width, u = c.y + c.height;
+    const s = r.dimensions?.width ?? we, a = r.dimensions?.height ?? _e, l = Gt(r, n), c = r.rotation ? wo(l.x, l.y, s, a, r.rotation) : { x: l.x, y: l.y, width: s, height: a }, d = c.x + c.width, u = c.y + c.height;
     return !(d < e.x || c.x > o || u < e.y || c.y > i);
   });
 }
-function Uu(t, e, n) {
+function Ju(t, e, n) {
   const o = e.x + e.width, i = e.y + e.height;
   return t.filter((r) => {
-    const s = r.dimensions?.width ?? we, a = r.dimensions?.height ?? _e, l = Zt(r, n), c = r.rotation ? yo(l.x, l.y, s, a, r.rotation) : { x: l.x, y: l.y, width: s, height: a };
+    const s = r.dimensions?.width ?? we, a = r.dimensions?.height ?? _e, l = Gt(r, n), c = r.rotation ? wo(l.x, l.y, s, a, r.rotation) : { x: l.x, y: l.y, width: s, height: a };
     return c.x >= e.x && c.y >= e.y && c.x + c.width <= o && c.y + c.height <= i;
   });
 }
@@ -2399,7 +2399,7 @@ function Jn(t, e, n, o, i, r = 0.1) {
   const s = Math.max(t.width, 1), a = Math.max(t.height, 1), l = s * (1 + r), c = a * (1 + r), d = e / l, u = n / c, f = Math.min(Math.max(Math.min(d, u), o), i), h = { x: t.x + s / 2, y: t.y + a / 2 }, g = e / 2 - h.x * f, p = n / 2 - h.y * f;
   return { x: g, y: p, zoom: f };
 }
-function Zu(t, e, n, o) {
+function Qu(t, e, n, o) {
   const i = 1 / t.zoom;
   return {
     minX: (0 - t.x) * i - o,
@@ -2408,7 +2408,7 @@ function Zu(t, e, n, o) {
     maxY: (n - t.y) * i + o
   };
 }
-class Gu {
+class ef {
   constructor(e = 300) {
     this._cells = /* @__PURE__ */ new Map(), this._nodeCells = /* @__PURE__ */ new Map(), this._cellSize = e;
   }
@@ -2471,7 +2471,7 @@ class Gu {
     return this._nodeCells.size;
   }
 }
-function Zt(t, e) {
+function Gt(t, e) {
   if (!t.position) return { x: 0, y: 0 };
   const n = t.nodeOrigin ?? e ?? [0, 0], o = t.dimensions?.width ?? we, i = t.dimensions?.height ?? _e;
   return {
@@ -2479,16 +2479,16 @@ function Zt(t, e) {
     y: t.position.y - i * n[1]
   };
 }
-let Ir = !1;
-function $r(t) {
-  Ir = t;
+let Rr = !1;
+function Fr(t) {
+  Rr = t;
 }
 function V(t, e, n) {
-  if (!Ir) return;
-  const o = `%c[AlpineFlow:${t}]`, i = Ku(t);
+  if (!Rr) return;
+  const o = `%c[AlpineFlow:${t}]`, i = tf(t);
   n !== void 0 ? console.log(o, i, e, n) : console.log(o, i, e);
 }
-function Ku(t) {
+function tf(t) {
   return `color: ${{
     init: "#4ade80",
     destroy: "#f87171",
@@ -2508,8 +2508,8 @@ function Ku(t) {
     clipboard: "#94a3b8"
   }[t] ?? "#94a3b8"}; font-weight: bold`;
 }
-const yn = "#64748b", wi = "#d4d4d8", Dr = "#ef4444", Ju = "2", Qu = "6 3", Ji = 1.2, Go = 0.2, Qn = 5, Qi = 25;
-class ef {
+const yn = "#64748b", vi = "#d4d4d8", Or = "#ef4444", nf = "2", of = "6 3", Qi = 1.2, Ko = 0.2, Qn = 5, es = 25;
+class sf {
   constructor(e = 50) {
     this.past = [], this.future = [], this._suspendDepth = 0, this.maxSize = e;
   }
@@ -2543,19 +2543,19 @@ class ef {
     return this.future.length > 0;
   }
 }
-const tf = 16;
-function nf() {
+const rf = 16;
+function af() {
   return typeof requestAnimationFrame == "function" ? {
     request: (t) => requestAnimationFrame(t),
     cancel: (t) => cancelAnimationFrame(t)
   } : {
-    request: (t) => setTimeout(() => t(performance.now()), tf),
+    request: (t) => setTimeout(() => t(performance.now()), rf),
     cancel: (t) => clearTimeout(t)
   };
 }
-class Hr {
+class zr {
   constructor() {
-    this._scheduler = nf(), this._entries = [], this._postTickCallbacks = [], this._frameId = null, this._running = !1;
+    this._scheduler = af(), this._entries = [], this._postTickCallbacks = [], this._frameId = null, this._running = !1;
   }
   /** True when the rAF loop is running. */
   get active() {
@@ -2636,45 +2636,45 @@ class Hr {
     this._scheduleFrame();
   }
 }
-const eo = new Hr(), of = {
-  linear: iu,
-  easeIn: su,
-  easeOut: ru,
-  easeInOut: au,
-  easeCubicIn: lu,
-  easeCubicOut: cu,
-  easeCubicInOut: Mr,
-  easeCircIn: mu,
-  easeCircOut: yu,
-  easeCircInOut: wu,
-  easeSinIn: du,
-  easeSinOut: uu,
-  easeSinInOut: fu,
-  easeExpoIn: hu,
-  easeExpoOut: gu,
-  easeExpoInOut: pu,
-  easeBounce: Gn,
-  easeBounceIn: Lu,
-  easeBounceInOut: Pu,
-  easeElastic: Iu,
-  easeElasticIn: Nu,
-  easeElasticInOut: $u,
-  easeBack: Au,
-  easeBackIn: Mu,
-  easeBackOut: Tu
+const eo = new zr(), lf = {
+  linear: lu,
+  easeIn: cu,
+  easeOut: du,
+  easeInOut: uu,
+  easeCubicIn: fu,
+  easeCubicOut: hu,
+  easeCubicInOut: Ir,
+  easeCircIn: _u,
+  easeCircOut: bu,
+  easeCircInOut: xu,
+  easeSinIn: gu,
+  easeSinOut: pu,
+  easeSinInOut: mu,
+  easeExpoIn: yu,
+  easeExpoOut: wu,
+  easeExpoInOut: vu,
+  easeBounce: Zn,
+  easeBounceIn: Au,
+  easeBounceInOut: Nu,
+  easeElastic: Ru,
+  easeElasticIn: Hu,
+  easeElasticInOut: Fu,
+  easeBack: Du,
+  easeBackIn: Iu,
+  easeBackOut: $u
 };
-function Rr(t) {
+function Vr(t) {
   const e = t ?? "auto";
   return e === !1 ? !1 : e === !0 ? !0 : typeof globalThis < "u" && globalThis.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === !0;
 }
 function to(t) {
-  return typeof t == "function" ? t : of[t ?? "easeInOut"];
+  return typeof t == "function" ? t : lf[t ?? "easeInOut"];
 }
 function it(t, e, n) {
   return t + (e - t) * n;
 }
-function vi(t, e, n) {
-  return qo(t, e)(n);
+function _i(t, e, n) {
+  return Yo(t, e)(n);
 }
 function wn(t) {
   if (typeof t != "string")
@@ -2692,8 +2692,8 @@ function wn(t) {
   }
   return e;
 }
-const es = /^(-?\d+\.?\d*)(px|em|rem|%|vh|vw|pt|cm|mm|in|ex|ch)?$/, ts = /^(#|rgb|hsl)/;
-function Fr(t, e, n) {
+const ts = /^(-?\d+\.?\d*)(px|em|rem|%|vh|vw|pt|cm|mm|in|ex|ch)?$/, ns = /^(#|rgb|hsl)/;
+function Br(t, e, n) {
   const o = {}, i = /* @__PURE__ */ new Set([...Object.keys(t), ...Object.keys(e)]);
   for (const r of i) {
     const s = t[r], a = e[r];
@@ -2705,21 +2705,21 @@ function Fr(t, e, n) {
       o[r] = s;
       continue;
     }
-    const l = es.exec(s), c = es.exec(a);
+    const l = ts.exec(s), c = ts.exec(a);
     if (l && c) {
       const d = parseFloat(l[1]), u = parseFloat(c[1]), f = c[2] ?? "", h = it(d, u, n);
       o[r] = f ? `${h}${f}` : String(h);
       continue;
     }
-    if (ts.test(s) && ts.test(a)) {
-      o[r] = vi(s, a, n);
+    if (ns.test(s) && ns.test(a)) {
+      o[r] = _i(s, a, n);
       continue;
     }
     o[r] = n < 0.5 ? s : a;
   }
   return o;
 }
-function sf(t, e, n, o) {
+function cf(t, e, n, o) {
   let i = it(t.zoom, e.zoom, n);
   return o?.minZoom !== void 0 && (i = Math.max(i, o.minZoom)), o?.maxZoom !== void 0 && (i = Math.min(i, o.maxZoom)), {
     x: it(t.x, e.x, n),
@@ -2727,7 +2727,7 @@ function sf(t, e, n, o) {
     zoom: i
   };
 }
-class rf {
+class df {
   constructor() {
     this._handles = /* @__PURE__ */ new Set();
   }
@@ -2763,7 +2763,7 @@ class rf {
     return this._handles.size;
   }
 }
-class af {
+class uf {
   constructor() {
     this._handles = [], this._state = "active", this._propertySnapshots = /* @__PURE__ */ new Map(), this._onAfterRollback = null, this.finished = new Promise((e) => {
       this._resolveFinished = e;
@@ -2820,37 +2820,37 @@ const tn = {
   restVelocity: 0.01,
   restDisplacement: 0.01
 };
-function Or(t, e, n) {
+function qr(t, e, n) {
   if (n <= 0)
     return;
   const o = e.stiffness ?? tn.stiffness, i = e.damping ?? tn.damping, r = e.mass ?? tn.mass, s = t.value - t.target, a = (-o * s - i * t.velocity) / r;
   t.velocity += a * n, t.value += t.velocity * n, Math.abs(t.velocity) < (e.restVelocity ?? tn.restVelocity) && Math.abs(t.value - t.target) < (e.restDisplacement ?? tn.restDisplacement) && (t.value = t.target, t.velocity = 0, t.settled = !0);
 }
-const ns = {
+const os = {
   timeConstant: 350,
   restVelocity: 0.5
 };
-function _i(t, e, n) {
+function bi(t, e, n) {
   if (n <= 0)
     return;
-  const o = e.timeConstant ?? ns.timeConstant, i = Math.exp(-n * 1e3 / o);
-  t.velocity *= i, t.value += t.velocity * n, Math.abs(t.velocity) < ns.restVelocity && (t.velocity = 0, t.settled = !0, t.target = t.value);
+  const o = e.timeConstant ?? os.timeConstant, i = Math.exp(-n * 1e3 / o);
+  t.velocity *= i, t.value += t.velocity * n, Math.abs(t.velocity) < os.restVelocity && (t.velocity = 0, t.settled = !0, t.target = t.value);
 }
-function bi(t) {
+function xi(t) {
   const e = t.lastIndexOf("."), n = t.lastIndexOf(":"), o = Math.max(e, n);
   if (o < 0) return null;
   const i = t.slice(o + 1);
   return i.length === 0 || i.length > 6 ? null : i;
 }
-function zr(t, e, n, o) {
+function Yr(t, e, n, o) {
   if (n <= 0)
     return;
-  _i(t, {
+  bi(t, {
     velocity: t.velocity,
     power: e.power,
     timeConstant: e.timeConstant
   }, n);
-  const i = o ? bi(o) : null;
+  const i = o ? xi(o) : null;
   if (e.bounds && o) {
     const r = e.bounds[o] ?? (i ? e.bounds[i] : void 0);
     if (r) {
@@ -2870,8 +2870,8 @@ function zr(t, e, n, o) {
     t.value = r;
   }
 }
-function Vr(t, e, n, o) {
-  const i = bi(o), r = e.values.map(
+function Xr(t, e, n, o) {
+  const i = xi(o), r = e.values.map(
     (g) => g[o] ?? (i ? g[i] : void 0) ?? t.value
   );
   if (r.length < 2) {
@@ -2885,20 +2885,20 @@ function Vr(t, e, n, o) {
   const c = s[l], d = s[l + 1] ?? 1, u = d > c ? (a - c) / (d - c) : 1, f = r[l], h = r[l + 1] ?? r[l];
   t.value = f + (h - f) * Math.max(0, Math.min(1, u)), a >= 1 && (t.value = r[r.length - 1], t.settled = !0);
 }
-const os = {
+const is = {
   gentle: { type: "spring", stiffness: 120, damping: 14 },
   wobbly: { type: "spring", stiffness: 180, damping: 12 },
   stiff: { type: "spring", stiffness: 300, damping: 30 },
   slow: { type: "spring", stiffness: 60, damping: 15 },
   molasses: { type: "spring", stiffness: 40, damping: 30 }
-}, is = {
+}, ss = {
   smooth: { type: "decay", velocity: 0, power: 0.6, timeConstant: 400 },
   snappy: { type: "decay", velocity: 0, power: 1.2, timeConstant: 200 }
-}, ss = {
+}, rs = {
   momentum: { type: "inertia", velocity: 0, power: 0.8, timeConstant: 700 },
   rails: { type: "inertia", velocity: 0, bounceStiffness: 500, bounceDamping: 40 }
 };
-function Br(t) {
+function Wr(t) {
   if (typeof t != "string")
     return t;
   const [e, n] = t.split(".");
@@ -2906,24 +2906,24 @@ function Br(t) {
     return null;
   switch (e) {
     case "spring":
-      return os[n] ? { ...os[n] } : null;
-    case "decay":
       return is[n] ? { ...is[n] } : null;
-    case "inertia":
+    case "decay":
       return ss[n] ? { ...ss[n] } : null;
+    case "inertia":
+      return rs[n] ? { ...rs[n] } : null;
     default:
       return null;
   }
 }
-function rs(t) {
+function as(t) {
   return typeof t != "string" ? !1 : /^(#|rgb|hsl)/.test(t);
 }
-function lf(t, e, n) {
-  return typeof t == "number" && typeof e == "number" ? it(t, e, n) : rs(t) && rs(e) ? vi(t, e, n) : n < 0.5 ? t : e;
+function ff(t, e, n) {
+  return typeof t == "number" && typeof e == "number" ? it(t, e, n) : as(t) && as(e) ? _i(t, e, n) : n < 0.5 ? t : e;
 }
-class cf {
+class hf {
   constructor(e) {
-    this._ownership = /* @__PURE__ */ new Map(), this._groups = /* @__PURE__ */ new Set(), this._nextGroupId = 0, this._registry = new rf(), this._activeTransaction = null, this._engine = e;
+    this._ownership = /* @__PURE__ */ new Map(), this._groups = /* @__PURE__ */ new Set(), this._nextGroupId = 0, this._registry = new df(), this._activeTransaction = null, this._engine = e;
   }
   /** Whether any animations are currently running. */
   get active() {
@@ -2935,7 +2935,7 @@ class cf {
   }
   /** Begin a new transaction — all subsequent `animate()` calls will be tracked until `endTransaction()`. */
   beginTransaction() {
-    const e = new af();
+    const e = new uf();
     return this._activeTransaction = e, e;
   }
   /** End the current transaction context (does NOT commit or rollback — the caller decides). */
@@ -2965,12 +2965,12 @@ class cf {
       whileStopMode: g = "jump-end",
       motion: p,
       maxDuration: m = 5e3
-    } = n, y = to(i), x = p ? Br(p) : void 0;
+    } = n, y = to(i), _ = p ? Wr(p) : void 0;
     for (const w of e) {
       const N = this._ownership.get(w.key);
       if (N && !N.stopped) {
-        const S = N.currentValues.get(w.key);
-        S !== void 0 && (w.from = S), N.entries = N.entries.filter((R) => R.key !== w.key), N.entries.length === 0 && this._stop(N, "superseded");
+        const k = N.currentValues.get(w.key);
+        k !== void 0 && (w.from = k), N.entries = N.entries.filter((R) => R.key !== w.key), N.entries.length === 0 && this._stop(N, "superseded");
       }
     }
     if (this._activeTransaction && this._activeTransaction.state === "active")
@@ -2983,8 +2983,8 @@ class cf {
       l?.();
       for (const O of e)
         O.apply(O.to);
-      const S = [...u ? [u] : [], ...f ?? []], R = {
-        _tags: S.length > 0 ? S : void 0,
+      const k = [...u ? [u] : [], ...f ?? []], R = {
+        _tags: k.length > 0 ? k : void 0,
         pause: () => {
         },
         resume: () => {
@@ -3020,12 +3020,12 @@ class cf {
       };
       return this._registry.register(R), queueMicrotask(() => this._registry.unregister(R)), this._activeTransaction && this._activeTransaction.state === "active" && this._activeTransaction.trackHandle(R), d?.(), R;
     }
-    const P = /* @__PURE__ */ new Map(), _ = /* @__PURE__ */ new Map();
+    const S = /* @__PURE__ */ new Map(), b = /* @__PURE__ */ new Map();
     for (const w of e)
-      P.set(w.key, w.from), _.set(w.key, w.to);
-    let b;
-    if (x) {
-      b = /* @__PURE__ */ new Map();
+      S.set(w.key, w.from), b.set(w.key, w.to);
+    let x;
+    if (_) {
+      x = /* @__PURE__ */ new Map();
       for (const w of e) {
         if (typeof w.from != "number" || typeof w.to != "number") {
           console.warn(
@@ -3034,31 +3034,31 @@ class cf {
           continue;
         }
         let N = 0;
-        if (x.type === "decay" || x.type === "inertia") {
-          const S = x.velocity;
-          if (typeof S == "number")
-            N = S;
-          else if (S && typeof S == "object") {
-            const O = S, q = bi(w.key);
+        if (_.type === "decay" || _.type === "inertia") {
+          const k = _.velocity;
+          if (typeof k == "number")
+            N = k;
+          else if (k && typeof k == "object") {
+            const O = k, q = xi(w.key);
             N = O[w.key] ?? (q ? O[q] ?? 0 : 0);
           }
-          const R = x.power ?? 0.8;
+          const R = _.power ?? 0.8;
           N *= R;
         }
-        b.set(w.key, {
+        x.set(w.key, {
           value: w.from,
           velocity: N,
           target: w.to,
           settled: !1
         });
       }
-      b.size === 0 && (b = void 0);
+      x.size === 0 && (x = void 0);
     }
     const C = s === "ping-pong" ? "reverse" : s, E = a === "end" ? "backward" : "forward";
     let T;
     const $ = new Promise((w) => {
       T = w;
-    }), L = {
+    }), M = {
       _id: this._nextGroupId++,
       entries: [...e],
       engineHandle: null,
@@ -3079,58 +3079,58 @@ class cf {
       currentValues: /* @__PURE__ */ new Map(),
       _lastElapsed: 0,
       _lastTickWallTime: 0,
-      snapshot: P,
-      target: _,
+      snapshot: S,
+      target: b,
       _currentFinished: $,
       whilePredicate: h,
       whileStopMode: g,
-      motionConfig: b ? x : void 0,
-      physicsStates: b,
+      motionConfig: x ? _ : void 0,
+      physicsStates: x,
       maxDuration: m,
-      isPhysics: !!b,
+      isPhysics: !!x,
       _prevElapsed: 0
     };
     if (a === "end")
-      for (const w of L.entries)
-        w.apply(w.to), L.currentValues.set(w.key, w.to);
+      for (const w of M.entries)
+        w.apply(w.to), M.currentValues.set(w.key, w.to);
     else
-      for (const w of L.entries)
-        L.currentValues.set(w.key, w.from);
+      for (const w of M.entries)
+        M.currentValues.set(w.key, w.from);
     for (const w of e)
-      this._ownership.set(w.key, L);
-    this._groups.add(L);
-    const A = this._engine.register((w) => this._tick(L, w), r);
-    L.engineHandle = A;
-    const k = [...u ? [u] : [], ...f ?? []], v = {
-      _tags: k.length > 0 ? k : void 0,
-      pause: () => this._pause(L),
-      resume: () => this._resume(L),
-      stop: (w) => this._stop(L, w?.mode ?? "jump-end"),
-      reverse: () => this._reverse(L),
-      play: () => this._play(L),
-      playForward: () => this._playDirection(L, "forward"),
-      playBackward: () => this._playDirection(L, "backward"),
-      restart: (w) => this._restart(L, w),
+      this._ownership.set(w.key, M);
+    this._groups.add(M);
+    const A = this._engine.register((w) => this._tick(M, w), r);
+    M.engineHandle = A;
+    const P = [...u ? [u] : [], ...f ?? []], v = {
+      _tags: P.length > 0 ? P : void 0,
+      pause: () => this._pause(M),
+      resume: () => this._resume(M),
+      stop: (w) => this._stop(M, w?.mode ?? "jump-end"),
+      reverse: () => this._reverse(M),
+      play: () => this._play(M),
+      playForward: () => this._playDirection(M, "forward"),
+      playBackward: () => this._playDirection(M, "backward"),
+      restart: (w) => this._restart(M, w),
       get direction() {
-        return L.direction;
+        return M.direction;
       },
       get isFinished() {
-        return L.isFinished;
+        return M.isFinished;
       },
       get currentValue() {
-        return L.currentValues;
+        return M.currentValues;
       },
       get finished() {
-        return L._currentFinished;
+        return M._currentFinished;
       },
       get _snapshot() {
-        return L.snapshot;
+        return M.snapshot;
       },
       get _target() {
-        return L.target;
+        return M.target;
       }
     };
-    return this._registry.register(v), L._handle = v, this._activeTransaction && this._activeTransaction.state === "active" && this._activeTransaction.trackHandle(v), v;
+    return this._registry.register(v), M._handle = v, this._activeTransaction && this._activeTransaction.state === "active" && this._activeTransaction.trackHandle(v), v;
   }
   /** Stop all active animations. */
   stopAll(e) {
@@ -3164,7 +3164,7 @@ class cf {
         i = o % e.duration / e.duration;
     const r = e.direction === "backward" ? 1 - i : i, s = e.easingFn(r);
     for (const a of e.entries) {
-      const l = lf(a.from, a.to, s);
+      const l = ff(a.from, a.to, s);
       e.currentValues.set(a.key, l), a.apply(l);
     }
     if (e.onProgress?.(r), !e.loop && i >= 1) {
@@ -3207,17 +3207,17 @@ class cf {
         if (!d.settled) {
           switch (e.direction === "backward" ? d.target = e.snapshot.get(c.key) : d.target = e.target.get(c.key), e.motionConfig.type) {
             case "spring":
-              Or(d, e.motionConfig, i);
+              qr(d, e.motionConfig, i);
               break;
             case "decay":
-              _i(d, e.motionConfig, i);
+              bi(d, e.motionConfig, i);
               break;
             case "inertia":
-              zr(d, e.motionConfig, i, c.key);
+              Yr(d, e.motionConfig, i, c.key);
               break;
             case "keyframes": {
               const u = n - e.startTime, f = e.motionConfig.duration ?? e.maxDuration, h = Math.min(u / f, 1);
-              Vr(d, e.motionConfig, h, c.key);
+              Xr(d, e.motionConfig, h, c.key);
               break;
             }
           }
@@ -3375,21 +3375,21 @@ class cf {
     this._groups.delete(e);
   }
 }
-const qr = /* @__PURE__ */ new Map();
-function df(t, e) {
-  qr.set(t, e);
+const jr = /* @__PURE__ */ new Map();
+function gf(t, e) {
+  jr.set(t, e);
 }
-function ko(t) {
+function Lo(t) {
   return t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 function Ot(t) {
   return typeof t == "string" ? { type: t } : t;
 }
 function zt(t, e) {
-  return `${e}__${t.type}__${(t.color ?? wi).replace(/[^a-zA-Z0-9]/g, "_")}`;
+  return `${e}__${t.type}__${(t.color ?? vi).replace(/[^a-zA-Z0-9]/g, "_")}`;
 }
 function no(t, e) {
-  const n = ko(t.color ?? wi), o = Number(t.width ?? 12.5), i = Number(t.height ?? 12.5), r = Number.isFinite(o) && o > 0 ? o : 12.5, s = Number.isFinite(i) && i > 0 ? i : 12.5, a = ko(t.orient ?? "auto-start-reverse"), l = ko(e);
+  const n = Lo(t.color ?? vi), o = Number(t.width ?? 12.5), i = Number(t.height ?? 12.5), r = Number.isFinite(o) && o > 0 ? o : 12.5, s = Number.isFinite(i) && i > 0 ? i : 12.5, a = Lo(t.orient ?? "auto-start-reverse"), l = Lo(e);
   if (t.type === "arrow")
     return `<marker
       id="${l}"
@@ -3430,17 +3430,17 @@ function no(t, e) {
         points="-5,-4 0,0 -5,4 -5,-4"
       />
     </marker>`;
-  const c = qr.get(t.type);
+  const c = jr.get(t.type);
   return c ? c({ id: l, color: n, width: r, height: s, orient: a }) : no({ ...t, type: "arrowclosed" }, e);
 }
-const _t = 200, bt = 150, uf = 1.2, nn = "http://www.w3.org/2000/svg";
-function ff(t, e) {
+const bt = 200, xt = 150, pf = 1.2, nn = "http://www.w3.org/2000/svg";
+function mf(t, e) {
   const { getState: n, setViewport: o, config: i } = e, r = i.minimapPosition ?? "bottom-right", s = i.minimapMaskColor, a = i.minimapNodeColor, l = document.createElement("div");
   l.className = `flow-minimap flow-minimap-${r}`;
   const c = document.createElementNS(nn, "svg");
-  c.setAttribute("width", String(_t)), c.setAttribute("height", String(bt));
+  c.setAttribute("width", String(bt)), c.setAttribute("height", String(xt));
   const d = document.createElementNS(nn, "rect");
-  d.classList.add("flow-minimap-bg"), d.setAttribute("width", String(_t)), d.setAttribute("height", String(bt));
+  d.classList.add("flow-minimap-bg"), d.setAttribute("width", String(bt)), d.setAttribute("height", String(xt));
   const u = document.createElementNS(nn, "g");
   u.classList.add("flow-minimap-nodes");
   const f = document.createElementNS(nn, "path");
@@ -3448,14 +3448,14 @@ function ff(t, e) {
   let h = { x: 0, y: 0, width: 0, height: 0 }, g = 1;
   function p() {
     const A = n();
-    if (h = Yt(A.nodes.filter((k) => !k.hidden), i.nodeOrigin), h.width === 0 && h.height === 0) {
+    if (h = Yt(A.nodes.filter((P) => !P.hidden), i.nodeOrigin), h.width === 0 && h.height === 0) {
       g = 1;
       return;
     }
     g = Math.max(
-      h.width / _t,
-      h.height / bt
-    ) * uf;
+      h.width / bt,
+      h.height / xt
+    ) * pf;
   }
   function m(A) {
     return typeof a == "function" ? a(A) : a;
@@ -3463,59 +3463,59 @@ function ff(t, e) {
   function y() {
     const A = n();
     p(), u.innerHTML = "";
-    const k = (_t - h.width / g) / 2, v = (bt - h.height / g) / 2;
+    const P = (bt - h.width / g) / 2, v = (xt - h.height / g) / 2;
     for (const w of A.nodes) {
       if (w.hidden) continue;
-      const N = document.createElementNS(nn, "rect"), S = (w.dimensions?.width ?? we) / g, R = (w.dimensions?.height ?? _e) / g, O = (w.position.x - h.x) / g + k, q = (w.position.y - h.y) / g + v;
-      N.setAttribute("x", String(O)), N.setAttribute("y", String(q)), N.setAttribute("width", String(S)), N.setAttribute("height", String(R)), N.setAttribute("rx", "2");
+      const N = document.createElementNS(nn, "rect"), k = (w.dimensions?.width ?? we) / g, R = (w.dimensions?.height ?? _e) / g, O = (w.position.x - h.x) / g + P, q = (w.position.y - h.y) / g + v;
+      N.setAttribute("x", String(O)), N.setAttribute("y", String(q)), N.setAttribute("width", String(k)), N.setAttribute("height", String(R)), N.setAttribute("rx", "2");
       const D = m(w);
       D && (N.style.fill = D), u.appendChild(N);
     }
-    x();
+    _();
   }
-  function x() {
+  function _() {
     const A = e.getViewportState ? e.getViewportState() : n();
     if (h.width === 0 && h.height === 0) {
       f.setAttribute("d", "");
       return;
     }
-    const k = (_t - h.width / g) / 2, v = (bt - h.height / g) / 2, w = (-A.viewport.x / A.viewport.zoom - h.x) / g + k, N = (-A.viewport.y / A.viewport.zoom - h.y) / g + v, S = A.containerWidth / A.viewport.zoom / g, R = A.containerHeight / A.viewport.zoom / g, O = `M0,0 H${_t} V${bt} H0 Z`, q = `M${w},${N} h${S} v${R} h${-S} Z`;
+    const P = (bt - h.width / g) / 2, v = (xt - h.height / g) / 2, w = (-A.viewport.x / A.viewport.zoom - h.x) / g + P, N = (-A.viewport.y / A.viewport.zoom - h.y) / g + v, k = A.containerWidth / A.viewport.zoom / g, R = A.containerHeight / A.viewport.zoom / g, O = `M0,0 H${bt} V${xt} H0 Z`, q = `M${w},${N} h${k} v${R} h${-k} Z`;
     f.setAttribute("d", `${O} ${q}`);
   }
-  let P = !1;
-  function _(A, k) {
-    const v = (_t - h.width / g) / 2, w = (bt - h.height / g) / 2, N = (A - v) * g + h.x, S = (k - w) * g + h.y;
-    return { x: N, y: S };
+  let S = !1;
+  function b(A, P) {
+    const v = (bt - h.width / g) / 2, w = (xt - h.height / g) / 2, N = (A - v) * g + h.x, k = (P - w) * g + h.y;
+    return { x: N, y: k };
   }
-  function b(A) {
-    const k = c.getBoundingClientRect(), v = A.clientX - k.left, w = A.clientY - k.top, N = n(), S = _(v, w), R = -S.x * N.viewport.zoom + N.containerWidth / 2, O = -S.y * N.viewport.zoom + N.containerHeight / 2;
+  function x(A) {
+    const P = c.getBoundingClientRect(), v = A.clientX - P.left, w = A.clientY - P.top, N = n(), k = b(v, w), R = -k.x * N.viewport.zoom + N.containerWidth / 2, O = -k.y * N.viewport.zoom + N.containerHeight / 2;
     o({ x: R, y: O, zoom: N.viewport.zoom });
   }
   function C(A) {
-    i.minimapPannable && (P = !0, c.setPointerCapture(A.pointerId), b(A));
+    i.minimapPannable && (S = !0, c.setPointerCapture(A.pointerId), x(A));
   }
   function E(A) {
-    P && b(A);
+    S && x(A);
   }
   function T(A) {
-    P && (P = !1, c.releasePointerCapture(A.pointerId));
+    S && (S = !1, c.releasePointerCapture(A.pointerId));
   }
   c.addEventListener("pointerdown", C), c.addEventListener("pointermove", E), c.addEventListener("pointerup", T);
   function $(A) {
     if (!i.minimapZoomable)
       return;
     A.preventDefault();
-    const k = n(), v = i.minZoom ?? 0.5, w = i.maxZoom ?? 2, N = A.deltaY > 0 ? 0.9 : 1.1, S = Math.min(Math.max(k.viewport.zoom * N, v), w);
-    o({ zoom: S });
+    const P = n(), v = i.minZoom ?? 0.5, w = i.maxZoom ?? 2, N = A.deltaY > 0 ? 0.9 : 1.1, k = Math.min(Math.max(P.viewport.zoom * N, v), w);
+    o({ zoom: k });
   }
   c.addEventListener("wheel", $, { passive: !1 });
-  function L() {
+  function M() {
     c.removeEventListener("pointerdown", C), c.removeEventListener("pointermove", E), c.removeEventListener("pointerup", T), c.removeEventListener("wheel", $), l.remove();
   }
-  return { render: y, updateViewport: x, destroy: L };
+  return { render: y, updateViewport: _, destroy: M };
 }
-const hf = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>', gf = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>', pf = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>', as = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>', mf = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>', yf = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>', ls = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9V3h6"/><path d="M21 9V3h-6"/><path d="M3 15v6h6"/><path d="M21 15v6h-6"/></svg>', wf = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v6H3"/><path d="M15 3v6h6"/><path d="M9 21v-6H3"/><path d="M15 21v-6h6"/></svg>';
-function vf(t, e) {
+const yf = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>', wf = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>', vf = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>', ls = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>', _f = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>', bf = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>', cs = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9V3h6"/><path d="M21 9V3h-6"/><path d="M3 15v6h6"/><path d="M21 15v6h-6"/></svg>', xf = '<svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v6H3"/><path d="M15 3v6h6"/><path d="M9 21v-6H3"/><path d="M15 21v-6h6"/></svg>';
+function Ef(t, e) {
   const {
     position: n,
     orientation: o,
@@ -3535,47 +3535,47 @@ function vf(t, e) {
     `flow-controls-${o}`
   ];
   l ? m.push("flow-controls-external") : m.push(`flow-controls-${n}`), p.className = m.join(" "), p.setAttribute("role", "toolbar"), p.setAttribute("aria-label", "Flow controls");
-  let y = null, x = null;
+  let y = null, _ = null;
   if (i) {
-    const b = Tt(hf, "Zoom in", c), C = Tt(gf, "Zoom out", d);
-    p.appendChild(b), p.appendChild(C);
+    const x = Tt(yf, "Zoom in", c), C = Tt(wf, "Zoom out", d);
+    p.appendChild(x), p.appendChild(C);
   }
   if (r) {
-    const b = Tt(pf, "Fit view", u);
-    p.appendChild(b);
+    const x = Tt(vf, "Fit view", u);
+    p.appendChild(x);
   }
-  if (s && (y = Tt(as, "Toggle interactivity", f), p.appendChild(y)), a) {
-    const b = Tt(yf, "Reset panels", h);
-    p.appendChild(b);
+  if (s && (y = Tt(ls, "Toggle interactivity", f), p.appendChild(y)), a) {
+    const x = Tt(bf, "Reset panels", h);
+    p.appendChild(x);
   }
-  g && (x = Tt(ls, "Toggle fullscreen", g), x.classList.add("flow-controls-button-fullscreen"), p.appendChild(x)), p.addEventListener("mousedown", (b) => b.stopPropagation()), p.addEventListener("pointerdown", (b) => b.stopPropagation()), p.addEventListener("wheel", (b) => b.stopPropagation(), { passive: !1 }), t.appendChild(p);
-  function P(b) {
-    if (y && typeof b.isInteractive == "boolean") {
-      Ko(y, b.isInteractive ? as : mf);
-      const C = b.isInteractive ? "Lock interactivity" : "Unlock interactivity";
+  g && (_ = Tt(cs, "Toggle fullscreen", g), _.classList.add("flow-controls-button-fullscreen"), p.appendChild(_)), p.addEventListener("mousedown", (x) => x.stopPropagation()), p.addEventListener("pointerdown", (x) => x.stopPropagation()), p.addEventListener("wheel", (x) => x.stopPropagation(), { passive: !1 }), t.appendChild(p);
+  function S(x) {
+    if (y && typeof x.isInteractive == "boolean") {
+      Jo(y, x.isInteractive ? ls : _f);
+      const C = x.isInteractive ? "Lock interactivity" : "Unlock interactivity";
       y.title = C, y.setAttribute("aria-label", C);
     }
-    if (x && typeof b.isFullscreen == "boolean") {
-      Ko(x, b.isFullscreen ? wf : ls);
-      const C = b.isFullscreen ? "Exit fullscreen" : "Enter fullscreen";
-      x.title = C, x.setAttribute("aria-label", C), x.classList.toggle("flow-controls-button-fullscreen--active", b.isFullscreen);
+    if (_ && typeof x.isFullscreen == "boolean") {
+      Jo(_, x.isFullscreen ? xf : cs);
+      const C = x.isFullscreen ? "Exit fullscreen" : "Enter fullscreen";
+      _.title = C, _.setAttribute("aria-label", C), _.classList.toggle("flow-controls-button-fullscreen--active", x.isFullscreen);
     }
   }
-  function _() {
+  function b() {
     p.remove();
   }
-  return { update: P, destroy: _ };
+  return { update: S, destroy: b };
 }
 function Tt(t, e, n) {
   const o = document.createElement("button");
-  return o.type = "button", Ko(o, t), o.title = e, o.setAttribute("aria-label", e), o.addEventListener("click", n), o;
+  return o.type = "button", Jo(o, t), o.title = e, o.setAttribute("aria-label", e), o.addEventListener("click", n), o;
 }
-function Ko(t, e) {
+function Jo(t, e) {
   const o = new DOMParser().parseFromString(e, "image/svg+xml").documentElement;
   t.replaceChildren(o);
 }
-const cs = 5;
-function _f(t) {
+const ds = 5;
+function Cf(t) {
   const e = document.createElement("div");
   e.className = "flow-selection-box", t.appendChild(e);
   let n = !1, o = 0, i = 0, r = 0, s = 0;
@@ -3594,10 +3594,10 @@ function _f(t) {
       return null;
     n = !1, e.classList.remove("flow-selection-box-active"), e.classList.remove("flow-selection-partial", "flow-selection-full");
     const h = Math.abs(r - o), g = Math.abs(s - i);
-    if (h < cs && g < cs)
+    if (h < ds && g < ds)
       return null;
-    const p = Math.min(o, r), m = Math.min(i, s), y = (p - f.x) / f.zoom, x = (m - f.y) / f.zoom, P = h / f.zoom, _ = g / f.zoom;
-    return { x: y, y: x, width: P, height: _ };
+    const p = Math.min(o, r), m = Math.min(i, s), y = (p - f.x) / f.zoom, _ = (m - f.y) / f.zoom, S = h / f.zoom, b = g / f.zoom;
+    return { x: y, y: _, width: S, height: b };
   }
   function d() {
     return n;
@@ -3607,8 +3607,8 @@ function _f(t) {
   }
   return { start: a, update: l, end: c, isActive: d, destroy: u };
 }
-const ds = 3;
-function bf(t) {
+const us = 3;
+function Sf(t) {
   const e = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   e.classList.add("flow-lasso-svg"), e.setAttribute("width", "100%"), e.setAttribute("height", "100%"), t.appendChild(e);
   const n = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
@@ -3621,7 +3621,7 @@ function bf(t) {
     if (!o)
       return;
     const f = i[i.length - 1], h = d - f.x, g = u - f.y;
-    h * h + g * g < ds * ds || (i.push({ x: d, y: u }), n.setAttribute("points", i.map((p) => `${p.x},${p.y}`).join(" ")));
+    h * h + g * g < us * us || (i.push({ x: d, y: u }), n.setAttribute("points", i.map((p) => `${p.x},${p.y}`).join(" ")));
   }
   function a(d) {
     if (!o || (o = !1, e.classList.remove("flow-lasso-active", "flow-lasso-partial", "flow-lasso-full"), n.setAttribute("points", ""), i.length < 3))
@@ -3640,7 +3640,7 @@ function bf(t) {
   }
   return { start: r, update: s, end: a, isActive: l, destroy: c };
 }
-function xi(t, e, n) {
+function Ei(t, e, n) {
   if (n.length < 3) return !1;
   let o = !1;
   for (let i = 0, r = n.length - 1; i < n.length; r = i++) {
@@ -3649,15 +3649,15 @@ function xi(t, e, n) {
   }
   return o;
 }
-function xf(t, e, n, o, i, r, s, a) {
+function kf(t, e, n, o, i, r, s, a) {
   const l = n - t, c = o - e, d = s - i, u = a - r, f = l * u - c * d;
   if (Math.abs(f) < 1e-10) return !1;
   const h = i - t, g = r - e, p = (h * u - g * d) / f, m = (h * c - g * l) / f;
   return p >= 0 && p <= 1 && m >= 0 && m <= 1;
 }
-function Ef(t, e) {
+function Lf(t, e) {
   const n = e.x, o = e.y, i = e.x + e.width, r = e.y + e.height, s = n + e.width / 2, a = o + e.height / 2;
-  if (xi(s, a, t)) return !0;
+  if (Ei(s, a, t)) return !0;
   for (const c of t)
     if (c.x >= n && c.x <= i && c.y >= o && c.y <= r) return !0;
   const l = [
@@ -3672,49 +3672,49 @@ function Ef(t, e) {
   ];
   for (let c = 0, d = t.length - 1; c < t.length; d = c++)
     for (const [u, f, h, g] of l)
-      if (xf(t[d].x, t[d].y, t[c].x, t[c].y, u, f, h, g))
+      if (kf(t[d].x, t[d].y, t[c].x, t[c].y, u, f, h, g))
         return !0;
   return !1;
 }
-function Yr(t) {
+function Ur(t) {
   const e = t.dimensions?.width ?? we, n = t.dimensions?.height ?? _e;
-  return t.rotation ? yo(t.position.x, t.position.y, e, n, t.rotation) : { x: t.position.x, y: t.position.y, width: e, height: n };
+  return t.rotation ? wo(t.position.x, t.position.y, e, n, t.rotation) : { x: t.position.x, y: t.position.y, width: e, height: n };
 }
-function Cf(t, e) {
+function Pf(t, e) {
   return e.length < 3 ? [] : t.filter((n) => {
     if (n.hidden || n.selectable === !1) return !1;
-    const o = Yr(n);
-    return Ef(e, o);
+    const o = Ur(n);
+    return Lf(e, o);
   });
 }
-function Sf(t, e) {
+function Mf(t, e) {
   return e.length < 3 ? [] : t.filter((n) => {
     if (n.hidden || n.selectable === !1) return !1;
-    const o = Yr(n);
+    const o = Ur(n);
     return [
       { x: o.x, y: o.y },
       { x: o.x + o.width, y: o.y },
       { x: o.x + o.width, y: o.y + o.height },
       { x: o.x, y: o.y + o.height }
-    ].every((r) => xi(r.x, r.y, e));
+    ].every((r) => Ei(r.x, r.y, e));
   });
 }
-function kf(t, e) {
+function Tf(t, e) {
   return e.filter((n) => n.source === t || n.target === t);
 }
-function Jo(t, e, n) {
+function Qo(t, e, n) {
   const o = new Set(
     n.filter((i) => i.source === t).map((i) => i.target)
   );
   return e.filter((i) => o.has(i.id));
 }
-function Lf(t, e, n) {
+function Af(t, e, n) {
   const o = new Set(
     n.filter((i) => i.target === t).map((i) => i.source)
   );
   return e.filter((i) => o.has(i.id));
 }
-function Pf(t, e, n) {
+function Nf(t, e, n) {
   if (t === e) return !0;
   const o = /* @__PURE__ */ new Map();
   for (const s of n) {
@@ -3734,10 +3734,10 @@ function Pf(t, e, n) {
   }
   return !1;
 }
-function Mf(t, e, n, o = !1) {
+function If(t, e, n, o = !1) {
   return n.some((i) => o ? i.source === t && i.target === e : i.source === t && i.target === e || i.source === e && i.target === t);
 }
-function Tf(t, e, n) {
+function $f(t, e, n) {
   const o = new Map(e.map((l) => [l.id, l])), i = new Set(
     n.map((l) => `${l.source}|${l.target}|${l.sourceHandle ?? ""}|${l.targetHandle ?? ""}`)
   ), r = [], s = /* @__PURE__ */ new Set();
@@ -3782,10 +3782,10 @@ function gt(t, e, n) {
 function pt(t, e, n) {
   return !(t.source === t.target || e.some(
     (i) => i.source === t.source && i.target === t.target && i.sourceHandle === t.sourceHandle && i.targetHandle === t.targetHandle
-  ) || n?.preventCycles && Pf(t.source, t.target, e));
+  ) || n?.preventCycles && Nf(t.source, t.target, e));
 }
 const We = "_flowHandleValidate";
-function Af(t) {
+function Df(t) {
   t.directive(
     "flow-handle-validate",
     (e, { expression: n }, { evaluate: o, effect: i, cleanup: r }) => {
@@ -3811,7 +3811,7 @@ function Af(t) {
   );
 }
 const ut = "_flowHandleLimit";
-function Nf(t) {
+function Hf(t) {
   t.directive(
     "flow-handle-limit",
     (e, { expression: n }, { evaluate: o, effect: i, cleanup: r }) => {
@@ -3825,7 +3825,7 @@ function Nf(t) {
   );
 }
 const Pt = "_flowHandleConnectableStart", st = "_flowHandleConnectableEnd";
-function If(t) {
+function Rf(t) {
   t.directive(
     "flow-handle-connectable",
     (e, { expression: n, modifiers: o }, { evaluate: i, effect: r, cleanup: s }) => {
@@ -3842,19 +3842,19 @@ function If(t) {
 function Cn(t, e, n = !0) {
   return e !== void 0 ? e : t.locked ? !1 : n;
 }
-function Xr(t) {
+function Gr(t) {
   return Cn(t, t.draggable);
 }
-function $f(t) {
+function Ff(t) {
   return Cn(t, t.deletable);
 }
 function Be(t) {
   return Cn(t, t.connectable);
 }
-function Qo(t) {
+function ei(t) {
   return Cn(t, t.selectable);
 }
-function us(t) {
+function fs(t) {
   return Cn(t, t.resizable);
 }
 function Xt(t, e, n, o, i, r, s) {
@@ -3881,7 +3881,7 @@ function Sn({
 function $n(t, e) {
   return t >= 0 ? 0.5 * t : e * 25 * Math.sqrt(-t);
 }
-function Df({
+function Of({
   sourceX: t,
   sourceY: e,
   sourcePosition: n = "bottom",
@@ -3906,7 +3906,7 @@ function Df({
   return [c, d, u, f];
 }
 function oo(t) {
-  const { sourceX: e, sourceY: n, targetX: o, targetY: i } = t, [r, s, a, l] = Df(t), c = `M${e},${n} C${r},${s} ${a},${l} ${o},${i}`, { x: d, y: u, offsetX: f, offsetY: h } = Sn({ sourceX: e, sourceY: n, targetX: o, targetY: i });
+  const { sourceX: e, sourceY: n, targetX: o, targetY: i } = t, [r, s, a, l] = Of(t), c = `M${e},${n} C${r},${s} ${a},${l} ${o},${i}`, { x: d, y: u, offsetX: f, offsetY: h } = Sn({ sourceX: e, sourceY: n, targetX: o, targetY: i });
   return {
     path: c,
     labelPosition: { x: d, y: u },
@@ -3914,7 +3914,7 @@ function oo(t) {
     labelOffsetY: h
   };
 }
-function My({
+function Iy({
   sourceX: t,
   sourceY: e,
   targetX: n,
@@ -3928,7 +3928,7 @@ function My({
     labelOffsetY: c
   };
 }
-function fs(t) {
+function hs(t) {
   switch (t) {
     case "top":
     case "top-left":
@@ -3944,8 +3944,8 @@ function fs(t) {
       return { x: 1, y: 0 };
   }
 }
-function Hf(t, e, n, o, i, r, s) {
-  const a = fs(n), l = fs(r), c = t + a.x * s, d = e + a.y * s, u = o + l.x * s, f = i + l.y * s, h = n === "left" || n === "right";
+function zf(t, e, n, o, i, r, s) {
+  const a = hs(n), l = hs(r), c = t + a.x * s, d = e + a.y * s, u = o + l.x * s, f = i + l.y * s, h = n === "left" || n === "right";
   if (h === (r === "left" || r === "right")) {
     const p = (c + u) / 2, m = (d + f) / 2;
     return h ? [
@@ -3980,7 +3980,7 @@ function vn({
   borderRadius: s = 5,
   offset: a = 10
 }) {
-  const l = Hf(
+  const l = zf(
     t,
     e,
     n,
@@ -3993,8 +3993,8 @@ function vn({
   for (let g = 0; g < l.length; g++) {
     const [p, m] = l[g];
     if (s > 0 && g > 0 && g < l.length - 1) {
-      const [y, x] = g === 1 ? [t, e] : l[g - 1], [P, _] = l[g + 1];
-      c += ` ${Xt(y, x, p, m, P, _, s)}`;
+      const [y, _] = g === 1 ? [t, e] : l[g - 1], [S, b] = l[g + 1];
+      c += ` ${Xt(y, _, p, m, S, b, s)}`;
     } else
       c += ` L${p},${m}`;
   }
@@ -4007,10 +4007,10 @@ function vn({
     labelOffsetY: h
   };
 }
-function Rf(t) {
+function Vf(t) {
   return vn({ ...t, borderRadius: 0 });
 }
-function Wr({
+function Zr({
   sourceX: t,
   sourceY: e,
   targetX: n,
@@ -4025,18 +4025,18 @@ function Wr({
   };
 }
 const at = 40;
-function Ff(t, e, n, o) {
+function Bf(t, e, n, o) {
   let i = 0, r = 0;
   const s = t - n.left, a = n.right - t, l = e - n.top, c = n.bottom - e;
   return s < at && s >= 0 ? i = -o * (1 - s / at) : a < at && a >= 0 && (i = o * (1 - a / at)), l < at && l >= 0 ? r = -o * (1 - l / at) : c < at && c >= 0 && (r = o * (1 - c / at)), { dx: i, dy: r };
 }
-function jr(t) {
+function Kr(t) {
   const { container: e, speed: n, onPan: o } = t;
   let i = null, r = 0, s = 0, a = !1;
   function l() {
     if (!a)
       return;
-    const c = e.getBoundingClientRect(), { dx: d, dy: u } = Ff(r, s, c, n);
+    const c = e.getBoundingClientRect(), { dx: d, dy: u } = Bf(r, s, c, n);
     if ((d !== 0 || u !== 0) && o(d, u) === !0) {
       a = !1, i = null;
       return;
@@ -4060,9 +4060,9 @@ function jr(t) {
 }
 function Wt(t) {
   const e = t.connectionLineType ?? "straight", o = {
-    stroke: (t.invalid ? (t.containerEl ? getComputedStyle(t.containerEl).getPropertyValue("--flow-connection-line-invalid").trim() : "") || Dr : null) ?? t.connectionLineStyle?.stroke ?? ((t.containerEl ? getComputedStyle(t.containerEl).getPropertyValue("--flow-edge-stroke-selected").trim() : "") || yn),
-    strokeWidth: t.connectionLineStyle?.strokeWidth ?? Number(Ju),
-    strokeDasharray: t.connectionLineStyle?.strokeDasharray ?? Qu
+    stroke: (t.invalid ? (t.containerEl ? getComputedStyle(t.containerEl).getPropertyValue("--flow-connection-line-invalid").trim() : "") || Or : null) ?? t.connectionLineStyle?.stroke ?? ((t.containerEl ? getComputedStyle(t.containerEl).getPropertyValue("--flow-edge-stroke-selected").trim() : "") || yn),
+    strokeWidth: t.connectionLineStyle?.strokeWidth ?? Number(nf),
+    strokeDasharray: t.connectionLineStyle?.strokeDasharray ?? of
   }, i = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   i.setAttribute("class", "flow-connect-line"), i.style.cssText = "position:absolute;top:0;left:0;width:1px;height:1px;overflow:visible;pointer-events:none;z-index:1000;";
   let r = null;
@@ -4089,11 +4089,11 @@ function Wt(t) {
         break;
       }
       case "step": {
-        g = Rf({ sourceX: d, sourceY: u, targetX: f, targetY: h }).path;
+        g = Vf({ sourceX: d, sourceY: u, targetX: f, targetY: h }).path;
         break;
       }
       default: {
-        g = Wr({ sourceX: d, sourceY: u, targetX: f, targetY: h }).path;
+        g = Zr({ sourceX: d, sourceY: u, targetX: f, targetY: h }).path;
         break;
       }
     }
@@ -4142,9 +4142,9 @@ function _n(t) {
     h < r && (r = h, o = a, i = f);
   }), { element: o, position: i };
 }
-function wo(t, e, n, o) {
+function vo(t, e, n, o) {
   if (e._config?.autoPanOnConnect === !1) return null;
-  const i = jr({
+  const i = Kr({
     container: t,
     speed: e._config?.autoPanSpeed ?? 15,
     onPan(r, s) {
@@ -4160,7 +4160,7 @@ function wo(t, e, n, o) {
   });
   return i.updatePointer(n, o), i.start(), i;
 }
-function Of(t, e, n, o) {
+function qf(t, e, n, o) {
   const i = o ? t.edges.filter((c) => c.id !== o) : t.edges, r = /* @__PURE__ */ new Set(), s = /* @__PURE__ */ new Map(), a = /* @__PURE__ */ new Map();
   for (const c of i) {
     const d = `${c.source}|${c.sourceHandle ?? "source"}`, u = `${c.target}|${c.targetHandle ?? "target"}`;
@@ -4185,7 +4185,7 @@ function Of(t, e, n, o) {
   }
   return { existingTargets: r, cycleForbidden: l, sourceCounts: s, targetCounts: a };
 }
-function Ur(t, e) {
+function Jr(t, e) {
   const n = [], o = /* @__PURE__ */ new Map(), i = /* @__PURE__ */ new Map(), r = t.querySelectorAll("[data-flow-handle-type]");
   for (const l of r) {
     const c = l.closest("[data-flow-node-id]");
@@ -4272,10 +4272,10 @@ function nt(t, e, n) {
 }
 function bn(t, e, n, o, i, r) {
   if (!r) {
-    zf(t, e, n, o, i);
+    Yf(t, e, n, o, i);
     return;
   }
-  const s = Of(o, e, n, i), a = r.get(e, n, "source"), l = a?.limit != null && (s.sourceCounts.get(`${e}|${n}`) ?? 0) >= a.limit, c = [];
+  const s = qf(o, e, n, i), a = r.get(e, n, "source"), l = a?.limit != null && (s.sourceCounts.get(`${e}|${n}`) ?? 0) >= a.limit, c = [];
   for (const d of r.byType("target")) {
     if (!d.connectableEnd) {
       c.push({ el: d.el, valid: !1, limitHit: !1 });
@@ -4297,7 +4297,7 @@ function bn(t, e, n, o, i, r) {
   for (const d of c)
     d.el.classList.toggle("flow-handle-valid", d.valid), d.el.classList.toggle("flow-handle-invalid", !d.valid), d.el.classList.toggle("flow-handle-limit-reached", d.limitHit);
 }
-function zf(t, e, n, o, i) {
+function Yf(t, e, n, o, i) {
   const r = i ? o.edges.filter((a) => a.id !== i) : o.edges, s = t.querySelectorAll('[data-flow-handle-type="target"]');
   for (const a of s) {
     const c = a.closest("[x-flow-node]")?.dataset.flowNodeId;
@@ -4321,7 +4321,7 @@ function ke(t) {
   for (const n of e)
     n.classList.remove("flow-handle-valid", "flow-handle-invalid", "flow-handle-limit-reached");
 }
-function St(t, e) {
+function kt(t, e) {
   t && (e ? t.classList.add("flow-connect-line--validating") : t.classList.remove("flow-connect-line--validating"));
 }
 function Ae(t, e) {
@@ -4337,7 +4337,7 @@ function Ae(t, e) {
     bubbles: !0
   })));
 }
-async function vo(t, e, n, o, i, r) {
+async function _o(t, e, n, o, i, r) {
   if (!t) return { allowed: !0 };
   n?.classList.add(r), o?.classList.add(r), i.dispatchEvent(new CustomEvent("flow-connect-validating", {
     detail: { connection: e },
@@ -4357,7 +4357,7 @@ async function vo(t, e, n, o, i, r) {
     bubbles: !0
   })), { allowed: a, reason: l };
 }
-async function Zr(t) {
+async function Qr(t) {
   const { edge: e, newConnection: n, canvas: o, containerEl: i } = t, r = t.endpoint ?? "target", s = o.edges.filter(
     (c) => c.id !== e.id
   ), a = (c) => (Ae(i, {
@@ -4371,11 +4371,11 @@ async function Zr(t) {
     return a();
   const l = o._config?.connectValidator;
   if (l) {
-    const c = o._config?.validatingHandleClass ?? "flow-handle-validating", { sourceEl: d, targetEl: u } = _o(i, n);
+    const c = o._config?.validatingHandleClass ?? "flow-handle-validating", { sourceEl: d, targetEl: u } = bo(i, n);
     o._connectValidating = !0;
     let f;
     try {
-      f = await vo(
+      f = await _o(
         l,
         n,
         d,
@@ -4391,7 +4391,7 @@ async function Zr(t) {
   }
   return o._captureHistory?.(), r === "source" ? (e.source = n.source, e.sourceHandle = n.sourceHandle) : (e.target = n.target, e.targetHandle = n.targetHandle), { applied: !0 };
 }
-async function Gr(t) {
+async function ea(t) {
   const { connection: e, canvas: n, containerEl: o } = t, i = n.edges, r = (d) => (Ae(o, {
     source: e.source,
     target: e.target,
@@ -4403,11 +4403,11 @@ async function Gr(t) {
     return r();
   const a = n._config?.connectValidator;
   if (a) {
-    const d = n._config?.validatingHandleClass ?? "flow-handle-validating", { sourceEl: u, targetEl: f } = _o(o, e);
+    const d = n._config?.validatingHandleClass ?? "flow-handle-validating", { sourceEl: u, targetEl: f } = bo(o, e);
     n._connectValidating = !0;
     let h;
     try {
-      h = await vo(
+      h = await _o(
         a,
         e,
         u,
@@ -4424,7 +4424,7 @@ async function Gr(t) {
   const c = { id: `e-${e.source}-${e.target}-${Date.now()}-${dn++}`, ...e };
   return n.addEdges(c), n._emit?.("connect", { connection: e }), { applied: !0, edge: c };
 }
-function _o(t, e) {
+function bo(t, e) {
   const n = t.querySelector(
     `[data-flow-node-id="${CSS.escape(e.source)}"]`
   ), o = e.sourceHandle ?? "source", i = n?.querySelector(
@@ -4437,7 +4437,7 @@ function _o(t, e) {
   return { sourceEl: i, targetEl: a };
 }
 const ft = /* @__PURE__ */ new WeakMap();
-function Kr(t, e, n) {
+function ta(t, e, n) {
   n.preventDefault(), n.stopPropagation();
   const o = t.dataset.flowHandleId ?? "source", i = t.closest("[x-flow-node]");
   if (!e || !i || e._animationLocked) return;
@@ -4459,7 +4459,7 @@ function Kr(t, e, n) {
   }
   let d = null, u = null, f = null, h = null, g = null;
   const p = e._config?.connectionSnapRadius ?? 20, m = t.closest(".flow-container");
-  let y = null, x = 0, P = 0, _ = !1, b = /* @__PURE__ */ new Map();
+  let y = null, _ = 0, S = 0, b = !1, x = /* @__PURE__ */ new Map();
   const C = () => {
     if (c = !0, V("connection", `Connection drag started from node "${r}" handle "${o}"`), e._emit("connect-start", { source: r, sourceHandle: o }), !m) return;
     u = Wt({
@@ -4468,58 +4468,58 @@ function Kr(t, e, n) {
       connectionLine: e._config?.connectionLine,
       containerEl: m
     }), d = u.svg;
-    const A = t.getBoundingClientRect(), k = m.getBoundingClientRect(), v = e._viewportLive ?? e.viewport, w = v?.zoom || 1, N = v?.x || 0, S = v?.y || 0;
-    x = (A.left + A.width / 2 - k.left - N) / w, P = (A.top + A.height / 2 - k.top - S) / w, u.update({ fromX: x, fromY: P, toX: x, toY: P, source: r, sourceHandle: o });
+    const A = t.getBoundingClientRect(), P = m.getBoundingClientRect(), v = e._viewportLive ?? e.viewport, w = v?.zoom || 1, N = v?.x || 0, k = v?.y || 0;
+    _ = (A.left + A.width / 2 - P.left - N) / w, S = (A.top + A.height / 2 - P.top - k) / w, u.update({ fromX: _, fromY: S, toX: _, toY: S, source: r, sourceHandle: o });
     const R = m.querySelector(".flow-viewport");
     if (R && R.appendChild(d), e.pendingConnection = {
       source: r,
       sourceHandle: o,
-      position: { x, y: P }
-    }, h = wo(m, e, a, l), y = Ur(
+      position: { x: _, y: S }
+    }, h = vo(m, e, a, l), y = Jr(
       m,
       (O, q) => e.screenToFlowPosition(O, q)
     ), bn(m, r, o, e, void 0, y), e._config?.onEdgeDrop) {
       const O = e._config.edgeDropPreview, D = O ? O({ source: r, sourceHandle: o }) : "New Node";
       if (D !== null) {
         g = document.createElement("div"), g.className = "flow-ghost-node";
-        const M = document.createElement("div");
-        if (M.className = "flow-ghost-handle", g.appendChild(M), typeof D == "string") {
+        const L = document.createElement("div");
+        if (L.className = "flow-ghost-handle", g.appendChild(L), typeof D == "string") {
           const F = document.createElement("span");
           F.textContent = D, g.appendChild(F);
         } else
           g.appendChild(D);
-        g.style.left = `${x}px`, g.style.top = `${P}px`;
+        g.style.left = `${_}px`, g.style.top = `${S}px`;
         const I = m.querySelector(".flow-viewport");
         I && I.appendChild(g);
       }
     }
   }, E = () => {
-    const A = [...e.selectedNodes], k = [], v = m.getBoundingClientRect(), w = e._viewportLive ?? e.viewport, N = w?.zoom || 1, S = w?.x || 0, R = w?.y || 0;
+    const A = [...e.selectedNodes], P = [], v = m.getBoundingClientRect(), w = e._viewportLive ?? e.viewport, N = w?.zoom || 1, k = w?.x || 0, R = w?.y || 0;
     for (const O of A) {
       if (O === r) continue;
       const D = m?.querySelector(`[data-flow-node-id="${CSS.escape(O)}"]`)?.querySelector('[data-flow-handle-type="source"]');
       if (!D) continue;
-      const M = D.getBoundingClientRect();
-      k.push({
+      const L = D.getBoundingClientRect();
+      P.push({
         nodeId: O,
         handleId: D.dataset.flowHandleId ?? "source",
         pos: {
-          x: (M.left + M.width / 2 - v.left - S) / N,
-          y: (M.top + M.height / 2 - v.top - R) / N
+          x: (L.left + L.width / 2 - v.left - k) / N,
+          y: (L.top + L.height / 2 - v.top - R) / N
         }
       });
     }
-    return k;
+    return P;
   }, T = (A) => {
-    _ = !0, u && (b.set(r, {
+    b = !0, u && (x.set(r, {
       line: u,
       sourceNodeId: r,
       sourceHandleId: o,
-      sourcePos: { x, y: P },
+      sourcePos: { x: _, y: S },
       valid: !0
     }), u = null);
-    const k = E(), v = m.querySelector(".flow-viewport");
-    for (const w of k) {
+    const P = E(), v = m.querySelector(".flow-viewport");
+    for (const w of P) {
       const N = Wt({
         connectionLineType: e._config?.connectionLineType,
         connectionLineStyle: e._config?.connectionLineStyle,
@@ -4533,7 +4533,7 @@ function Kr(t, e, n) {
         toY: A.y,
         source: w.nodeId,
         sourceHandle: w.handleId
-      }), v && v.appendChild(N.svg), b.set(w.nodeId, {
+      }), v && v.appendChild(N.svg), x.set(w.nodeId, {
         line: N,
         sourceNodeId: w.nodeId,
         sourceHandleId: w.handleId,
@@ -4546,19 +4546,19 @@ function Kr(t, e, n) {
       const w = A.clientX - a, N = A.clientY - l;
       if (Math.abs(w) >= Qn || Math.abs(N) >= Qn) {
         if (C(), e._config?.multiConnect && e.selectedNodes.size > 1 && e.selectedNodes.has(r)) {
-          const S = e.screenToFlowPosition(A.clientX, A.clientY);
-          T(S);
+          const k = e.screenToFlowPosition(A.clientX, A.clientY);
+          T(k);
         }
       } else
         return;
     }
-    const k = e.screenToFlowPosition(A.clientX, A.clientY);
-    if (_) {
+    const P = e.screenToFlowPosition(A.clientX, A.clientY);
+    if (b) {
       const w = _n({
         containerEl: m,
         handleType: "target",
         excludeNodeId: r,
-        cursorFlowPos: k,
+        cursorFlowPos: P,
         connectionSnapRadius: p,
         getNode: (q) => e.getNode(q),
         toFlowPosition: (q, D) => e.screenToFlowPosition(q, D),
@@ -4566,8 +4566,8 @@ function Kr(t, e, n) {
         index: y ?? void 0
       });
       w.element !== f && (f?.classList.remove("flow-handle-active"), w.element?.classList.add("flow-handle-active"), f = w.element);
-      const S = w.element?.closest("[x-flow-node]")?.dataset.flowNodeId ?? null, R = w.element?.dataset.flowHandleId ?? "target", O = e._config?.connectionLineStyle?.stroke ?? (getComputedStyle(m).getPropertyValue("--flow-edge-stroke-selected").trim() || yn);
-      for (const q of b.values())
+      const k = w.element?.closest("[x-flow-node]")?.dataset.flowNodeId ?? null, R = w.element?.dataset.flowHandleId ?? "target", O = e._config?.connectionLineStyle?.stroke ?? (getComputedStyle(m).getPropertyValue("--flow-edge-stroke-selected").trim() || yn);
+      for (const q of x.values())
         if (q.line.update({
           fromX: q.sourcePos.x,
           fromY: q.sourcePos.y,
@@ -4575,20 +4575,20 @@ function Kr(t, e, n) {
           toY: w.position.y,
           source: q.sourceNodeId,
           sourceHandle: q.sourceHandleId
-        }), w.element && S) {
+        }), w.element && k) {
           const D = {
             source: q.sourceNodeId,
             sourceHandle: q.sourceHandleId,
-            target: S,
+            target: k,
             targetHandle: R
-          }, Z = e.getNode(S)?.connectable !== !1 && q.sourceNodeId !== S && pt(D, e.edges, { preventCycles: e._config?.preventCycles }) && gt(D, e._config?.connectionRules, e._nodeMap) && nt(m, D, e.edges) && tt(m, D) && (!e._config?.isValidConnection || e._config.isValidConnection(D));
-          q.valid = Z;
+          }, G = e.getNode(k)?.connectable !== !1 && q.sourceNodeId !== k && pt(D, e.edges, { preventCycles: e._config?.preventCycles }) && gt(D, e._config?.connectionRules, e._nodeMap) && nt(m, D, e.edges) && tt(m, D) && (!e._config?.isValidConnection || e._config.isValidConnection(D));
+          q.valid = G;
           const B = q.line.svg.querySelector("path");
           if (B)
-            if (Z)
+            if (G)
               B.setAttribute("stroke", O);
             else {
-              const z = getComputedStyle(m).getPropertyValue("--flow-connection-line-invalid").trim() || Dr;
+              const z = getComputedStyle(m).getPropertyValue("--flow-connection-line-invalid").trim() || Or;
               B.setAttribute("stroke", z);
             }
         } else {
@@ -4603,54 +4603,54 @@ function Kr(t, e, n) {
       containerEl: m,
       handleType: "target",
       excludeNodeId: r,
-      cursorFlowPos: k,
+      cursorFlowPos: P,
       connectionSnapRadius: p,
       getNode: (w) => e.getNode(w),
       toFlowPosition: (w, N) => e.screenToFlowPosition(w, N),
       index: y ?? void 0
     });
-    v.element !== f && (f?.classList.remove("flow-handle-active"), v.element?.classList.add("flow-handle-active"), f = v.element), g ? v.element ? (g.style.display = "none", u?.update({ fromX: x, fromY: P, toX: v.position.x, toY: v.position.y, source: r, sourceHandle: o })) : (g.style.display = "", g.style.left = `${k.x}px`, g.style.top = `${k.y}px`, u?.update({ fromX: x, fromY: P, toX: k.x, toY: k.y, source: r, sourceHandle: o })) : u?.update({ fromX: x, fromY: P, toX: v.position.x, toY: v.position.y, source: r, sourceHandle: o }), e.pendingConnection = { ...e.pendingConnection, position: v.position }, h?.updatePointer(A.clientX, A.clientY);
-  }, L = async (A) => {
-    if (h?.stop(), h = null, document.removeEventListener("pointermove", $), document.removeEventListener("pointerup", L), document.removeEventListener("pointercancel", L), ft.delete(t), y = null, e._connectValidating) return;
-    if (_) {
+    v.element !== f && (f?.classList.remove("flow-handle-active"), v.element?.classList.add("flow-handle-active"), f = v.element), g ? v.element ? (g.style.display = "none", u?.update({ fromX: _, fromY: S, toX: v.position.x, toY: v.position.y, source: r, sourceHandle: o })) : (g.style.display = "", g.style.left = `${P.x}px`, g.style.top = `${P.y}px`, u?.update({ fromX: _, fromY: S, toX: P.x, toY: P.y, source: r, sourceHandle: o })) : u?.update({ fromX: _, fromY: S, toX: v.position.x, toY: v.position.y, source: r, sourceHandle: o }), e.pendingConnection = { ...e.pendingConnection, position: v.position }, h?.updatePointer(A.clientX, A.clientY);
+  }, M = async (A) => {
+    if (h?.stop(), h = null, document.removeEventListener("pointermove", $), document.removeEventListener("pointerup", M), document.removeEventListener("pointercancel", M), ft.delete(t), y = null, e._connectValidating) return;
+    if (b) {
       const N = e.screenToFlowPosition(A.clientX, A.clientY);
-      let S = f;
-      S || (S = document.elementFromPoint(A.clientX, A.clientY)?.closest('[data-flow-handle-type="target"]'));
-      const O = S?.closest("[x-flow-node]")?.dataset.flowNodeId ?? null, q = S?.dataset.flowHandleId ?? "target", D = [], M = [], I = [], F = [];
-      if (S && O) {
+      let k = f;
+      k || (k = document.elementFromPoint(A.clientX, A.clientY)?.closest('[data-flow-handle-type="target"]'));
+      const O = k?.closest("[x-flow-node]")?.dataset.flowNodeId ?? null, q = k?.dataset.flowHandleId ?? "target", D = [], L = [], I = [], F = [];
+      if (k && O) {
         const K = e.getNode(O);
-        for (const ne of b.values()) {
-          const Z = {
+        for (const ne of x.values()) {
+          const G = {
             source: ne.sourceNodeId,
             sourceHandle: ne.sourceHandleId,
             target: O,
             targetHandle: q
           };
-          if (K?.connectable !== !1 && ne.sourceNodeId !== O && pt(Z, e.edges, { preventCycles: e._config?.preventCycles }) && gt(Z, e._config?.connectionRules, e._nodeMap) && nt(m, Z, e.edges) && tt(m, Z) && (!e._config?.isValidConnection || e._config.isValidConnection(Z))) {
+          if (K?.connectable !== !1 && ne.sourceNodeId !== O && pt(G, e.edges, { preventCycles: e._config?.preventCycles }) && gt(G, e._config?.connectionRules, e._nodeMap) && nt(m, G, e.edges) && tt(m, G) && (!e._config?.isValidConnection || e._config.isValidConnection(G))) {
             const H = `e-${ne.sourceNodeId}-${O}-${Date.now()}-${dn++}`;
-            D.push({ id: H, ...Z }), M.push(Z), F.push(ne);
+            D.push({ id: H, ...G }), L.push(G), F.push(ne);
           } else
             I.push(ne);
         }
       } else
-        I.push(...b.values());
+        I.push(...x.values());
       for (const K of F)
         K.line.destroy();
       if (D.length > 0) {
         e.addEdges(D);
-        for (const K of M)
+        for (const K of L)
           e._emit("connect", { connection: K });
-        e._emit("multi-connect", { connections: M });
+        e._emit("multi-connect", { connections: L });
       }
       I.length > 0 && setTimeout(() => {
         for (const K of I)
           K.line.destroy();
       }, 100), f?.classList.remove("flow-handle-active"), e._emit("connect-end", {
-        connection: M.length > 0 ? M[0] : null,
+        connection: L.length > 0 ? L[0] : null,
         source: r,
         sourceHandle: o,
         position: N
-      }), b.clear(), _ = !1, ke(m), e.pendingConnection = null, e._container?.classList.remove("flow-connecting");
+      }), x.clear(), b = !1, ke(m), e.pendingConnection = null, e._container?.classList.remove("flow-connecting");
       return;
     }
     if (!c) {
@@ -4661,7 +4661,7 @@ function Kr(t, e, n) {
       }, e._container?.classList.add("flow-connecting"), bn(m, r, o, e, void 0, y ?? void 0));
       return;
     }
-    const k = u?.svg ?? null;
+    const P = u?.svg ?? null;
     g?.remove(), g = null, f?.classList.remove("flow-handle-active"), ke(m);
     const v = e.screenToFlowPosition(A.clientX, A.clientY), w = { source: r, sourceHandle: o, position: v };
     try {
@@ -4701,14 +4701,14 @@ function Kr(t, e, n) {
               V("connection", "Connection rejected (custom validator)", D), Ae(m, D), e._emit("connect-end", { connection: null, ...w }), e.pendingConnection = null;
               return;
             }
-            const M = e._config?.connectValidator;
-            if (M) {
-              const F = e._config?.validatingHandleClass ?? "flow-handle-validating", { sourceEl: K, targetEl: ne } = _o(m, D);
-              e._connectValidating = !0, St(k, !0);
-              let Z;
+            const L = e._config?.connectValidator;
+            if (L) {
+              const F = e._config?.validatingHandleClass ?? "flow-handle-validating", { sourceEl: K, targetEl: ne } = bo(m, D);
+              e._connectValidating = !0, kt(P, !0);
+              let G;
               try {
-                Z = await vo(
-                  M,
+                G = await _o(
+                  L,
                   D,
                   K,
                   ne,
@@ -4716,10 +4716,10 @@ function Kr(t, e, n) {
                   F
                 );
               } finally {
-                e._connectValidating = !1, St(k, !1);
+                e._connectValidating = !1, kt(P, !1);
               }
-              if (!Z.allowed) {
-                V("connection", "Connection rejected (async connectValidator)", { connection: D, reason: Z.reason }), Ae(m, { ...D, reason: Z.reason }), e._emit("connect-end", { connection: null, ...w }), e.pendingConnection = null;
+              if (!G.allowed) {
+                V("connection", "Connection rejected (async connectValidator)", { connection: D, reason: G.reason }), Ae(m, { ...D, reason: G.reason }), e._emit("connect-end", { connection: null, ...w }), e.pendingConnection = null;
                 return;
               }
             }
@@ -4730,13 +4730,13 @@ function Kr(t, e, n) {
         } else
           e._emit("connect-end", { connection: null, ...w });
       } else if (e._config?.onEdgeDrop) {
-        const S = {
+        const k = {
           x: v.x - we / 2,
           y: v.y - _e / 2
         }, R = e._config.onEdgeDrop({
           source: r,
           sourceHandle: o,
-          position: S
+          position: k
         });
         if (R) {
           const O = {
@@ -4760,18 +4760,18 @@ function Kr(t, e, n) {
       } else
         V("connection", "Connection cancelled (no target)"), e._emit("connect-end", { connection: null, ...w });
     } finally {
-      St(k, !1), u?.destroy(), u = null;
+      kt(P, !1), u?.destroy(), u = null;
     }
     e.pendingConnection = null;
   };
-  document.addEventListener("pointermove", $), document.addEventListener("pointerup", L), document.addEventListener("pointercancel", L), ft.set(t, () => {
-    document.removeEventListener("pointermove", $), document.removeEventListener("pointerup", L), document.removeEventListener("pointercancel", L), h?.stop(), u?.destroy(), u = null, g?.remove(), g = null;
-    for (const A of b.values())
+  document.addEventListener("pointermove", $), document.addEventListener("pointerup", M), document.addEventListener("pointercancel", M), ft.set(t, () => {
+    document.removeEventListener("pointermove", $), document.removeEventListener("pointerup", M), document.removeEventListener("pointercancel", M), h?.stop(), u?.destroy(), u = null, g?.remove(), g = null;
+    for (const A of x.values())
       A.line.destroy();
-    b.clear(), _ = !1, f?.classList.remove("flow-handle-active"), ke(m), y = null, e.pendingConnection = null, e._container?.classList.remove("flow-connecting");
+    x.clear(), b = !1, f?.classList.remove("flow-handle-active"), ke(m), y = null, e.pendingConnection = null, e._container?.classList.remove("flow-connecting");
   });
 }
-function Jr(t, e, n) {
+function na(t, e, n) {
   if (n.button !== 0) return;
   const o = t.dataset.flowHandleId ?? "target", r = t.closest("[x-flow-node]")?.getAttribute("data-flow-node-id") ?? null;
   if (!e || !r || e._animationLocked || e._config?.edgesReconnectable === !1 || e._pendingReconnection) return;
@@ -4790,19 +4790,19 @@ function Jr(t, e, n) {
   if (!p) return;
   const m = p.querySelector(
     `[data-flow-node-id="${CSS.escape(a.source)}"]`
-  ), y = a.sourceHandle ? `[data-flow-handle-id="${CSS.escape(a.sourceHandle)}"]` : '[data-flow-handle-type="source"]', x = m?.querySelector(y), P = p.getBoundingClientRect(), _ = e._viewportLive ?? e.viewport, b = _?.zoom || 1, C = _?.x || 0, E = _?.y || 0;
+  ), y = a.sourceHandle ? `[data-flow-handle-id="${CSS.escape(a.sourceHandle)}"]` : '[data-flow-handle-type="source"]', _ = m?.querySelector(y), S = p.getBoundingClientRect(), b = e._viewportLive ?? e.viewport, x = b?.zoom || 1, C = b?.x || 0, E = b?.y || 0;
   let T, $;
-  if (x) {
-    const D = x.getBoundingClientRect();
-    T = (D.left + D.width / 2 - P.left - C) / b, $ = (D.top + D.height / 2 - P.top - E) / b;
+  if (_) {
+    const D = _.getBoundingClientRect();
+    T = (D.left + D.width / 2 - S.left - C) / x, $ = (D.top + D.height / 2 - S.top - E) / x;
   } else {
     const D = e.getNode(a.source);
     if (!D) return;
-    const M = D.dimensions?.width ?? we, I = D.dimensions?.height ?? _e;
-    T = D.position.x + M / 2, $ = D.position.y + I;
+    const L = D.dimensions?.width ?? we, I = D.dimensions?.height ?? _e;
+    T = D.position.x + L / 2, $ = D.position.y + I;
   }
-  let L = null, A = null, k = null, v = c, w = d, N = null;
-  const S = () => {
+  let M = null, A = null, P = null, v = c, w = d, N = null;
+  const k = () => {
     u = !0;
     const D = p.querySelector(
       `[data-flow-edge-id="${a.id}"]`
@@ -4812,27 +4812,27 @@ function Jr(t, e, n) {
       connectionLineStyle: e._config?.connectionLineStyle,
       connectionLine: e._config?.connectionLine,
       containerEl: p
-    }), L = A.svg;
-    const M = e.screenToFlowPosition(c, d);
+    }), M = A.svg;
+    const L = e.screenToFlowPosition(c, d);
     A.update({
       fromX: T,
       fromY: $,
-      toX: M.x,
-      toY: M.y,
+      toX: L.x,
+      toY: L.y,
       source: a.source,
       sourceHandle: a.sourceHandle
     });
     const I = p.querySelector(".flow-viewport");
-    I && I.appendChild(L), e.pendingConnection = {
+    I && I.appendChild(M), e.pendingConnection = {
       source: a.source,
       sourceHandle: a.sourceHandle,
-      position: M
+      position: L
     }, e._pendingReconnection = {
       edge: a,
       draggedEnd: "target",
       anchorPosition: { x: T, y: $ },
-      position: M
-    }, k = wo(p, e, v, w), N = Ur(
+      position: L
+    }, P = vo(p, e, v, w), N = Jr(
       p,
       (F, K) => e.screenToFlowPosition(F, K)
     ), bn(p, a.source, a.sourceHandle ?? "source", e, a.id, N);
@@ -4840,14 +4840,14 @@ function Jr(t, e, n) {
     if (v = D.clientX, w = D.clientY, !u) {
       Math.sqrt(
         (D.clientX - c) ** 2 + (D.clientY - d) ** 2
-      ) >= Qn && S();
+      ) >= Qn && k();
       return;
     }
-    const M = e.screenToFlowPosition(D.clientX, D.clientY), I = _n({
+    const L = e.screenToFlowPosition(D.clientX, D.clientY), I = _n({
       containerEl: p,
       handleType: "target",
       excludeNodeId: a.source,
-      cursorFlowPos: M,
+      cursorFlowPos: L,
       connectionSnapRadius: g,
       getNode: (F) => e.getNode(F),
       toFlowPosition: (F, K) => e.screenToFlowPosition(F, K),
@@ -4866,10 +4866,10 @@ function Jr(t, e, n) {
     }), e._pendingReconnection && (e._pendingReconnection = {
       ...e._pendingReconnection,
       position: I.position
-    }), k?.updatePointer(D.clientX, D.clientY);
+    }), P?.updatePointer(D.clientX, D.clientY);
   }, O = () => {
     if (f) return;
-    f = !0, document.removeEventListener("pointermove", R), document.removeEventListener("pointerup", q), document.removeEventListener("pointercancel", q), k?.stop(), k = null, A?.destroy(), A = null, L = null, N = null, h?.classList.remove("flow-handle-active"), ft.delete(t);
+    f = !0, document.removeEventListener("pointermove", R), document.removeEventListener("pointerup", q), document.removeEventListener("pointercancel", q), P?.stop(), P = null, A?.destroy(), A = null, M = null, N = null, h?.classList.remove("flow-handle-active"), ft.delete(t);
     const D = p.querySelector(
       `[data-flow-edge-id="${a.id}"]`
     );
@@ -4880,11 +4880,11 @@ function Jr(t, e, n) {
       return;
     }
     if (e._connectValidating) return;
-    let M = h;
-    M || (M = document.elementFromPoint(D.clientX, D.clientY)?.closest('[data-flow-handle-type="target"]'));
+    let L = h;
+    L || (L = document.elementFromPoint(D.clientX, D.clientY)?.closest('[data-flow-handle-type="target"]'));
     let I = !1;
-    if (M) {
-      const K = M.closest("[x-flow-node]")?.dataset.flowNodeId, ne = M.dataset.flowHandleId;
+    if (L) {
+      const K = L.closest("[x-flow-node]")?.dataset.flowNodeId, ne = L.dataset.flowHandleId;
       if (K && e.getNode(K)?.connectable !== !1) {
         const B = {
           source: a.source,
@@ -4892,10 +4892,10 @@ function Jr(t, e, n) {
           target: K,
           targetHandle: ne
         }, z = { ...a }, Y = A?.svg ?? null;
-        St(Y, !0);
-        let X;
+        kt(Y, !0);
+        let W;
         try {
-          X = await Zr({
+          W = await Qr({
             edge: a,
             newConnection: B,
             canvas: e,
@@ -4903,22 +4903,22 @@ function Jr(t, e, n) {
             endpoint: "target"
           });
         } finally {
-          St(Y, !1);
+          kt(Y, !1);
         }
-        X.applied ? (I = !0, V("reconnect", `Edge "${a.id}" reconnected (target)`, B), e._emit("reconnect", { oldEdge: z, newConnection: B })) : V("reconnect", "Reconnection rejected", { connection: B, reason: X.reason });
+        W.applied ? (I = !0, V("reconnect", `Edge "${a.id}" reconnected (target)`, B), e._emit("reconnect", { oldEdge: z, newConnection: B })) : V("reconnect", "Reconnection rejected", { connection: B, reason: W.reason });
       }
     }
     I || V("reconnect", `Edge "${a.id}" reconnection cancelled — snapping back`), e._emit("reconnect-end", { edge: a, successful: I }), O();
   };
   document.addEventListener("pointermove", R), document.addEventListener("pointerup", q), document.addEventListener("pointercancel", q), ft.set(t, O);
 }
-function Vf(t, e, n) {
-  t.dataset.flowHandleType === "source" ? Kr(t, e, n) : Jr(t, e, n);
+function Xf(t, e, n) {
+  t.dataset.flowHandleType === "source" ? ta(t, e, n) : na(t, e, n);
 }
-function hs(t) {
+function gs(t) {
   return t?._config?.delegatedHandleEvents === !1;
 }
-function Bf(t) {
+function Wf(t) {
   t.directive(
     "flow-handle",
     (e, { value: n, modifiers: o, expression: i }, { evaluate: r, effect: s, cleanup: a }) => {
@@ -4927,22 +4927,22 @@ function Bf(t) {
       c && u ? g = "top-left" : c && f ? g = "top-right" : d && u ? g = "bottom-left" : d && f ? g = "bottom-right" : c ? g = "top" : f ? g = "right" : d ? g = "bottom" : u ? g = "left" : g = e.getAttribute("data-flow-handle-position") ?? (l === "source" ? "bottom" : "top");
       let p, m = !1;
       if (i) {
-        const b = r(i);
-        b && typeof b == "object" && !Array.isArray(b) ? (p = b.id || e.getAttribute("data-flow-handle-id") || l, b.position && (g = b.position, m = !0)) : p = b || e.getAttribute("data-flow-handle-id") || l;
+        const x = r(i);
+        x && typeof x == "object" && !Array.isArray(x) ? (p = x.id || e.getAttribute("data-flow-handle-id") || l, x.position && (g = x.position, m = !0)) : p = x || e.getAttribute("data-flow-handle-id") || l;
       } else
         p = e.getAttribute("data-flow-handle-id") || l;
       if (o.includes("hidden") && (e.style.display = "none"), e.dataset.flowHandleType = l, e.dataset.flowHandlePosition = g, e.dataset.flowHandleId = p, h && (e.dataset.flowHandleExplicit = "true"), m && i && (e.dataset.flowHandleExplicit = "true", s(() => {
-        const b = r(i);
-        b && typeof b == "object" && !Array.isArray(b) && b.position && (e.dataset.flowHandlePosition = b.position);
+        const x = r(i);
+        x && typeof x == "object" && !Array.isArray(x) && x.position && (e.dataset.flowHandlePosition = x.position);
       })), !h && !m) {
-        const b = () => {
+        const x = () => {
           const E = e.closest("[x-flow-node]")?.dataset.flowNodeId;
           if (!E) return;
           const T = e.closest("[x-data]");
           return T ? t.$data(T)?.getNode?.(E) : void 0;
         };
         s(() => {
-          const C = b();
+          const C = x();
           if (!C) return;
           const E = l === "source" ? C.sourcePosition : C.targetPosition;
           E && (e.dataset.flowHandlePosition = E);
@@ -4950,49 +4950,49 @@ function Bf(t) {
       }
       e.classList.add("flow-handle", `flow-handle-${l}`);
       const y = () => {
-        const b = e.closest("[x-flow-node]");
-        return b ? b.getAttribute("data-flow-node-id") ?? null : null;
-      }, x = () => {
-        const b = e.closest("[x-data]");
-        return b ? t.$data(b) : null;
-      }, P = x();
-      let _ = null;
-      if (P?._config?.keyboardConnect) {
+        const x = e.closest("[x-flow-node]");
+        return x ? x.getAttribute("data-flow-node-id") ?? null : null;
+      }, _ = () => {
+        const x = e.closest("[x-data]");
+        return x ? t.$data(x) : null;
+      }, S = _();
+      let b = null;
+      if (S?._config?.keyboardConnect) {
         e.setAttribute("tabindex", "0"), e.setAttribute("role", "button"), e.setAttribute("aria-label", `${l} handle ${p}`);
-        const b = (T) => {
+        const x = (T) => {
           const $ = T?._pendingKeyboardConnect;
           if (!$) return;
-          const L = e.closest(".flow-container");
-          L && L.querySelector(
+          const M = e.closest(".flow-container");
+          M && M.querySelector(
             `[data-flow-node-id="${CSS.escape($.sourceNodeId)}"] [data-flow-handle-id="${CSS.escape($.sourceHandleId)}"][data-flow-handle-type="source"]`
           )?.classList.remove("flow-handle-connect-pending"), T && (T._pendingKeyboardConnect = null);
         }, C = (T) => {
           if (!(T.key === "Enter" || T.key === " " || T.key === "Spacebar")) return;
-          const L = x();
-          if (!L || L._animationLocked) return;
+          const M = _();
+          if (!M || M._animationLocked) return;
           const A = y();
           if (A)
             if (l === "source") {
-              const k = L.getNode?.(A);
-              if (k && !Be(k) || e[Pt] === !1) return;
-              T.preventDefault(), T.stopPropagation(), b(L), L._pendingKeyboardConnect = {
+              const P = M.getNode?.(A);
+              if (P && !Be(P) || e[Pt] === !1) return;
+              T.preventDefault(), T.stopPropagation(), x(M), M._pendingKeyboardConnect = {
                 sourceNodeId: A,
                 sourceHandleId: p
-              }, e.classList.add("flow-handle-connect-pending"), L._announcer?.announce?.(`Connecting from ${l} handle ${p}. Focus a target handle and press Enter to connect.`);
+              }, e.classList.add("flow-handle-connect-pending"), M._announcer?.announce?.(`Connecting from ${l} handle ${p}. Focus a target handle and press Enter to connect.`);
             } else {
-              if (!L._pendingKeyboardConnect) return;
-              const k = L.getNode?.(A);
-              if (k && !Be(k) || e[st] === !1) return;
+              if (!M._pendingKeyboardConnect) return;
+              const P = M.getNode?.(A);
+              if (P && !Be(P) || e[st] === !1) return;
               T.preventDefault(), T.stopPropagation();
-              const { sourceNodeId: v, sourceHandleId: w } = L._pendingKeyboardConnect, N = {
+              const { sourceNodeId: v, sourceHandleId: w } = M._pendingKeyboardConnect, N = {
                 source: v,
                 sourceHandle: w,
                 target: A,
                 targetHandle: p
-              }, S = e.closest(".flow-container");
-              if (b(L), !S) return;
-              Gr({ connection: N, canvas: L, containerEl: S }).then((R) => {
-                R.applied && L._announcer?.announce?.(`Connected ${v} to ${A}.`);
+              }, k = e.closest(".flow-container");
+              if (x(M), !k) return;
+              ea({ connection: N, canvas: M, containerEl: k }).then((R) => {
+                R.applied && M._announcer?.announce?.(`Connected ${v} to ${A}.`);
               });
             }
         };
@@ -5003,17 +5003,17 @@ function Bf(t) {
           if (T)
             T.count += 1;
           else {
-            const $ = (L) => {
-              if (L.key !== "Escape") return;
+            const $ = (M) => {
+              if (M.key !== "Escape") return;
               const A = E.matches("[x-data]") ? E : E.closest("[x-data]") ?? E.querySelector("[x-data]");
               if (!A) return;
-              const k = t.$data(A);
-              k?._pendingKeyboardConnect && b(k);
+              const P = t.$data(A);
+              P?._pendingKeyboardConnect && x(P);
             };
             E.addEventListener("keydown", $), Dn.set(E, { count: 1, handler: $ });
           }
         }
-        _ = () => {
+        b = () => {
           if (e.removeEventListener("keydown", C), E) {
             const T = Dn.get(E);
             T && (T.count -= 1, T.count <= 0 && (E.removeEventListener("keydown", T.handler), Dn.delete(E)));
@@ -5022,134 +5022,134 @@ function Bf(t) {
         };
       }
       if (l === "source") {
-        const b = (T) => {
-          Kr(e, x(), T);
+        const x = (T) => {
+          ta(e, _(), T);
         };
-        hs(P) && e.addEventListener("pointerdown", b);
+        gs(S) && e.addEventListener("pointerdown", x);
         const C = () => {
-          const T = x();
+          const T = _();
           if (!T?._pendingReconnection || T._pendingReconnection.draggedEnd !== "source") return;
           const $ = y();
           if ($) {
-            const L = T.getNode($);
-            if (L && !Be(L)) return;
+            const M = T.getNode($);
+            if (M && !Be(M)) return;
           }
           e[Pt] !== !1 && e.classList.add("flow-handle-active");
         }, E = () => {
           e.classList.remove("flow-handle-active");
         };
         e.addEventListener("pointerenter", C), e.addEventListener("pointerleave", E), a(() => {
-          ft.get(e)?.(), ft.delete(e), _?.(), e.removeEventListener("pointerdown", b), e.removeEventListener("pointerenter", C), e.removeEventListener("pointerleave", E), e.classList.remove("flow-handle", `flow-handle-${l}`);
+          ft.get(e)?.(), ft.delete(e), b?.(), e.removeEventListener("pointerdown", x), e.removeEventListener("pointerenter", C), e.removeEventListener("pointerleave", E), e.classList.remove("flow-handle", `flow-handle-${l}`);
         });
       } else {
-        const b = () => {
-          const $ = x();
+        const x = () => {
+          const $ = _();
           if (!$?.pendingConnection) return;
-          const L = y();
-          if (L) {
-            const A = $.getNode(L);
+          const M = y();
+          if (M) {
+            const A = $.getNode(M);
             if (A && !Be(A)) return;
           }
           e[st] !== !1 && e.classList.add("flow-handle-active");
         }, C = () => {
           e.classList.remove("flow-handle-active");
         };
-        e.addEventListener("pointerenter", b), e.addEventListener("pointerleave", C);
+        e.addEventListener("pointerenter", x), e.addEventListener("pointerleave", C);
         const E = async ($) => {
-          const L = x();
-          if (!L?.pendingConnection || L._config?.connectOnClick === !1 || L._connectValidating) return;
+          const M = _();
+          if (!M?.pendingConnection || M._config?.connectOnClick === !1 || M._connectValidating) return;
           $.preventDefault(), $.stopPropagation();
           const A = y();
           if (!A) return;
           if (e[st] === !1) {
-            V("connection", "Click-to-connect rejected (handle not connectable end)"), L._emit("connect-end", { connection: null, source: L.pendingConnection.source, sourceHandle: L.pendingConnection.sourceHandle, position: { x: 0, y: 0 } }), L.pendingConnection = null, L._container?.classList.remove("flow-connecting");
-            const S = e.closest(".flow-container");
-            S && ke(S);
+            V("connection", "Click-to-connect rejected (handle not connectable end)"), M._emit("connect-end", { connection: null, source: M.pendingConnection.source, sourceHandle: M.pendingConnection.sourceHandle, position: { x: 0, y: 0 } }), M.pendingConnection = null, M._container?.classList.remove("flow-connecting");
+            const k = e.closest(".flow-container");
+            k && ke(k);
             return;
           }
-          const k = L.getNode(A);
-          if (k && !Be(k)) {
-            V("connection", `Click-to-connect rejected (target "${A}" not connectable)`), L._emit("connect-end", { connection: null, source: L.pendingConnection.source, sourceHandle: L.pendingConnection.sourceHandle, position: { x: 0, y: 0 } }), L.pendingConnection = null, L._container?.classList.remove("flow-connecting");
-            const S = e.closest(".flow-container");
-            S && ke(S);
+          const P = M.getNode(A);
+          if (P && !Be(P)) {
+            V("connection", `Click-to-connect rejected (target "${A}" not connectable)`), M._emit("connect-end", { connection: null, source: M.pendingConnection.source, sourceHandle: M.pendingConnection.sourceHandle, position: { x: 0, y: 0 } }), M.pendingConnection = null, M._container?.classList.remove("flow-connecting");
+            const k = e.closest(".flow-container");
+            k && ke(k);
             return;
           }
           const v = {
-            source: L.pendingConnection.source,
-            sourceHandle: L.pendingConnection.sourceHandle,
+            source: M.pendingConnection.source,
+            sourceHandle: M.pendingConnection.sourceHandle,
             target: A,
             targetHandle: p
-          }, w = { source: L.pendingConnection.source, sourceHandle: L.pendingConnection.sourceHandle, position: { x: 0, y: 0 } };
-          if (pt(v, L.edges, { preventCycles: L._config?.preventCycles })) {
-            const S = e.closest(".flow-container");
-            if (!gt(v, L._config?.connectionRules, L._nodeMap)) {
-              V("connection", "Click-to-connect rejected (connection rules)", v), Ae(S, v), L._emit("connect-end", { connection: null, ...w }), L.pendingConnection = null, L._container?.classList.remove("flow-connecting"), S && ke(S);
+          }, w = { source: M.pendingConnection.source, sourceHandle: M.pendingConnection.sourceHandle, position: { x: 0, y: 0 } };
+          if (pt(v, M.edges, { preventCycles: M._config?.preventCycles })) {
+            const k = e.closest(".flow-container");
+            if (!gt(v, M._config?.connectionRules, M._nodeMap)) {
+              V("connection", "Click-to-connect rejected (connection rules)", v), Ae(k, v), M._emit("connect-end", { connection: null, ...w }), M.pendingConnection = null, M._container?.classList.remove("flow-connecting"), k && ke(k);
               return;
             }
-            if (S && !nt(S, v, L.edges)) {
-              V("connection", "Click-to-connect rejected (handle limit)", v), Ae(S, v), L._emit("connect-end", { connection: null, ...w }), L.pendingConnection = null, L._container?.classList.remove("flow-connecting"), ke(S);
+            if (k && !nt(k, v, M.edges)) {
+              V("connection", "Click-to-connect rejected (handle limit)", v), Ae(k, v), M._emit("connect-end", { connection: null, ...w }), M.pendingConnection = null, M._container?.classList.remove("flow-connecting"), ke(k);
               return;
             }
-            if (S && !tt(S, v)) {
-              V("connection", "Click-to-connect rejected (per-handle validator)", v), Ae(S, v), L._emit("connect-end", { connection: null, ...w }), L.pendingConnection = null, L._container?.classList.remove("flow-connecting"), S && ke(S);
+            if (k && !tt(k, v)) {
+              V("connection", "Click-to-connect rejected (per-handle validator)", v), Ae(k, v), M._emit("connect-end", { connection: null, ...w }), M.pendingConnection = null, M._container?.classList.remove("flow-connecting"), k && ke(k);
               return;
             }
-            if (L._config?.isValidConnection && !L._config.isValidConnection(v)) {
-              V("connection", "Click-to-connect rejected (custom validator)", v), Ae(S, v), L._emit("connect-end", { connection: null, ...w }), L.pendingConnection = null, L._container?.classList.remove("flow-connecting"), S && ke(S);
+            if (M._config?.isValidConnection && !M._config.isValidConnection(v)) {
+              V("connection", "Click-to-connect rejected (custom validator)", v), Ae(k, v), M._emit("connect-end", { connection: null, ...w }), M.pendingConnection = null, M._container?.classList.remove("flow-connecting"), k && ke(k);
               return;
             }
-            const R = L._config?.connectValidator;
-            if (R && S) {
-              const q = L._config?.validatingHandleClass ?? "flow-handle-validating", { sourceEl: D, targetEl: M } = _o(S, v);
-              L._connectValidating = !0;
+            const R = M._config?.connectValidator;
+            if (R && k) {
+              const q = M._config?.validatingHandleClass ?? "flow-handle-validating", { sourceEl: D, targetEl: L } = bo(k, v);
+              M._connectValidating = !0;
               let I;
               try {
-                I = await vo(
+                I = await _o(
                   R,
                   v,
                   D,
-                  M,
-                  S,
+                  L,
+                  k,
                   q
                 );
               } finally {
-                L._connectValidating = !1;
+                M._connectValidating = !1;
               }
               if (!I.allowed) {
-                V("connection", "Click-to-connect rejected (async connectValidator)", { connection: v, reason: I.reason }), Ae(S, { ...v, reason: I.reason }), L._emit("connect-end", { connection: null, ...w }), L.pendingConnection = null, L._container?.classList.remove("flow-connecting"), ke(S);
+                V("connection", "Click-to-connect rejected (async connectValidator)", { connection: v, reason: I.reason }), Ae(k, { ...v, reason: I.reason }), M._emit("connect-end", { connection: null, ...w }), M.pendingConnection = null, M._container?.classList.remove("flow-connecting"), ke(k);
                 return;
               }
             }
             const O = `e-${v.source}-${v.target}-${Date.now()}-${dn++}`;
-            L.addEdges({ id: O, ...v }), V("connection", `Click-to-connect: ${v.source} → ${v.target}`, v), L._emit("connect", { connection: v }), L._emit("connect-end", { connection: v, ...w });
+            M.addEdges({ id: O, ...v }), V("connection", `Click-to-connect: ${v.source} → ${v.target}`, v), M._emit("connect", { connection: v }), M._emit("connect-end", { connection: v, ...w });
           } else {
             V("connection", "Click-to-connect rejected (invalid)", v);
-            const S = e.closest(".flow-container");
-            Ae(S, v), L._emit("connect-end", { connection: null, ...w });
+            const k = e.closest(".flow-container");
+            Ae(k, v), M._emit("connect-end", { connection: null, ...w });
           }
-          L.pendingConnection = null, L._container?.classList.remove("flow-connecting");
+          M.pendingConnection = null, M._container?.classList.remove("flow-connecting");
           const N = e.closest(".flow-container");
           N && ke(N);
         };
         e.addEventListener("click", E);
         const T = ($) => {
-          Jr(e, x(), $);
+          na(e, _(), $);
         };
-        hs(P) && e.addEventListener("pointerdown", T), a(() => {
-          ft.get(e)?.(), ft.delete(e), _?.(), e.removeEventListener("pointerdown", T), e.removeEventListener("pointerenter", b), e.removeEventListener("pointerleave", C), e.removeEventListener("click", E), e.classList.remove("flow-handle", `flow-handle-${l}`, "flow-handle-active");
+        gs(S) && e.addEventListener("pointerdown", T), a(() => {
+          ft.get(e)?.(), ft.delete(e), b?.(), e.removeEventListener("pointerdown", T), e.removeEventListener("pointerenter", x), e.removeEventListener("pointerleave", C), e.removeEventListener("click", E), e.classList.remove("flow-handle", `flow-handle-${l}`, "flow-handle-active");
         });
       }
     }
   );
 }
-function gs(t, e) {
+function ps(t, e) {
   const n = (o) => {
     const r = o.target?.closest?.("[data-flow-handle-type]");
-    r && t.contains(r) && (e?._container && r.closest(".flow-container") !== e._container || Vf(r, e, o));
+    r && t.contains(r) && (e?._container && r.closest(".flow-container") !== e._container || Xf(r, e, o));
   };
   return t.addEventListener("pointerdown", n, !0), () => t.removeEventListener("pointerdown", n, !0);
 }
-const ps = {
+const ms = {
   delete: ["Delete", "Backspace"],
   selectionBox: "Shift",
   multiSelect: "Shift",
@@ -5166,19 +5166,19 @@ const ps = {
   selectionModeToggle: "Alt",
   selectionToolToggle: "l"
 };
-function qf(t) {
-  if (!t) return { ...ps };
-  const e = { ...ps };
+function jf(t) {
+  if (!t) return { ...ms };
+  const e = { ...ms };
   for (const n of Object.keys(t))
     n in t && (e[n] = t[n]);
   return e;
 }
-function Ze(t, e) {
+function Ge(t, e) {
   if (e == null) return !1;
   const n = t.length === 1 ? t.toLowerCase() : t;
   return Array.isArray(e) ? e.some((o) => (o.length === 1 ? o.toLowerCase() : o) === n) : (e.length === 1 ? e.toLowerCase() : e) === n;
 }
-function Yf(t, e, n, o) {
+function Uf(t, e, n, o) {
   return !t && e > 0 && (n !== 0 || o !== 0);
 }
 function mt(t, e) {
@@ -5196,7 +5196,7 @@ function mt(t, e) {
       return !1;
   }
 }
-function Xf(t, e, n = {}) {
+function Gf(t, e, n = {}) {
   const o = n.duration ?? 500, i = n.moveThreshold ?? 10;
   let r = null, s = 0, a = 0, l = null;
   function c() {
@@ -5216,8 +5216,8 @@ function Xf(t, e, n = {}) {
     c(), t.removeEventListener("pointerdown", u);
   };
 }
-const ei = 20, Hn = ei + 1, Qr = 1, ea = 0.5, Wf = `b${Qr}d${ea}`;
-function ms(t) {
+const ti = 20, Hn = ti + 1, oa = 1, ia = 0.5, Zf = `b${oa}d${ia}`;
+function ys(t) {
   switch (t) {
     case "top":
       return { x: 0, y: -1 };
@@ -5231,7 +5231,7 @@ function ms(t) {
       return { x: 0, y: 1 };
   }
 }
-function ys(t, e) {
+function ws(t, e) {
   return {
     x: t.x - e,
     y: t.y - e,
@@ -5239,10 +5239,10 @@ function ys(t, e) {
     height: t.height + e * 2
   };
 }
-function jf(t, e, n) {
+function Kf(t, e, n) {
   return t > n.x && t < n.x + n.width && e > n.y && e < n.y + n.height;
 }
-function ta(t, e, n, o) {
+function sa(t, e, n, o) {
   const i = Math.min(t, e), r = Math.max(t, e);
   for (const s of o) {
     const a = s.x, l = s.x + s.width, c = s.y, d = s.y + s.height;
@@ -5251,7 +5251,7 @@ function ta(t, e, n, o) {
   }
   return !1;
 }
-function na(t, e, n, o) {
+function ra(t, e, n, o) {
   const i = Math.min(e, n), r = Math.max(e, n);
   for (const s of o) {
     const a = s.x, l = s.x + s.width, c = s.y, d = s.y + s.height;
@@ -5260,7 +5260,7 @@ function na(t, e, n, o) {
   }
   return !1;
 }
-function Uf(t, e, n, o, i) {
+function Jf(t, e, n, o, i) {
   const r = /* @__PURE__ */ new Set([t, n]), s = /* @__PURE__ */ new Set([e, o]);
   for (const u of i)
     r.add(u.x), r.add(u.x + u.width), s.add(u.y), s.add(u.y + u.height);
@@ -5270,7 +5270,7 @@ function Uf(t, e, n, o, i) {
     for (const f of l) {
       let h = !1;
       for (const g of i)
-        if (jf(u, f, g)) {
+        if (Kf(u, f, g)) {
           h = !0;
           break;
         }
@@ -5278,7 +5278,7 @@ function Uf(t, e, n, o, i) {
     }
   return c;
 }
-class Zf {
+class Qf {
   constructor(e) {
     this.less = e, this.items = [];
   }
@@ -5311,7 +5311,7 @@ class Zf {
     return n;
   }
 }
-function Gf(t, e) {
+function eh(t, e) {
   const n = t.map(() => []), o = /* @__PURE__ */ new Map(), i = /* @__PURE__ */ new Map();
   for (const r of t) {
     let s = o.get(r.x);
@@ -5323,55 +5323,55 @@ function Gf(t, e) {
     r.sort((s, a) => s.y - a.y);
     for (let s = 1; s < r.length; s++) {
       const a = r[s - 1], l = r[s];
-      na(a.x, a.y, l.y, e) || (n[a.index].push(l.index), n[l.index].push(a.index));
+      ra(a.x, a.y, l.y, e) || (n[a.index].push(l.index), n[l.index].push(a.index));
     }
   }
   for (const r of i.values()) {
     r.sort((s, a) => s.x - a.x);
     for (let s = 1; s < r.length; s++) {
       const a = r[s - 1], l = r[s];
-      ta(a.x, l.x, a.y, e) || (n[a.index].push(l.index), n[l.index].push(a.index));
+      sa(a.x, l.x, a.y, e) || (n[a.index].push(l.index), n[l.index].push(a.index));
     }
   }
   return n;
 }
-function Kf(t, e, n, o) {
-  const i = n.length, r = 2 * i, s = new Float64Array(r).fill(1 / 0), a = new Float64Array(r).fill(1 / 0), l = new Int32Array(r).fill(-1), c = new Uint8Array(r), d = Gf(n, o), u = Math.min(t.x, e.x), f = Math.max(t.x, e.x), h = Math.min(t.y, e.y), g = Math.max(t.y, e.y), p = (E) => Math.max(0, u - E.x) + Math.max(0, E.x - f) + Math.max(0, h - E.y) + Math.max(0, E.y - g), m = (E, T) => s[E] < s[T] || s[E] === s[T] && a[E] < a[T], y = new Zf(m);
+function th(t, e, n, o) {
+  const i = n.length, r = 2 * i, s = new Float64Array(r).fill(1 / 0), a = new Float64Array(r).fill(1 / 0), l = new Int32Array(r).fill(-1), c = new Uint8Array(r), d = eh(n, o), u = Math.min(t.x, e.x), f = Math.max(t.x, e.x), h = Math.min(t.y, e.y), g = Math.max(t.y, e.y), p = (E) => Math.max(0, u - E.x) + Math.max(0, E.x - f) + Math.max(0, h - E.y) + Math.max(0, E.y - g), m = (E, T) => s[E] < s[T] || s[E] === s[T] && a[E] < a[T], y = new Qf(m);
   for (let E = 0; E < 2; E++) {
     const T = E * i + t.index;
     s[T] = 0, a[T] = 0, y.push(T);
   }
-  const x = (E) => E % i, P = (E) => E < i ? 0 : 1;
-  let _ = -1;
+  const _ = (E) => E % i, S = (E) => E < i ? 0 : 1;
+  let b = -1;
   for (; y.size > 0; ) {
     const E = y.pop();
     if (c[E]) continue;
     c[E] = 1;
-    const T = x(E);
+    const T = _(E);
     if (T === e.index) {
-      _ = E;
+      b = E;
       break;
     }
-    const $ = P(E), L = n[T];
+    const $ = S(E), M = n[T];
     for (const A of d[T]) {
-      const k = n[A], v = L.x === k.x ? 1 : 0, w = v * i + A;
+      const P = n[A], v = M.x === P.x ? 1 : 0, w = v * i + A;
       if (c[w]) continue;
-      const N = Math.abs(k.x - L.x) + Math.abs(k.y - L.y), R = Qr * ($ === v ? 0 : 1) + ea * p(k), O = s[E] + N, q = a[E] + R;
+      const N = Math.abs(P.x - M.x) + Math.abs(P.y - M.y), R = oa * ($ === v ? 0 : 1) + ia * p(P), O = s[E] + N, q = a[E] + R;
       (O < s[w] || O === s[w] && q < a[w]) && (s[w] = O, a[w] = q, l[w] = E, y.push(w));
     }
   }
-  if (_ === -1) {
+  if (b === -1) {
     const E = e.index, T = i + e.index;
     if (s[E] === 1 / 0 && s[T] === 1 / 0) return null;
-    _ = m(E, T) ? E : T;
+    b = m(E, T) ? E : T;
   }
-  const b = [];
-  let C = _;
+  const x = [];
+  let C = b;
   for (; C !== -1; )
-    b.unshift(n[x(C)]), C = l[C];
-  return b;
+    x.unshift(n[_(C)]), C = l[C];
+  return x;
 }
-function Jf(t) {
+function nh(t) {
   if (t.length <= 2) return t;
   const e = [t[0]];
   for (let n = 1; n < t.length - 1; n++) {
@@ -5380,7 +5380,7 @@ function Jf(t) {
   }
   return e.push(t[t.length - 1]), e;
 }
-function Qf(t, e) {
+function oh(t, e) {
   if (t.length < 2) return "";
   let n = `M${t[0].x},${t[0].y}`;
   for (let i = 1; i < t.length - 1; i++) {
@@ -5390,7 +5390,7 @@ function Qf(t, e) {
   const o = t[t.length - 1];
   return n += ` L${o.x},${o.y}`, n;
 }
-function eh(t) {
+function ih(t) {
   if (t.length < 2)
     return { x: t[0]?.x ?? 0, y: t[0]?.y ?? 0, offsetX: 0, offsetY: 0 };
   let e = 0;
@@ -5416,35 +5416,35 @@ function eh(t) {
   return { x: i.x, y: i.y, offsetX: 0, offsetY: 0 };
 }
 const ht = 200;
-function th(t, e, n, o, i) {
+function sh(t, e, n, o, i) {
   const r = Math.min(t, n) - ht, s = Math.max(t, n) + ht, a = Math.min(e, o) - ht, l = Math.max(e, o) + ht;
   return i.filter(
     (c) => c.x < s && c.x + c.width > r && c.y < l && c.y + c.height > a
   );
 }
-function nh(t, e) {
+function rh(t, e) {
   for (let n = 1; n < t.length; n++) {
     const o = t[n - 1], i = t[n];
     if (o.x === i.x) {
-      if (na(o.x, o.y, i.y, e)) return !0;
-    } else if (o.y === i.y && ta(o.x, i.x, o.y, e))
+      if (ra(o.x, o.y, i.y, e)) return !0;
+    } else if (o.y === i.y && sa(o.x, i.x, o.y, e))
       return !0;
   }
   return !1;
 }
-function oh(t, e, n, o, i, r, s) {
-  const a = ms(n), l = ms(r), c = t + a.x * Hn, d = e + a.y * Hn, u = o + l.x * Hn, f = i + l.y * Hn, h = (x) => {
-    const P = x.map(($) => ys($, ei)), _ = Uf(c, d, u, f, P);
-    _.length;
-    const b = _.find(($) => $.x === c && $.y === d), C = _.find(($) => $.x === u && $.y === f);
-    b || _.push({ x: c, y: d, index: _.length }), C || _.push({ x: u, y: f, index: _.length });
-    const E = b ?? _[_.length - (C ? 1 : 2)], T = C ?? _[_.length - 1];
-    return Kf(E, T, _, P);
-  }, g = th(t, e, o, i, s), p = g.length < s.length;
+function ah(t, e, n, o, i, r, s) {
+  const a = ys(n), l = ys(r), c = t + a.x * Hn, d = e + a.y * Hn, u = o + l.x * Hn, f = i + l.y * Hn, h = (_) => {
+    const S = _.map(($) => ws($, ti)), b = Jf(c, d, u, f, S);
+    b.length;
+    const x = b.find(($) => $.x === c && $.y === d), C = b.find(($) => $.x === u && $.y === f);
+    x || b.push({ x: c, y: d, index: b.length }), C || b.push({ x: u, y: f, index: b.length });
+    const E = x ?? b[b.length - (C ? 1 : 2)], T = C ?? b[b.length - 1];
+    return th(E, T, b, S);
+  }, g = sh(t, e, o, i, s), p = g.length < s.length;
   let m = h(g);
   if (p) {
-    const x = s.map((_) => ys(_, ei));
-    (!(m !== null && m.length >= 2) || nh(m, x)) && (m = h(s));
+    const _ = s.map((b) => ws(b, ti));
+    (!(m !== null && m.length >= 2) || rh(m, _)) && (m = h(s));
   }
   if (!m || m.length < 2) return null;
   const y = [
@@ -5452,25 +5452,25 @@ function oh(t, e, n, o, i, r, s) {
     ...m,
     { x: o, y: i, index: -2 }
   ];
-  return Jf(y);
+  return nh(y);
 }
-const ih = 512, lt = /* @__PURE__ */ new Map();
-function sh(t, e, n, o, i, r, s) {
-  let a = `${Wf}|${Math.round(t)},${Math.round(e)},${n}|${Math.round(o)},${Math.round(i)},${r}`;
+const lh = 512, lt = /* @__PURE__ */ new Map();
+function ch(t, e, n, o, i, r, s) {
+  let a = `${Zf}|${Math.round(t)},${Math.round(e)},${n}|${Math.round(o)},${Math.round(i)},${r}`;
   for (const l of s)
     a += `|${Math.round(l.x)},${Math.round(l.y)},${Math.round(l.width)},${Math.round(l.height)}`;
   return a;
 }
-function oa(t, e, n, o, i, r, s) {
-  const a = sh(t, e, n, o, i, r, s);
+function aa(t, e, n, o, i, r, s) {
+  const a = ch(t, e, n, o, i, r, s);
   if (lt.has(a)) {
     const c = lt.get(a);
     return lt.delete(a), lt.set(a, c), c;
   }
-  const l = oh(t, e, n, o, i, r, s);
-  return lt.set(a, l), lt.size > ih && lt.delete(lt.keys().next().value), l;
+  const l = ah(t, e, n, o, i, r, s);
+  return lt.set(a, l), lt.size > lh && lt.delete(lt.keys().next().value), l;
 }
-function rh({
+function dh({
   sourceX: t,
   sourceY: e,
   sourcePosition: n = "bottom",
@@ -5490,7 +5490,7 @@ function rh({
       targetPosition: r,
       borderRadius: a
     });
-  const l = oa(t, e, n, o, i, r, s);
+  const l = aa(t, e, n, o, i, r, s);
   if (!l)
     return vn({
       sourceX: t,
@@ -5501,7 +5501,7 @@ function rh({
       targetPosition: r,
       borderRadius: a
     });
-  const c = Qf(l, a), { x: d, y: u, offsetX: f, offsetY: h } = eh(l);
+  const c = oh(l, a), { x: d, y: u, offsetX: f, offsetY: h } = ih(l);
   return {
     path: c,
     labelPosition: { x: d, y: u },
@@ -5509,11 +5509,23 @@ function rh({
     labelOffsetY: h
   };
 }
-const ws = 20;
-function ia(t) {
+const vs = 5;
+function io(t) {
+  return t ? t === !0 ? vs : t.spacing ?? vs : null;
+}
+function _s(t, e, n, o) {
+  if (e <= 1) return 0;
+  const r = Math.min((e - 1) * o, Math.max(0, n)) / (e - 1);
+  return (t - (e - 1) / 2) * r;
+}
+function bs(t, e, n) {
+  return e === "left" || e === "right" ? { x: t.x, y: t.y + n } : { x: t.x + n, y: t.y };
+}
+const xs = 20;
+function la(t) {
   return new Map(t.map((e) => [e.id, e]));
 }
-function ah(t, e) {
+function uh(t, e) {
   const n = /* @__PURE__ */ new Map();
   for (const o of e)
     if (o.parentId) {
@@ -5527,7 +5539,7 @@ function ah(t, e) {
     (!r || r.length !== i.length || r.some((s, a) => s !== i[a])) && t.set(o, i);
   }
 }
-function ti(t, e, n) {
+function ni(t, e, n) {
   if (!t.position) return { x: 0, y: 0 };
   let o = t.position.x, i = t.position.y;
   const r = /* @__PURE__ */ new Set();
@@ -5540,16 +5552,16 @@ function ti(t, e, n) {
   }
   return { x: o, y: i };
 }
-function kt(t, e, n) {
+function yt(t, e, n) {
   if (!t.parentId)
     return t;
-  const o = ti(t, e, n);
+  const o = ni(t, e, n);
   return { ...t, position: o };
 }
-function io(t, e, n) {
-  return t.map((o) => kt(o, e, n));
+function so(t, e, n) {
+  return t.map((o) => yt(o, e, n));
 }
-function yt(t, e) {
+function wt(t, e) {
   const n = /* @__PURE__ */ new Set(), o = [t], i = /* @__PURE__ */ new Map();
   for (const r of e)
     if (r.parentId) {
@@ -5565,7 +5577,7 @@ function yt(t, e) {
   return n;
 }
 function Mt(t) {
-  const e = ia(t), n = [], o = /* @__PURE__ */ new Set();
+  const e = la(t), n = [], o = /* @__PURE__ */ new Set();
   function i(r) {
     if (!o.has(r.id)) {
       if (r.parentId) {
@@ -5579,21 +5591,21 @@ function Mt(t) {
     i(r);
   return n;
 }
-function sa(t, e, n = /* @__PURE__ */ new Set()) {
+function ca(t, e, n = /* @__PURE__ */ new Set()) {
   if (n.has(t.id))
     return t.zIndex ?? 2;
   if (n.add(t.id), !t.parentId)
     return t.zIndex !== void 0 ? t.zIndex : t.type === "group" ? 0 : 2;
   const o = e.get(t.parentId);
-  return o ? sa(o, e, n) + 2 + (t.zIndex ?? 0) : (t.zIndex ?? 0) + 2;
+  return o ? ca(o, e, n) + 2 + (t.zIndex ?? 0) : (t.zIndex ?? 0) + 2;
 }
-function ra(t, e, n) {
+function da(t, e, n) {
   return {
     x: Math.max(e[0][0], Math.min(t.x, e[1][0] - (n?.width ?? 0))),
     y: Math.max(e[0][1], Math.min(t.y, e[1][1] - (n?.height ?? 0)))
   };
 }
-function Lo(t, e, n) {
+function Po(t, e, n) {
   return {
     x: Math.max(0, Math.min(t.x, n.width - e.width)),
     y: Math.max(0, Math.min(t.y, n.height - e.height))
@@ -5603,13 +5615,13 @@ function Rn(t, e, n) {
   const o = e.extent ?? n;
   if (!o || o === "parent" || e.parentId) return t;
   const i = e.dimensions ?? { width: we, height: _e };
-  return ra(t, o, i);
+  return da(t, o, i);
 }
-function lh(t, e, n) {
-  const o = t.x + e.width + ws, i = t.y + e.height + ws, r = Math.max(n.width, o), s = Math.max(n.height, i);
+function fh(t, e, n) {
+  const o = t.x + e.width + xs, i = t.y + e.height + xs, r = Math.max(n.width, o), s = Math.max(n.height, i);
   return r === n.width && s === n.height ? null : { width: r, height: s };
 }
-function vs(t, e, n) {
+function Es(t, e, n) {
   switch (n) {
     case "top":
       return { x: t / 2, y: 0 };
@@ -5629,7 +5641,7 @@ function vs(t, e, n) {
       return { x: t, y: e };
   }
 }
-function ch(t, e, n) {
+function hh(t, e, n) {
   const o = t / 2, i = e / 2, r = t / 2, s = e / 2;
   switch (n) {
     case "top":
@@ -5658,7 +5670,7 @@ function ch(t, e, n) {
     }
   }
 }
-function dh(t, e, n) {
+function gh(t, e, n) {
   switch (n) {
     case "top":
       return { x: t / 2, y: 0 };
@@ -5678,7 +5690,7 @@ function dh(t, e, n) {
       return { x: t * 0.25, y: e * 0.75 };
   }
 }
-function uh(t, e, n) {
+function ph(t, e, n) {
   switch (n) {
     case "top":
       return { x: t / 2, y: 0 };
@@ -5698,7 +5710,7 @@ function uh(t, e, n) {
       return { x: t * 0.25, y: e };
   }
 }
-function fh(t, e, n) {
+function mh(t, e, n) {
   const o = t * 0.15;
   switch (n) {
     case "top":
@@ -5719,7 +5731,7 @@ function fh(t, e, n) {
       return { x: 0, y: e };
   }
 }
-function hh(t, e, n) {
+function yh(t, e, n) {
   switch (n) {
     case "top":
       return { x: t / 2, y: 0 };
@@ -5739,7 +5751,7 @@ function hh(t, e, n) {
       return { x: 0, y: e };
   }
 }
-function gh(t, e, n) {
+function wh(t, e, n) {
   const o = e * 0.12;
   switch (n) {
     case "top":
@@ -5760,7 +5772,7 @@ function gh(t, e, n) {
       return { x: 0, y: e - o };
   }
 }
-function ph(t, e, n) {
+function vh(t, e, n) {
   const o = Math.min(t, e) / 2, i = t / 2, r = e / 2;
   switch (n) {
     case "top":
@@ -5789,16 +5801,16 @@ function ph(t, e, n) {
     }
   }
 }
-const aa = {
-  circle: { perimeterPoint: ch },
-  diamond: { perimeterPoint: dh },
-  hexagon: { perimeterPoint: uh },
-  parallelogram: { perimeterPoint: fh },
-  triangle: { perimeterPoint: hh },
-  cylinder: { perimeterPoint: gh },
-  stadium: { perimeterPoint: ph }
+const ua = {
+  circle: { perimeterPoint: hh },
+  diamond: { perimeterPoint: gh },
+  hexagon: { perimeterPoint: ph },
+  parallelogram: { perimeterPoint: mh },
+  triangle: { perimeterPoint: yh },
+  cylinder: { perimeterPoint: wh },
+  stadium: { perimeterPoint: vh }
 };
-function la(t, e = "light") {
+function fa(t, e = "light") {
   let n = e === "dark" ? "dark" : "light", o = null, i = null;
   function r(a) {
     n = a ? "dark" : "light", t.classList.toggle("dark", a);
@@ -5816,18 +5828,18 @@ function la(t, e = "light") {
     }
   };
 }
-const Po = "__alpineflow_collab_store__";
-function mh() {
-  return typeof globalThis < "u" ? (globalThis[Po] || (globalThis[Po] = /* @__PURE__ */ new WeakMap()), globalThis[Po]) : /* @__PURE__ */ new WeakMap();
+const Mo = "__alpineflow_collab_store__";
+function _h() {
+  return typeof globalThis < "u" ? (globalThis[Mo] || (globalThis[Mo] = /* @__PURE__ */ new WeakMap()), globalThis[Mo]) : /* @__PURE__ */ new WeakMap();
 }
-const He = mh(), Mo = "__alpineflow_registry__";
-function ca() {
-  return typeof globalThis < "u" ? (globalThis[Mo] || (globalThis[Mo] = /* @__PURE__ */ new Map()), globalThis[Mo]) : /* @__PURE__ */ new Map();
+const He = _h(), To = "__alpineflow_registry__";
+function ha() {
+  return typeof globalThis < "u" ? (globalThis[To] || (globalThis[To] = /* @__PURE__ */ new Map()), globalThis[To]) : /* @__PURE__ */ new Map();
 }
 function Dt(t) {
-  return ca().get(t);
+  return ha().get(t);
 }
-function yh(t, e) {
+function bh(t, e) {
   switch (t) {
     case "nodes-change": {
       const n = e.nodes ?? [], o = n.length === 1 ? n[0].data?.label || n[0].id : null;
@@ -5858,17 +5870,17 @@ function yh(t, e) {
       return null;
   }
 }
-const wh = 1e3;
-class vh {
+const xh = 1e3;
+class Eh {
   constructor(e, n) {
-    this._clearTimer = null, this._formatMessage = n ?? yh, this._el = document.createElement("div"), this._el.setAttribute("aria-live", "polite"), this._el.setAttribute("aria-atomic", "true"), this._el.setAttribute("role", "status");
+    this._clearTimer = null, this._formatMessage = n ?? bh, this._el = document.createElement("div"), this._el.setAttribute("aria-live", "polite"), this._el.setAttribute("aria-atomic", "true"), this._el.setAttribute("role", "status");
     const o = this._el.style;
     o.position = "absolute", o.width = "1px", o.height = "1px", o.padding = "0", o.margin = "-1px", o.overflow = "hidden", o.clip = "rect(0,0,0,0)", o.whiteSpace = "nowrap", o.border = "0", e.appendChild(this._el);
   }
   announce(e) {
     this._clearTimer && clearTimeout(this._clearTimer), this._el.textContent = e, this._clearTimer = setTimeout(() => {
       this._el.textContent = "", this._clearTimer = null;
-    }, wh);
+    }, xh);
   }
   handleEvent(e, n) {
     const o = this._formatMessage(e, n);
@@ -5878,7 +5890,7 @@ class vh {
     this._clearTimer && clearTimeout(this._clearTimer), this._el.remove();
   }
 }
-class _h {
+class Ch {
   constructor() {
     this._registry = /* @__PURE__ */ new Map();
   }
@@ -5968,7 +5980,7 @@ class _h {
     return i.delete(e), i;
   }
 }
-const bh = {
+const Sh = {
   connect: (t) => [t.connection?.source ?? t.source, t.connection?.target ?? t.target, t.connection?.sourceHandle ?? t.sourceHandle, t.connection?.targetHandle ?? t.targetHandle],
   "connect-start": (t) => [t.source, t.sourceHandle],
   "connect-end": (t) => [t.connection, t.source, t.sourceHandle, t.position],
@@ -5998,7 +6010,7 @@ const bh = {
   "row-select": (t) => [t.rowId, t.nodeId, t.attrId],
   "row-deselect": (t) => [t.rowId, t.nodeId, t.attrId],
   "row-selection-change": (t) => [t.selectedRows]
-}, xh = {
+}, kh = {
   "flow:addNodes": "addNodes",
   "flow:removeNodes": "removeNodes",
   "flow:addEdges": "addEdges",
@@ -6040,7 +6052,7 @@ const bh = {
   // RunState (D2)
   "flow:setNodeState": "setNodeState",
   "flow:resetStates": "resetStates"
-}, Eh = {
+}, Lh = {
   "flow:addNodes": (t) => [t.nodes],
   "flow:removeNodes": (t) => [t.ids],
   "flow:addEdges": (t) => [t.edges],
@@ -6082,13 +6094,13 @@ const bh = {
   // RunState (D2)
   "flow:setNodeState": (t) => [t.ids, t.state],
   "flow:resetStates": () => []
-}, _s = {
+}, Cs = {
   success: { borderColor: "#22c55e", shadow: "0 0 0 2px rgba(34,197,94,0.3)" },
   error: { borderColor: "#ef4444", shadow: "0 0 0 2px rgba(239,68,68,0.3)" },
   warning: { borderColor: "#f59e0b", shadow: "0 0 0 2px rgba(245,158,11,0.3)" },
   info: { borderColor: "#3b82f6", shadow: "0 0 0 2px rgba(59,130,246,0.3)" }
 };
-function Ch(t, e) {
+function Ph(t, e) {
   const n = [];
   return n.push(e.on("flow:moveNode", (o) => {
     const i = o.duration ?? 0;
@@ -6119,7 +6131,7 @@ function Ch(t, e) {
   })), n.push(e.on("flow:highlightNode", (o) => {
     const i = t.getNode(o.id);
     if (!i) return;
-    const r = _s[o.style] ?? _s.info, s = o.duration ?? 1500, a = Math.floor(s * 0.6), l = Math.floor(s * 0.4), c = i.style?.borderColor ?? null, d = i.style?.boxShadow ?? null;
+    const r = Cs[o.style] ?? Cs.info, s = o.duration ?? 1500, a = Math.floor(s * 0.6), l = Math.floor(s * 0.4), c = i.style?.borderColor ?? null, d = i.style?.boxShadow ?? null;
     t.update({
       nodes: { [o.id]: { style: `border-color: ${r.borderColor}; box-shadow: ${r.shadow}` } }
     }, { duration: 100 }), setTimeout(() => {
@@ -6179,13 +6191,13 @@ function Ch(t, e) {
       typeof o == "function" && o();
   };
 }
-function Sh(t) {
+function Mh(t) {
   return "on" + t.split("-").map(
     (e) => e.charAt(0).toUpperCase() + e.slice(1)
   ).join("");
 }
-const kh = /* @__PURE__ */ new Set(["viewport-change", "viewport-move"]), Lh = 150;
-function Ph(t, e) {
+const Th = /* @__PURE__ */ new Set(["viewport-change", "viewport-move"]), Ah = 150;
+function Nh(t, e) {
   let n = null, o = null;
   return ((...i) => {
     o = i, n === null && (n = setTimeout(() => {
@@ -6195,24 +6207,24 @@ function Ph(t, e) {
     }, e));
   });
 }
-function Mh(t, e, n) {
+function Ih(t, e, n) {
   for (const [o, i] of Object.entries(n)) {
-    const r = Sh(o), s = t[r], a = (l) => {
+    const r = Mh(o), s = t[r], a = (l) => {
       let c;
       typeof s == "function" && (c = s(l));
-      const d = bh[o], u = d ? d(l) : [l], f = e[i];
+      const d = Sh[o], u = d ? d(l) : [l], f = e[i];
       return typeof f == "function" && f.call(e, ...u), c;
     };
-    t[r] = kh.has(o) ? Ph(a, Lh) : a;
+    t[r] = Th.has(o) ? Nh(a, Ah) : a;
   }
 }
-function Th(t, e) {
+function $h(t, e) {
   const n = [];
-  for (const [o, i] of Object.entries(xh)) {
+  for (const [o, i] of Object.entries(kh)) {
     const r = e.on(o, (s) => {
       const a = t[i];
       if (typeof a != "function") return;
-      const l = Eh[o], c = l ? l(s) : Object.values(s);
+      const l = Lh[o], c = l ? l(s) : Object.values(s);
       a.call(t, ...c);
     });
     n.push(r);
@@ -6222,8 +6234,8 @@ function Th(t, e) {
       typeof o == "function" && o();
   };
 }
-const Ah = 5;
-function Nh(t) {
+const Dh = 5;
+function Hh(t) {
   const e = /* @__PURE__ */ new Set(), n = /* @__PURE__ */ new Map(), o = /* @__PURE__ */ new Set();
   let i = null, r = /* @__PURE__ */ new Set(), s = 0;
   const a = /* @__PURE__ */ new Set();
@@ -6232,7 +6244,7 @@ function Nh(t) {
       i = null;
       for (const c of e) {
         const u = (r.has(c) ? n.get(c) ?? 0 : 0) + 1;
-        n.set(c, u), u > Ah && !o.has(c) && (o.add(c), console.warn(
+        n.set(c, u), u > Dh && !o.has(c) && (o.add(c), console.warn(
           `[alpineflow] Auto-layout for parent "${c}" has run for ${u} consecutive frames. Suppressing to avoid an infinite loop. This usually indicates a layout that keeps changing child dimensions by more than the 1px threshold. Next user mutation will clear the suppression.`
         ));
       }
@@ -6269,7 +6281,7 @@ function Nh(t) {
     }
   };
 }
-function Ih(t) {
+function Rh(t) {
   return function(n) {
     t.suspend();
     try {
@@ -6279,7 +6291,7 @@ function Ih(t) {
     }
   };
 }
-function $h(t, e, n) {
+function Fh(t, e, n) {
   let { width: o, height: i } = t;
   return e?.width !== void 0 && (o = Math.max(o, e.width)), e?.height !== void 0 && (i = Math.max(i, e.height)), n?.width !== void 0 && (o = Math.min(o, n.width)), n?.height !== void 0 && (i = Math.min(i, n.height)), { width: o, height: i };
 }
@@ -6288,7 +6300,7 @@ function un(t, e) {
   if (!(!o && !i))
     return o ? i ? { ...o, ...i } : o : i;
 }
-function da(t, e, n, o) {
+function ga(t, e, n, o) {
   if (!o) return { valid: !0 };
   if (o.maxChildren !== void 0 && n.length >= o.maxChildren)
     return {
@@ -6327,7 +6339,7 @@ function da(t, e, n, o) {
   }
   return { valid: !0 };
 }
-function so(t, e, n, o) {
+function ro(t, e, n, o) {
   if (!o) return { valid: !0 };
   if (o.preventChildEscape)
     return {
@@ -6358,7 +6370,7 @@ function so(t, e, n, o) {
   }
   return { valid: !0 };
 }
-function bs(t, e, n) {
+function Ss(t, e, n) {
   if (!n) return [];
   const o = [], i = Math.max(
     n.minChildren ?? 0,
@@ -6374,7 +6386,7 @@ function bs(t, e, n) {
   return o;
 }
 function jt(t, e) {
-  const n = Zt(t, e);
+  const n = Gt(t, e);
   return {
     x: n.x,
     y: n.y,
@@ -6382,23 +6394,23 @@ function jt(t, e) {
     height: t.dimensions?.height ?? _e
   };
 }
-function ua(t, e) {
+function pa(t, e) {
   return t.x < e.x + e.width && t.x + t.width > e.x && t.y < e.y + e.height && t.y + t.height > e.y;
 }
-function Dh(t, e, n = !0) {
+function Oh(t, e, n = !0) {
   const o = jt(t);
   return e.filter((i) => {
     if (i.id === t.id) return !1;
     const r = jt(i);
-    return n ? ua(o, r) : o.x <= r.x && o.y <= r.y && o.x + o.width >= r.x + r.width && o.y + o.height >= r.y + r.height;
+    return n ? pa(o, r) : o.x <= r.x && o.y <= r.y && o.x + o.width >= r.x + r.width && o.y + o.height >= r.y + r.height;
   });
 }
-function Hh(t, e, n = !0) {
+function zh(t, e, n = !0) {
   if (t.id === e.id) return !1;
   const o = jt(t), i = jt(e);
-  return n ? ua(o, i) : o.x <= i.x && o.y <= i.y && o.x + o.width >= i.x + i.width && o.y + o.height >= i.y + i.height;
+  return n ? pa(o, i) : o.x <= i.x && o.y <= i.y && o.x + o.width >= i.x + i.width && o.y + o.height >= i.y + i.height;
 }
-function Rh(t, e, n, o, i = 5) {
+function Vh(t, e, n, o, i = 5) {
   let { x: r, y: s } = t;
   for (const a of o) {
     const l = r + e, c = s + n, d = a.x + a.width, u = a.y + a.height;
@@ -6409,7 +6421,7 @@ function Rh(t, e, n, o, i = 5) {
   }
   return { x: r, y: s };
 }
-function Fh(t) {
+function Bh(t) {
   return {
     /**
      * Add one or more nodes to the canvas.
@@ -6448,7 +6460,7 @@ function Fh(t) {
                 ...r.filter(
                   (p) => p.parentId === d.parentId
                 )
-              ], g = da(f, d, h, u);
+              ], g = ga(f, d, h, u);
               if (!g.valid) {
                 t._config.onChildValidationFail && t._config.onChildValidationFail({
                   parent: f,
@@ -6547,7 +6559,7 @@ function Fh(t) {
         if (!g) continue;
         const p = t.nodes.filter(
           (y) => y.parentId === f.parentId
-        ), m = so(g, f, p, h);
+        ), m = ro(g, f, p, h);
         m.valid || (o.add(u), t._config.onChildValidationFail && t._config.onChildValidationFail({
           parent: g,
           child: f,
@@ -6565,12 +6577,12 @@ function Fh(t) {
         f?.parentId && i.set(u, f.parentId);
       }
       for (const u of [...n])
-        for (const f of yt(u, t.nodes))
+        for (const f of wt(u, t.nodes))
           n.add(f);
       V("destroy", `Removing ${n.size} node(s)`, [...n]);
       const r = t.nodes.filter((u) => n.has(u.id));
       let s = [];
-      t._config.reconnectOnDelete && (s = Tf(n, t.nodes, t.edges));
+      t._config.reconnectOnDelete && (s = $f(n, t.nodes, t.edges));
       const a = [];
       t.edges = t.edges.filter((u) => n.has(u.source) || n.has(u.target) ? (a.push(u.id), !1) : !0), s.length && (t.edges.push(...s), V("destroy", `Created ${s.length} reconnection edge(s)`)), t._rebuildEdgeMap(), t.nodes = t.nodes.filter((u) => !n.has(u.id)), t._rebuildNodeMap();
       for (const u of n)
@@ -6615,26 +6627,26 @@ function Fh(t) {
      * Get all nodes connected via outgoing edges from the given node.
      */
     getOutgoers(e) {
-      return Jo(e, t.nodes, t.edges);
+      return Qo(e, t.nodes, t.edges);
     },
     /**
      * Get all nodes connected via incoming edges to the given node.
      */
     getIncomers(e) {
-      return Lf(e, t.nodes, t.edges);
+      return Af(e, t.nodes, t.edges);
     },
     /**
      * Get all edges connected to a node (both incoming and outgoing).
      */
     getConnectedEdges(e) {
-      return kf(e, t.edges);
+      return Tf(e, t.edges);
     },
     /**
      * Check if two nodes are connected by an edge.
      * When `directed` is true, only checks source→target direction.
      */
     areNodesConnected(e, n, o = !1) {
-      return Mf(e, n, t.edges, o);
+      return If(e, n, t.edges, o);
     },
     /**
      * Apply a node-level filter predicate.
@@ -6663,7 +6675,7 @@ function Fh(t) {
      */
     getIntersectingNodes(e, n) {
       const o = typeof e == "string" ? t.nodes.find((i) => i.id === e) : e;
-      return o ? Dh(o, t.nodes, n) : [];
+      return o ? Oh(o, t.nodes, n) : [];
     },
     /**
      * Check if two nodes' bounding rects overlap.
@@ -6671,7 +6683,7 @@ function Fh(t) {
      */
     isNodeIntersecting(e, n, o) {
       const i = typeof e == "string" ? t.nodes.find((s) => s.id === e) : e, r = typeof n == "string" ? t.nodes.find((s) => s.id === n) : n;
-      return !i || !r ? !1 : Hh(i, r, o);
+      return !i || !r ? !1 : zh(i, r, o);
     },
     /**
      * Set runState on one or more nodes by ID.
@@ -6693,7 +6705,7 @@ function Fh(t) {
     }
   };
 }
-function Oh(t) {
+function qh(t) {
   return {
     /**
      * Add one or more edges to the canvas.
@@ -6705,17 +6717,19 @@ function Oh(t) {
      * - Schedules auto-layout after the mutation.
      */
     addEdges(e) {
-      const n = t._config.defaultEdgeOptions, o = t._config.connectionRules, i = (Array.isArray(e) ? e : [e]).map((s) => n ? { ...n, ...s } : s).filter((s) => {
+      const n = t._config.defaultEdgeOptions, o = t._config.connectionRules, i = (Array.isArray(e) ? e : [e]).map((a) => n ? { ...n, ...a } : a).filter((a) => {
         if (!o) return !0;
-        const a = { source: s.source, sourceHandle: s.sourceHandle, target: s.target, targetHandle: s.targetHandle };
-        return gt(a, o, t._nodeMap);
+        const l = { source: a.source, sourceHandle: a.sourceHandle, target: a.target, targetHandle: a.targetHandle };
+        return gt(l, o, t._nodeMap);
       });
       if (i.length === 0) return;
-      t._captureHistory(), V("edge", `Adding ${i.length} edge(s)`, i.map((s) => s.id)), t.edges.push(...i), t._rebuildEdgeMap(), t._emit("edges-change", { type: "add", edges: i });
-      const r = t._container ? He.get(t._container) : void 0;
-      if (r?.bridge)
-        for (const s of i)
-          r.bridge.pushLocalEdgeAdd(s);
+      t._captureHistory(), V("edge", `Adding ${i.length} edge(s)`, i.map((a) => a.id)), t.edges.push(...i), t._rebuildEdgeMap();
+      const r = t._computeEndpointGrouping();
+      r.size > 0 && t._markEdgesDirtyById(r), t._emit("edges-change", { type: "add", edges: i });
+      const s = t._container ? He.get(t._container) : void 0;
+      if (s?.bridge)
+        for (const a of i)
+          s.bridge.pushLocalEdgeAdd(a);
       t._scheduleAutoLayout();
     },
     /**
@@ -6731,15 +6745,16 @@ function Oh(t) {
       t._captureHistory();
       const n = new Set(Array.isArray(e) ? e : [e]);
       V("edge", `Removing ${n.size} edge(s)`, [...n]);
-      const o = t.edges.filter((r) => n.has(r.id));
-      t.edges = t.edges.filter((r) => !n.has(r.id)), t._rebuildEdgeMap();
-      for (const r of n)
-        t.selectedEdges.delete(r), t._edgeDirtyTicks?.delete(r), t._edgeCorridors?.delete(r);
-      o.length && t._emit("edges-change", { type: "remove", edges: o });
-      const i = t._container ? He.get(t._container) : void 0;
-      if (i?.bridge)
-        for (const r of n)
-          i.bridge.pushLocalEdgeRemove(r);
+      const o = t.edges.filter((s) => n.has(s.id));
+      t.edges = t.edges.filter((s) => !n.has(s.id)), t._rebuildEdgeMap();
+      for (const s of n)
+        t.selectedEdges.delete(s), t._edgeDirtyTicks?.delete(s), t._edgeCorridors?.delete(s);
+      const i = t._computeEndpointGrouping();
+      i.size > 0 && t._markEdgesDirtyById(i), o.length && t._emit("edges-change", { type: "remove", edges: o });
+      const r = t._container ? He.get(t._container) : void 0;
+      if (r?.bridge)
+        for (const s of n)
+          r.bridge.pushLocalEdgeRemove(s);
       t._scheduleAutoLayout();
     },
     /**
@@ -6780,7 +6795,7 @@ function Oh(t) {
     }
   };
 }
-function zh(t) {
+function Yh(t) {
   return {
     // ── Coordinate Transforms ─────────────────────────────────────────────
     /**
@@ -6790,7 +6805,7 @@ function zh(t) {
     screenToFlowPosition(e, n) {
       if (!t._container) return { x: e, y: n };
       const o = t._container.getBoundingClientRect();
-      return Nr(e, n, t._viewportLive ?? t.viewport, o);
+      return Hr(e, n, t._viewportLive ?? t.viewport, o);
     },
     /**
      * Convert flow coordinates to screen coordinates, accounting for the
@@ -6799,7 +6814,7 @@ function zh(t) {
     flowToScreenPosition(e, n) {
       if (!t._container) return { x: e, y: n };
       const o = t._container.getBoundingClientRect();
-      return Wu(e, n, t._viewportLive ?? t.viewport, o);
+      return Zu(e, n, t._viewportLive ?? t.viewport, o);
     },
     // ── Fit & Bounds ──────────────────────────────────────────────────────
     /**
@@ -6813,7 +6828,7 @@ function zh(t) {
         n < 10 && requestAnimationFrame(() => this.fitView(e, n + 1));
         return;
       }
-      const o = t.nodes.filter((r) => !r.hidden), i = Yt(io(o, t._nodeMap, t._config.nodeOrigin), t._config.nodeOrigin);
+      const o = t.nodes.filter((r) => !r.hidden), i = Yt(so(o, t._nodeMap, t._config.nodeOrigin), t._config.nodeOrigin);
       this.fitBounds(i, e), t._announcer?.handleEvent("fit-view", {});
     },
     /**
@@ -6830,7 +6845,7 @@ function zh(t) {
         o.height,
         t._config.minZoom ?? 0.5,
         t._config.maxZoom ?? 2,
-        n?.padding ?? Go
+        n?.padding ?? Ko
       );
       V("viewport", "fitBounds", { rect: e, viewport: i });
       const r = n?.duration ?? 0;
@@ -6845,7 +6860,7 @@ function zh(t) {
      */
     getNodesBounds(e) {
       let n;
-      return e ? n = e.map((o) => t.getNode(o)).filter((o) => !!o) : n = t.nodes.filter((o) => !o.hidden), Yt(io(n, t._nodeMap, t._config.nodeOrigin), t._config.nodeOrigin);
+      return e ? n = e.map((o) => t.getNode(o)).filter((o) => !!o) : n = t.nodes.filter((o) => !o.hidden), Yt(so(n, t._nodeMap, t._config.nodeOrigin), t._config.nodeOrigin);
     },
     /**
      * Compute the viewport (pan + zoom) that frames the given bounds
@@ -6859,7 +6874,7 @@ function zh(t) {
         o.clientHeight,
         t._config.minZoom ?? 0.5,
         t._config.maxZoom ?? 2,
-        n ?? Go
+        n ?? Ko
       ) : { x: 0, y: 0, zoom: 1 };
     },
     // ── Viewport Mutation ─────────────────────────────────────────────────
@@ -6873,14 +6888,14 @@ function zh(t) {
      * Zoom in by `ZOOM_STEP_FACTOR`, clamped to `maxZoom`.
      */
     zoomIn(e) {
-      const n = t._viewportLive ?? t.viewport, o = t._config.maxZoom ?? 2, i = Math.min(n.zoom * Ji, o);
+      const n = t._viewportLive ?? t.viewport, o = t._config.maxZoom ?? 2, i = Math.min(n.zoom * Qi, o);
       V("viewport", "zoomIn", { from: n.zoom, to: i }), t._panZoom?.setViewport({ ...n, zoom: i }, e);
     },
     /**
      * Zoom out by `ZOOM_STEP_FACTOR`, clamped to `minZoom`.
      */
     zoomOut(e) {
-      const n = t._viewportLive ?? t.viewport, o = t._config.minZoom ?? 0.5, i = Math.max(n.zoom / Ji, o);
+      const n = t._viewportLive ?? t.viewport, o = t._config.minZoom ?? 0.5, i = Math.max(n.zoom / Qi, o);
       V("viewport", "zoomOut", { from: n.zoom, to: i }), t._panZoom?.setViewport({ ...n, zoom: i }, e);
     },
     /**
@@ -6940,50 +6955,50 @@ function zh(t) {
     }
   };
 }
-let xt = null;
-const Vh = 20;
-function ni(t) {
+let Et = null;
+const Xh = 20;
+function oi(t) {
   return JSON.parse(JSON.stringify(t));
 }
-function xs(t) {
+function ks(t) {
   return `${t}-copy-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 }
-function fa(t, e) {
+function ma(t, e) {
   const n = t.filter((r) => r.selected), o = new Set(n.map((r) => r.id)), i = e.filter(
     (r) => r.selected || o.has(r.source) && o.has(r.target)
   );
-  return xt = {
-    nodes: ni(n),
-    edges: ni(i),
+  return Et = {
+    nodes: oi(n),
+    edges: oi(i),
     pasteCount: 0
   }, { nodeCount: n.length, edgeCount: i.length };
 }
-function Bh() {
-  if (!xt || xt.nodes.length === 0) return null;
-  xt.pasteCount++;
-  const t = xt.pasteCount * Vh, e = /* @__PURE__ */ new Map(), n = xt.nodes.map((i) => {
-    const r = xs(i.id);
+function Wh() {
+  if (!Et || Et.nodes.length === 0) return null;
+  Et.pasteCount++;
+  const t = Et.pasteCount * Xh, e = /* @__PURE__ */ new Map(), n = Et.nodes.map((i) => {
+    const r = ks(i.id);
     return e.set(i.id, r), {
       ...i,
       id: r,
-      data: ni(i.data),
+      data: oi(i.data),
       position: { x: i.position.x + t, y: i.position.y + t },
       selected: !0
     };
-  }), o = xt.edges.map((i) => ({
+  }), o = Et.edges.map((i) => ({
     ...i,
-    id: xs(i.id),
+    id: ks(i.id),
     source: e.get(i.source),
     target: e.get(i.target),
     selected: !0
   }));
   return { nodes: n, edges: o };
 }
-function qh(t, e) {
-  const n = fa(t, e);
+function jh(t, e) {
+  const n = ma(t, e);
   return { nodeIds: t.filter((i) => i.selected).map((i) => i.id), ...n };
 }
-function Yh(t) {
+function Uh(t) {
   return {
     // ── Deselect ─────────────────────────────────────────────────────────
     /**
@@ -7025,7 +7040,7 @@ function Yh(t) {
     async _deleteSelected() {
       const e = [...t.selectedNodes].filter((l) => {
         const c = t.getNode(l);
-        return c ? $f(c) : !1;
+        return c ? Ff(c) : !1;
       }), n = [...t.selectedEdges].filter((l) => t.getEdge(l)?.deletable !== !1);
       let o = e.map((l) => t.getNode(l)).filter(Boolean);
       const i = new Set(e), r = t.edges.filter(
@@ -7045,7 +7060,7 @@ function Yh(t) {
         if (!d) return !0;
         const u = t.nodes.filter(
           (h) => h.parentId === l.parentId
-        ), f = so(d, l, u, c);
+        ), f = ro(d, l, u, c);
         return !f.valid && t._config.onChildValidationFail && t._config.onChildValidationFail({
           parent: d,
           child: l,
@@ -7103,7 +7118,7 @@ function Yh(t) {
      * module-level clipboard. Emits a `copy` event.
      */
     copy() {
-      const e = fa(t.nodes, t.edges);
+      const e = ma(t.nodes, t.edges);
       e.nodeCount > 0 && (V("clipboard", `Copied ${e.nodeCount} node(s) and ${e.edgeCount} edge(s)`), t._emit("copy", e));
     },
     /**
@@ -7117,7 +7132,7 @@ function Yh(t) {
      *   after Alpine renders the new DOM elements.
      */
     paste() {
-      const e = Bh();
+      const e = Wh();
       if (e) {
         t._captureHistory(), t.deselectAll(), t.nodes.push(...e.nodes), t.nodes = Mt(t.nodes), t._rebuildNodeMap(), t.edges.push(...e.edges), t._rebuildEdgeMap();
         for (const n of e.nodes)
@@ -7138,15 +7153,15 @@ function Yh(t) {
      */
     async cut() {
       if (t.selectedNodes.size === 0) return;
-      const e = qh(t.nodes, t.edges);
+      const e = jh(t.nodes, t.edges);
       e.nodeCount !== 0 && (await t._deleteSelected(), t._emit("cut", { nodeCount: e.nodeCount, edgeCount: e.edgeCount }), V("clipboard", `Cut ${e.nodeCount} node(s)`));
     }
   };
 }
-function Xh(t, e) {
+function Gh(t, e) {
   return t === e ? !0 : t === void 0 || e === void 0 ? t === e : JSON.stringify(t) === JSON.stringify(e);
 }
-function ro(t, e, n = {}) {
+function ao(t, e, n = {}) {
   const o = n.deleteMissing ?? !0, i = new Map(t.map((s) => [s.id, s])), r = [];
   for (const s of e) {
     const a = i.get(s.id);
@@ -7158,15 +7173,15 @@ function ro(t, e, n = {}) {
       for (const l of Object.keys(a))
         l !== "id" && !(l in s) && delete a[l];
     for (const [l, c] of Object.entries(s))
-      l === "id" || l === "__proto__" || l === "constructor" || l === "prototype" || Xh(a[l], c) || (a[l] = c);
+      l === "id" || l === "__proto__" || l === "constructor" || l === "prototype" || Gh(a[l], c) || (a[l] = c);
     r.push(a);
   }
   return r;
 }
-function Es(t, e, n) {
-  const o = ro(t.nodes, Mt(e.nodes));
+function Ls(t, e, n) {
+  const o = ao(t.nodes, Mt(e.nodes));
   t.nodes.splice(0, t.nodes.length, ...o);
-  const i = ro(t.edges, e.edges);
+  const i = ao(t.edges, e.edges);
   t.edges.splice(0, t.edges.length, ...i), t._rebuildNodeMap(), t._rebuildEdgeMap(), t.deselectAll();
   for (const r of t.nodes)
     r.selected && (r.selected = !1);
@@ -7176,7 +7191,7 @@ function Es(t, e, n) {
     t._layoutAnimTick++, t._commitNodeGeometry?.();
   }), V("history", `${n} applied`, { nodes: e.nodes.length, edges: e.edges.length });
 }
-function Wh(t) {
+function Zh(t) {
   return {
     // ── Save / Restore ────────────────────────────────────────────
     /**
@@ -7208,11 +7223,11 @@ function Wh(t) {
       }), e.nodes) {
         const n = Mt(
           JSON.parse(JSON.stringify(e.nodes))
-        ), o = ro(t.nodes, n);
+        ), o = ao(t.nodes, n);
         t.nodes.splice(0, t.nodes.length, ...o);
       }
       if (e.edges) {
-        const n = JSON.parse(JSON.stringify(e.edges)), o = ro(t.edges, n);
+        const n = JSON.parse(JSON.stringify(e.edges)), o = ao(t.edges, n);
         t.edges.splice(0, t.edges.length, ...o);
       }
       if (t._rebuildNodeMap(), t._rebuildEdgeMap(), e.viewport) {
@@ -7251,7 +7266,7 @@ function Wh(t) {
     undo() {
       if (!t._history) return;
       const e = t._history.undo({ nodes: t.nodes, edges: t.edges });
-      e && Es(t, e, "undo");
+      e && Ls(t, e, "undo");
     },
     /**
      * Redo the last undone change by popping a snapshot from the
@@ -7260,7 +7275,7 @@ function Wh(t) {
     redo() {
       if (!t._history) return;
       const e = t._history.redo({ nodes: t.nodes, edges: t.edges });
-      e && Es(t, e, "redo");
+      e && Ls(t, e, "redo");
     },
     /**
      * Whether an undo operation is available.
@@ -7276,32 +7291,32 @@ function Wh(t) {
     }
   };
 }
-function jh(t, e) {
+function Kh(t, e) {
   return t * (1 - e);
 }
-function Uh(t, e) {
+function Jh(t, e) {
   return t * e;
 }
-function Zh(t, e) {
+function Qh(t, e) {
   return e === "in" ? t : 1 - t;
 }
-function Gh(t, e, n) {
+function eg(t, e, n) {
   const o = t.getTotalLength();
   t.style.strokeDasharray = String(o);
-  const i = n === "in" ? jh(o, e) : Uh(o, e);
+  const i = n === "in" ? Kh(o, e) : Jh(o, e);
   t.style.strokeDashoffset = String(i), (n === "in" && e < 1 || n === "out") && (t.style.setProperty("marker-start", "none"), t.style.setProperty("marker-end", "none"));
 }
-function Kh(t) {
+function tg(t) {
   t.style.removeProperty("stroke-dasharray"), t.style.removeProperty("stroke-dashoffset"), t.style.removeProperty("marker-start"), t.style.removeProperty("marker-end");
 }
-function Jh(t, e, n) {
-  t.style.opacity = String(Zh(e, n));
+function ng(t, e, n) {
+  t.style.opacity = String(Qh(e, n));
 }
-function Qh(t) {
+function og(t) {
   t.style.removeProperty("opacity");
 }
-const ot = Math.PI * 2, on = /* @__PURE__ */ new Map(), eg = 64;
-function Ei(t) {
+const ot = Math.PI * 2, on = /* @__PURE__ */ new Map(), ig = 64;
+function Ci(t) {
   if (typeof document > "u" || typeof document.createElementNS != "function")
     return null;
   const e = on.get(t);
@@ -7312,28 +7327,28 @@ function Ei(t) {
     const s = n.getPointAtLength(r * o);
     return { x: s.x, y: s.y };
   };
-  if (on.size >= eg) {
+  if (on.size >= ig) {
     const r = on.keys().next().value;
     r !== void 0 && on.delete(r);
   }
   return on.set(t, i), i;
 }
-function Ty(t) {
+function $y(t) {
   const { cx: e, cy: n, offset: o = 0, clockwise: i = !0 } = t, r = t.rx ?? t.radius ?? 100, s = t.ry ?? t.radius ?? 100, a = i ? 1 : -1;
   return (l) => ({
     x: e + r * Math.cos(ot * l * a + o * ot),
     y: n + s * Math.sin(ot * l * a + o * ot)
   });
 }
-function Ay(t) {
+function Dy(t) {
   const { startX: e, startY: n, endX: o, endY: i, amplitude: r = 30, frequency: s = 1, offset: a = 0 } = t, l = o - e, c = i - n, d = Math.sqrt(l * l + c * c), u = d > 0 ? l / d : 1, h = -(d > 0 ? c / d : 0), g = u;
   return (p) => {
-    const m = e + l * p, y = n + c * p, x = r * Math.sin(ot * s * p + a * ot);
-    return { x: m + h * x, y: y + g * x };
+    const m = e + l * p, y = n + c * p, _ = r * Math.sin(ot * s * p + a * ot);
+    return { x: m + h * _, y: y + g * _ };
   };
 }
-function Ny(t, e) {
-  const n = Ei(t);
+function Hy(t, e) {
+  const n = Ci(t);
   if (!n) return null;
   const { reverse: o = !1, startAt: i = 0, endAt: r = 1 } = e ?? {}, s = r - i;
   return (a) => {
@@ -7341,7 +7356,7 @@ function Ny(t, e) {
     return o && (l = r - a * s), n(l);
   };
 }
-function Iy(t) {
+function Ry(t) {
   const { cx: e, cy: n, radius: o, angle: i = 60, offset: r = 0 } = t, s = i * Math.PI / 180;
   return (a) => {
     const l = s * Math.sin(ot * a + r * ot);
@@ -7351,28 +7366,28 @@ function Iy(t) {
     };
   };
 }
-function $y(t) {
+function Fy(t) {
   const { originX: e, originY: n, range: o = 20, speed: i = 1, seed: r = 0 } = t, s = 1 + r % 7 * 0.3, a = 1.3 + r % 11 * 0.2, l = 0.7 + r % 13 * 0.25, c = 1.1 + r % 17 * 0.15;
   return (d) => {
     const u = d * i * ot, f = (Math.sin(s * u) + Math.sin(a * u * 1.3)) / 2, h = (Math.sin(l * u * 0.9) + Math.sin(c * u * 1.1)) / 2;
     return { x: e + f * o, y: n + h * o };
   };
 }
-function Dy(t, e) {
+function Oy(t, e) {
   const n = e?.from ?? 0;
   return (o, i) => n + o * t;
 }
-let Cs = !1;
+let Ps = !1;
 function ve(t) {
   try {
     return structuredClone(t);
   } catch {
-    return Cs || (Cs = !0, typeof console < "u" && console.warn(
+    return Ps || (Ps = !0, typeof console < "u" && console.warn(
       "[AlpineFlow] Cloning fell back to JSON roundtrip because structuredClone could not clone the input (likely a reactive proxy or an object with functions). Non-JSON values (functions, Symbols, Dates) will be stripped. This warning fires once per session."
     )), JSON.parse(JSON.stringify(t));
   }
 }
-function tg(t) {
+function sg(t) {
   return {
     position: { ...t.position },
     class: t.class,
@@ -7383,7 +7398,7 @@ function tg(t) {
     zIndex: t.zIndex
   };
 }
-function ng(t) {
+function rg(t) {
   return {
     animated: t.animated,
     color: t.color,
@@ -7392,12 +7407,12 @@ function ng(t) {
     strokeWidth: t.strokeWidth
   };
 }
-function og(t, e) {
+function ag(t, e) {
   t.position.x = e.position.x, t.position.y = e.position.y, t.class = e.class, t.style = e.style, t.data = ve(e.data), t.dimensions = e.dimensions ? { ...e.dimensions } : t.dimensions, t.selected = e.selected, t.zIndex = e.zIndex;
 }
-class Ci {
+class Si {
   constructor(e, n) {
-    this._entries = [], this._state = "idle", this._reversed = !1, this._loopCount = -1, this._lockEnabled = !1, this._locked = !1, this._respectReducedMotion = void 0, this._listeners = /* @__PURE__ */ new Map(), this._context = {}, this._activeHandles = [], this._subTimelines = [], this._initialSnapshot = /* @__PURE__ */ new Map(), this._initialEdgeSnapshot = /* @__PURE__ */ new Map(), this._playResolve = null, this._pauseWaiters = /* @__PURE__ */ new Set(), this._canvas = e, this._engine = n ?? new Hr();
+    this._entries = [], this._state = "idle", this._reversed = !1, this._loopCount = -1, this._lockEnabled = !1, this._locked = !1, this._respectReducedMotion = void 0, this._listeners = /* @__PURE__ */ new Map(), this._context = {}, this._activeHandles = [], this._subTimelines = [], this._initialSnapshot = /* @__PURE__ */ new Map(), this._initialEdgeSnapshot = /* @__PURE__ */ new Map(), this._playResolve = null, this._pauseWaiters = /* @__PURE__ */ new Set(), this._canvas = e, this._engine = n ?? new zr();
   }
   // ── Public API ───────────────────────────────────────────────────────
   get state() {
@@ -7426,7 +7441,7 @@ class Ci {
    * Returns the sub-timeline for individual targeting.
    */
   timeline(e, n) {
-    const o = new Ci(this._canvas, this._engine);
+    const o = new Si(this._canvas, this._engine);
     return this._tag && !n?.independent && o.setTag(this._tag), e(o), this._entries.push({
       type: "step",
       config: { timeline: o, independent: n?.independent }
@@ -7497,7 +7512,7 @@ class Ci {
   }
   /** Check if reduced motion is active (OS preference + not opted out). */
   _isReducedMotion() {
-    return Rr(this._respectReducedMotion);
+    return Vr(this._respectReducedMotion);
   }
   // ── Internal: event emission ────────────────────────────────────────
   _emit(e, n) {
@@ -7530,21 +7545,21 @@ class Ci {
       for (const n of e.nodes)
         if (!this._initialSnapshot.has(n)) {
           const o = this._canvas.getNode(n);
-          o && this._initialSnapshot.set(n, tg(o));
+          o && this._initialSnapshot.set(n, sg(o));
         }
     }
     if (e.edges) {
       for (const n of e.edges)
         if (!this._initialEdgeSnapshot.has(n)) {
           const o = this._canvas.getEdge(n);
-          o && this._initialEdgeSnapshot.set(n, ng(o));
+          o && this._initialEdgeSnapshot.set(n, rg(o));
         }
     }
   }
   _restoreInitialSnapshot() {
     for (const [e, n] of this._initialSnapshot) {
       const o = this._canvas.getNode(e);
-      o && og(o, n);
+      o && ag(o, n);
     }
   }
   // ── Internal: handle management ─────────────────────────────────────
@@ -7657,9 +7672,9 @@ class Ci {
     const f = /* @__PURE__ */ new Map(), h = /* @__PURE__ */ new Map();
     this._captureEdgeFromValues(e, c, f, h);
     const g = this._resolveFollowPath(e), p = this._createGuidePath(e), m = !!(e.viewport || e.fitView || e.panTo);
-    let y = null, x = null;
-    m && this._canvas.viewport && (y = { ...this._canvas.viewport }, x = this._resolveTargetViewport(e));
-    const P = e.edgeTransition ?? "none", _ = e.addEdges?.map((T) => T.id) ?? [], b = e.removeEdges?.filter((T) => this._canvas.getEdge(T)).slice() ?? [], C = {
+    let y = null, _ = null;
+    m && this._canvas.viewport && (y = { ...this._canvas.viewport }, _ = this._resolveTargetViewport(e));
+    const S = e.edgeTransition ?? "none", b = e.addEdges?.map((T) => T.id) ?? [], x = e.removeEdges?.filter((T) => this._canvas.getEdge(T)).slice() ?? [], C = {
       step: e,
       ctx: a,
       duration: i,
@@ -7674,14 +7689,14 @@ class Ci {
       edgeFromStrokeWidth: f,
       edgeFromColor: h,
       viewportFrom: y,
-      viewportTarget: x,
-      transition: P,
-      addEdgeIds: _,
-      removeEdgeIds: b
+      viewportTarget: _,
+      transition: S,
+      addEdgeIds: b,
+      removeEdgeIds: x
     };
     if (i === 0)
       return this._executeInstantStep(C);
-    const E = this._prepareAnimatedEdges(e, P, _);
+    const E = this._prepareAnimatedEdges(e, S, b);
     return E && await E, g ? this._executeFollowPathStep(C) : this._executeAnimatedStep(C);
   }
   // ── Step decomposition: target validation ──────────────────────────
@@ -7748,7 +7763,7 @@ class Ci {
     if (!e.followPath) return null;
     if (typeof e.followPath == "function")
       return e.followPath;
-    const n = Ei(e.followPath);
+    const n = Ci(e.followPath);
     return !n && this._canvas.debug && console.warn("[AlpineFlow] SVG path resolution unavailable (no DOM), followPath string ignored"), n;
   }
   /** Create a visible SVG guide path overlay for string-based followPath. */
@@ -7814,17 +7829,17 @@ class Ci {
       transition: p,
       addEdgeIds: m,
       removeEdgeIds: y,
-      guidePathEl: x
-    } = e, P = e.resolvedPathFn;
-    return new Promise((_) => {
-      const b = this._engine.register((C) => {
+      guidePathEl: _
+    } = e, S = e.resolvedPathFn;
+    return new Promise((b) => {
+      const x = this._engine.register((C) => {
         if (this._state === "stopped")
-          return _(), !0;
+          return b(), !0;
         const E = Math.min(C / i, 1), T = s(E);
         if (a) {
-          const $ = P(T);
-          for (const L of a) {
-            const A = this._canvas.getNode(L);
+          const $ = S(T);
+          for (const M of a) {
+            const A = this._canvas.getNode(M);
             A && (A.position.x = $.x, A.position.y = $.y);
           }
         }
@@ -7839,9 +7854,9 @@ class Ci {
           f,
           h,
           g
-        ), this._tickEdgeTransitions(p, m, y, T), n.onProgress?.(E, o), E >= 1 ? (this._cleanupEdgeTransitions(p, m, y), y.length && this._removeEdges(y), this._applyStepInstant(n), x && n.guidePath?.autoRemove !== !1 && x.remove(), n.onProgress?.(1, o), n.onComplete?.(o), this._emit("step-complete"), _(), !0) : !1;
+        ), this._tickEdgeTransitions(p, m, y, T), n.onProgress?.(E, o), E >= 1 ? (this._cleanupEdgeTransitions(p, m, y), y.length && this._removeEdges(y), this._applyStepInstant(n), _ && n.guidePath?.autoRemove !== !1 && _.remove(), n.onProgress?.(1, o), n.onComplete?.(o), this._emit("step-complete"), b(), !0) : !1;
       }, r);
-      this._activeHandles.push(b);
+      this._activeHandles.push(x);
     });
   }
   /** Per-tick interpolation for properties during followPath animation. */
@@ -7855,7 +7870,7 @@ class Ci {
       const u = wn(e.style);
       for (const f of o) {
         const h = this._canvas.getNode(f), g = s.get(f);
-        h && g && (h.style = Fr(g, u, n));
+        h && g && (h.style = Br(g, u, n));
       }
     }
     if (i && e.edgeStrokeWidth !== void 0)
@@ -7866,10 +7881,10 @@ class Ci {
     if (i && e.edgeColor !== void 0)
       for (const u of i) {
         const f = this._canvas.getEdge(u), h = l.get(u);
-        f && (h !== void 0 && typeof h == "string" ? f.color = vi(h, e.edgeColor, n) : f.color = e.edgeColor);
+        f && (h !== void 0 && typeof h == "string" ? f.color = _i(h, e.edgeColor, n) : f.color = e.edgeColor);
       }
     if (c && d && this._canvas.viewport) {
-      const u = sf(c, d, n, {
+      const u = cf(c, d, n, {
         minZoom: this._canvas.minZoom,
         maxZoom: this._canvas.maxZoom
       });
@@ -7919,12 +7934,12 @@ class Ci {
           duration: i,
           easing: n.easing,
           delay: r,
-          onProgress: (x) => {
+          onProgress: (_) => {
             if (this._state === "stopped") {
               y.stop(), g();
               return;
             }
-            this._tickEdgeTransitions(d, u, f, x), n.onProgress?.(x, o);
+            this._tickEdgeTransitions(d, u, f, _), n.onProgress?.(_, o);
           },
           onComplete: () => {
             this._cleanupEdgeTransitions(d, u, f), f.length && this._removeEdges(f), this._applyStepInstant(n), h && n.guidePath?.autoRemove !== !1 && h.remove(), n.onProgress?.(1, o), n.onComplete?.(o), this._emit("step-complete"), g();
@@ -8002,28 +8017,28 @@ class Ci {
   _applyEdgeDrawTransition(e, n, o) {
     for (const i of e) {
       const r = this._canvas.getEdgePathElement?.(i);
-      r && Gh(r, n, o);
+      r && eg(r, n, o);
     }
   }
   /** Clean up draw transition styles. */
   _cleanupEdgeDrawTransition(e) {
     for (const n of e) {
       const o = this._canvas.getEdgePathElement?.(n);
-      o && Kh(o);
+      o && tg(o);
     }
   }
   /** Apply fade transition on each tick for added/removed edges. */
   _applyEdgeFadeTransition(e, n, o) {
     for (const i of e) {
       const r = this._canvas.getEdgeElement?.(i);
-      r && Jh(r, n, o);
+      r && ng(r, n, o);
     }
   }
   /** Clean up fade transition styles. */
   _cleanupEdgeFadeTransition(e) {
     for (const n of e) {
       const o = this._canvas.getEdgeElement?.(n);
-      o && Qh(o);
+      o && og(o);
     }
   }
   // ── Internal: viewport helpers ──────────────────────────────────
@@ -8073,14 +8088,14 @@ class Ci {
     !n || !this._canvas.viewport || (this._canvas.viewport.x = n.x, this._canvas.viewport.y = n.y, this._canvas.viewport.zoom = n.zoom);
   }
 }
-const ha = /* @__PURE__ */ new Map();
-function Gt(t, e) {
-  ha.set(t, e);
+const ya = /* @__PURE__ */ new Map();
+function Zt(t, e) {
+  ya.set(t, e);
 }
-function ig(t) {
-  return ha.get(t);
+function lg(t) {
+  return ya.get(t);
 }
-const Re = "http://www.w3.org/2000/svg", sg = {
+const Re = "http://www.w3.org/2000/svg", cg = {
   create(t, e) {
     const n = document.createElementNS(Re, "circle");
     if (n.setAttribute("r", String(e.size ?? 4)), n.setAttribute("fill", e.color ?? "#8B5CF6"), n.classList.add("flow-edge-particle"), e.class)
@@ -8094,7 +8109,7 @@ const Re = "http://www.w3.org/2000/svg", sg = {
   destroy(t) {
     t.remove();
   }
-}, rg = {
+}, dg = {
   create(t, e) {
     const n = document.createElementNS(Re, "g"), o = e.size ?? 6, i = e.color ?? "#8B5CF6", r = document.createElementNS(Re, "circle");
     r.setAttribute("r", String(o * 1.5)), r.setAttribute("fill", i), r.setAttribute("opacity", "0.3"), n.appendChild(r);
@@ -8112,11 +8127,11 @@ const Re = "http://www.w3.org/2000/svg", sg = {
     t.remove();
   }
 };
-let ag = 0;
-const lg = {
+let ug = 0;
+const fg = {
   create(t, e) {
     const n = document.createElementNS(Re, "g");
-    if (n.__beamLength = e.length ?? 30, n.__beamWidth = e.width ?? 4, n.__beamColor = e.color ?? "#8B5CF6", n.__beamGradient = e.gradient, n.__beamFollowThrough = e.followThrough ?? !0, n.__beamUid = `afbeam-${++ag}`, e.class)
+    if (n.__beamLength = e.length ?? 30, n.__beamWidth = e.width ?? 4, n.__beamColor = e.color ?? "#8B5CF6", n.__beamGradient = e.gradient, n.__beamFollowThrough = e.followThrough ?? !0, n.__beamUid = `afbeam-${++ug}`, e.class)
       for (const o of e.class.split(" "))
         o && n.classList.add(o);
     return t.appendChild(n), n;
@@ -8131,8 +8146,8 @@ const lg = {
           const m = document.createElementNS(Re, "defs");
           u = document.createElementNS(Re, "linearGradient"), u.setAttribute("id", a), u.setAttribute("gradientUnits", "userSpaceOnUse");
           for (const y of s) {
-            const x = document.createElementNS(Re, "stop");
-            x.setAttribute("offset", String(y.offset)), x.setAttribute("stop-color", y.color), y.opacity !== void 0 && x.setAttribute("stop-opacity", String(y.opacity)), u.appendChild(x);
+            const _ = document.createElementNS(Re, "stop");
+            _.setAttribute("offset", String(y.offset)), _.setAttribute("stop-color", y.color), y.opacity !== void 0 && _.setAttribute("stop-opacity", String(y.opacity)), u.appendChild(_);
           }
           m.appendChild(u), n.appendChild(m), p = `url(#${a})`, n.__gradient = u;
         }
@@ -8140,8 +8155,8 @@ const lg = {
       }
       const h = n.__beamFollowThrough ? e.progress * (e.pathLength + o) : e.progress * e.pathLength, g = o - h;
       if (d.setAttribute("stroke-dashoffset", String(g)), u) {
-        const p = Math.max(0, Math.min(e.pathLength, h)), m = Math.max(0, Math.min(e.pathLength, h - o)), y = e.pathEl.getPointAtLength(p), x = e.pathEl.getPointAtLength(m);
-        u.setAttribute("x1", String(x.x)), u.setAttribute("y1", String(x.y)), u.setAttribute("x2", String(y.x)), u.setAttribute("y2", String(y.y));
+        const p = Math.max(0, Math.min(e.pathLength, h)), m = Math.max(0, Math.min(e.pathLength, h - o)), y = e.pathEl.getPointAtLength(p), _ = e.pathEl.getPointAtLength(m);
+        u.setAttribute("x1", String(_.x)), u.setAttribute("y1", String(_.y)), u.setAttribute("x2", String(y.x)), u.setAttribute("y2", String(y.y));
       }
       return;
     }
@@ -8156,7 +8171,7 @@ const lg = {
   destroy(t) {
     t.remove();
   }
-}, cg = {
+}, hg = {
   create(t, e) {
     const n = document.createElementNS(Re, "circle");
     if (n.setAttribute("r", String(e.size ?? 6)), n.setAttribute("fill", "none"), n.setAttribute("stroke", e.color ?? "#8B5CF6"), n.setAttribute("stroke-width", "2"), e.class)
@@ -8171,7 +8186,7 @@ const lg = {
   destroy(t) {
     t.remove();
   }
-}, dg = {
+}, gg = {
   create(t, e) {
     const n = e.size ?? 16, o = e.href ?? "";
     let i;
@@ -8188,35 +8203,35 @@ const lg = {
     t.remove();
   }
 };
-Gt("circle", sg);
-Gt("orb", rg);
-Gt("beam", lg);
-Gt("pulse", cg);
-Gt("image", dg);
-let Ss = !1;
-function ug(t) {
+Zt("circle", cg);
+Zt("orb", dg);
+Zt("beam", fg);
+Zt("pulse", hg);
+Zt("image", gg);
+let Ms = !1;
+function pg(t) {
   const e = t.match(/^([\d.]+)(ms|s)?$/);
   if (!e) return 2e3;
   const n = parseFloat(e[1]);
   return e[2] === "ms" ? n : n * 1e3;
 }
-function ks(t, e, n) {
+function Ts(t, e, n) {
   if (t.speed !== void 0 && t.speed > 0)
     return t.duration !== void 0 && console.warn("[AlpineFlow] Both speed and duration provided for particle; speed takes precedence."), e / t.speed * 1e3;
   const o = t.duration ?? n;
-  return typeof o == "number" ? o : ug(o);
+  return typeof o == "number" ? o : pg(o);
 }
-function fg(t) {
+function mg(t) {
   function e(o, i, r = {}, s = {}) {
-    const a = r.renderer ?? "circle", l = ig(a);
+    const a = r.renderer ?? "circle", l = lg(a);
     if (!l) {
       V("particle", `_fireParticleOnPath: unknown renderer "${a}"`);
       return;
     }
-    a === "beam" && typeof r.onComplete == "function" && r.followThrough === void 0 && !Ss && (Ss = !0, console.warn(
+    a === "beam" && typeof r.onComplete == "function" && r.followThrough === void 0 && !Ms && (Ms = !0, console.warn(
       "[AlpineFlow] beam `onComplete` fires after the tail exits the path (follow-through is on by default). Pass `followThrough: false` if you want `onComplete` to fire when the head reaches the target."
     ));
-    const c = t._containerStyles, d = r.size ?? s.size ?? (parseFloat(c?.getPropertyValue("--flow-edge-dot-size").trim() ?? "4") || 4), u = r.color ?? s.color ?? c?.getPropertyValue("--flow-edge-dot-fill").trim() ?? yn, f = s.durationFallback ?? c?.getPropertyValue("--flow-edge-dot-duration").trim() ?? "2s", h = o.getTotalLength(), g = ks(r, h, f), p = { ...r, size: d, color: u }, m = l.create(i, p), y = o.getPointAtLength(0), x = {
+    const c = t._containerStyles, d = r.size ?? s.size ?? (parseFloat(c?.getPropertyValue("--flow-edge-dot-size").trim() ?? "4") || 4), u = r.color ?? s.color ?? c?.getPropertyValue("--flow-edge-dot-fill").trim() ?? yn, f = s.durationFallback ?? c?.getPropertyValue("--flow-edge-dot-duration").trim() ?? "2s", h = o.getTotalLength(), g = Ts(r, h, f), p = { ...r, size: d, color: u }, m = l.create(i, p), y = o.getPointAtLength(0), _ = {
       x: y.x,
       y: y.y,
       progress: 0,
@@ -8225,13 +8240,13 @@ function fg(t) {
       elapsed: 0,
       pathEl: o
     };
-    l.update(m, x);
-    let P;
-    const _ = new Promise(($) => {
-      P = $;
-    }), b = () => {
-      typeof r.onComplete == "function" && r.onComplete(), P();
-    }, C = s.wrapOnComplete ? s.wrapOnComplete(b) : b, E = {
+    l.update(m, _);
+    let S;
+    const b = new Promise(($) => {
+      S = $;
+    }), x = () => {
+      typeof r.onComplete == "function" && r.onComplete(), S();
+    }, C = s.wrapOnComplete ? s.wrapOnComplete(x) : x, E = {
       element: m,
       renderer: l,
       pathEl: o,
@@ -8249,7 +8264,7 @@ function fg(t) {
         t._activeParticles.has(E) && (E.renderer.destroy(E.element), t._activeParticles.delete(E), C());
       },
       get finished() {
-        return _;
+        return b;
       }
     };
   }
@@ -8424,18 +8439,18 @@ function fg(t) {
           }, finished: p, stopAll() {
           } };
         }
-        const h = Math.max(...f.map((p) => p.length)), g = ks(l, h, "2s");
+        const h = Math.max(...f.map((p) => p.length)), g = Ts(l, h, "2s");
         for (const { id: p, length: m } of f) {
-          const y = m / h, x = g * y, P = g - x;
-          if (P <= 0) {
-            const _ = this.sendParticle(p, { ...l, duration: x });
-            _ && c.push(_);
+          const y = m / h, _ = g * y, S = g - _;
+          if (S <= 0) {
+            const b = this.sendParticle(p, { ...l, duration: _ });
+            b && c.push(b);
           } else {
-            const _ = setTimeout(() => {
-              const b = this.sendParticle(p, { ...l, duration: x });
-              b && c.push(b);
-            }, P);
-            d.push(_);
+            const b = setTimeout(() => {
+              const x = this.sendParticle(p, { ...l, duration: _ });
+              x && c.push(x);
+            }, S);
+            d.push(b);
           }
         }
       } else
@@ -8476,7 +8491,7 @@ function fg(t) {
     }
   };
 }
-class hg {
+class yg {
   constructor(e, n) {
     this.name = e, this._host = n;
   }
@@ -8520,7 +8535,7 @@ class hg {
     return this._host.getHandles({ tag: this.name });
   }
 }
-const oi = 1, ii = 1 / 60;
+const ii = 1, si = 1 / 60;
 class ln {
   constructor(e) {
     this._virtualTime = 0, this._inFlight = /* @__PURE__ */ new Map(), this._state = ve(e);
@@ -8609,7 +8624,7 @@ class ln {
   _applyAnimate(e) {
     const n = e.args.handleId ?? `virt-${this._virtualTime.toFixed(3)}-${this._inFlight.size}`;
     e.args.handleId || console.warn("[AlpineFlow VirtualEngine] animate event missing handleId — determinism not guaranteed for this event");
-    const o = e.args.targets ?? {}, i = e.args.options ?? {}, r = i.motion, s = r ? Br(r) ?? void 0 : void 0, a = {
+    const o = e.args.targets ?? {}, i = e.args.options ?? {}, r = i.motion, s = r ? Wr(r) ?? void 0 : void 0, a = {
       handleId: n,
       type: s ? s.type : "eased",
       targets: ve(o),
@@ -8709,17 +8724,17 @@ class ln {
       if (!r.settled) {
         switch (o.type) {
           case "spring":
-            Or(r, o, n);
+            qr(r, o, n);
             break;
           case "decay":
-            _i(r, o, n);
+            bi(r, o, n);
             break;
           case "inertia":
-            zr(r, o, n, i);
+            Yr(r, o, n, i);
             break;
           case "keyframes": {
             const s = o, a = s.duration ?? 5e3, l = a > 0 ? Math.min((this._virtualTime - e.startTime) / a, 1) : 1;
-            Vr(r, s, l, i), l >= 1 && (r.settled = !0);
+            Xr(r, s, l, i), l >= 1 && (r.settled = !0);
             break;
           }
         }
@@ -8767,14 +8782,14 @@ class ln {
     return !0;
   }
 }
-const ga = /* @__PURE__ */ new Map();
-function Si(t, e) {
-  ga.set(t, e);
+const wa = /* @__PURE__ */ new Map();
+function ki(t, e) {
+  wa.set(t, e);
 }
-function gg(t) {
-  return ga.get(t);
+function wg(t) {
+  return wa.get(t);
 }
-function ki(t, e = 20) {
+function Li(t, e = 20) {
   const n = Object.values(t);
   if (n.length === 0)
     return null;
@@ -8785,7 +8800,7 @@ function ki(t, e = 20) {
   }
   return o -= e, i -= e, r += e, s += e, { minX: o, minY: i, vbWidth: r - o, vbHeight: s - i };
 }
-function pa(t) {
+function va(t) {
   let e = "";
   for (const n of Object.values(t.edges)) {
     const o = t.nodes[n.source], i = t.nodes[n.target];
@@ -8796,29 +8811,29 @@ function pa(t) {
   }
   return e;
 }
-const pg = {
+const vg = {
   render(t, { width: e, height: n }) {
     const o = Object.values(t.nodes);
     if (o.length === 0)
       return `<svg width="${e}" height="${n}" xmlns="http://www.w3.org/2000/svg"></svg>`;
-    const i = ki(t.nodes);
+    const i = Li(t.nodes);
     if (!i)
       return `<svg width="${e}" height="${n}" xmlns="http://www.w3.org/2000/svg"></svg>`;
     const { minX: r, minY: s, vbWidth: a, vbHeight: l } = i;
     let c = `<svg width="${e}" height="${n}" viewBox="${r} ${s} ${a} ${l}" xmlns="http://www.w3.org/2000/svg">`;
-    c += pa(t);
+    c += va(t);
     for (const d of o) {
       const u = d.position?.x ?? 0, f = d.position?.y ?? 0, h = d.dimensions?.width ?? 150, g = d.dimensions?.height ?? 40;
       c += `<rect x="${u}" y="${f}" width="${h}" height="${g}" fill="currentColor" fill-opacity="0.2" stroke="currentColor" stroke-width="1" rx="4"/>`;
     }
     return c += "</svg>", c;
   }
-}, mg = {
+}, _g = {
   render(t, { width: e, height: n }) {
     const o = Object.values(t.nodes);
     if (o.length === 0)
       return `<svg width="${e}" height="${n}" xmlns="http://www.w3.org/2000/svg"></svg>`;
-    const i = ki(t.nodes);
+    const i = Li(t.nodes);
     if (!i)
       return `<svg width="${e}" height="${n}" xmlns="http://www.w3.org/2000/svg"></svg>`;
     const { minX: r, minY: s, vbWidth: a, vbHeight: l } = i;
@@ -8836,12 +8851,12 @@ const pg = {
     }
     return c += "</svg>", c;
   }
-}, yg = {
+}, bg = {
   render(t, { width: e, height: n, inFlight: o }) {
     const i = Object.values(t.nodes);
     if (i.length === 0)
       return `<svg width="${e}" height="${n}" xmlns="http://www.w3.org/2000/svg"></svg>`;
-    const r = ki(t.nodes);
+    const r = Li(t.nodes);
     if (!r)
       return `<svg width="${e}" height="${n}" xmlns="http://www.w3.org/2000/svg"></svg>`;
     const s = /* @__PURE__ */ new Set();
@@ -8853,7 +8868,7 @@ const pg = {
     }
     const { minX: a, minY: l, vbWidth: c, vbHeight: d } = r;
     let u = `<svg width="${e}" height="${n}" viewBox="${a} ${l} ${c} ${d}" xmlns="http://www.w3.org/2000/svg">`;
-    u += pa(t);
+    u += va(t);
     for (const f of i) {
       const h = f.position?.x ?? 0, g = f.position?.y ?? 0, p = f.dimensions?.width ?? 150, m = f.dimensions?.height ?? 40;
       s.has(f.id ?? "") ? u += `<rect x="${h}" y="${g}" width="${p}" height="${m}" fill="currentColor" fill-opacity="0.8" stroke="currentColor" stroke-width="2" rx="4"/>` : u += `<rect x="${h}" y="${g}" width="${p}" height="${m}" fill="currentColor" fill-opacity="0.1" stroke="currentColor" stroke-width="1" rx="4" opacity="0.3"/>`;
@@ -8861,10 +8876,10 @@ const pg = {
     return u += "</svg>", u;
   }
 };
-Si("faithful", pg);
-Si("outline", mg);
-Si("activity", yg);
-function si(t, e) {
+ki("faithful", vg);
+ki("outline", _g);
+ki("activity", bg);
+function ri(t, e) {
   let n = 0, o = t.length;
   for (; n < o; ) {
     const i = n + o >>> 1;
@@ -8872,7 +8887,7 @@ function si(t, e) {
   }
   return n;
 }
-function ri(t, e) {
+function ai(t, e) {
   let n = 0, o = t.length;
   for (; n < o; ) {
     const i = n + o >>> 1;
@@ -8880,20 +8895,20 @@ function ri(t, e) {
   }
   return n;
 }
-function wg(t, e) {
+function xg(t, e) {
   return e.split(".").reduce((n, o) => n?.[o], t);
 }
-function ma(t) {
+function _a(t) {
   if (t !== null && typeof t == "object") {
     Object.freeze(t);
     for (const e of Object.keys(t))
-      ma(t[e]);
+      _a(t[e]);
   }
   return t;
 }
-class Li {
+class Pi {
   constructor(e) {
-    this.version = e.version, this.duration = e.duration, this.initialState = ma(ve(e.initialState)), this.events = Object.freeze(ve(e.events)), this.checkpoints = Object.freeze(ve(e.checkpoints)), this.metadata = Object.freeze({ ...e.metadata ?? {} }), Object.freeze(this);
+    this.version = e.version, this.duration = e.duration, this.initialState = _a(ve(e.initialState)), this.events = Object.freeze(ve(e.events)), this.checkpoints = Object.freeze(ve(e.checkpoints)), this.metadata = Object.freeze({ ...e.metadata ?? {} }), Object.freeze(this);
   }
   toJSON() {
     return {
@@ -8906,11 +8921,11 @@ class Li {
     };
   }
   static fromJSON(e) {
-    if (e.version > oi)
+    if (e.version > ii)
       throw new Error(
-        `[AlpineFlow] Recording version ${e.version} is newer than supported (${oi}). Please update AlpineFlow to replay this recording.`
+        `[AlpineFlow] Recording version ${e.version} is newer than supported (${ii}). Please update AlpineFlow to replay this recording.`
       );
-    return new Li(e);
+    return new Pi(e);
   }
   /**
    * Returns unique subjects (nodes, edges, timelines, particles) that appeared
@@ -9025,7 +9040,7 @@ class Li {
   getValueTrack(e) {
     const n = [];
     for (const o of this.checkpoints) {
-      const i = wg(o.canvas, e);
+      const i = xg(o.canvas, e);
       i !== void 0 && n.push({ t: o.t, v: i });
     }
     return n;
@@ -9042,8 +9057,8 @@ class Li {
     o && n.restoreCheckpoint(o);
     const i = o?.t ?? 0, r = this.events;
     let s = i;
-    const a = ii * 1e3;
-    let l = o ? si(r, i) : ri(r, i);
+    const a = si * 1e3;
+    let l = o ? ri(r, i) : ai(r, i);
     for (; s < e; ) {
       const c = Math.min(s + a, e);
       for (; l < r.length && r[l].t <= c; )
@@ -9057,13 +9072,13 @@ class Li {
    * Renders a thumbnail SVG snapshot of the canvas state at virtual time `t`.
    */
   renderThumbnailAt(e, n) {
-    const o = this.getStateAt(e), i = n.renderer ?? "faithful", r = gg(i);
+    const o = this.getStateAt(e), i = n.renderer ?? "faithful", r = wg(i);
     if (!r)
       throw new Error(`[AlpineFlow] Unknown thumbnail renderer "${i}"`);
     return r.render(o, { width: n.width, height: n.height });
   }
 }
-class vg {
+class Eg {
   constructor(e, n = {}) {
     this._events = [], this._checkpoints = [], this._startTime = 0, this._originalMethods = {}, this._checkpointTimer = null, this._eventCounter = 0, this._activeAnims = /* @__PURE__ */ new Map(), this._canvas = e, this._checkpointInterval = n.checkpointInterval ?? 500, this._maxDuration = n.maxDuration ?? 6e4;
   }
@@ -9080,14 +9095,14 @@ class vg {
     }
     this._captureCheckpoint(), this._activeAnims.clear();
     const i = {
-      version: oi,
+      version: ii,
       duration: this._virtualNow(),
       initialState: o,
       events: this._events,
       checkpoints: this._checkpoints,
       metadata: n
     };
-    return new Li(i);
+    return new Pi(i);
   }
   _virtualNow() {
     return performance.now() - this._startTime;
@@ -9243,7 +9258,7 @@ class vg {
     this._originalMethods = {};
   }
 }
-class _g {
+class Cg {
   constructor(e, n, o = {}) {
     this._currentTime = 0, this._state = "idle", this._direction = "forward", this._speed = 1, this._rafHandle = null, this._lastWallTime = 0, this._resolveFinished = () => {
     }, this.recording = n, this._canvas = e, this._virtualEngine = new ln(n.initialState), this._speed = o.speed ?? 1, this._direction = this._speed < 0 ? "backward" : "forward", this._from = o.from ?? 0, this._to = o.to ?? n.duration, this._loop = o.loop ?? !1, this._currentTime = this._from, this._from > 0 && this._seekEngineTo(this._from), o.skipInitialState || this._applyStateToCanvas(this._virtualEngine.getState()), this.finished = new Promise((i) => {
@@ -9269,7 +9284,7 @@ class _g {
     this._speed = e, this._direction = e < 0 ? "backward" : "forward";
   }
   play() {
-    this._state !== "playing" && (this._state === "ended" && (this._currentTime = this._from, this._seekEngineTo(this._from), this._applyStateToCanvas(this._virtualEngine.getState())), this._state = "playing", this._lastWallTime = To(), this._scheduleTick());
+    this._state !== "playing" && (this._state === "ended" && (this._currentTime = this._from, this._seekEngineTo(this._from), this._applyStateToCanvas(this._virtualEngine.getState())), this._state = "playing", this._lastWallTime = Ao(), this._scheduleTick());
   }
   pause() {
     this._state === "playing" && (this._state = "paused", this._cancelTick());
@@ -9292,8 +9307,8 @@ class _g {
     n && o.restoreCheckpoint(n);
     const i = n?.t ?? 0, r = this.recording.events;
     let s = i;
-    const a = ii * 1e3;
-    let l = n ? si(r, i) : ri(r, i);
+    const a = si * 1e3;
+    let l = n ? ri(r, i) : ai(r, i);
     for (; s < e; ) {
       const c = Math.min(s + a, e);
       for (; l < r.length && r[l].t <= c; )
@@ -9307,7 +9322,7 @@ class _g {
   _tick() {
     if (this._state !== "playing")
       return;
-    const e = To(), n = (e - this._lastWallTime) / 1e3;
+    const e = Ao(), n = (e - this._lastWallTime) / 1e3;
     this._lastWallTime = e;
     const o = n * this._speed * 1e3, i = this._currentTime + o;
     if (this._direction === "forward" ? i >= this._to : i <= this._from) {
@@ -9339,8 +9354,8 @@ class _g {
       return;
     const i = this.recording.events;
     let r = e;
-    const s = ii * 1e3;
-    let a = e === 0 ? ri(i, 0) : si(i, e);
+    const s = si * 1e3;
+    let a = e === 0 ? ai(i, 0) : ri(i, e);
     for (; r < n; ) {
       const l = Math.min(r + s, n);
       for (; a < i.length && i[a].t <= l; ) {
@@ -9403,7 +9418,7 @@ class _g {
     if (this._loop) {
       const e = typeof this._loop == "number" ? this._loop - 1 : 1 / 0;
       if (e > 0) {
-        this._loop = typeof this._loop == "number" ? e : !0, this._currentTime = this._from, this._seekEngineTo(this._from), this._applyStateToCanvas(this._virtualEngine.getState()), this._state = "playing", this._lastWallTime = To(), this._scheduleTick();
+        this._loop = typeof this._loop == "number" ? e : !0, this._currentTime = this._from, this._seekEngineTo(this._from), this._applyStateToCanvas(this._virtualEngine.getState()), this._state = "playing", this._lastWallTime = Ao(), this._scheduleTick();
         return;
       }
     }
@@ -9455,11 +9470,11 @@ class _g {
         }
   }
 }
-function To() {
+function Ao() {
   return typeof performance < "u" && typeof performance.now == "function" ? performance.now() : Date.now();
 }
-function bg(t) {
-  const e = fg(t);
+function Sg(t) {
+  const e = mg(t);
   return {
     // ── Internal: Sync animation lock state ───────────────────────────────
     /**
@@ -9476,7 +9491,7 @@ function bg(t) {
      * history suspension are automatically managed via timeline events.
      */
     timeline() {
-      const n = new Ci(t, eo);
+      const n = new Si(t, eo);
       n.on("play", () => {
         t._activeTimelines.add(n), t._syncAnimationState();
       }), n.on("resume", () => {
@@ -9552,15 +9567,15 @@ function bg(t) {
           if (!p) continue;
           const y = (g._duration ?? i) === 0;
           if (g.followPath && !y) {
-            let x = null;
-            typeof g.followPath == "function" ? x = g.followPath : x = Ei(g.followPath);
-            let P = null;
+            let _ = null;
+            typeof g.followPath == "function" ? _ = g.followPath : _ = Ci(g.followPath);
+            let S = null;
             if (g.guidePath?.visible && typeof g.followPath == "string" && typeof document < "u") {
-              const _ = t.getEdgeSvgElement?.();
-              _ && (P = document.createElementNS("http://www.w3.org/2000/svg", "path"), P.setAttribute("d", g.followPath), P.classList.add("flow-guide-path"), g.guidePath.class && P.classList.add(g.guidePath.class), _.appendChild(P));
+              const b = t.getEdgeSvgElement?.();
+              b && (S = document.createElementNS("http://www.w3.org/2000/svg", "path"), S.setAttribute("d", g.followPath), S.classList.add("flow-guide-path"), g.guidePath.class && S.classList.add(g.guidePath.class), b.appendChild(S));
             }
-            if (x) {
-              const _ = x, b = P, C = g.guidePath?.autoRemove !== !1;
+            if (_) {
+              const b = _, x = S, C = g.guidePath?.autoRemove !== !1;
               r.push({
                 key: `node:${h}:followPath`,
                 from: 0,
@@ -9568,23 +9583,23 @@ function bg(t) {
                 apply: (E) => {
                   const T = t._nodeMap.get(h);
                   if (!T) return;
-                  const $ = _(E);
-                  Ce().raw(T).position.x = $.x, Ce().raw(T).position.y = $.y, s.add(h), E >= 1 && b && C && b.remove();
+                  const $ = b(E);
+                  Ce().raw(T).position.x = $.x, Ce().raw(T).position.y = $.y, s.add(h), E >= 1 && x && C && x.remove();
                 }
               });
             }
           } else if (g.position) {
-            const P = Ce().raw(p).position;
+            const S = Ce().raw(p).position;
             if (g.position.x !== void 0) {
-              const _ = g.position.x;
+              const b = g.position.x;
               if (y)
-                P.x = _;
+                S.x = b;
               else {
-                const b = P.x;
+                const x = S.x;
                 r.push({
                   key: `node:${h}:position.x`,
-                  from: b,
-                  to: _,
+                  from: x,
+                  to: b,
                   apply: (C) => {
                     const E = t._nodeMap.get(h);
                     E && (Ce().raw(E).position.x = C, s.add(h));
@@ -9593,15 +9608,15 @@ function bg(t) {
               }
             }
             if (g.position.y !== void 0) {
-              const _ = g.position.y;
+              const b = g.position.y;
               if (y)
-                P.y = _;
+                S.y = b;
               else {
-                const b = P.y;
+                const x = S.y;
                 r.push({
                   key: `node:${h}:position.y`,
-                  from: b,
-                  to: _,
+                  from: x,
+                  to: b,
                   apply: (C) => {
                     const E = t._nodeMap.get(h);
                     E && (Ce().raw(E).position.y = C), s.add(h);
@@ -9615,19 +9630,19 @@ function bg(t) {
             if (y)
               p.style = g.style, a.add(h);
             else {
-              const x = wn(p.style || {}), P = wn(g.style), _ = t._nodeElements.get(h);
-              if (_) {
-                const b = getComputedStyle(_);
-                for (const C of Object.keys(P))
-                  x[C] === void 0 && (x[C] = b.getPropertyValue(C));
+              const _ = wn(p.style || {}), S = wn(g.style), b = t._nodeElements.get(h);
+              if (b) {
+                const x = getComputedStyle(b);
+                for (const C of Object.keys(S))
+                  _[C] === void 0 && (_[C] = x.getPropertyValue(C));
               }
               r.push({
                 key: `node:${h}:style`,
                 from: 0,
                 to: 1,
-                apply: (b) => {
+                apply: (x) => {
                   const C = t._nodeMap.get(h);
-                  C && (Ce().raw(C).style = Fr(x, P, b), a.add(h));
+                  C && (Ce().raw(C).style = Br(_, S, x), a.add(h));
                 }
               });
             }
@@ -9635,15 +9650,15 @@ function bg(t) {
             key: `node:${h}:dimensions.width`,
             from: p.dimensions.width,
             to: g.dimensions.width,
-            apply: (x) => {
-              p.dimensions.width = x;
+            apply: (_) => {
+              p.dimensions.width = _;
             }
           })), g.dimensions.height !== void 0 && (p.fixedDimensions = !0, y ? p.dimensions.height = g.dimensions.height : r.push({
             key: `node:${h}:dimensions.height`,
             from: p.dimensions.height,
             to: g.dimensions.height,
-            apply: (x) => {
-              p.dimensions.height = x;
+            apply: (_) => {
+              p.dimensions.height = _;
             }
           })));
         }
@@ -9658,14 +9673,14 @@ function bg(t) {
             else if (y)
               p.color = g.color, l.add(h);
             else {
-              const x = typeof p.color == "string" && p.color || getComputedStyle(t._container).getPropertyValue("--flow-edge-stroke").trim() || wi;
+              const _ = typeof p.color == "string" && p.color || getComputedStyle(t._container).getPropertyValue("--flow-edge-stroke").trim() || vi;
               r.push({
                 key: `edge:${h}:color`,
-                from: x,
+                from: _,
                 to: g.color,
-                apply: (P) => {
-                  const _ = t._edgeMap.get(h);
-                  _ && (Ce().raw(_).color = P, l.add(h));
+                apply: (S) => {
+                  const b = t._edgeMap.get(h);
+                  b && (Ce().raw(b).color = S, l.add(h));
                 }
               });
             }
@@ -9673,14 +9688,14 @@ function bg(t) {
             if (y)
               p.strokeWidth = g.strokeWidth, l.add(h);
             else {
-              const x = p.strokeWidth ?? (parseFloat(getComputedStyle(t._container).getPropertyValue("--flow-edge-stroke-width").trim() || "1") || 1);
+              const _ = p.strokeWidth ?? (parseFloat(getComputedStyle(t._container).getPropertyValue("--flow-edge-stroke-width").trim() || "1") || 1);
               r.push({
                 key: `edge:${h}:strokeWidth`,
-                from: x,
+                from: _,
                 to: g.strokeWidth,
-                apply: (P) => {
-                  const _ = t._edgeMap.get(h);
-                  _ && (Ce().raw(_).strokeWidth = P, l.add(h));
+                apply: (S) => {
+                  const b = t._edgeMap.get(h);
+                  b && (Ce().raw(b).strokeWidth = S, l.add(h));
                 }
               });
             }
@@ -9789,7 +9804,7 @@ function bg(t) {
      * the effective duration is collapsed to 0 for an instant snap.
      */
     animate(n, o = {}) {
-      const i = Rr(t._config?.respectReducedMotion) ? 0 : o.duration ?? 300;
+      const i = Vr(t._config?.respectReducedMotion) ? 0 : o.duration ?? 300;
       return this.update(n, { ...o, duration: i });
     },
     // ── Follow (viewport tracking) ────────────────────────────────────────
@@ -9819,8 +9834,8 @@ function bg(t) {
           const m = n._targetNodeIds[0], y = t._nodeMap.get(m);
           if (y) {
             d = y.parentId ? t.getAbsolutePosition(m) : { ...y.position };
-            const x = y.nodeOrigin ?? t._config.nodeOrigin ?? [0, 0];
-            y.dimensions && (d.x += y.dimensions.width * (0.5 - x[0]), d.y += y.dimensions.height * (0.5 - x[1]));
+            const _ = y.nodeOrigin ?? t._config.nodeOrigin ?? [0, 0];
+            y.dimensions && (d.x += y.dimensions.width * (0.5 - _[0]), d.y += y.dimensions.height * (0.5 - _[1]));
           }
         } else if ("getCurrentPosition" in n && typeof n.getCurrentPosition == "function") {
           const m = n.getCurrentPosition();
@@ -9897,7 +9912,7 @@ function bg(t) {
      */
     group(n) {
       const o = this;
-      return new hg(n, {
+      return new yg(n, {
         animate: (i, r) => o.animate(i, r),
         update: (i, r) => o.update(i, r),
         sendParticle: (i, r) => o.sendParticle(i, r),
@@ -9982,7 +9997,7 @@ function bg(t) {
         removeNodes: (p) => t.removeNodes(p),
         addEdges: (p) => t.addEdges(p),
         removeEdges: (p) => t.removeEdges(p)
-      }, h = new vg(f, o), g = async () => {
+      }, h = new Eg(f, o), g = async () => {
         i.animate = (...p) => f.animate(...p), i.update = (...p) => f.update(...p), i.sendParticle = (...p) => f.sendParticle(...p), i.sendParticleAlongPath = (...p) => f.sendParticleAlongPath(...p), i.sendParticleBetween = (...p) => f.sendParticleBetween(...p), i.sendParticleBurst = (...p) => f.sendParticleBurst(...p), i.sendConverging = (...p) => f.sendConverging(...p);
         try {
           const p = n();
@@ -10018,7 +10033,7 @@ function bg(t) {
         sendParticleBurst: (s, a) => i.sendParticleBurst(s, a),
         sendConverging: (s, a) => i.sendConverging(s, a)
       };
-      return new _g(r, n, o);
+      return new Cg(r, n, o);
     },
     // ── Cleanup lifecycle ─────────────────────────────────────────────────
     /**
@@ -10043,7 +10058,7 @@ function bg(t) {
      * `renderer: 'your-name'` in any `sendParticle*` options to use it.
      */
     registerParticleRenderer(n, o) {
-      Gt(n, o);
+      Zt(n, o);
     },
     // ── Particle system (delegated to canvas-particles sub-mixin) ────────
     _tickParticles: e._tickParticles,
@@ -10055,25 +10070,25 @@ function bg(t) {
     destroyParticles: e.destroyParticles
   };
 }
-function Ls(t, e, n, o) {
+function As(t, e, n, o) {
   const i = e.find((a) => a.id === t);
   if (!i) return /* @__PURE__ */ new Set();
   if (i.type === "group")
-    return yt(t, e);
-  const r = /* @__PURE__ */ new Set(), s = Jo(t, e, n);
+    return wt(t, e);
+  const r = /* @__PURE__ */ new Set(), s = Qo(t, e, n);
   for (const a of s)
     r.add(a.id);
   if (o?.recursive) {
     const a = s.map((l) => l.id);
     for (; a.length > 0; ) {
-      const l = a.shift(), c = Jo(l, e, n);
+      const l = a.shift(), c = Qo(l, e, n);
       for (const d of c)
         !r.has(d.id) && d.id !== t && (r.add(d.id), a.push(d.id));
     }
   }
   return r;
 }
-function xg(t, e, n) {
+function kg(t, e, n) {
   const o = /* @__PURE__ */ new Map();
   for (const i of e)
     n.has(i.id) && o.set(i.id, { ...i.position });
@@ -10083,18 +10098,18 @@ function xg(t, e, n) {
     reroutedEdges: /* @__PURE__ */ new Map()
   };
 }
-function Ao(t, e, n, o) {
+function No(t, e, n, o) {
   t.collapsed = !0, o && (t.dimensions = { ...o });
   for (const i of e)
     n.targetPositions.has(i.id) && (i.hidden = !0);
 }
-function Ps(t, e, n, o = !0) {
+function Ns(t, e, n, o = !0) {
   t.collapsed = !1, o && n.originalDimensions && (t.dimensions = { ...n.originalDimensions });
   const i = /* @__PURE__ */ new Set();
   if (t.type === "group") {
     for (const r of e)
       if (r.collapsed && r.id !== t.id && n.targetPositions.has(r.id)) {
-        const s = yt(r.id, e);
+        const s = wt(r.id, e);
         for (const a of s)
           i.add(a);
       }
@@ -10105,7 +10120,7 @@ function Ps(t, e, n, o = !0) {
       r.position = { ...s }, i.has(r.id) || (r.hidden = !1);
     }
 }
-function No(t, e, n) {
+function Io(t, e, n) {
   const o = /* @__PURE__ */ new Map();
   for (const i of e) {
     const r = n.has(i.source), s = n.has(i.target), a = i.source === t, l = i.target === t;
@@ -10113,14 +10128,14 @@ function No(t, e, n) {
   }
   return o;
 }
-function Eg(t, e) {
+function Lg(t, e) {
   for (const n of t) {
     const o = e.get(n.id);
     o && (n.source = o.source, n.target = o.target, o.hidden !== void 0 ? n.hidden = o.hidden : delete n.hidden);
   }
 }
 const Fn = { width: 150, height: 50 };
-function Cg(t) {
+function Pg(t) {
   return {
     /**
      * Collapse a node — hide its descendants/outgoers and optionally animate.
@@ -10128,7 +10143,7 @@ function Cg(t) {
     collapseNode(e, n) {
       const o = t._nodeMap.get(e);
       if (!o || o.collapsed) return;
-      const i = Ls(e, t.nodes, t.edges, { recursive: n?.recursive });
+      const i = As(e, t.nodes, t.edges, { recursive: n?.recursive });
       if (i.size === 0) return;
       V("collapse", `Collapsing node "${e}"`, {
         type: o.type ?? "default",
@@ -10136,7 +10151,7 @@ function Cg(t) {
         animate: n?.animate !== !1,
         recursive: n?.recursive ?? !1
       }), t._captureHistory();
-      const r = o.type === "group", s = r ? o.collapsedDimensions ?? { width: 150, height: 60 } : void 0, a = n?.animate !== !1, l = xg(o, t.nodes, i);
+      const r = o.type === "group", s = r ? o.collapsedDimensions ?? { width: 150, height: 60 } : void 0, a = n?.animate !== !1, l = kg(o, t.nodes, i);
       if (a) {
         t._suspendHistory();
         const c = o.dimensions ?? Fn, d = r && s ? s : c, u = {};
@@ -10166,11 +10181,11 @@ function Cg(t) {
           },
           onComplete: () => {
             for (const h of f) h.style.opacity = "";
-            Ao(o, t.nodes, l, s), l.reroutedEdges = No(e, t.edges, i), t._collapseState.set(e, l), t._resumeHistory(), t._emit("node-collapse", { node: o, descendants: [...i] });
+            No(o, t.nodes, l, s), l.reroutedEdges = Io(e, t.edges, i), t._collapseState.set(e, l), t._resumeHistory(), t._emit("node-collapse", { node: o, descendants: [...i] });
           }
-        }) : (Ao(o, t.nodes, l, s), l.reroutedEdges = No(e, t.edges, i), t._collapseState.set(e, l), t._resumeHistory(), t._emit("node-collapse", { node: o, descendants: [...i] }));
+        }) : (No(o, t.nodes, l, s), l.reroutedEdges = Io(e, t.edges, i), t._collapseState.set(e, l), t._resumeHistory(), t._emit("node-collapse", { node: o, descendants: [...i] }));
       } else
-        Ao(o, t.nodes, l, s), l.reroutedEdges = No(e, t.edges, i), t._collapseState.set(e, l), t._emit("node-collapse", { node: o, descendants: [...i] });
+        No(o, t.nodes, l, s), l.reroutedEdges = Io(e, t.edges, i), t._collapseState.set(e, l), t._emit("node-collapse", { node: o, descendants: [...i] });
     },
     /**
      * Expand a previously collapsed node — restore descendants/outgoers.
@@ -10187,10 +10202,10 @@ function Cg(t) {
         reroutedEdges: i.reroutedEdges.size
       }), t._captureHistory();
       const r = o.type === "group", s = n?.animate !== !1;
-      if (i.reroutedEdges.size > 0 && Eg(t.edges, i.reroutedEdges), s) {
+      if (i.reroutedEdges.size > 0 && Lg(t.edges, i.reroutedEdges), s) {
         t._suspendHistory(), r && i.originalDimensions && (o.dimensions = { ...i.originalDimensions });
         const a = o.dimensions ?? Fn;
-        Ps(o, t.nodes, i, r);
+        Ns(o, t.nodes, i, r);
         const l = {};
         for (const [u, f] of i.targetPositions) {
           const h = t._nodeMap.get(u);
@@ -10228,7 +10243,7 @@ function Cg(t) {
           }
         }) : t._resumeHistory(), t._collapseState.delete(e), t._emit("node-expand", { node: o, descendants: [...i.targetPositions.keys()] });
       } else
-        Ps(o, t.nodes, i, r), t._collapseState.delete(e), t._emit("node-expand", { node: o, descendants: [...i.targetPositions.keys()] });
+        Ns(o, t.nodes, i, r), t._collapseState.delete(e), t._emit("node-expand", { node: o, descendants: [...i.targetPositions.keys()] });
     },
     /**
      * Toggle collapse/expand state of a node.
@@ -10247,17 +10262,17 @@ function Cg(t) {
      * Get the number of nodes that would be hidden when collapsing this node.
      */
     getCollapseTargetCount(e) {
-      return Ls(e, t.nodes, t.edges).size;
+      return As(e, t.nodes, t.edges).size;
     },
     /**
      * Get the number of descendants (via parentId hierarchy) of a node.
      */
     getDescendantCount(e) {
-      return yt(e, t.nodes).size;
+      return wt(e, t.nodes).size;
     }
   };
 }
-function Sg(t) {
+function Mg(t) {
   return {
     /**
      * Condense a node — switch to summary view hiding internal rows.
@@ -10288,7 +10303,7 @@ function Sg(t) {
     }
   };
 }
-function kg(t) {
+function Tg(t) {
   return {
     // ── Row Selection ────────────────────────────────────────────────────
     selectRow(e) {
@@ -10347,14 +10362,14 @@ function kg(t) {
     }
   };
 }
-const Lg = 8, Pg = 12, Mg = 2;
-function Pi(t) {
+const Ag = 8, Ng = 12, Ig = 2;
+function Mi(t) {
   return {
     width: t.dimensions?.width ?? we,
     height: t.dimensions?.height ?? _e
   };
 }
-function Tg(t) {
+function $g(t) {
   if (t.stretch) return t.stretch;
   switch (t.direction) {
     case "vertical":
@@ -10365,14 +10380,14 @@ function Tg(t) {
       return "both";
   }
 }
-function Ag(t) {
+function Dg(t) {
   return [...t].sort((e, n) => {
     const o = e.order ?? 1 / 0, i = n.order ?? 1 / 0;
     return o !== i ? o - i : 0;
   });
 }
-function Ms(t, e, n) {
-  const o = e.gap ?? Lg, i = e.padding ?? Pg, r = e.headerHeight ?? 0, s = Tg(e), a = Ag(t), l = /* @__PURE__ */ new Map(), c = /* @__PURE__ */ new Map();
+function Is(t, e, n) {
+  const o = e.gap ?? Ag, i = e.padding ?? Ng, r = e.headerHeight ?? 0, s = $g(e), a = Dg(t), l = /* @__PURE__ */ new Map(), c = /* @__PURE__ */ new Map();
   if (a.length === 0)
     return {
       positions: l,
@@ -10380,11 +10395,11 @@ function Ms(t, e, n) {
       parentDimensions: n ? { width: n.width, height: n.height } : { width: i * 2, height: i * 2 + r }
     };
   const d = n ? n.width - i * 2 : 0, u = n ? n.height - i * 2 - r : 0;
-  return e.direction === "vertical" ? Ng(a, o, i, r, s, d, l, c) : e.direction === "horizontal" ? Ig(a, o, i, r, s, u, l, c) : $g(a, o, i, r, s, e.columns ?? Mg, d, u, l, c);
+  return e.direction === "vertical" ? Hg(a, o, i, r, s, d, l, c) : e.direction === "horizontal" ? Rg(a, o, i, r, s, u, l, c) : Fg(a, o, i, r, s, e.columns ?? Ig, d, u, l, c);
 }
-function Ng(t, e, n, o, i, r, s, a) {
+function Hg(t, e, n, o, i, r, s, a) {
   let l = 0;
-  const c = t.map((f) => Pi(f));
+  const c = t.map((f) => Mi(f));
   for (const f of c) l = Math.max(l, f.width);
   const d = r > 0 ? r : l;
   let u = n + o;
@@ -10398,9 +10413,9 @@ function Ng(t, e, n, o, i, r, s, a) {
     parentDimensions: { width: d + n * 2, height: u }
   };
 }
-function Ig(t, e, n, o, i, r, s, a) {
+function Rg(t, e, n, o, i, r, s, a) {
   let l = 0;
-  const c = t.map((f) => Pi(f));
+  const c = t.map((f) => Mi(f));
   for (const f of c) l = Math.max(l, f.height);
   const d = r > 0 ? r : l;
   let u = n;
@@ -10414,8 +10429,8 @@ function Ig(t, e, n, o, i, r, s, a) {
     parentDimensions: { width: u, height: d + n * 2 + o }
   };
 }
-function $g(t, e, n, o, i, r, s, a, l, c) {
-  const d = Math.min(r, t.length), u = t.map((y) => Pi(y));
+function Fg(t, e, n, o, i, r, s, a, l, c) {
+  const d = Math.min(r, t.length), u = t.map((y) => Mi(y));
   let f = 0, h = 0;
   for (const y of u)
     f = Math.max(f, y.width), h = Math.max(h, y.height);
@@ -10424,8 +10439,8 @@ function $g(t, e, n, o, i, r, s, a, l, c) {
   const p = Math.ceil(t.length / d), m = a > 0 ? (a - (p - 1) * e) / p : 0;
   m > 0 && (h = m);
   for (let y = 0; y < t.length; y++) {
-    const x = y % d, P = Math.floor(y / d), _ = n + x * (f + e), b = n + o + P * (h + e);
-    l.set(t[y].id, { x: _, y: b }), i === "both" ? c.set(t[y].id, { width: f, height: h }) : i === "width" ? c.set(t[y].id, { width: f, height: u[y].height }) : i === "height" && c.set(t[y].id, { width: u[y].width, height: h });
+    const _ = y % d, S = Math.floor(y / d), b = n + _ * (f + e), x = n + o + S * (h + e);
+    l.set(t[y].id, { x: b, y: x }), i === "both" ? c.set(t[y].id, { width: f, height: h }) : i === "width" ? c.set(t[y].id, { width: f, height: u[y].height }) : i === "height" && c.set(t[y].id, { width: u[y].width, height: h });
   }
   return {
     positions: l,
@@ -10436,7 +10451,7 @@ function $g(t, e, n, o, i, r, s, a, l, c) {
     }
   };
 }
-function Dg(t) {
+function Og(t) {
   return {
     // ── Auto-layout scheduling ─────────────────────────────────────────────
     /**
@@ -10596,42 +10611,42 @@ function Dg(t) {
       typeof n == "string" ? r = { excludeId: n, shallow: o, stretchedSize: i } : r = n ?? {};
       const { excludeId: s, omitFromComputation: a, includeNode: l, shallow: c } = r;
       let { stretchedSize: d } = r;
-      const u = t.nodes.find((_) => _.id === e);
+      const u = t.nodes.find((b) => b.id === e);
       if (!u?.childLayout) return;
-      let f = t.nodes.filter((_) => _.parentId === e);
-      a && (f = f.filter((_) => _.id !== a)), l && !f.some((_) => _.id === l.id) && (f = [...f, l]);
-      const h = new Map(f.map((_) => [_.id, _]));
+      let f = t.nodes.filter((b) => b.parentId === e);
+      a && (f = f.filter((b) => b.id !== a)), l && !f.some((b) => b.id === l.id) && (f = [...f, l]);
+      const h = new Map(f.map((b) => [b.id, b]));
       if (u.dimensions = void 0, !d && u.maxDimensions && u.maxDimensions.width !== void 0 && u.maxDimensions.height !== void 0 && (d = { width: u.maxDimensions.width, height: u.maxDimensions.height }), !c)
-        for (const _ of f)
-          _.childLayout && this.layoutChildren(_.id, { excludeId: s, omitFromComputation: a, shallow: !1 });
-      const g = u.childLayout, p = g.headerHeight !== void 0 ? g : u.data?.label ? { ...g, headerHeight: 30 } : g, m = Ms(f, p, d);
-      for (const [_, b] of m.positions) {
-        if (_ === s || l && _ === l.id && !t._nodeMap.has(_)) continue;
-        const C = h.get(_);
-        C && (C.position ? (C.position.x = b.x, C.position.y = b.y) : C.position = { x: b.x, y: b.y });
+        for (const b of f)
+          b.childLayout && this.layoutChildren(b.id, { excludeId: s, omitFromComputation: a, shallow: !1 });
+      const g = u.childLayout, p = g.headerHeight !== void 0 ? g : u.data?.label ? { ...g, headerHeight: 30 } : g, m = Is(f, p, d);
+      for (const [b, x] of m.positions) {
+        if (b === s || l && b === l.id && !t._nodeMap.has(b)) continue;
+        const C = h.get(b);
+        C && (C.position ? (C.position.x = x.x, C.position.y = x.y) : C.position = { x: x.x, y: x.y });
       }
-      for (const [_, b] of m.dimensions) {
-        if (_ === s || l && _ === l.id && !t._nodeMap.has(_)) continue;
-        const C = h.get(_);
+      for (const [b, x] of m.dimensions) {
+        if (b === s || l && b === l.id && !t._nodeMap.has(b)) continue;
+        const C = h.get(b);
         if (C) {
-          let E = b.width, T = b.height;
-          C.minDimensions && (C.minDimensions.width != null && (E = Math.max(E, C.minDimensions.width)), C.minDimensions.height != null && (T = Math.max(T, C.minDimensions.height))), C.maxDimensions && (C.maxDimensions.width != null && (E = Math.min(E, C.maxDimensions.width)), C.maxDimensions.height != null && (T = Math.min(T, C.maxDimensions.height))), C.dimensions ? (C.dimensions.width = E, C.dimensions.height = T) : C.dimensions = { width: E, height: T }, C.childLayout && !c && this.layoutChildren(_, { excludeId: s, omitFromComputation: a, shallow: !1, stretchedSize: C.dimensions });
+          let E = x.width, T = x.height;
+          C.minDimensions && (C.minDimensions.width != null && (E = Math.max(E, C.minDimensions.width)), C.minDimensions.height != null && (T = Math.max(T, C.minDimensions.height))), C.maxDimensions && (C.maxDimensions.width != null && (E = Math.min(E, C.maxDimensions.width)), C.maxDimensions.height != null && (T = Math.min(T, C.maxDimensions.height))), C.dimensions ? (C.dimensions.width = E, C.dimensions.height = T) : C.dimensions = { width: E, height: T }, C.childLayout && !c && this.layoutChildren(b, { excludeId: s, omitFromComputation: a, shallow: !1, stretchedSize: C.dimensions });
         }
       }
-      let y = m.parentDimensions.width, x = m.parentDimensions.height;
-      if (u.minDimensions && (u.minDimensions.width != null && (y = Math.max(y, u.minDimensions.width)), u.minDimensions.height != null && (x = Math.max(x, u.minDimensions.height))), u.maxDimensions && (u.maxDimensions.width != null && (y = Math.min(y, u.maxDimensions.width)), u.maxDimensions.height != null && (x = Math.min(x, u.maxDimensions.height))), u.dimensions || (u.dimensions = { width: 0, height: 0 }), u.dimensions.width = y, u.dimensions.height = x, y !== m.parentDimensions.width || x !== m.parentDimensions.height) {
-        const b = Ms(f, p, { width: y, height: x });
-        for (const [C, E] of b.positions) {
+      let y = m.parentDimensions.width, _ = m.parentDimensions.height;
+      if (u.minDimensions && (u.minDimensions.width != null && (y = Math.max(y, u.minDimensions.width)), u.minDimensions.height != null && (_ = Math.max(_, u.minDimensions.height))), u.maxDimensions && (u.maxDimensions.width != null && (y = Math.min(y, u.maxDimensions.width)), u.maxDimensions.height != null && (_ = Math.min(_, u.maxDimensions.height))), u.dimensions || (u.dimensions = { width: 0, height: 0 }), u.dimensions.width = y, u.dimensions.height = _, y !== m.parentDimensions.width || _ !== m.parentDimensions.height) {
+        const x = Is(f, p, { width: y, height: _ });
+        for (const [C, E] of x.positions) {
           if (C === s || l && C === l.id && !t._nodeMap.has(C)) continue;
           const T = h.get(C);
           T && (T.position ? (T.position.x = E.x, T.position.y = E.y) : T.position = { x: E.x, y: E.y });
         }
-        for (const [C, E] of b.dimensions) {
+        for (const [C, E] of x.dimensions) {
           if (C === s || l && C === l.id && !t._nodeMap.has(C)) continue;
           const T = h.get(C);
           if (T) {
-            let $ = E.width, L = E.height;
-            T.minDimensions && (T.minDimensions.width != null && ($ = Math.max($, T.minDimensions.width)), T.minDimensions.height != null && (L = Math.max(L, T.minDimensions.height))), T.maxDimensions && (T.maxDimensions.width != null && ($ = Math.min($, T.maxDimensions.width)), T.maxDimensions.height != null && (L = Math.min(L, T.maxDimensions.height))), T.dimensions ? (T.dimensions.width = $, T.dimensions.height = L) : T.dimensions = { width: $, height: L }, T.childLayout && !c && this.layoutChildren(C, { excludeId: s, omitFromComputation: a, shallow: !1, stretchedSize: T.dimensions });
+            let $ = E.width, M = E.height;
+            T.minDimensions && (T.minDimensions.width != null && ($ = Math.max($, T.minDimensions.width)), T.minDimensions.height != null && (M = Math.max(M, T.minDimensions.height))), T.maxDimensions && (T.maxDimensions.width != null && ($ = Math.min($, T.maxDimensions.width)), T.maxDimensions.height != null && (M = Math.min(M, T.maxDimensions.height))), T.dimensions ? (T.dimensions.width = $, T.dimensions.height = M) : T.dimensions = { width: $, height: M }, T.childLayout && !c && this.layoutChildren(C, { excludeId: s, omitFromComputation: a, shallow: !1, stretchedSize: T.dimensions });
           }
         }
       }
@@ -10778,7 +10793,7 @@ function Dg(t) {
     }
   };
 }
-function Hg(t) {
+function zg(t) {
   return {
     // ── Internal helpers ──────────────────────────────────────────────────
     _getChildValidation(e) {
@@ -10803,7 +10818,7 @@ function Hg(t) {
           t._validationErrorCache.delete(o);
           continue;
         }
-        const s = t.nodes.filter((l) => l.parentId === o), a = bs(i, s, r);
+        const s = t.nodes.filter((l) => l.parentId === o), a = Ss(i, s, r);
         a.length > 0 ? t._validationErrorCache.set(o, a) : t._validationErrorCache.delete(o), i._validationErrors = a;
       }
     },
@@ -10813,7 +10828,7 @@ function Hg(t) {
       if (!n) return { valid: !0, errors: [] };
       const o = un(n, t._config.childValidationRules ?? {});
       if (!o) return { valid: !0, errors: [] };
-      const i = t.nodes.filter((s) => s.parentId === e), r = bs(n, i, o);
+      const i = t.nodes.filter((s) => s.parentId === e), r = Ss(n, i, o);
       return { valid: r.length === 0, errors: r };
     },
     validateAll() {
@@ -10846,7 +10861,7 @@ function Hg(t) {
             if (f) {
               const h = t.nodes.filter(
                 (p) => p.parentId === i
-              ), g = so(f, o, h, u);
+              ), g = ro(f, o, h, u);
               if (!g.valid)
                 return t._config.onChildValidationFail && t._config.onChildValidationFail({
                   parent: f,
@@ -10872,12 +10887,12 @@ function Hg(t) {
         return t._emit("node-reparent", { node: o, oldParentId: i, newParentId: null }), !0;
       }
       const r = t.getNode(n);
-      if (!r || yt(e, t.nodes).has(n)) return !1;
+      if (!r || wt(e, t.nodes).has(n)) return !1;
       const s = this._getChildValidation(n);
       if (s) {
         const d = t.nodes.filter(
           (f) => f.parentId === n && f.id !== e
-        ), u = da(r, o, d, s);
+        ), u = ga(r, o, d, s);
         if (!u.valid)
           return t._config.onChildValidationFail && t._config.onChildValidationFail({
             parent: r,
@@ -10894,7 +10909,7 @@ function Hg(t) {
           if (u) {
             const f = t.nodes.filter(
               (g) => g.parentId === i
-            ), h = so(u, o, f, d);
+            ), h = ro(u, o, f, d);
             if (!h.valid)
               return t._config.onChildValidationFail && t._config.onChildValidationFail({
                 parent: u,
@@ -10937,7 +10952,7 @@ function Hg(t) {
     }
   };
 }
-function Rg(t) {
+function Vg(t) {
   return {
     registerCompute(e, n) {
       t._computeEngine.registerCompute(e, n);
@@ -10968,7 +10983,7 @@ function qn(t, e, n, o, i) {
     y: o + l * a + c * s
   };
 }
-function ya(t) {
+function ba(t) {
   if (t.length < 2) return "";
   if (t.length === 2)
     return `M${t[0].x},${t[0].y} L${t[1].x},${t[1].y}`;
@@ -10979,7 +10994,7 @@ function ya(t) {
   }
   return e;
 }
-function Fg(t) {
+function Bg(t) {
   if (t.length < 2)
     return { x: t[0]?.x ?? 0, y: t[0]?.y ?? 0, offsetX: 0, offsetY: 0 };
   let e = 0;
@@ -11004,7 +11019,7 @@ function Fg(t) {
   const i = t[t.length - 1];
   return { x: i.x, y: i.y, offsetX: 0, offsetY: 0 };
 }
-function Og({
+function qg({
   sourceX: t,
   sourceY: e,
   sourcePosition: n = "bottom",
@@ -11022,7 +11037,7 @@ function Og({
       targetY: i,
       targetPosition: r
     });
-  const a = oa(t, e, n, o, i, r, s);
+  const a = aa(t, e, n, o, i, r, s);
   if (!a)
     return oo({
       sourceX: t,
@@ -11032,7 +11047,7 @@ function Og({
       targetY: i,
       targetPosition: r
     });
-  const l = ya(a), { x: c, y: d, offsetX: u, offsetY: f } = Fg(a);
+  const l = ba(a), { x: c, y: d, offsetX: u, offsetY: f } = Bg(a);
   return {
     path: l,
     labelPosition: { x: c, y: d },
@@ -11040,7 +11055,7 @@ function Og({
     labelOffsetY: f
   };
 }
-function zg(t) {
+function Yg(t) {
   const {
     sourceX: e,
     sourceY: n,
@@ -11057,22 +11072,22 @@ function zg(t) {
   let c;
   switch (s) {
     case "linear":
-      c = Ts(l);
+      c = $s(l);
       break;
     case "step":
-      c = Vg(l, 0);
+      c = Xg(l, 0);
       break;
     case "smoothstep":
-      c = Bg(l, a);
+      c = Wg(l, a);
       break;
     case "catmull-rom":
     case "bezier":
-      c = ya(l.map((f, h) => ({ ...f, index: h })));
+      c = ba(l.map((f, h) => ({ ...f, index: h })));
       break;
     default:
-      c = Ts(l);
+      c = $s(l);
   }
-  const d = qg(l), u = Sn({ sourceX: e, sourceY: n, targetX: o, targetY: i });
+  const d = jg(l), u = Sn({ sourceX: e, sourceY: n, targetX: o, targetY: i });
   return {
     path: c,
     labelPosition: d,
@@ -11080,17 +11095,17 @@ function zg(t) {
     labelOffsetY: u.offsetY
   };
 }
-function Ts(t) {
+function $s(t) {
   if (t.length < 2) return "";
   let e = `M${t[0].x},${t[0].y}`;
   for (let n = 1; n < t.length; n++)
     e += ` L${t[n].x},${t[n].y}`;
   return e;
 }
-function Vg(t, e) {
+function Xg(t, e) {
   if (t.length < 2) return "";
   if (t.length === 2)
-    return wa(t[0], t[1], e);
+    return xa(t[0], t[1], e);
   let n = `M${t[0].x},${t[0].y}`;
   for (let i = 1; i < t.length - 1; i++) {
     const r = t[i - 1], s = t[i], a = t[i + 1];
@@ -11099,14 +11114,14 @@ function Vg(t, e) {
   const o = t[t.length - 1];
   return n += ` L${o.x},${o.y}`, n;
 }
-function wa(t, e, n) {
+function xa(t, e, n) {
   const o = (t.x + e.x) / 2, i = Xt(t.x, t.y, o, t.y, o, e.y, n), r = Xt(o, t.y, o, e.y, e.x, e.y, n);
   return `M${t.x},${t.y}${i}${r} L${e.x},${e.y}`;
 }
-function Bg(t, e) {
+function Wg(t, e) {
   if (t.length < 2) return "";
   if (t.length === 2)
-    return wa(t[0], t[1], e);
+    return xa(t[0], t[1], e);
   const n = [t[0]];
   for (let r = 0; r < t.length - 1; r++) {
     const s = t[r], a = t[r + 1], l = Math.abs(a.x - s.x), c = Math.abs(a.y - s.y);
@@ -11125,7 +11140,7 @@ function Bg(t, e) {
   const i = n[n.length - 1];
   return o += ` L${i.x},${i.y}`, o;
 }
-function qg(t) {
+function jg(t) {
   if (t.length < 2) return t[0] ?? { x: 0, y: 0 };
   let e = 0;
   const n = [];
@@ -11148,19 +11163,19 @@ function qg(t) {
   return t[t.length - 1];
 }
 function Ut(t, e, n, o) {
-  const i = t.dimensions?.width ?? we, r = t.dimensions?.height ?? _e, s = Zt(t, o);
+  const i = t.dimensions?.width ?? we, r = t.dimensions?.height ?? _e, s = Gt(t, o);
   let a;
   if (t.shape) {
-    const l = n?.[t.shape] ?? aa[t.shape];
+    const l = n?.[t.shape] ?? ua[t.shape];
     if (l) {
       const c = l.perimeterPoint(i, r, e);
       a = { x: s.x + c.x, y: s.y + c.y };
     } else {
-      const c = vs(i, r, e);
+      const c = Es(i, r, e);
       a = { x: s.x + c.x, y: s.y + c.y };
     }
   } else {
-    const l = vs(i, r, e);
+    const l = Es(i, r, e);
     a = { x: s.x + l.x, y: s.y + l.y };
   }
   if (t.rotation) {
@@ -11169,7 +11184,7 @@ function Ut(t, e, n, o) {
   }
   return a;
 }
-function As(t) {
+function Ds(t) {
   switch (t) {
     case "top-left":
     case "top-right":
@@ -11181,7 +11196,7 @@ function As(t) {
       return t;
   }
 }
-function ai(t) {
+function li(t) {
   const e = Math.SQRT1_2;
   switch (t) {
     case "top":
@@ -11202,48 +11217,48 @@ function ai(t) {
       return { x: e, y: e };
   }
 }
-const Yg = 1.5, Xg = 5 / 20;
+const Ug = 1.5, Gg = 5 / 20;
 function Ht(t, e, n, o) {
   if (!o) return t;
   const i = typeof o == "string" ? {} : o, r = n ? Math.min(n.handleWidth, n.handleHeight) / 2 : 5;
   if (i.offset !== void 0) {
-    const u = ai(e);
+    const u = li(e);
     return { x: t.x + u.x * i.offset, y: t.y + u.y * i.offset };
   }
-  const l = (i.width ?? 12.5) * Yg * Xg * 0.4, c = r + l, d = ai(e);
+  const l = (i.width ?? 12.5) * Ug * Gg * 0.4, c = r + l, d = li(e);
   return { x: t.x + d.x * c, y: t.y + d.y * c };
 }
-function ao(t, e, n, o = "bottom", i = "top", r, s, a, l, c, d, u) {
+function lo(t, e, n, o = "bottom", i = "top", r, s, a, l, c, d, u) {
   const f = r ?? Ut(e, o, c, d), h = s ?? Ut(n, i, c, d), g = {
     sourceX: f.x,
     sourceY: f.y,
-    sourcePosition: As(o),
+    sourcePosition: Ds(o),
     targetX: h.x,
     targetY: h.y,
-    targetPosition: As(i)
+    targetPosition: Ds(i)
   }, p = t.type ?? u ?? "bezier";
   if (a?.[p])
     return a[p](g);
   switch (p === "floating" ? t.pathType ?? "bezier" : p) {
     case "editable":
-      return zg({
+      return Yg({
         ...g,
         controlPoints: t.controlPoints,
         pathStyle: t.pathStyle
       });
     case "avoidant":
-      return Og({ ...g, obstacles: l });
+      return qg({ ...g, obstacles: l });
     case "orthogonal":
-      return rh({ ...g, obstacles: l });
+      return dh({ ...g, obstacles: l });
     case "smoothstep":
       return vn(g);
     case "straight":
-      return Wr({ sourceX: f.x, sourceY: f.y, targetX: h.x, targetY: h.y });
+      return Zr({ sourceX: f.x, sourceY: f.y, targetX: h.x, targetY: h.y });
     default:
       return oo(g);
   }
 }
-function Ns(t, e) {
+function Hs(t, e) {
   const n = t.dimensions?.width ?? we, o = t.dimensions?.height ?? _e, i = {
     x: t.position.x + n / 2,
     y: t.position.y + o / 2
@@ -11261,7 +11276,7 @@ function Ns(t, e) {
   };
   return t.rotation ? qn(h.x, h.y, i.x, i.y, t.rotation) : h;
 }
-function Is(t, e) {
+function Rs(t, e) {
   const n = t.dimensions?.width ?? we, o = t.dimensions?.height ?? _e, i = t.position.x + n / 2, r = t.position.y + o / 2;
   if (t.rotation) {
     const h = e.x - i, g = e.y - r;
@@ -11275,14 +11290,14 @@ function Is(t, e) {
   const u = e.x - i, f = e.y - r;
   return Math.abs(u) > Math.abs(f) ? u > 0 ? "right" : "left" : f > 0 ? "bottom" : "top";
 }
-function va(t, e) {
+function Ea(t, e) {
   const n = t.dimensions?.width ?? we, o = t.dimensions?.height ?? _e, i = e.dimensions?.width ?? we, r = e.dimensions?.height ?? _e, s = {
     x: t.position.x + n / 2,
     y: t.position.y + o / 2
   }, a = {
     x: e.position.x + i / 2,
     y: e.position.y + r / 2
-  }, l = Ns(t, a), c = Ns(e, s), d = Is(t, l), u = Is(e, c);
+  }, l = Hs(t, a), c = Hs(e, s), d = Rs(t, l), u = Rs(e, c);
   return {
     sx: l.x,
     sy: l.y,
@@ -11292,18 +11307,18 @@ function va(t, e) {
     targetPos: u
   };
 }
-function Hy(t, e) {
+function zy(t, e) {
   const n = e.x - t.x, o = e.y - t.y;
   let i, r;
   return Math.abs(n) > Math.abs(o) ? (i = n > 0 ? "right" : "left", r = n > 0 ? "left" : "right") : (i = o > 0 ? "bottom" : "top", r = o > 0 ? "top" : "bottom"), { sourcePos: i, targetPos: r };
 }
-function _a(t) {
+function Ca(t) {
   return typeof t == "object" && t !== null && "from" in t && "to" in t;
 }
-function ba(t, e) {
+function Sa(t, e) {
   return `${t}__grad__${e}`;
 }
-function xa(t, e, n, o, i, r, s) {
+function ka(t, e, n, o, i, r, s) {
   let a = t.querySelector(`#${CSS.escape(e)}`);
   if (!a) {
     a = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient"), a.id = e, a.setAttribute("gradientUnits", "userSpaceOnUse"), a.classList.add("flow-edge-gradient");
@@ -11316,13 +11331,13 @@ function xa(t, e, n, o, i, r, s) {
   const l = a.querySelectorAll("stop");
   return l[0]?.setAttribute("stop-color", n.from), l[1]?.setAttribute("stop-color", n.to), a;
 }
-function Io(t, e) {
+function $o(t, e) {
   t.querySelector(`#${CSS.escape(e)}`)?.remove();
 }
-function Wg(t, e) {
+function Zg(t, e) {
   return Array.isArray(t) ? t.findIndex((n) => n?.name === e) : -1;
 }
-function $s(t, e, n, o, i) {
+function Fs(t, e, n, o, i) {
   const r = t.data?.fields;
   if (!Array.isArray(r) || !Number.isInteger(n) || n < 0 || n >= r.length) return null;
   const { width: s, height: a } = t.dimensions ?? {};
@@ -11333,15 +11348,15 @@ function $s(t, e, n, o, i) {
   const p = n === r.length - 1 ? u : d, m = e.y + g + l + n * c + p;
   return { x: o === "left" ? e.x + f : e.x + s - h, y: m, position: o };
 }
-const jg = /* @__PURE__ */ new Set(["x-data", "x-init", "x-bind", "href", "src", "action", "formaction", "srcdoc"]);
-async function Ug(t) {
+const Kg = /* @__PURE__ */ new Set(["x-data", "x-init", "x-bind", "href", "src", "action", "formaction", "srcdoc"]);
+async function Jg(t) {
   const { dropNodeId: e, dropHandleId: n, draggedEnd: o, edge: i, canvas: r, containerEl: s } = t;
   if (!e)
     return { applied: !1 };
   const a = r.getNode(e);
   if (a && !Be(a))
     return { applied: !1 };
-  const l = o === "target" ? { source: i.source, sourceHandle: i.sourceHandle, target: e, targetHandle: n } : { source: e, sourceHandle: n, target: i.target, targetHandle: i.targetHandle }, c = { ...i }, d = await Zr({
+  const l = o === "target" ? { source: i.source, sourceHandle: i.sourceHandle, target: e, targetHandle: n } : { source: e, sourceHandle: n, target: i.target, targetHandle: i.targetHandle }, c = { ...i }, d = await Qr({
     edge: i,
     newConnection: l,
     canvas: r,
@@ -11350,21 +11365,21 @@ async function Ug(t) {
   });
   return d.applied ? (r._emit?.("reconnect", { oldEdge: c, newConnection: l }), { applied: !0, newConnection: l }) : { applied: !1, reason: d.reason, newConnection: l };
 }
-function Zg(t) {
+function Qg(t) {
   return t === !0 || t === "dash" ? "dash" : t === "pulse" ? "pulse" : t === "dot" ? "dot" : "none";
 }
-function Ea(t) {
+function La(t) {
   return t.endsWith("-l") ? "left" : t.endsWith("-r") ? "right" : null;
 }
-function Ds(t, e) {
+function Os(t, e) {
   if (!e) return t;
-  const n = ai(t), o = e * Math.PI / 180, i = Math.cos(o), r = Math.sin(o), s = n.x * i - n.y * r, a = n.x * r + n.y * i;
+  const n = li(t), o = e * Math.PI / 180, i = Math.cos(o), r = Math.sin(o), s = n.x * i - n.y * r, a = n.x * r + n.y * i;
   return Math.abs(s) > Math.abs(a) ? s > 0 ? "right" : "left" : a > 0 ? "bottom" : "top";
 }
-function Hs(t) {
+function zs(t) {
   return { x: (t.left + t.right) / 2, y: (t.top + t.bottom) / 2 };
 }
-function lo(t, e) {
+function co(t, e) {
   const n = Array.from(t);
   if (n.length === 0) return null;
   if (n.length === 1 || !e) return n[0];
@@ -11375,25 +11390,25 @@ function lo(t, e) {
   }
   return o;
 }
-function co(t, e, n, o, i, r, s) {
+function uo(t, e, n, o, i, r, s) {
   const a = s ?? t.querySelector(`[data-flow-node-id="${CSS.escape(e)}"]`);
   if (a) {
     if (n) {
       const c = a.querySelectorAll(
         `[data-flow-handle-id="${CSS.escape(n)}"][data-flow-handle-type="${o}"]`
       );
-      let d = lo(c, r);
+      let d = co(c, r);
       if (!d) {
         const u = a.querySelectorAll(
           `[data-flow-handle-id="${CSS.escape(n)}"]`
         );
-        d = lo(u, r);
+        d = co(u, r);
       }
       if (d)
         return d.getAttribute("data-flow-handle-position") ?? (o === "source" ? "bottom" : "top");
     }
     if (n) {
-      const c = Ea(n);
+      const c = La(n);
       if (c && a.querySelector(`[data-flow-handle-position="${c}"]`))
         return c;
     }
@@ -11407,7 +11422,7 @@ function co(t, e, n, o, i, r, s) {
   }
   return o === "source" ? "bottom" : "top";
 }
-function Rs(t, e, n, o) {
+function Vs(t, e, n, o) {
   if (!t || !e || t.hidden || t.collapsed || t.condensed || t.rotation) return -1;
   const i = t.nodeOrigin;
   if (i && (i[0] !== 0 || i[1] !== 0) || !n?.hasAttribute("data-flow-schema-node") || n.style.display === "none") return -1;
@@ -11416,21 +11431,21 @@ function Rs(t, e, n, o) {
   const a = t.data?.fields;
   if (!Array.isArray(a) || a.length === 0) return -1;
   const l = o.insetTop + o.headerHeight + (a.length - 1) * o.rowHeight + o.rowHeightLast + o.insetBottom;
-  return Math.abs(l - s) > 0.5 ? -1 : Wg(a, e);
+  return Math.abs(l - s) > 0.5 ? -1 : Zg(a, e);
 }
-function Fs(t, e, n, o, i) {
+function Bs(t, e, n, o, i) {
   const r = t.dimensions?.width ?? we, s = e.x + (i.insetLeft + (r - i.insetRight)) / 2;
   return n === "source" ? o >= s ? "right" : "left" : o > s ? "right" : "left";
 }
-function Os(t) {
+function qs(t) {
   return t.position.x + (t.dimensions?.width ?? we) / 2;
 }
-function Gg(t, e, n, o, i, r, s, a) {
-  const l = Rs(t, i, s?.get(t.id), a);
+function ep(t, e, n, o, i, r, s, a) {
+  const l = Vs(t, i, s?.get(t.id), a);
   if (l < 0) return null;
-  const c = Rs(e, r, s?.get(e.id), a);
+  const c = Vs(e, r, s?.get(e.id), a);
   if (c < 0) return null;
-  const d = Fs(t, n.position, "source", Os(o), a), u = Fs(e, o.position, "target", Os(n), a), f = $s(t, n.position, l, d, a), h = $s(e, o.position, c, u, a);
+  const d = Bs(t, n.position, "source", qs(o), a), u = Bs(e, o.position, "target", qs(n), a), f = Fs(t, n.position, l, d, a), h = Fs(e, o.position, c, u, a);
   if (!f || !h) return null;
   const g = { handleWidth: a.handleWidth, handleHeight: a.handleHeight };
   return {
@@ -11440,7 +11455,7 @@ function Gg(t, e, n, o, i, r, s, a) {
     tgtMeasurement: { x: h.x, y: h.y, ...g }
   };
 }
-function zs(t, e, n, o, i, r, s, a, l) {
+function Ys(t, e, n, o, i, r, s, a, l) {
   const c = l ?? t.querySelector(`[data-flow-node-id="${CSS.escape(e)}"]`);
   if (!c) return null;
   let d = null;
@@ -11448,14 +11463,14 @@ function zs(t, e, n, o, i, r, s, a, l) {
     const p = c.querySelectorAll(
       `[data-flow-handle-id="${CSS.escape(o)}"][data-flow-handle-type="${i}"]`
     );
-    if (d = lo(p, a), !d) {
+    if (d = co(p, a), !d) {
       const m = c.querySelectorAll(
         `[data-flow-handle-id="${CSS.escape(o)}"]`
       );
-      d = lo(m, a);
+      d = co(m, a);
     }
     if (!d) {
-      const m = Ea(o);
+      const m = La(o);
       m && (d = c.querySelector(`[data-flow-handle-position="${m}"]`));
     }
   } else
@@ -11471,7 +11486,7 @@ function zs(t, e, n, o, i, r, s, a, l) {
     handleHeight: u.height / r
   };
 }
-function Kg(t, e, n) {
+function tp(t, e, n) {
   const o = n ?? t.getTotalLength(), i = t.getPointAtLength(o * Math.max(0, Math.min(1, e)));
   return { x: i.x, y: i.y };
 }
@@ -11479,7 +11494,7 @@ function ct(t, e, n, o, i) {
   const r = t - n, s = e - o;
   return Math.sqrt(r * r + s * s) <= i;
 }
-function Jg(t, e, n) {
+function np(t, e, n) {
   const o = n.x - e.x, i = n.y - e.y, r = o * o + i * i;
   if (r === 0) return Math.sqrt((t.x - e.x) ** 2 + (t.y - e.y) ** 2);
   let s = ((t.x - e.x) * o + (t.y - e.y) * i) / r;
@@ -11487,7 +11502,7 @@ function Jg(t, e, n) {
   const a = e.x + s * o, l = e.y + s * i;
   return Math.sqrt((t.x - a) ** 2 + (t.y - l) ** 2);
 }
-function Qg(t) {
+function op(t) {
   t.directive(
     "flow-edge",
     (e, { expression: n }, { evaluate: o, effect: i, cleanup: r }) => {
@@ -11498,82 +11513,82 @@ function Qg(t) {
       let l = e.querySelector("path:not(:first-child)");
       l || (l = document.createElementNS("http://www.w3.org/2000/svg", "path"), l.setAttribute("fill", "none"), l.setAttribute("stroke-width", "1.5"), l.style.pointerEvents = "none", s.appendChild(l));
       let c = null, d = null, u = null, f = null, h = 0, g = null, p = "none", m = null, y = null;
-      function x(M, I, F, K, ne) {
-        g || (g = document.createElementNS("http://www.w3.org/2000/svg", "circle"), g.classList.add("flow-edge-dot"), g.style.pointerEvents = "none", M.appendChild(g));
-        const Z = F.closest(".flow-container"), B = Z ? getComputedStyle(Z) : null, z = K.particleSize ?? (parseFloat(B?.getPropertyValue("--flow-edge-dot-size").trim() ?? "4") || 4), Y = ne || B?.getPropertyValue("--flow-edge-dot-duration").trim() || "2s";
+      function _(L, I, F, K, ne) {
+        g || (g = document.createElementNS("http://www.w3.org/2000/svg", "circle"), g.classList.add("flow-edge-dot"), g.style.pointerEvents = "none", L.appendChild(g));
+        const G = F.closest(".flow-container"), B = G ? getComputedStyle(G) : null, z = K.particleSize ?? (parseFloat(B?.getPropertyValue("--flow-edge-dot-size").trim() ?? "4") || 4), Y = ne || B?.getPropertyValue("--flow-edge-dot-duration").trim() || "2s";
         g.setAttribute("r", String(z)), K.particleColor ? g.style.fill = K.particleColor : g.style.removeProperty("fill");
-        const X = g.querySelector("animateMotion");
-        X && X.remove();
+        const W = g.querySelector("animateMotion");
+        W && W.remove();
         const j = document.createElementNS("http://www.w3.org/2000/svg", "animateMotion");
         j.setAttribute("dur", Y), j.setAttribute("repeatCount", "indefinite"), j.setAttribute("path", I), g.appendChild(j);
       }
-      function P() {
+      function S() {
         g?.remove(), g = null;
       }
-      let _ = null, b = null, C = null, E = null;
-      const T = (M) => {
-        M.stopPropagation();
+      let b = null, x = null, C = null, E = null;
+      const T = (L) => {
+        L.stopPropagation();
         const I = o(n);
         if (!I) return;
         const F = t.$data(e.closest("[x-data]"));
-        F && (F._emit("edge-click", { edge: I, event: M }), mt(M, F._shortcuts?.multiSelect) ? F.selectedEdges.has(I.id) ? (F.selectedEdges.delete(I.id), I.selected = !1, V("selection", `Edge "${I.id}" deselected (shift)`)) : (F.selectedEdges.add(I.id), I.selected = !0, V("selection", `Edge "${I.id}" selected (shift)`)) : (F.deselectAll(), F.selectedEdges.add(I.id), I.selected = !0, V("selection", `Edge "${I.id}" selected`)), F._emitSelectionChange());
-      }, $ = (M) => {
-        M.preventDefault(), M.stopPropagation();
+        F && (F._emit("edge-click", { edge: I, event: L }), mt(L, F._shortcuts?.multiSelect) ? F.selectedEdges.has(I.id) ? (F.selectedEdges.delete(I.id), I.selected = !1, V("selection", `Edge "${I.id}" deselected (shift)`)) : (F.selectedEdges.add(I.id), I.selected = !0, V("selection", `Edge "${I.id}" selected (shift)`)) : (F.deselectAll(), F.selectedEdges.add(I.id), I.selected = !0, V("selection", `Edge "${I.id}" selected`)), F._emitSelectionChange());
+      }, $ = (L) => {
+        L.preventDefault(), L.stopPropagation();
         const I = o(n);
         if (!I) return;
         const F = t.$data(e.closest("[x-data]"));
         if (!F) return;
-        const K = M.target;
+        const K = L.target;
         if (K.classList.contains("flow-edge-control-point")) {
           const ne = parseInt(K.dataset.pointIndex ?? "", 10);
           if (!isNaN(ne)) {
             F._emit("edge-control-point-context-menu", {
               edge: I,
               pointIndex: ne,
-              position: { x: M.clientX, y: M.clientY },
-              event: M
+              position: { x: L.clientX, y: L.clientY },
+              event: L
             });
             return;
           }
         }
-        F._emit("edge-context-menu", { edge: I, event: M });
-      }, L = (M) => {
-        M.stopPropagation(), M.preventDefault();
+        F._emit("edge-context-menu", { edge: I, event: L });
+      }, M = (L) => {
+        L.stopPropagation(), L.preventDefault();
         const I = o(n), F = t.$data(e.closest("[x-data]"));
         if (!I || !F || (I.type ?? F._config?.defaultEdgeType ?? "bezier") !== "editable") return;
-        const ne = M.target;
+        const ne = L.target;
         if (ne.classList.contains("flow-edge-control-point")) {
-          const Z = parseInt(ne.dataset.pointIndex ?? "", 10);
-          !isNaN(Z) && I.controlPoints && (F._captureHistory?.(), I.controlPoints.splice(Z, 1), F._emit("edge-control-point-change", { edge: I, action: "remove", index: Z }));
+          const G = parseInt(ne.dataset.pointIndex ?? "", 10);
+          !isNaN(G) && I.controlPoints && (F._captureHistory?.(), I.controlPoints.splice(G, 1), F._emit("edge-control-point-change", { edge: I, action: "remove", index: G }));
           return;
         }
         if (ne.classList.contains("flow-edge-midpoint")) {
-          const Z = parseInt(ne.dataset.segmentIndex ?? "", 10);
-          if (!isNaN(Z)) {
-            const B = F.screenToFlowPosition(M.clientX, M.clientY);
-            I.controlPoints || (I.controlPoints = []), F._captureHistory?.(), I.controlPoints.splice(Z, 0, { x: B.x, y: B.y }), F._emit("edge-control-point-change", { edge: I, action: "add", index: Z });
+          const G = parseInt(ne.dataset.segmentIndex ?? "", 10);
+          if (!isNaN(G)) {
+            const B = F.screenToFlowPosition(L.clientX, L.clientY);
+            I.controlPoints || (I.controlPoints = []), F._captureHistory?.(), I.controlPoints.splice(G, 0, { x: B.x, y: B.y }), F._emit("edge-control-point-change", { edge: I, action: "add", index: G });
           }
           return;
         }
         if (ne.closest("path")) {
-          const Z = F.screenToFlowPosition(M.clientX, M.clientY);
+          const G = F.screenToFlowPosition(L.clientX, L.clientY);
           I.controlPoints || (I.controlPoints = []);
           const B = [
-            _ ?? { x: 0, y: 0 },
+            b ?? { x: 0, y: 0 },
             ...I.controlPoints,
-            b ?? { x: 0, y: 0 }
+            x ?? { x: 0, y: 0 }
           ];
           let z = 0, Y = 1 / 0;
-          for (let X = 0; X < B.length - 1; X++) {
-            const j = Jg(Z, B[X], B[X + 1]);
-            j < Y && (Y = j, z = X);
+          for (let W = 0; W < B.length - 1; W++) {
+            const j = np(G, B[W], B[W + 1]);
+            j < Y && (Y = j, z = W);
           }
-          F._captureHistory?.(), I.controlPoints.splice(z, 0, { x: Z.x, y: Z.y }), F._emit("edge-control-point-change", { edge: I, action: "add", index: z });
+          F._captureHistory?.(), I.controlPoints.splice(z, 0, { x: G.x, y: G.y }), F._emit("edge-control-point-change", { edge: I, action: "add", index: z });
         }
-      }, A = (M) => {
-        const I = M.target;
-        if (!I.classList.contains("flow-edge-control-point") || M.button !== 0) return;
-        M.stopPropagation(), M.preventDefault();
+      }, A = (L) => {
+        const I = L.target;
+        if (!I.classList.contains("flow-edge-control-point") || L.button !== 0) return;
+        L.stopPropagation(), L.preventDefault();
         const F = o(n);
         if (!F?.controlPoints) return;
         const K = t.$data(e.closest("[x-data]"));
@@ -11581,50 +11596,50 @@ function Qg(t) {
         const ne = parseInt(I.dataset.pointIndex ?? "", 10);
         if (isNaN(ne)) return;
         I.classList.add("dragging");
-        let Z = !1;
+        let G = !1;
         const B = (Y) => {
-          Z || (K._captureHistory?.(), Z = !0);
-          let X = K.screenToFlowPosition(Y.clientX, Y.clientY);
+          G || (K._captureHistory?.(), G = !0);
+          let W = K.screenToFlowPosition(Y.clientX, Y.clientY);
           const j = K._config?.snapToGrid;
-          j && (X = {
-            x: Math.round(X.x / j[0]) * j[0],
-            y: Math.round(X.y / j[1]) * j[1]
-          }), F.controlPoints[ne] = X;
+          j && (W = {
+            x: Math.round(W.x / j[0]) * j[0],
+            y: Math.round(W.y / j[1]) * j[1]
+          }), F.controlPoints[ne] = W;
         }, z = () => {
-          document.removeEventListener("pointermove", B), document.removeEventListener("pointerup", z), I.classList.remove("dragging"), Z && K._emit("edge-control-point-change", { edge: F, action: "move", index: ne });
+          document.removeEventListener("pointermove", B), document.removeEventListener("pointerup", z), I.classList.remove("dragging"), G && K._emit("edge-control-point-change", { edge: F, action: "move", index: ne });
         };
         document.addEventListener("pointermove", B), document.addEventListener("pointerup", z);
       };
-      s.addEventListener("contextmenu", $), s.addEventListener("dblclick", L), s.addEventListener("pointerdown", A, !0);
-      let k = null;
-      const v = (M) => {
-        if (M.button !== 0) return;
-        M.stopPropagation();
+      s.addEventListener("contextmenu", $), s.addEventListener("dblclick", M), s.addEventListener("pointerdown", A, !0);
+      let P = null;
+      const v = (L) => {
+        if (L.button !== 0) return;
+        L.stopPropagation();
         const I = o(n);
         if (!I) return;
         const F = t.$data(e.closest("[x-data]"));
         if (!F) return;
-        const K = F._config?.reconnectSnapRadius ?? Qi, ne = F._config?.edgesReconnectable !== !1, Z = I.reconnectable ?? !0;
+        const K = F._config?.reconnectSnapRadius ?? es, ne = F._config?.edgesReconnectable !== !1, G = I.reconnectable ?? !0;
         let B = null;
-        if (ne && Z !== !1 && _ && b) {
-          const re = F.screenToFlowPosition(M.clientX, M.clientY), pe = ct(re.x, re.y, _.x, _.y, K) || C && ct(re.x, re.y, C.x, C.y, K);
-          (ct(re.x, re.y, b.x, b.y, K) || E && ct(re.x, re.y, E.x, E.y, K)) && (Z === !0 || Z === "target") ? B = "target" : pe && (Z === !0 || Z === "source") && (B = "source");
+        if (ne && G !== !1 && b && x) {
+          const re = F.screenToFlowPosition(L.clientX, L.clientY), me = ct(re.x, re.y, b.x, b.y, K) || C && ct(re.x, re.y, C.x, C.y, K);
+          (ct(re.x, re.y, x.x, x.y, K) || E && ct(re.x, re.y, E.x, E.y, K)) && (G === !0 || G === "target") ? B = "target" : me && (G === !0 || G === "source") && (B = "source");
         }
         if (!B) {
-          const re = (pe) => {
-            document.removeEventListener("pointerup", re), T(pe);
+          const re = (me) => {
+            document.removeEventListener("pointerup", re), T(me);
           };
           document.addEventListener("pointerup", re, { once: !0 });
           return;
         }
-        const z = M.clientX, Y = M.clientY;
-        let X = !1, j = !1, H = null;
+        const z = L.clientX, Y = L.clientY;
+        let W = !1, j = !1, H = null;
         const te = F._config?.connectionSnapRadius ?? 20;
-        let Q = null, U = null, J = null, se = z, ie = Y;
-        const G = e.closest(".flow-container");
-        if (!G) return;
-        const ee = B === "target" ? _ : b, he = () => {
-          X = !0, s.classList.add("flow-edge-reconnecting"), F._emit("reconnect-start", { edge: I, handleType: B }), V("reconnect", `Reconnection drag started on edge "${I.id}" (${B} end)`), U = Wt({
+        let Q = null, U = null, J = null, se = z, oe = Y;
+        const Z = e.closest(".flow-container");
+        if (!Z) return;
+        const ee = B === "target" ? b : x, ge = () => {
+          W = !0, s.classList.add("flow-edge-reconnecting"), F._emit("reconnect-start", { edge: I, handleType: B }), V("reconnect", `Reconnection drag started on edge "${I.id}" (${B} end)`), U = Wt({
             connectionLineType: F._config?.connectionLineType,
             connectionLineStyle: F._config?.connectionLineStyle,
             connectionLine: F._config?.connectionLine,
@@ -11639,8 +11654,8 @@ function Qg(t) {
             source: I.source,
             sourceHandle: I.sourceHandle
           });
-          const pe = G.querySelector(".flow-viewport");
-          pe && pe.appendChild(Q), B === "target" && (F.pendingConnection = {
+          const me = Z.querySelector(".flow-viewport");
+          me && me.appendChild(Q), B === "target" && (F.pendingConnection = {
             source: I.source,
             sourceHandle: I.sourceHandle,
             position: re
@@ -11649,32 +11664,32 @@ function Qg(t) {
             draggedEnd: B,
             anchorPosition: { ...ee },
             position: re
-          }, J = wo(G, F, se, ie), B === "target" && bn(G, I.source, I.sourceHandle ?? "source", F, I.id);
-        }, ce = (re) => {
-          if (se = re.clientX, ie = re.clientY, !X) {
+          }, J = vo(Z, F, se, oe), B === "target" && bn(Z, I.source, I.sourceHandle ?? "source", F, I.id);
+        }, fe = (re) => {
+          if (se = re.clientX, oe = re.clientY, !W) {
             Math.sqrt(
               (re.clientX - z) ** 2 + (re.clientY - Y) ** 2
-            ) >= Qn && he();
+            ) >= Qn && ge();
             return;
           }
-          const pe = F.screenToFlowPosition(re.clientX, re.clientY), me = _n({
-            containerEl: G,
+          const me = F.screenToFlowPosition(re.clientX, re.clientY), ye = _n({
+            containerEl: Z,
             handleType: B === "target" ? "target" : "source",
             excludeNodeId: B === "target" ? I.source : I.target,
-            cursorFlowPos: pe,
+            cursorFlowPos: me,
             connectionSnapRadius: te,
             getNode: (Pe) => F.getNode(Pe),
             toFlowPosition: (Pe, Ee) => F.screenToFlowPosition(Pe, Ee)
           });
-          me.element !== H && (H?.classList.remove("flow-handle-active"), me.element?.classList.add("flow-handle-active"), H = me.element), U?.update({
+          ye.element !== H && (H?.classList.remove("flow-handle-active"), ye.element?.classList.add("flow-handle-active"), H = ye.element), U?.update({
             fromX: ee.x,
             fromY: ee.y,
-            toX: me.position.x,
-            toY: me.position.y,
+            toX: ye.position.x,
+            toY: ye.position.y,
             source: I.source,
             sourceHandle: I.sourceHandle
           });
-          const Oe = me.position;
+          const Oe = ye.position;
           B === "target" && F.pendingConnection && (F.pendingConnection = {
             ...F.pendingConnection,
             position: Oe
@@ -11682,133 +11697,154 @@ function Qg(t) {
             ...F._pendingReconnection,
             position: Oe
           }), J?.updatePointer(re.clientX, re.clientY);
-        }, oe = () => {
-          j || (j = !0, document.removeEventListener("pointermove", ce), document.removeEventListener("pointerup", ge), J?.stop(), J = null, U?.destroy(), U = null, Q = null, H?.classList.remove("flow-handle-active"), k = null, s.classList.remove("flow-edge-reconnecting"), ke(G), F.pendingConnection = null, F._pendingReconnection = null);
-        }, ge = async (re) => {
-          if (!X) {
-            oe(), T(re);
+        }, ie = () => {
+          j || (j = !0, document.removeEventListener("pointermove", fe), document.removeEventListener("pointerup", pe), J?.stop(), J = null, U?.destroy(), U = null, Q = null, H?.classList.remove("flow-handle-active"), P = null, s.classList.remove("flow-edge-reconnecting"), ke(Z), F.pendingConnection = null, F._pendingReconnection = null);
+        }, pe = async (re) => {
+          if (!W) {
+            ie(), T(re);
             return;
           }
           if (F._connectValidating) return;
-          let pe = H, me = null;
-          if (!pe) {
-            me = document.elementFromPoint(re.clientX, re.clientY);
+          let me = H, ye = null;
+          if (!me) {
+            ye = document.elementFromPoint(re.clientX, re.clientY);
             const Me = B === "target" ? '[data-flow-handle-type="target"]' : '[data-flow-handle-type="source"]';
-            pe = me?.closest(Me);
+            me = ye?.closest(Me);
           }
-          const Pe = (pe ? pe.closest("[data-flow-node-id]") : me?.closest("[data-flow-node-id]"))?.dataset.flowNodeId, Ee = pe?.dataset.flowHandleId, ue = U?.svg ?? null;
-          St(ue, !0);
+          const Pe = (me ? me.closest("[data-flow-node-id]") : ye?.closest("[data-flow-node-id]"))?.dataset.flowNodeId, Ee = me?.dataset.flowHandleId, he = U?.svg ?? null;
+          kt(he, !0);
           let be;
           try {
-            be = await Ug({
+            be = await Jg({
               dropNodeId: Pe,
               dropHandleId: Ee,
               draggedEnd: B,
               edge: I,
               canvas: F,
-              containerEl: G
+              containerEl: Z
             });
           } finally {
-            St(ue, !1);
+            kt(he, !1);
           }
-          be.applied ? V("reconnect", `Edge "${I.id}" reconnected (${B})`, be.newConnection) : V("reconnect", `Edge "${I.id}" reconnection cancelled — snapping back`, { reason: be.reason }), F._emit("reconnect-end", { edge: I, successful: be.applied }), oe();
+          be.applied ? V("reconnect", `Edge "${I.id}" reconnected (${B})`, be.newConnection) : V("reconnect", `Edge "${I.id}" reconnection cancelled — snapping back`, { reason: be.reason }), F._emit("reconnect-end", { edge: I, successful: be.applied }), ie();
         };
-        document.addEventListener("pointermove", ce), document.addEventListener("pointerup", ge), k = oe;
+        document.addEventListener("pointermove", fe), document.addEventListener("pointerup", pe), P = ie;
       };
       s.addEventListener("pointerdown", v);
-      const w = (M) => {
+      const w = (L) => {
         const I = o(n);
         if (!I) return;
         const F = t.$data(e.closest("[x-data]"));
         if (!F) return;
         const K = F._config?.edgesReconnectable !== !1, ne = I.reconnectable ?? !0;
-        if (!K || ne === !1 || !_ || !b) {
+        if (!K || ne === !1 || !b || !x) {
           s.style.removeProperty("cursor"), a.style.cursor = "pointer";
           return;
         }
-        const Z = F._config?.reconnectSnapRadius ?? Qi, B = F.screenToFlowPosition(M.clientX, M.clientY), z = (ct(B.x, B.y, _.x, _.y, Z) || C && ct(B.x, B.y, C.x, C.y, Z)) && (ne === !0 || ne === "source"), Y = (ct(B.x, B.y, b.x, b.y, Z) || E && ct(B.x, B.y, E.x, E.y, Z)) && (ne === !0 || ne === "target");
+        const G = F._config?.reconnectSnapRadius ?? es, B = F.screenToFlowPosition(L.clientX, L.clientY), z = (ct(B.x, B.y, b.x, b.y, G) || C && ct(B.x, B.y, C.x, C.y, G)) && (ne === !0 || ne === "source"), Y = (ct(B.x, B.y, x.x, x.y, G) || E && ct(B.x, B.y, E.x, E.y, G)) && (ne === !0 || ne === "target");
         z || Y ? (s.style.cursor = "grab", a.style.cursor = "grab") : (s.style.removeProperty("cursor"), a.style.cursor = "pointer");
       };
       s.addEventListener("pointermove", w);
-      const N = (M) => {
-        if (M.key !== "Enter" && M.key !== " ") return;
-        M.preventDefault(), M.stopPropagation();
+      const N = (L) => {
+        if (L.key !== "Enter" && L.key !== " ") return;
+        L.preventDefault(), L.stopPropagation();
         const I = o(n);
         if (!I) return;
         const F = t.$data(e.closest("[x-data]"));
-        F && (F._emit("edge-click", { edge: I, event: M }), mt(M, F._shortcuts?.multiSelect) ? F.selectedEdges.has(I.id) ? (F.selectedEdges.delete(I.id), I.selected = !1) : (F.selectedEdges.add(I.id), I.selected = !0) : (F.deselectAll(), F.selectedEdges.add(I.id), I.selected = !0), F._emitSelectionChange());
+        F && (F._emit("edge-click", { edge: I, event: L }), mt(L, F._shortcuts?.multiSelect) ? F.selectedEdges.has(I.id) ? (F.selectedEdges.delete(I.id), I.selected = !1) : (F.selectedEdges.add(I.id), I.selected = !0) : (F.deselectAll(), F.selectedEdges.add(I.id), I.selected = !0), F._emitSelectionChange());
       };
       s.addEventListener("keydown", N);
-      const S = () => {
+      const k = () => {
         s.matches(":focus-visible") && s.classList.add("flow-edge-focused");
       }, R = () => s.classList.remove("flow-edge-focused");
-      s.addEventListener("focus", S), s.addEventListener("blur", R);
-      const O = (M) => {
-        M.stopPropagation();
+      s.addEventListener("focus", k), s.addEventListener("blur", R);
+      const O = (L) => {
+        L.stopPropagation();
       };
       s.addEventListener("mousedown", O);
       const q = () => {
-        for (const M of [c, d, u])
-          M && M.classList.add("flow-edge-hovered");
+        for (const L of [c, d, u])
+          L && L.classList.add("flow-edge-hovered");
       }, D = () => {
-        for (const M of [c, d, u])
-          M && M.classList.remove("flow-edge-hovered");
+        for (const L of [c, d, u])
+          L && L.classList.remove("flow-edge-hovered");
       };
       s.addEventListener("mouseenter", q), s.addEventListener("mouseleave", D), i(() => {
-        const M = o(n);
-        if (!M || !l) return;
-        s.setAttribute("data-flow-edge-id", M.id);
+        const L = o(n);
+        if (!L || !l) return;
+        s.setAttribute("data-flow-edge-id", L.id);
         const I = t.$data(e.closest("[x-data]"));
         if (!I?.nodes) return;
-        const F = M.type ?? I._config?.defaultEdgeType ?? "bezier", K = I._config?.edgeLod;
+        const F = L.type ?? I._config?.defaultEdgeType ?? "bezier", K = I._config?.edgeLod;
         let ne = F;
         if (K) {
-          const W = I._zoomLevel;
-          (K.simplifyAt === "medium" && W === "medium" || W === "far") && (ne = "straight");
+          const X = I._zoomLevel;
+          (K.simplifyAt === "medium" && X === "medium" || X === "far") && (ne = "straight");
         }
-        I._layoutAnimTick, I._edgeDirtyTicks?.get(M.id);
-        const Z = I.getNode(M.source), B = I.getNode(M.target);
-        if (!Z || !B) return;
-        Z.sourcePosition, B.targetPosition;
-        const z = kt(Z, I._nodeMap, I._config?.nodeOrigin), Y = kt(B, I._nodeMap, I._config?.nodeOrigin), X = e.closest("[x-data]");
+        I._layoutAnimTick, I._edgeDirtyTicks?.get(L.id);
+        const G = I.getNode(L.source), B = I.getNode(L.target);
+        if (!G || !B) return;
+        G.sourcePosition, B.targetPosition;
+        const z = yt(G, I._nodeMap, I._config?.nodeOrigin), Y = yt(B, I._nodeMap, I._config?.nodeOrigin), W = e.closest("[x-data]");
         let j, H, te, Q;
-        const U = I._schemaMetrics, J = I._config?.nodeOrigin, se = F !== "floating" && I._config?.schemaHandleGeometry !== "dom" && U && (!J || J[0] === 0 && J[1] === 0) ? Gg(
-          Z,
+        const U = I._schemaMetrics, J = I._config?.nodeOrigin, se = F !== "floating" && I._config?.schemaHandleGeometry !== "dom" && U && (!J || J[0] === 0 && J[1] === 0) ? ep(
+          G,
           B,
           z,
           Y,
-          M.sourceHandle,
-          M.targetHandle,
+          L.sourceHandle,
+          L.targetHandle,
           I._nodeElements,
           U
         ) : null;
         if (F === "floating") {
-          const W = va(z, Y);
-          j = W.sourcePos, H = W.targetPos, te = { x: W.sx, y: W.sy, handleWidth: 0, handleHeight: 0 }, Q = { x: W.tx, y: W.ty, handleWidth: 0, handleHeight: 0 }, _ = { x: W.sx, y: W.sy }, b = { x: W.tx, y: W.ty };
+          const X = Ea(z, Y);
+          j = X.sourcePos, H = X.targetPos, te = { x: X.sx, y: X.sy, handleWidth: 0, handleHeight: 0 }, Q = { x: X.tx, y: X.ty, handleWidth: 0, handleHeight: 0 }, b = { x: X.sx, y: X.sy }, x = { x: X.tx, y: X.ty };
         } else if (se)
-          j = se.sourcePos, H = se.targetPos, te = se.srcMeasurement, Q = se.tgtMeasurement, _ = { x: te.x, y: te.y }, b = { x: Q.x, y: Q.y };
+          j = se.sourcePos, H = se.targetPos, te = se.srcMeasurement, Q = se.tgtMeasurement, b = { x: te.x, y: te.y }, x = { x: Q.x, y: Q.y };
         else {
-          const W = I._nodeElements?.get(M.source) ?? X.querySelector(`[data-flow-node-id="${CSS.escape(M.source)}"]`), ae = I._nodeElements?.get(M.target) ?? X.querySelector(`[data-flow-node-id="${CSS.escape(M.target)}"]`), fe = W ? Hs(W.getBoundingClientRect()) : void 0, ye = ae ? Hs(ae.getBoundingClientRect()) : void 0;
-          j = co(X, M.source, M.sourceHandle, "source", Z, ye, W), H = co(X, M.target, M.targetHandle, "target", B, fe, ae);
-          const le = t.raw(I).viewport ?? { x: 0, y: 0, zoom: 1 }, de = le.zoom || 1, xe = Z.rotation, Se = B.rotation;
-          j = Ds(j, xe), H = Ds(H, Se), te = zs(X, M.source, z, M.sourceHandle, "source", de, le, ye, W), Q = zs(X, M.target, Y, M.targetHandle, "target", de, le, fe, ae);
+          const X = I._nodeElements?.get(L.source) ?? W.querySelector(`[data-flow-node-id="${CSS.escape(L.source)}"]`), ae = I._nodeElements?.get(L.target) ?? W.querySelector(`[data-flow-node-id="${CSS.escape(L.target)}"]`), ue = X ? zs(X.getBoundingClientRect()) : void 0, ce = ae ? zs(ae.getBoundingClientRect()) : void 0;
+          j = uo(W, L.source, L.sourceHandle, "source", G, ce, X), H = uo(W, L.target, L.targetHandle, "target", B, ue, ae);
+          const le = t.raw(I).viewport ?? { x: 0, y: 0, zoom: 1 }, de = le.zoom || 1, xe = G.rotation, Se = B.rotation;
+          j = Os(j, xe), H = Os(H, Se), te = Ys(W, L.source, z, L.sourceHandle, "source", de, le, ce, X), Q = Ys(W, L.target, Y, L.targetHandle, "target", de, le, ue, ae);
           const Te = Ut(z, j, I._shapeRegistry, I._config?.nodeOrigin), Le = Ut(Y, H, I._shapeRegistry, I._config?.nodeOrigin);
-          _ = te ?? Te, b = Q ?? Le;
+          b = te ?? Te, x = Q ?? Le;
         }
-        const ie = Ht(te ?? _, j, te, M.markerStart), G = Ht(Q ?? b, H, Q, M.markerEnd);
-        C = ie, E = G;
+        let oe = Ht(te ?? b, j, te, L.markerStart), Z = Ht(Q ?? x, H, Q, L.markerEnd);
+        if (F === "orthogonal" || F === "avoidant") {
+          const X = t.raw(I._endpointSpreadGrouping);
+          if (X) {
+            const ae = io(G.endpointSpread ?? I._config?.avoidantEndpointSpread);
+            if (ae !== null) {
+              const ce = X.get(`${L.source}|${L.sourceHandle ?? ""}`), le = ce?.lanes.get(L.id);
+              if (ce && le !== void 0 && ce.count > 1) {
+                const de = I._schemaMetrics?.rowHeight ?? te?.handleHeight ?? 0;
+                oe = bs(oe, j, _s(le, ce.count, de, ae));
+              }
+            }
+            const ue = io(B.endpointSpread ?? I._config?.avoidantEndpointSpread);
+            if (ue !== null) {
+              const ce = X.get(`${L.target}|${L.targetHandle ?? ""}`), le = ce?.lanes.get(L.id);
+              if (ce && le !== void 0 && ce.count > 1) {
+                const de = I._schemaMetrics?.rowHeight ?? Q?.handleHeight ?? 0;
+                Z = bs(Z, H, _s(le, ce.count, de, ue));
+              }
+            }
+          }
+        }
+        C = oe, E = Z;
         let ee;
         if (F === "orthogonal" || F === "avoidant")
-          if (I._config?.avoidantSimplifyOnDrag !== !1 && (I._draggingNodeIds?.has(M.source) || I._draggingNodeIds?.has(M.target)))
+          if (I._config?.avoidantSimplifyOnDrag !== !1 && (I._draggingNodeIds?.has(L.source) || I._draggingNodeIds?.has(L.target)))
             ee = void 0;
           else {
             const ae = t.raw(I._obstacleSnapshot);
             if (ae)
-              ee = ae.filter((fe) => fe.id !== M.source && fe.id !== M.target);
+              ee = ae.filter((ue) => ue.id !== L.source && ue.id !== L.target);
             else {
-              const fe = t.raw(I.nodes), ye = new Map(fe.map((de) => [de.id, de])), le = I._config?.nodeOrigin;
-              ee = fe.filter((de) => de.id !== M.source && de.id !== M.target).map((de) => {
-                const xe = kt(de, ye, le);
+              const ue = t.raw(I.nodes), ce = new Map(ue.map((de) => [de.id, de])), le = I._config?.nodeOrigin;
+              ee = ue.filter((de) => de.id !== L.source && de.id !== L.target).map((de) => {
+                const xe = yt(de, ce, le);
                 return {
                   x: xe.position.x,
                   y: xe.position.y,
@@ -11818,54 +11854,54 @@ function Qg(t) {
               });
             }
           }
-        const he = ne === F ? M : { ...M, type: ne }, { path: ce, labelPosition: oe } = ao(he, z, Y, j, H, ie, G, I._config?.edgeTypes, ee, I._shapeRegistry, I._config?.nodeOrigin, I._config?.defaultEdgeType);
-        l.setAttribute("d", ce), a.setAttribute("d", ce), (F === "orthogonal" || F === "avoidant") && t.raw(I._edgeCorridors)?.set(M.id, {
-          minX: Math.min(ie.x, G.x),
-          minY: Math.min(ie.y, G.y),
-          maxX: Math.max(ie.x, G.x),
-          maxY: Math.max(ie.y, G.y)
+        const ge = ne === F ? L : { ...L, type: ne }, { path: fe, labelPosition: ie } = lo(ge, z, Y, j, H, oe, Z, I._config?.edgeTypes, ee, I._shapeRegistry, I._config?.nodeOrigin, I._config?.defaultEdgeType);
+        l.setAttribute("d", fe), a.setAttribute("d", fe), (F === "orthogonal" || F === "avoidant") && t.raw(I._edgeCorridors)?.set(L.id, {
+          minX: Math.min(oe.x, Z.x),
+          minY: Math.min(oe.y, Z.y),
+          maxX: Math.max(oe.x, Z.x),
+          maxY: Math.max(oe.y, Z.y)
         });
-        const ge = F === "editable", re = ge && (M.showControlPoints || M.selected);
-        if (s.querySelectorAll(".flow-edge-control-point, .flow-edge-midpoint").forEach((W) => W.remove()), re) {
-          const W = M.controlPoints ?? [], ae = I.viewport?.zoom ?? 1, fe = 6 / ae, ye = 5 / ae, le = _ ?? { x: 0, y: 0 }, de = b ?? { x: 0, y: 0 }, xe = [le, ...W, de], Se = xe.length - 1, Te = l.getTotalLength?.() ?? 0;
+        const pe = F === "editable", re = pe && (L.showControlPoints || L.selected);
+        if (s.querySelectorAll(".flow-edge-control-point, .flow-edge-midpoint").forEach((X) => X.remove()), re) {
+          const X = L.controlPoints ?? [], ae = I.viewport?.zoom ?? 1, ue = 6 / ae, ce = 5 / ae, le = b ?? { x: 0, y: 0 }, de = x ?? { x: 0, y: 0 }, xe = [le, ...X, de], Se = xe.length - 1, Te = l.getTotalLength?.() ?? 0;
           if (Te > 0) {
             const Le = [0], ze = 200;
             let $e = 1;
             for (let qe = 1; qe <= ze && $e < xe.length; qe++) {
-              const Ln = qe / ze * Te, Kt = l.getPointAtLength(Ln), Ue = xe[$e], Jt = Kt.x - Ue.x, Ii = Kt.y - Ue.y;
-              Jt * Jt + Ii * Ii < 25 && (Le.push(Ln), $e++);
+              const Ln = qe / ze * Te, Kt = l.getPointAtLength(Ln), Ue = xe[$e], Jt = Kt.x - Ue.x, $i = Kt.y - Ue.y;
+              Jt * Jt + $i * $i < 25 && (Le.push(Ln), $e++);
             }
             for (; Le.length <= Se; )
               Le.push(Te);
             for (let qe = 0; qe < Se; qe++) {
               const Ln = (Le[qe] + Le[qe + 1]) / 2, Kt = l.getPointAtLength(Ln), Ue = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-              Ue.classList.add("flow-edge-midpoint"), Ue.setAttribute("cx", String(Kt.x)), Ue.setAttribute("cy", String(Kt.y)), Ue.setAttribute("r", String(ye)), Ue.dataset.segmentIndex = String(qe);
+              Ue.classList.add("flow-edge-midpoint"), Ue.setAttribute("cx", String(Kt.x)), Ue.setAttribute("cy", String(Kt.y)), Ue.setAttribute("r", String(ce)), Ue.dataset.segmentIndex = String(qe);
               const Jt = document.createElementNS("http://www.w3.org/2000/svg", "title");
               Jt.textContent = "Double-click to add control point", Ue.appendChild(Jt), s.appendChild(Ue);
             }
           }
-          for (let Le = 0; Le < W.length; Le++) {
+          for (let Le = 0; Le < X.length; Le++) {
             const ze = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-            ze.classList.add("flow-edge-control-point"), ze.setAttribute("cx", String(W[Le].x)), ze.setAttribute("cy", String(W[Le].y)), ze.setAttribute("r", String(fe)), ze.dataset.pointIndex = String(Le), s.appendChild(ze);
+            ze.classList.add("flow-edge-control-point"), ze.setAttribute("cx", String(X[Le].x)), ze.setAttribute("cy", String(X[Le].y)), ze.setAttribute("r", String(ue)), ze.dataset.pointIndex = String(Le), s.appendChild(ze);
           }
         }
-        if (a.style.cursor = ge ? "crosshair" : "pointer", a.style.strokeWidth = String(
-          M.interactionWidth ?? I._config?.defaultInteractionWidth ?? 20
-        ), M.markerStart != null) {
-          const W = Ot(M.markerStart), ae = zt(W, I._id);
+        if (a.style.cursor = pe ? "crosshair" : "pointer", a.style.strokeWidth = String(
+          L.interactionWidth ?? I._config?.defaultInteractionWidth ?? 20
+        ), L.markerStart != null) {
+          const X = Ot(L.markerStart), ae = zt(X, I._id);
           l.setAttribute("marker-start", `url(#${ae})`);
-        } else if (M._renderDualMarker && M.markerEnd) {
-          const W = Ot(M.markerEnd), ae = zt(W, I._id);
+        } else if (L._renderDualMarker && L.markerEnd) {
+          const X = Ot(L.markerEnd), ae = zt(X, I._id);
           l.setAttribute("marker-start", `url(#${ae})`);
         } else
           l.removeAttribute("marker-start");
-        if (M.markerEnd) {
-          const W = Ot(M.markerEnd), ae = zt(W, I._id);
+        if (L.markerEnd) {
+          const X = Ot(L.markerEnd), ae = zt(X, I._id);
           l.setAttribute("marker-end", `url(#${ae})`);
         } else
           l.removeAttribute("marker-end");
-        const pe = M.strokeWidth ?? 1.5, me = Zg(M.animated);
-        switch (me !== p && (l.classList.remove("flow-edge-animated", "flow-edge-pulse"), p === "dot" && P(), p = me), me) {
+        const me = L.strokeWidth ?? 1.5, ye = Qg(L.animated);
+        switch (ye !== p && (l.classList.remove("flow-edge-animated", "flow-edge-pulse"), p === "dot" && S(), p = ye), ye) {
           case "dash":
             l.classList.add("flow-edge-animated");
             break;
@@ -11873,98 +11909,98 @@ function Qg(t) {
             l.classList.add("flow-edge-pulse");
             break;
           case "dot":
-            x(s, ce, X, M, M.animationDuration);
+            _(s, fe, W, L, L.animationDuration);
             break;
         }
-        if (M.animationDuration && me !== "none" ? (me === "dash" || me === "pulse") && (l.style.animationDuration = M.animationDuration) : (me === "dash" || me === "pulse") && l.style.removeProperty("animation-duration"), y && y !== M.class && s.classList.remove(...y.split(" ").filter(Boolean)), M.class) {
-          const W = me === "dash" ? " flow-edge-animated" : me === "pulse" ? " flow-edge-pulse" : "";
-          l.setAttribute("class", M.class + W), s.classList.add(...M.class.split(" ").filter(Boolean)), y = M.class;
+        if (L.animationDuration && ye !== "none" ? (ye === "dash" || ye === "pulse") && (l.style.animationDuration = L.animationDuration) : (ye === "dash" || ye === "pulse") && l.style.removeProperty("animation-duration"), y && y !== L.class && s.classList.remove(...y.split(" ").filter(Boolean)), L.class) {
+          const X = ye === "dash" ? " flow-edge-animated" : ye === "pulse" ? " flow-edge-pulse" : "";
+          l.setAttribute("class", L.class + X), s.classList.add(...L.class.split(" ").filter(Boolean)), y = L.class;
         } else
           y && (s.classList.remove(...y.split(" ").filter(Boolean)), y = null);
-        if (s.setAttribute("aria-selected", String(!!M.selected)), M.selected)
-          s.classList.add("flow-edge-selected"), l.style.strokeWidth = String(Math.max(pe + 1, 2.5)), l.style.stroke = "var(--flow-edge-stroke-selected, " + yn + ")";
+        if (s.setAttribute("aria-selected", String(!!L.selected)), L.selected)
+          s.classList.add("flow-edge-selected"), l.style.strokeWidth = String(Math.max(me + 1, 2.5)), l.style.stroke = "var(--flow-edge-stroke-selected, " + yn + ")";
         else {
-          s.classList.remove("flow-edge-selected"), l.style.strokeWidth = String(pe);
-          const W = I._markerDefsEl?.querySelector("defs") ?? null;
-          if (_a(M.color)) {
-            if (W) {
-              const ae = ba(I._id, M.id), fe = M.gradientDirection === "target-source", ye = _.x, le = _.y, de = b.x, xe = b.y;
-              xa(
-                W,
+          s.classList.remove("flow-edge-selected"), l.style.strokeWidth = String(me);
+          const X = I._markerDefsEl?.querySelector("defs") ?? null;
+          if (Ca(L.color)) {
+            if (X) {
+              const ae = Sa(I._id, L.id), ue = L.gradientDirection === "target-source", ce = b.x, le = b.y, de = x.x, xe = x.y;
+              ka(
+                X,
                 ae,
-                fe ? { from: M.color.to, to: M.color.from } : M.color,
-                ye,
+                ue ? { from: L.color.to, to: L.color.from } : L.color,
+                ce,
                 le,
                 de,
                 xe
               ), l.style.stroke = `url(#${ae})`, m = ae;
             }
-          } else if (M.color) {
+          } else if (L.color) {
             if (m) {
-              const ae = W;
-              ae && Io(ae, m), m = null;
+              const ae = X;
+              ae && $o(ae, m), m = null;
             }
-            l.style.stroke = M.color;
+            l.style.stroke = L.color;
           } else {
             if (m) {
-              const ae = W;
-              ae && Io(ae, m), m = null;
+              const ae = X;
+              ae && $o(ae, m), m = null;
             }
             l.style.removeProperty("stroke");
           }
         }
-        if (!M.selected && ((M.sourceHandle ? I.selectedRows?.has(M.sourceHandle.replace(/-[lr]$/, "")) : !1) || (M.targetHandle ? I.selectedRows?.has(M.targetHandle.replace(/-[lr]$/, "")) : !1)) ? (s.classList.add("flow-edge-row-highlighted"), M.selected || (l.style.strokeWidth = String(Math.max(pe + 0.5, 2)), l.style.stroke = getComputedStyle(s.closest(".flow-container")).getPropertyValue("--flow-edge-row-highlight-color").trim() || "#3b82f6")) : s.classList.remove("flow-edge-row-highlighted"), M.focusable ?? I._config?.edgesFocusable !== !1 ? (s.setAttribute("tabindex", "0"), s.setAttribute("role", M.ariaRole ?? "group"), s.setAttribute("aria-label", M.ariaLabel ?? (M.label ? `Edge: ${M.label}` : `Edge from ${M.source} to ${M.target}`))) : (s.removeAttribute("tabindex"), s.removeAttribute("role"), s.removeAttribute("aria-label")), M.domAttributes)
-          for (const [W, ae] of Object.entries(M.domAttributes))
-            W.startsWith("on") || jg.has(W.toLowerCase()) || s.setAttribute(W, ae);
-        const Ee = (W, ae, fe, ye, le) => {
+        if (!L.selected && ((L.sourceHandle ? I.selectedRows?.has(L.sourceHandle.replace(/-[lr]$/, "")) : !1) || (L.targetHandle ? I.selectedRows?.has(L.targetHandle.replace(/-[lr]$/, "")) : !1)) ? (s.classList.add("flow-edge-row-highlighted"), L.selected || (l.style.strokeWidth = String(Math.max(me + 0.5, 2)), l.style.stroke = getComputedStyle(s.closest(".flow-container")).getPropertyValue("--flow-edge-row-highlight-color").trim() || "#3b82f6")) : s.classList.remove("flow-edge-row-highlighted"), L.focusable ?? I._config?.edgesFocusable !== !1 ? (s.setAttribute("tabindex", "0"), s.setAttribute("role", L.ariaRole ?? "group"), s.setAttribute("aria-label", L.ariaLabel ?? (L.label ? `Edge: ${L.label}` : `Edge from ${L.source} to ${L.target}`))) : (s.removeAttribute("tabindex"), s.removeAttribute("role"), s.removeAttribute("aria-label")), L.domAttributes)
+          for (const [X, ae] of Object.entries(L.domAttributes))
+            X.startsWith("on") || Kg.has(X.toLowerCase()) || s.setAttribute(X, ae);
+        const Ee = (X, ae, ue, ce, le) => {
           if (ae) {
-            if (!W && ye) {
-              const de = fe.includes("flow-edge-label-start"), xe = fe.includes("flow-edge-label-end");
+            if (!X && ce) {
+              const de = ue.includes("flow-edge-label-start"), xe = ue.includes("flow-edge-label-end");
               let Se = `[data-flow-edge-id="${le}"].flow-edge-label`;
-              de ? Se += ".flow-edge-label-start" : xe ? Se += ".flow-edge-label-end" : Se += ":not(.flow-edge-label-start):not(.flow-edge-label-end)", W = ye.querySelector(Se);
+              de ? Se += ".flow-edge-label-start" : xe ? Se += ".flow-edge-label-end" : Se += ":not(.flow-edge-label-start):not(.flow-edge-label-end)", X = ce.querySelector(Se);
             }
-            return W || (W = document.createElement("div"), W.className = fe, W.dataset.flowEdgeId = le, ye && ye.appendChild(W)), W.textContent = ae, W;
+            return X || (X = document.createElement("div"), X.className = ue, X.dataset.flowEdgeId = le, ce && ce.appendChild(X)), X.textContent = ae, X;
           }
-          return W && W.remove(), null;
-        }, ue = e.closest(".flow-viewport"), be = M.labelVisibility ?? "always", Me = () => {
-          const W = l.getAttribute("d") ?? "";
-          return W !== f && (f = W, h = typeof l.getTotalLength == "function" && l.getTotalLength() || 0), h;
+          return X && X.remove(), null;
+        }, he = e.closest(".flow-viewport"), be = L.labelVisibility ?? "always", Me = () => {
+          const X = l.getAttribute("d") ?? "";
+          return X !== f && (f = X, h = typeof l.getTotalLength == "function" && l.getTotalLength() || 0), h;
         };
-        if (c = Ee(c, M.label, "flow-edge-label", ue, M.id), c) {
-          const W = Me();
-          if (W > 0) {
-            const ae = M.labelPosition ?? 0.5, fe = Kg(l, ae, W);
-            c.style.left = `${fe.x}px`, c.style.top = `${fe.y}px`;
+        if (c = Ee(c, L.label, "flow-edge-label", he, L.id), c) {
+          const X = Me();
+          if (X > 0) {
+            const ae = L.labelPosition ?? 0.5, ue = tp(l, ae, X);
+            c.style.left = `${ue.x}px`, c.style.top = `${ue.y}px`;
           } else
-            c.style.left = `${oe.x}px`, c.style.top = `${oe.y}px`;
+            c.style.left = `${ie.x}px`, c.style.top = `${ie.y}px`;
         }
-        if (d = Ee(d, M.labelStart, "flow-edge-label flow-edge-label-start", ue, M.id), d) {
-          const W = Me();
-          if (W > 0) {
-            const ae = M.labelStartOffset ?? 30, fe = l.getPointAtLength(Math.min(ae, W / 2));
-            d.style.left = `${fe.x}px`, d.style.top = `${fe.y}px`;
+        if (d = Ee(d, L.labelStart, "flow-edge-label flow-edge-label-start", he, L.id), d) {
+          const X = Me();
+          if (X > 0) {
+            const ae = L.labelStartOffset ?? 30, ue = l.getPointAtLength(Math.min(ae, X / 2));
+            d.style.left = `${ue.x}px`, d.style.top = `${ue.y}px`;
           }
         }
-        if (u = Ee(u, M.labelEnd, "flow-edge-label flow-edge-label-end", ue, M.id), u) {
-          const W = Me();
-          if (W > 0) {
-            const ae = M.labelEndOffset ?? 30, fe = l.getPointAtLength(Math.max(W - ae, W / 2));
-            u.style.left = `${fe.x}px`, u.style.top = `${fe.y}px`;
+        if (u = Ee(u, L.labelEnd, "flow-edge-label flow-edge-label-end", he, L.id), u) {
+          const X = Me();
+          if (X > 0) {
+            const ae = L.labelEndOffset ?? 30, ue = l.getPointAtLength(Math.max(X - ae, X / 2));
+            u.style.left = `${ue.x}px`, u.style.top = `${ue.y}px`;
           }
         }
-        for (const W of [c, d, u])
-          W && (W.classList.toggle("flow-edge-label-hover", be === "hover"), W.classList.toggle("flow-edge-label-on-select", be === "selected"), W.classList.toggle("flow-edge-label-selected", !!M.selected), M.class ? W.classList.add(...M.class.split(" ").filter(Boolean)) : y && W.classList.remove(...y.split(" ").filter(Boolean)));
+        for (const X of [c, d, u])
+          X && (X.classList.toggle("flow-edge-label-hover", be === "hover"), X.classList.toggle("flow-edge-label-on-select", be === "selected"), X.classList.toggle("flow-edge-label-selected", !!L.selected), L.class ? X.classList.add(...L.class.split(" ").filter(Boolean)) : y && X.classList.remove(...y.split(" ").filter(Boolean)));
       }), r(() => {
         if (m) {
           const I = t.$data(e.closest("[x-data]"))?._markerDefsEl?.querySelector("defs");
-          I && Io(I, m);
+          I && $o(I, m);
         }
-        k?.(), P(), s.removeEventListener("contextmenu", $), s.removeEventListener("dblclick", L), s.removeEventListener("pointerdown", A, !0), s.removeEventListener("pointerdown", v), s.removeEventListener("pointermove", w), s.removeEventListener("keydown", N), s.removeEventListener("focus", S), s.removeEventListener("blur", R), s.removeEventListener("mousedown", O), s.removeEventListener("mouseenter", q), s.removeEventListener("mouseleave", D), c?.remove(), d?.remove(), u?.remove();
+        P?.(), S(), s.removeEventListener("contextmenu", $), s.removeEventListener("dblclick", M), s.removeEventListener("pointerdown", A, !0), s.removeEventListener("pointerdown", v), s.removeEventListener("pointermove", w), s.removeEventListener("keydown", N), s.removeEventListener("focus", k), s.removeEventListener("blur", R), s.removeEventListener("mousedown", O), s.removeEventListener("mouseenter", q), s.removeEventListener("mouseleave", D), c?.remove(), d?.remove(), u?.remove();
       });
     }
   );
 }
-function ep(t, e) {
+function ip(t, e) {
   return {
     /** Write node positions directly to DOM elements (bypassing Alpine effects). */
     _flushNodePositions(n) {
@@ -12014,24 +12050,24 @@ function ep(t, e) {
         if (!n.has(o.source) && !n.has(o.target)) continue;
         const i = e.raw(t.getNode(o.source)), r = e.raw(t.getNode(o.target));
         if (!i || !r) continue;
-        const s = kt(i, t._nodeMap, t._config.nodeOrigin), a = kt(r, t._nodeMap, t._config.nodeOrigin);
+        const s = yt(i, t._nodeMap, t._config.nodeOrigin), a = yt(r, t._nodeMap, t._config.nodeOrigin);
         let l, c, d, u;
         if (o.type === "floating") {
-          const h = va(s, a);
+          const h = Ea(s, a);
           d = { x: h.sx, y: h.sy }, u = { x: h.tx, y: h.ty };
-          const g = Ht(d, h.sourcePos, null, o.markerStart), p = Ht(u, h.targetPos, null, o.markerEnd), m = ao(o, s, a, h.sourcePos, h.targetPos, g, p, void 0, void 0, t._shapeRegistry, t._config.nodeOrigin);
+          const g = Ht(d, h.sourcePos, null, o.markerStart), p = Ht(u, h.targetPos, null, o.markerEnd), m = lo(o, s, a, h.sourcePos, h.targetPos, g, p, void 0, void 0, t._shapeRegistry, t._config.nodeOrigin);
           l = m.path, c = m.labelPosition;
         } else {
           const h = t._container;
           let g, p;
           if (h) {
-            const b = h.querySelector(
+            const x = h.querySelector(
               `[data-flow-node-id="${CSS.escape(o.source)}"]`
             ), C = h.querySelector(
               `[data-flow-node-id="${CSS.escape(o.target)}"]`
             );
-            if (b) {
-              const E = b.getBoundingClientRect();
+            if (x) {
+              const E = x.getBoundingClientRect();
               g = { x: (E.left + E.right) / 2, y: (E.top + E.bottom) / 2 };
             }
             if (C) {
@@ -12039,10 +12075,10 @@ function ep(t, e) {
               p = { x: (E.left + E.right) / 2, y: (E.top + E.bottom) / 2 };
             }
           }
-          const m = h ? co(h, o.source, o.sourceHandle, "source", i, p) : i?.sourcePosition ?? "bottom", y = h ? co(h, o.target, o.targetHandle, "target", r, g) : r?.targetPosition ?? "top";
+          const m = h ? uo(h, o.source, o.sourceHandle, "source", i, p) : i?.sourcePosition ?? "bottom", y = h ? uo(h, o.target, o.targetHandle, "target", r, g) : r?.targetPosition ?? "top";
           d = Ut(s, m, t._shapeRegistry, t._config.nodeOrigin), u = Ut(a, y, t._shapeRegistry, t._config.nodeOrigin);
-          const x = Ht(d, m, null, o.markerStart), P = Ht(u, y, null, o.markerEnd), _ = ao(o, s, a, m, y, x, P, void 0, void 0, t._shapeRegistry, t._config.nodeOrigin);
-          l = _.path, c = _.labelPosition;
+          const _ = Ht(d, m, null, o.markerStart), S = Ht(u, y, null, o.markerEnd), b = lo(o, s, a, m, y, _, S, void 0, void 0, t._shapeRegistry, t._config.nodeOrigin);
+          l = b.path, c = b.labelPosition;
         }
         const f = t.getEdgePathElement(o.id);
         if (f) {
@@ -12050,11 +12086,11 @@ function ep(t, e) {
           const g = f.parentElement?.querySelector("path:first-child");
           g && g !== f && g.setAttribute("d", l);
         }
-        if (_a(o.color)) {
+        if (Ca(o.color)) {
           const h = t._markerDefsEl?.querySelector("defs");
           if (h) {
-            const g = ba(t._id, o.id), p = o.gradientDirection === "target-source";
-            xa(
+            const g = Sa(t._id, o.id), p = o.gradientDirection === "target-source";
+            ka(
               h,
               g,
               p ? { from: o.color.to, to: o.color.from } : o.color,
@@ -12105,7 +12141,7 @@ function ep(t, e) {
     }
   };
 }
-function tp(t) {
+function sp(t) {
   return {
     _applyConfigPatch(e) {
       const n = t._config;
@@ -12131,7 +12167,7 @@ function tp(t) {
               t._patternColorOverride = i, t._container && t._container.style.setProperty("--flow-bg-pattern-color", i);
               break;
             case "debug":
-              $r(!!i);
+              Fr(!!i);
               break;
             case "preventOverlap":
               t._config.preventOverlap = i;
@@ -12152,7 +12188,7 @@ function tp(t) {
               t._loadingText = i;
               break;
             case "colorMode":
-              t._config.colorMode = i, i && t._container ? t._colorModeHandle ? t._colorModeHandle.update(i) : t._colorModeHandle = la(t._container, i) : !i && t._colorModeHandle && (t._colorModeHandle.destroy(), t._colorModeHandle = null);
+              t._config.colorMode = i, i && t._container ? t._colorModeHandle ? t._colorModeHandle.update(i) : t._colorModeHandle = fa(t._container, i) : !i && t._colorModeHandle && (t._colorModeHandle.destroy(), t._colorModeHandle = null);
               break;
             case "autoLayout":
               n.autoLayout = i || void 0, t._autoLayoutFailed = !1, i ? (t._autoLayoutReady = !0, t._scheduleAutoLayout()) : (t._autoLayoutReady = !1, t._autoLayoutTimer && (clearTimeout(t._autoLayoutTimer), t._autoLayoutTimer = null));
@@ -12161,8 +12197,8 @@ function tp(t) {
     }
   };
 }
-let np = 0;
-function op(t, e) {
+let rp = 0;
+function ap(t, e) {
   switch (t) {
     case "lines":
     case "cross":
@@ -12171,15 +12207,15 @@ function op(t, e) {
       return `radial-gradient(circle, ${e} 1px, transparent 1px)`;
   }
 }
-function ip(t, e) {
+function lp(t, e) {
   return t ? !(t.maxX < e.minX || t.minX > e.maxX || t.maxY < e.minY || t.minY > e.maxY) : !0;
 }
-function sp(t) {
+function cp(t) {
   t.data("flowCanvas", (e = {}) => {
     const n = {
       // ── Reactive State ────────────────────────────────────────────────
       /** Unique instance ID for SVG marker dedup, etc. */
-      _id: `flow-${++np}`,
+      _id: `flow-${++rp}`,
       nodes: e.nodes ?? [],
       edges: e.edges ?? [],
       viewport: {
@@ -12232,7 +12268,7 @@ function sp(t) {
         event: null
       },
       // ── Shape Registry ─────────────────────────────────────────────────
-      _shapeRegistry: { ...aa, ...e.shapeTypes },
+      _shapeRegistry: { ...ua, ...e.shapeTypes },
       // ── Background ────────────────────────────────────────────────────
       _background: e.background ?? "dots",
       _backgroundGap: e.backgroundGap ?? null,
@@ -12288,7 +12324,7 @@ function sp(t) {
         const a = this.viewport.zoom, l = this.viewport.x, c = this.viewport.y, d = [], u = [], f = [];
         for (const h of s) {
           const g = h.gap * a, p = h.variant === "cross" ? g / 2 : g;
-          d.push(op(h.variant, h.color)), h.variant === "lines" || h.variant === "cross" ? (u.push(`${p}px ${p}px, ${p}px ${p}px`), f.push(`${l}px ${c}px, ${l}px ${c}px`)) : (u.push(`${g}px ${g}px`), f.push(`${l}px ${c}px`));
+          d.push(ap(h.variant, h.color)), h.variant === "lines" || h.variant === "cross" ? (u.push(`${p}px ${p}px, ${p}px ${p}px`), f.push(`${l}px ${c}px, ${l}px ${c}px`)) : (u.push(`${g}px ${g}px`), f.push(`${l}px ${c}px`));
         }
         return {
           backgroundImage: d.join(", "),
@@ -12304,7 +12340,7 @@ function sp(t) {
         const { collab: s, ...a } = e;
         return a;
       })(),
-      _shortcuts: qf(e.keyboardShortcuts),
+      _shortcuts: jf(e.keyboardShortcuts),
       _container: null,
       _panZoom: null,
       _onKeyDown: null,
@@ -12370,7 +12406,7 @@ function sp(t) {
       _vpMoved: !1,
       _history: null,
       _announcer: null,
-      _computeEngine: new _h(),
+      _computeEngine: new Ch(),
       _computeDebounceTimer: null,
       _animationLocked: !1,
       _activeTimelines: /* @__PURE__ */ new Set(),
@@ -12402,9 +12438,11 @@ function sp(t) {
       _layoutAnimFrame: 0,
       // ── Shared obstacle cache (Workstream C) ─────────────────────────────
       /** Spatial index of node id → flow-space rect cells (committed geometry). Non-reactive: operate on it via `Alpine.raw(canvas._spatialGrid)` (raw the NESTED property — `Alpine.raw(canvas)` does NOT unwrap Alpine's merge-scope proxy; see flow-edge.ts). Also maintained for the viewport-culling overhaul (WS E), which will consume it — do not delete as dead code even though only WS C currently reads it. */
-      _spatialGrid: new Gu(),
+      _spatialGrid: new ef(),
       /** Obstacle rects rebuilt once per commit. In the edge effect read it via `Alpine.raw(canvas._obstacleSnapshot)` (nested-raw) so the edge does NOT subscribe to every node's reactive state. */
       _obstacleSnapshot: null,
+      /** WS-2 endpoint-spread lanes; null until first computed. Mutated in place (see _obstacleSnapshot). */
+      _endpointSpreadGrouping: null,
       /** Reactive epoch bumped by _commitNodeGeometry (internal signal; edges must NOT subscribe to it). Reserved for the interaction-degradation/LOD workstream (WS D), which will consume it — do not delete as dead code even though only WS C currently reads it. */
       _obstacleEpoch: 0,
       /** REACTIVE Map edge id → tick. Edge effects read key-scoped `.get(edge.id)`; bumped by _markDirtyEdges. */
@@ -12465,7 +12503,7 @@ function sp(t) {
         });
       },
       _rebuildNodeMap() {
-        this._nodeMap = ia(this.nodes), ah(this._childrenIds, this.nodes);
+        this._nodeMap = la(this.nodes), uh(this._childrenIds, this.nodes);
       },
       _rebuildEdgeMap() {
         this._edgeMap = new Map(this.edges.map((s) => [s.id, s]));
@@ -12487,20 +12525,71 @@ function sp(t) {
        * also prunes entries for removed/hidden nodes.
        */
       _commitNodeGeometry(s) {
-        const a = t.raw(this._obstacleSnapshot), l = a ? a.slice() : null, c = t.raw(this.nodes), d = new Map(c.map((g) => [g.id, g])), u = this._config?.nodeOrigin, f = t.raw(this._spatialGrid);
+        const a = t.raw(this._obstacleSnapshot), l = a ? a.slice() : null, c = t.raw(this.nodes), d = new Map(c.map((p) => [p.id, p])), u = this._config?.nodeOrigin, f = t.raw(this._spatialGrid);
         f.clear();
         const h = [];
-        for (const g of c) {
-          const p = kt(g, d, u), m = {
-            id: g.id,
-            x: p.position.x,
-            y: p.position.y,
-            width: p.dimensions?.width ?? we,
-            height: p.dimensions?.height ?? _e
+        for (const p of c) {
+          const m = yt(p, d, u), y = {
+            id: p.id,
+            x: m.position.x,
+            y: m.position.y,
+            width: m.dimensions?.width ?? we,
+            height: m.dimensions?.height ?? _e
           };
-          f.insert(g.id, m.x, m.y, m.width, m.height), !g.hidden && h.push(m);
+          f.insert(p.id, y.x, y.y, y.width, y.height), !p.hidden && h.push(y);
         }
         a ? (a.length = 0, a.push(...h)) : this._obstacleSnapshot = h, this._obstacleEpoch++, this._markDirtyEdges(s, l);
+        const g = this._computeEndpointGrouping();
+        g.size > 0 && this._markEdgesDirtyById(g);
+      },
+      /**
+       * WS-2: assign each avoidant/orthogonal edge a lane index per shared
+       * `(node, handleId)`, ordered by the opposite endpoint's position so the
+       * fan-in doesn't self-cross. No-op (empty grouping) when spread is disabled
+       * everywhere. Returns the set of edge ids whose lane/group membership
+       * changed since the last run, so the caller can dirty exactly those. The
+       * grouping Map is mutated in place (same reference) so reading it in the
+       * edge effect doesn't re-run every edge — mirrors `_obstacleSnapshot`.
+       */
+      _computeEndpointGrouping() {
+        const s = /* @__PURE__ */ new Set(), a = io(this._config?.avoidantEndpointSpread), l = t.raw(this.nodes), c = new Map(l.map((_) => [_.id, _])), d = this._config?.nodeOrigin, u = (_) => {
+          const S = c.get(_);
+          if (!S) return 0;
+          const b = yt(S, c, d);
+          return b.position.y + (b.dimensions?.height ?? 0) / 2;
+        }, f = (_) => {
+          const S = c.get(_)?.endpointSpread;
+          return S !== void 0 ? io(S) !== null : a !== null;
+        }, h = /* @__PURE__ */ new Map(), g = (_, S, b, x) => {
+          if (!f(_)) return;
+          const C = `${_}|${S ?? ""}`;
+          let E = h.get(C);
+          E || (E = [], h.set(C, E)), E.push({ edgeId: b, sortKey: u(x) });
+        }, p = t.raw(this.edges);
+        for (const _ of p) {
+          const S = _.type ?? this._config?.defaultEdgeType;
+          S !== "avoidant" && S !== "orthogonal" || (g(_.source, _.sourceHandle, _.id, _.target), g(_.target, _.targetHandle, _.id, _.source));
+        }
+        const m = t.raw(this._endpointSpreadGrouping), y = /* @__PURE__ */ new Map();
+        for (const [_, S] of h) {
+          S.sort((C, E) => C.sortKey - E.sortKey || (C.edgeId < E.edgeId ? -1 : 1));
+          const b = /* @__PURE__ */ new Map();
+          S.forEach((C, E) => b.set(C.edgeId, E)), y.set(_, { count: S.length, lanes: b });
+          const x = m?.get(_);
+          for (const [C, E] of b)
+            (!x || x.count !== S.length || x.lanes.get(C) !== E) && s.add(C);
+        }
+        if (m) {
+          for (const [_, S] of m)
+            if (!y.has(_))
+              for (const b of S.lanes.keys()) s.add(b);
+        }
+        if (m) {
+          m.clear();
+          for (const [_, S] of y) m.set(_, S);
+        } else
+          this._endpointSpreadGrouping = y;
+        return s;
       },
       /**
        * Dirty exactly the edges whose ROUTE could have changed as a result of
@@ -12540,18 +12629,18 @@ function sp(t) {
         }
         const g = new Set(s), p = [];
         for (const m of g) {
-          const y = f?.find((P) => P.id === m);
+          const y = f?.find((S) => S.id === m);
           y && p.push(y);
-          const x = a?.find((P) => P.id === m);
-          x && p.push(x);
+          const _ = a?.find((S) => S.id === m);
+          _ && p.push(_);
         }
         for (const m of d) {
           let y = g.has(m.source) || g.has(m.target);
           if (!y) {
-            const x = u.get(m.id);
-            if (x) {
-              for (const P of p)
-                if (P.x < x.maxX + ht && P.x + P.width > x.minX - ht && P.y < x.maxY + ht && P.y + P.height > x.minY - ht) {
+            const _ = u.get(m.id);
+            if (_) {
+              for (const S of p)
+                if (S.x < _.maxX + ht && S.x + S.width > _.minX - ht && S.y < _.maxY + ht && S.y + S.height > _.minY - ht) {
                   y = !0;
                   break;
                 }
@@ -12560,6 +12649,16 @@ function sp(t) {
           }
           y && h(m.id);
         }
+      },
+      /**
+       * Bump the routing dirty tick for a specific set of edge ids (WS-2 re-lane).
+       * Reuses the SAME tick-bump `_markDirtyEdges` uses: `.set()` on the REACTIVE
+       * Map so edge effects reading `_edgeDirtyTicks.get(edge.id)` are notified.
+       */
+      _markEdgesDirtyById(s) {
+        const a = this._edgeDirtyTicks, l = t.raw(a);
+        for (const c of s)
+          a.set(c, (l.get(c) ?? 0) + 1);
       },
       /**
        * Hydrate from a pre-rendered static diagram.
@@ -12648,31 +12747,31 @@ function sp(t) {
         if (this._cullingWasActive = !0, !this._container) return;
         const l = this._container.clientWidth, c = this._container.clientHeight;
         if (l === 0 || c === 0) return;
-        const d = e.cullingBuffer ?? 100, u = Zu(this.viewport, l, c, d), h = t.raw(this._spatialGrid).query(u), g = this._draggingNodeIds, p = /* @__PURE__ */ new Set(), m = (P) => {
-          const _ = this._nodeMap.get(P);
-          if (!_ || _.hidden) return;
-          const b = _.dimensions?.width ?? 150, C = _.dimensions?.height ?? 50, E = _.parentId ? ti(_, this._nodeMap, this._config.nodeOrigin) : _.position;
-          !(E.x + b < u.minX || E.x > u.maxX || E.y + C < u.minY || E.y > u.maxY) && p.add(P);
+        const d = e.cullingBuffer ?? 100, u = Qu(this.viewport, l, c, d), h = t.raw(this._spatialGrid).query(u), g = this._draggingNodeIds, p = /* @__PURE__ */ new Set(), m = (S) => {
+          const b = this._nodeMap.get(S);
+          if (!b || b.hidden) return;
+          const x = b.dimensions?.width ?? 150, C = b.dimensions?.height ?? 50, E = b.parentId ? ni(b, this._nodeMap, this._config.nodeOrigin) : b.position;
+          !(E.x + x < u.minX || E.x > u.maxX || E.y + C < u.minY || E.y > u.maxY) && p.add(S);
         };
-        for (const P of h) m(P);
+        for (const S of h) m(S);
         if (g)
-          for (const P of g)
-            h.has(P) || m(P);
-        for (const [P, _] of this._nodeElements) {
-          const b = p.has(P) ? "" : "none";
-          _.style.display !== b && (_.style.display = b);
+          for (const S of g)
+            h.has(S) || m(S);
+        for (const [S, b] of this._nodeElements) {
+          const x = p.has(S) ? "" : "none";
+          b.style.display !== x && (b.style.display = x);
         }
-        const y = this._culledEdgeIds, x = /* @__PURE__ */ new Set();
-        for (const [P, _] of this._edgeSvgElements) {
-          const b = this._edgeMap.get(P);
-          if (!b) continue;
-          const C = this._nodeMap.get(b.source)?.hidden, E = this._nodeMap.get(b.target)?.hidden;
-          if (b.hidden || b._hiddenByCollapse || C || E)
+        const y = this._culledEdgeIds, _ = /* @__PURE__ */ new Set();
+        for (const [S, b] of this._edgeSvgElements) {
+          const x = this._edgeMap.get(S);
+          if (!x) continue;
+          const C = this._nodeMap.get(x.source)?.hidden, E = this._nodeMap.get(x.target)?.hidden;
+          if (x.hidden || x._hiddenByCollapse || C || E)
             continue;
-          const T = p.has(b.source) || p.has(b.target) || ip(this._edgeCorridors.get(P), u), $ = !y.has(P);
-          T !== $ && (_.style.display = T ? "" : "none"), T || x.add(P);
+          const T = p.has(x.source) || p.has(x.target) || lp(this._edgeCorridors.get(S), u), $ = !y.has(S);
+          T !== $ && (b.style.display = T ? "" : "none"), T || _.add(S);
         }
-        this._visibleNodeIds = p, this._culledEdgeIds = x;
+        this._visibleNodeIds = p, this._culledEdgeIds = _;
       },
       /**
        * Restore CSS display on every element culling could have hidden and
@@ -12699,16 +12798,16 @@ function sp(t) {
       },
       getAbsolutePosition(s) {
         const a = this._nodeMap.get(s);
-        return a ? ti(a, this._nodeMap, this._config.nodeOrigin) : { x: 0, y: 0 };
+        return a ? ni(a, this._nodeMap, this._config.nodeOrigin) : { x: 0, y: 0 };
       },
       // ── Init Helpers ─────────────────────────────────────────────────
       /** Enable debug logging if configured. */
       _initDebug() {
-        e.debug && $r(!0);
+        e.debug && Fr(!0);
       },
       /** Set up container element, attributes, CSS custom properties, animator. */
       _initContainer() {
-        this._container = this.$el, this._container.setAttribute("data-flow-canvas", ""), e.fitViewOnInit && this._container.setAttribute("data-fit-view", ""), this._container.setAttribute("role", "application"), this._container.setAttribute("aria-label", e.ariaLabel ?? "Flow diagram"), this._containerStyles = getComputedStyle(this._container), this._animator = new cf(eo), e.patternColor && this._container.style.setProperty("--flow-bg-pattern-color", e.patternColor), e.backgroundGap && this._container.style.setProperty("--flow-bg-pattern-gap", String(e.backgroundGap));
+        this._container = this.$el, this._container.setAttribute("data-flow-canvas", ""), e.fitViewOnInit && this._container.setAttribute("data-fit-view", ""), this._container.setAttribute("role", "application"), this._container.setAttribute("aria-label", e.ariaLabel ?? "Flow diagram"), this._containerStyles = getComputedStyle(this._container), this._animator = new hf(eo), e.patternColor && this._container.style.setProperty("--flow-bg-pattern-color", e.patternColor), e.backgroundGap && this._container.style.setProperty("--flow-bg-pattern-gap", String(e.backgroundGap));
         const s = e.containerHeight;
         if (s !== void 0 && s !== "auto") {
           let a = null;
@@ -12718,7 +12817,7 @@ function sp(t) {
       },
       /** Create color mode handle if configured. */
       _initColorMode() {
-        e.colorMode && (this._colorModeHandle = la(this._container, e.colorMode));
+        e.colorMode && (this._colorModeHandle = fa(this._container, e.colorMode));
       },
       /** Hydrate from static HTML, sort nodes, rebuild maps, capture initial dimensions. */
       _initHydration() {
@@ -12728,13 +12827,13 @@ function sp(t) {
       },
       /** Create FlowHistory if configured. */
       _initHistory() {
-        e.history && (this._history = new ef(e.historyMaxSize ?? 50));
+        e.history && (this._history = new sf(e.historyMaxSize ?? 50));
       },
       /** Create screen reader announcer. */
       _initAnnouncer() {
         if (e.announcements !== !1 && this._container) {
           const s = typeof e.announcements == "object" ? e.announcements.formatMessage : void 0;
-          this._announcer = new vh(this._container, s);
+          this._announcer = new Eh(this._container, s);
         }
       },
       /** Set up collaboration bridge via collab addon plugin. */
@@ -12748,20 +12847,20 @@ function sp(t) {
           const a = this._container, { Doc: l, Awareness: c, CollabBridge: d, CollabAwareness: u } = s, f = e.collab, h = new l(), g = new c(h), p = new d(h, this, f.provider), m = new u(g, f.user);
           if (He.set(a, { bridge: p, awareness: m, doc: h }), f.provider.connect(h, g), f.cursors !== !1) {
             let y = !1;
-            const x = f.throttle ?? 20, P = (C) => {
+            const _ = f.throttle ?? 20, S = (C) => {
               if (y) return;
               y = !0;
-              const E = a.getBoundingClientRect(), T = this._viewportLive ?? this.viewport, $ = (C.clientX - E.left - T.x) / T.zoom, L = (C.clientY - E.top - T.y) / T.zoom;
-              m.updateCursor({ x: $, y: L }), setTimeout(() => {
+              const E = a.getBoundingClientRect(), T = this._viewportLive ?? this.viewport, $ = (C.clientX - E.left - T.x) / T.zoom, M = (C.clientY - E.top - T.y) / T.zoom;
+              m.updateCursor({ x: $, y: M }), setTimeout(() => {
                 y = !1;
-              }, x);
-            }, _ = () => {
+              }, _);
+            }, b = () => {
               m.updateCursor(null);
             };
-            a.addEventListener("mousemove", P), a.addEventListener("mouseleave", _);
-            const b = He.get(a);
-            b.cursorCleanup = () => {
-              a.removeEventListener("mousemove", P), a.removeEventListener("mouseleave", _);
+            a.addEventListener("mousemove", S), a.addEventListener("mouseleave", b);
+            const x = He.get(a);
+            x.cursorCleanup = () => {
+              a.removeEventListener("mousemove", S), a.removeEventListener("mouseleave", b);
             };
           }
         }
@@ -12772,7 +12871,7 @@ function sp(t) {
           nodes: this.nodes.map((s) => ({ id: s.id, type: s.type ?? "default", position: s.position, parentId: s.parentId })),
           edges: this.edges.map((s) => ({ id: s.id, source: s.source, target: s.target, type: s.type ?? "default" })),
           config: { minZoom: e.minZoom, maxZoom: e.maxZoom, pannable: e.pannable, zoomable: e.zoomable, debug: e.debug }
-        }), this._panZoom = Xu(this._container, {
+        }), this._panZoom = Gu(this._container, {
           onTransformChange: (s) => {
             this._onViewportTransform(s);
           },
@@ -12837,7 +12936,7 @@ function sp(t) {
           const s = this._viewportEl ?? this._container?.querySelector(".flow-viewport");
           !s && this._container && V("init", `flowCanvas "${this._id}" has no .flow-viewport — delegating handle pointerdown on the container instead; an active whiteboard tool may not suppress handle presses`);
           const a = s ?? this._container;
-          a && (this._handleDelegationCleanup = gs(a, this), this._handleDelegationEl = a);
+          a && (this._handleDelegationCleanup = ps(a, this), this._handleDelegationEl = a);
         });
       },
       /**
@@ -12863,7 +12962,7 @@ function sp(t) {
       _registerViewportEl(s) {
         this._viewportEl = s;
         const a = this._handleDelegationEl;
-        !a || a === s || (this._handleDelegationCleanup?.(), this._handleDelegationCleanup = null, this._handleDelegationEl = null, !this._handleDelegationTornDown && (this._handleDelegationCleanup = gs(s, this), this._handleDelegationEl = s, V("init", `flowCanvas "${this._id}" re-bound its delegated handle pointerdown listener to a replaced .flow-viewport`)));
+        !a || a === s || (this._handleDelegationCleanup?.(), this._handleDelegationCleanup = null, this._handleDelegationEl = null, !this._handleDelegationTornDown && (this._handleDelegationCleanup = ps(s, this), this._handleDelegationEl = s, V("init", `flowCanvas "${this._id}" re-bound its delegated handle pointerdown listener to a replaced .flow-viewport`)));
       },
       /** Canvas click handler, context menu handler, long press, touch selection mode, context menu event listeners. */
       _initClickHandlers() {
@@ -12895,7 +12994,7 @@ function sp(t) {
             }
         }, this._container.addEventListener("contextmenu", this._onCanvasContextMenu);
         const s = e.longPressAction ?? "context-menu";
-        if (s && (this._longPressCleanup = Xf(
+        if (s && (this._longPressCleanup = Gf(
           this._container,
           (l) => {
             const c = l.target;
@@ -12973,11 +13072,11 @@ function sp(t) {
         this._onKeyDown = (s) => {
           if (!this._active || this._animationLocked) return;
           const a = s.target.tagName, l = this._shortcuts;
-          if (Ze(s.key, l.escape) && this.contextMenu.show) {
+          if (Ge(s.key, l.escape) && this.contextMenu.show) {
             this.closeContextMenu();
             return;
           }
-          if (Ze(s.key, l.escape) && this.pendingConnection) {
+          if (Ge(s.key, l.escape) && this.pendingConnection) {
             this._emit("connect-end", {
               connection: null,
               source: this.pendingConnection.source,
@@ -12986,16 +13085,16 @@ function sp(t) {
             }), this.pendingConnection = null, this._container?.classList.remove("flow-connecting"), this._container && ke(this._container);
             return;
           }
-          if (Ze(s.key, l.delete)) {
+          if (Ge(s.key, l.delete)) {
             if (a === "INPUT" || a === "TEXTAREA") return;
             this._deleteSelected();
           }
-          if (Ze(s.key, this._shortcuts.selectionToolToggle) && !s.ctrlKey && !s.metaKey) {
+          if (Ge(s.key, this._shortcuts.selectionToolToggle) && !s.ctrlKey && !s.metaKey) {
             if (a === "INPUT" || a === "TEXTAREA") return;
             this._selectionTool = this._selectionTool === "box" ? "lasso" : "box";
             return;
           }
-          if (Ze(s.key, l.moveNodes)) {
+          if (Ge(s.key, l.moveNodes)) {
             if (a === "INPUT" || a === "TEXTAREA" || this._config?.disableKeyboardA11y || this.selectedNodes.size === 0) return;
             s.preventDefault();
             const c = mt(s, l.moveStepModifier) ? l.moveStep * l.moveStepMultiplier : l.moveStep;
@@ -13018,35 +13117,35 @@ function sp(t) {
                 g === 0 ? u = -c : g === 1 ? u = c : g === 2 ? d = -c : g === 3 && (d = c);
               }
             }
-            Yf(s.repeat, this.selectedNodes.size, d, u) && this._captureHistory();
+            Uf(s.repeat, this.selectedNodes.size, d, u) && this._captureHistory();
             for (const f of this.selectedNodes) {
               const h = this.getNode(f);
-              if (h && Xr(h)) {
+              if (h && Gr(h)) {
                 h.position.x += d, h.position.y += u;
                 const g = this._container ? He.get(this._container) : void 0;
                 g?.bridge && g.bridge.pushLocalNodeUpdate(h.id, { position: h.position });
               }
             }
           }
-          if ((s.ctrlKey || s.metaKey) && !s.shiftKey && Ze(s.key, l.undo)) {
+          if ((s.ctrlKey || s.metaKey) && !s.shiftKey && Ge(s.key, l.undo)) {
             if (a === "INPUT" || a === "TEXTAREA") return;
             s.preventDefault(), this.undo();
           }
-          if ((s.ctrlKey || s.metaKey) && s.shiftKey && Ze(s.key, l.redo)) {
+          if ((s.ctrlKey || s.metaKey) && s.shiftKey && Ge(s.key, l.redo)) {
             if (a === "INPUT" || a === "TEXTAREA") return;
             s.preventDefault(), this.redo();
           }
           if ((s.ctrlKey || s.metaKey) && !s.shiftKey) {
             if (a === "INPUT" || a === "TEXTAREA") return;
-            Ze(s.key, l.copy) ? (s.preventDefault(), this.copy()) : Ze(s.key, l.paste) ? (s.preventDefault(), this.paste()) : Ze(s.key, l.cut) && (s.preventDefault(), this.cut());
+            Ge(s.key, l.copy) ? (s.preventDefault(), this.copy()) : Ge(s.key, l.paste) ? (s.preventDefault(), this.paste()) : Ge(s.key, l.cut) && (s.preventDefault(), this.cut());
           }
         }, document.addEventListener("keydown", this._onKeyDown);
       },
       /** Create minimap if configured. */
       _initMinimap() {
-        e.minimap && (this._minimap = ff(this._container, {
+        e.minimap && (this._minimap = mf(this._container, {
           getState: () => ({
-            nodes: io(this.nodes, this._nodeMap, this._config.nodeOrigin),
+            nodes: so(this.nodes, this._nodeMap, this._config.nodeOrigin),
             viewport: this.viewport,
             containerWidth: this._container?.clientWidth ?? 0,
             containerHeight: this._container?.clientHeight ?? 0
@@ -13064,7 +13163,7 @@ function sp(t) {
       _initControls() {
         if (e.controls) {
           const s = e.controlsContainer ? document.querySelector(e.controlsContainer) ?? this._container : this._container, a = s !== this._container;
-          this._controls = vf(s, {
+          this._controls = Ef(s, {
             position: e.controlsPosition ?? "bottom-left",
             orientation: e.controlsOrientation ?? "vertical",
             external: a,
@@ -13074,7 +13173,7 @@ function sp(t) {
             showResetPanels: e.controlsShowResetPanels ?? !1,
             onZoomIn: () => this.zoomIn(),
             onZoomOut: () => this.zoomOut(),
-            onFitView: () => this.fitView({ padding: Go }),
+            onFitView: () => this.fitView({ padding: Ko }),
             onToggleInteractive: () => this.toggleInteractive(),
             onResetPanels: () => this.resetPanels(),
             onToggleFullscreen: () => this.toggleFullscreen()
@@ -13150,7 +13249,7 @@ function sp(t) {
       },
       /** Selection box/lasso setup (pointerdown/pointermove/pointerup handlers). */
       _initSelection() {
-        this._selectionBox = _f(this._container), this._lasso = bf(this._container), this._selectionTool = e.selectionTool ?? "box", this._onSelectionPointerDown = (s) => {
+        this._selectionBox = Cf(this._container), this._lasso = Sf(this._container), this._selectionTool = e.selectionTool ?? "box", this._onSelectionPointerDown = (s) => {
           if (!this._config.selectionOnDrag && !this._touchSelectionMode && !mt(s, this._shortcuts.selectionBox))
             return;
           const a = s.target;
@@ -13168,12 +13267,12 @@ function sp(t) {
         }, this._onSelectionPointerUp = (s) => {
           if (!(this._selectionTool === "lasso" ? this._lasso?.isActive() : this._selectionBox?.isActive())) return;
           s.target.releasePointerCapture(s.pointerId), this._suppressNextCanvasClick = !0;
-          const l = io(this.nodes, this._nodeMap, this._config.nodeOrigin);
+          const l = so(this.nodes, this._nodeMap, this._config.nodeOrigin);
           let c, d = [];
           if (this._selectionTool === "lasso") {
             const u = this._lasso.end(this.viewport);
             if (!u) return;
-            const f = this._selectionEffectiveMode === "full" ? Sf(l, u) : Cf(l, u), h = new Set(f.map((g) => g.id));
+            const f = this._selectionEffectiveMode === "full" ? Mf(l, u) : Pf(l, u), h = new Set(f.map((g) => g.id));
             if (c = this.nodes.filter((g) => h.has(g.id)), this._config.lassoSelectsEdges)
               for (const g of this.edges) {
                 if (g.hidden) continue;
@@ -13182,22 +13281,22 @@ function sp(t) {
                 );
                 if (!p) continue;
                 const m = p.getTotalLength(), y = Math.max(10, Math.ceil(m / 20));
-                let x = 0;
-                for (let _ = 0; _ <= y; _++) {
-                  const b = p.getPointAtLength(_ / y * m);
-                  xi(b.x, b.y, u) && x++;
+                let _ = 0;
+                for (let b = 0; b <= y; b++) {
+                  const x = p.getPointAtLength(b / y * m);
+                  Ei(x.x, x.y, u) && _++;
                 }
-                (this._selectionEffectiveMode === "full" ? x === y + 1 : x > 0) && d.push(g.id);
+                (this._selectionEffectiveMode === "full" ? _ === y + 1 : _ > 0) && d.push(g.id);
               }
           } else {
             const u = this._selectionBox.end(this.viewport);
             if (!u) return;
-            const f = this._selectionEffectiveMode === "full" ? Uu(l, u, this._config.nodeOrigin) : ju(l, u, this._config.nodeOrigin), h = new Set(f.map((g) => g.id));
+            const f = this._selectionEffectiveMode === "full" ? Ju(l, u, this._config.nodeOrigin) : Ku(l, u, this._config.nodeOrigin), h = new Set(f.map((g) => g.id));
             c = this.nodes.filter((g) => h.has(g.id));
           }
           this._selectionShiftHeld || this.deselectAll();
           for (const u of c) {
-            if (!Qo(u) || u.hidden) continue;
+            if (!ei(u) || u.hidden) continue;
             u.selected = !0, this.selectedNodes.add(u.id);
             const f = this._container?.querySelector(`[data-flow-node-id="${CSS.escape(u.id)}"]`);
             f && f.classList.add("flow-node-selected");
@@ -13255,7 +13354,7 @@ function sp(t) {
             }
             if (!this._container)
               return;
-            const f = Nr(
+            const f = Hr(
               l.clientX,
               l.clientY,
               this.viewport,
@@ -13344,24 +13443,24 @@ function sp(t) {
             const p = Math.round(h), m = Math.round(g), y = u.dimensions;
             if (y && Math.abs((y.width ?? 0) - p) < 1 && Math.abs((y.height ?? 0) - m) < 1)
               continue;
-            const x = $h(
+            const _ = Fh(
               { width: p, height: m },
               u.minDimensions,
               u.maxDimensions
             );
-            u.dimensions = x, a.add(d), u.parentId && this._layoutDedup?.safeLayoutChildren(u.parentId);
+            u.dimensions = _, a.add(d), u.parentId && this._layoutDedup?.safeLayoutChildren(u.parentId);
           }
           a.size > 0 && this._commitNodeGeometry([...a]);
         }));
       },
       /** Run initial child layouts for all layout parents. */
       _initChildLayout() {
-        if (this._layoutDedup = Nh((s) => {
+        if (this._layoutDedup = Hh((s) => {
           this.layoutChildren(s);
         }), this._resizeObserverInit(), this.$wire) {
           const s = this.$wire;
-          e.wireEvents && Mh(e, s, e.wireEvents);
-          const a = Th(this, s), l = Ch(this, s);
+          e.wireEvents && Ih(e, s, e.wireEvents);
+          const a = $h(this, s), l = Ph(this, s);
           this._wireCleanup = () => {
             a(), l();
           }, V("init", `wire bridge activated for "${this._id}"`);
@@ -13379,7 +13478,7 @@ function sp(t) {
       },
       /** Call setup(canvas) on any addon that provides it. */
       _initAddons() {
-        for (const [, s] of ca().entries())
+        for (const [, s] of ha().entries())
           s && typeof s == "object" && typeof s.setup == "function" && s.setup(this);
       },
       /** Validate auto-layout dependency and start initial layout. */
@@ -13513,7 +13612,7 @@ function sp(t) {
        * even if fn throws.
        */
       batch(s) {
-        return this._layoutDedup ? Ih(this._layoutDedup)(s) : s();
+        return this._layoutDedup ? Rh(this._layoutDedup)(s) : s();
       },
       get collab() {
         return this._container ? He.get(this._container)?.awareness : void 0;
@@ -13521,7 +13620,7 @@ function sp(t) {
       async toImage(s) {
         let a;
         try {
-          ({ captureFlowImage: a } = await Promise.resolve().then(() => Nm));
+          ({ captureFlowImage: a } = await Promise.resolve().then(() => Hm));
         } catch {
           throw new Error("toImage() requires html-to-image. Install it with: npm install html-to-image");
         }
@@ -13543,69 +13642,69 @@ function sp(t) {
         return o[a] = l, !0;
       }
     }), r = [
-      Fh(i),
-      Oh(i),
-      zh(i),
+      Bh(i),
+      qh(i),
       Yh(i),
-      Wh(i),
-      bg(i),
-      Cg(i),
+      Uh(i),
+      Zh(i),
       Sg(i),
-      kg(i),
-      Dg(i),
-      Hg(i),
-      Rg(i),
-      ep(i, t),
-      tp(i)
+      Pg(i),
+      Mg(i),
+      Tg(i),
+      Og(i),
+      zg(i),
+      Vg(i),
+      ip(i, t),
+      sp(i)
     ];
     for (const s of r)
       Object.defineProperties(n, Object.getOwnPropertyDescriptors(s));
     return n.registerMarker = (s, a) => {
-      df(s, a);
+      gf(s, a);
     }, n;
   });
 }
-function Vs(t, e) {
+function Xs(t, e) {
   return {
     x: e[0] * Math.round(t.x / e[0]),
     y: e[1] * Math.round(t.y / e[1])
   };
 }
-function rp(t, e, n) {
+function dp(t, e, n) {
   const { onDragStart: o, onDrag: i, onDragEnd: r, getViewport: s, getNodePosition: a, snapToGrid: l = !1, filterSelector: c, container: d, isLocked: u, noDragClassName: f, dragThreshold: h = 0 } = n;
   let g = { x: 0, y: 0 };
-  function p(x) {
-    const P = s();
+  function p(_) {
+    const S = s();
     return {
-      x: (x.x - P.x) / P.zoom,
-      y: (x.y - P.y) / P.zoom
+      x: (_.x - S.x) / S.zoom,
+      y: (_.y - S.y) / S.zoom
     };
   }
-  const m = Ye(t), y = Cc().subject(() => {
-    const x = s(), P = a();
+  const m = Ye(t), y = Pc().subject(() => {
+    const _ = s(), S = a();
     return {
-      x: P.x * x.zoom + x.x,
-      y: P.y * x.zoom + x.y
+      x: S.x * _.zoom + _.x,
+      y: S.y * _.zoom + _.y
     };
-  }).on("start", (x) => {
-    g = p(x), o?.({ nodeId: e, position: g, sourceEvent: x.sourceEvent });
-  }).on("drag", (x) => {
-    let P = p(x);
-    l && (P = Vs(P, l));
-    const _ = {
-      x: P.x - g.x,
-      y: P.y - g.y
+  }).on("start", (_) => {
+    g = p(_), o?.({ nodeId: e, position: g, sourceEvent: _.sourceEvent });
+  }).on("drag", (_) => {
+    let S = p(_);
+    l && (S = Xs(S, l));
+    const b = {
+      x: S.x - g.x,
+      y: S.y - g.y
     };
-    i?.({ nodeId: e, position: P, delta: _, sourceEvent: x.sourceEvent });
-  }).on("end", (x) => {
-    let P = p(x);
-    l && (P = Vs(P, l)), r?.({ nodeId: e, position: P, sourceEvent: x.sourceEvent });
+    i?.({ nodeId: e, position: S, delta: b, sourceEvent: _.sourceEvent });
+  }).on("end", (_) => {
+    let S = p(_);
+    l && (S = Xs(S, l)), r?.({ nodeId: e, position: S, sourceEvent: _.sourceEvent });
   });
-  return d && y.container(() => d), h > 0 && y.clickDistance(h), y.filter((x) => {
-    if (u?.() || f && x.target?.closest?.("." + f)) return !1;
+  return d && y.container(() => d), h > 0 && y.clickDistance(h), y.filter((_) => {
+    if (u?.() || f && _.target?.closest?.("." + f)) return !1;
     if (c) {
-      const P = t.querySelector(c);
-      return P ? P.contains(x.target) : !0;
+      const S = t.querySelector(c);
+      return S ? S.contains(_.target) : !0;
     }
     return !0;
   }), m.call(y), {
@@ -13614,8 +13713,8 @@ function rp(t, e, n) {
     }
   };
 }
-function ap(t, e) {
-  const n = Zt(t, e);
+function up(t, e) {
+  const n = Gt(t, e);
   return {
     id: t.id,
     x: n.x,
@@ -13624,12 +13723,12 @@ function ap(t, e) {
     height: t.dimensions?.height ?? _e
   };
 }
-function lp(t, e, n) {
+function fp(t, e, n) {
   const o = /* @__PURE__ */ new Set(), i = /* @__PURE__ */ new Set();
   let r = 0, s = 0, a = 1 / 0, l = 1 / 0;
   const c = t.x + t.width / 2, d = t.y + t.height / 2, u = t.x + t.width, f = t.y + t.height;
   for (const h of e) {
-    const g = h.x + h.width / 2, p = h.y + h.height / 2, m = h.x + h.width, y = h.y + h.height, x = [
+    const g = h.x + h.width / 2, p = h.y + h.height / 2, m = h.x + h.width, y = h.y + h.height, _ = [
       [t.x, h.x],
       // left-left
       [u, m],
@@ -13641,11 +13740,11 @@ function lp(t, e, n) {
       [u, h.x]
       // right-left
     ];
-    for (const [_, b] of x) {
-      const C = b - _;
-      Math.abs(C) <= n && (i.add(b), Math.abs(C) < Math.abs(a) && (a = C, r = C));
+    for (const [b, x] of _) {
+      const C = x - b;
+      Math.abs(C) <= n && (i.add(x), Math.abs(C) < Math.abs(a) && (a = C, r = C));
     }
-    const P = [
+    const S = [
       [t.y, h.y],
       // top-top
       [f, y],
@@ -13657,9 +13756,9 @@ function lp(t, e, n) {
       [f, h.y]
       // bottom-top
     ];
-    for (const [_, b] of P) {
-      const C = b - _;
-      Math.abs(C) <= n && (o.add(b), Math.abs(C) < Math.abs(l) && (l = C, s = C));
+    for (const [b, x] of S) {
+      const C = x - b;
+      Math.abs(C) <= n && (o.add(x), Math.abs(C) < Math.abs(l) && (l = C, s = C));
     }
   }
   return {
@@ -13668,10 +13767,10 @@ function lp(t, e, n) {
     snapOffset: { x: r, y: s }
   };
 }
-function cp(t, e, n, o) {
+function hp(t, e, n, o) {
   return Math.abs(t.x - e.x) > 30 ? t.x < e.x ? { source: n, target: o } : { source: o, target: n } : t.y < e.y ? { source: n, target: o } : { source: o, target: n };
 }
-function dp(t, e, n, o) {
+function gp(t, e, n, o) {
   let i = null, r = o;
   for (const s of n) {
     if (s.id === t) continue;
@@ -13680,18 +13779,18 @@ function dp(t, e, n, o) {
     );
     if (a < r) {
       r = a;
-      const { source: l, target: c } = cp(e, s.center, t, s.id);
+      const { source: l, target: c } = hp(e, s.center, t, s.id);
       i = { source: l, target: c, targetId: s.id, distance: a, targetCenter: s.center };
     }
   }
   return i;
 }
-const up = /* @__PURE__ */ new Set(["x-data", "x-init", "x-bind", "href", "src", "action", "formaction", "srcdoc"]);
-let fp = 0;
-function Bs(t, e, n) {
+const pp = /* @__PURE__ */ new Set(["x-data", "x-init", "x-bind", "href", "src", "action", "formaction", "srcdoc"]);
+let mp = 0;
+function Ws(t, e, n) {
   e && n !== null && t._commitHistory?.(n);
 }
-function $o(t, e, n) {
+function Do(t, e, n) {
   t._suspendHistory?.();
   try {
     t.reparentNode?.(e, n);
@@ -13699,7 +13798,7 @@ function $o(t, e, n) {
     t._resumeHistory?.();
   }
 }
-function hp(t, e) {
+function yp(t, e) {
   switch (e) {
     case "alt":
       return t.altKey;
@@ -13709,7 +13808,7 @@ function hp(t, e) {
       return t.shiftKey;
   }
 }
-function gp(t, e, n) {
+function wp(t, e, n) {
   const o = t.querySelectorAll('[data-flow-handle-type="source"]');
   if (o.length === 0) return null;
   let i = null, r = 1 / 0;
@@ -13720,7 +13819,7 @@ function gp(t, e, n) {
     u < r && (r = u, i = a);
   }), i;
 }
-function pp(t, e, n) {
+function vp(t, e, n) {
   let o = 1 / 0, i = -1 / 0, r = 1 / 0, s = -1 / 0;
   for (const c of n)
     o = Math.min(o, c.x), i = Math.max(i, c.x + c.width), r = Math.min(r, c.y), s = Math.max(s, c.y + c.height);
@@ -13736,106 +13835,106 @@ function pp(t, e, n) {
   }
   return l;
 }
-function mp(t) {
+function _p(t) {
   t.directive(
     "flow-node",
     (e, { expression: n }, { evaluate: o, effect: i, cleanup: r }) => {
-      let s = null, a = !1, l = null, c = !1, d = null, u = null, f = null, h = null, g = null, p = null, m = !1, y = -1, x = null, P = !1, _ = [], b = "", C = [], E = null;
+      let s = null, a = !1, l = null, c = !1, d = null, u = null, f = null, h = null, g = null, p = null, m = !1, y = -1, _ = null, S = !1, b = [], x = "", C = [], E = null;
       i(() => {
         if (!e.isConnected) return;
-        const k = o(n);
-        if (!k || k.hidden) return;
+        const P = o(n);
+        if (!P || P.hidden) return;
         const v = t.$data(e.closest("[x-data]"));
         if (!v?.viewport) return;
-        const w = k.parentId ? v.getAbsolutePosition(k.id) : k.position ?? { x: 0, y: 0 }, N = k.nodeOrigin ?? v._config?.nodeOrigin ?? [0, 0], S = k.dimensions?.width ?? 150, R = k.dimensions?.height ?? 40;
-        e.style.left = w.x - S * N[0] + "px", e.style.top = w.y - R * N[1] + "px";
+        const w = P.parentId ? v.getAbsolutePosition(P.id) : P.position ?? { x: 0, y: 0 }, N = P.nodeOrigin ?? v._config?.nodeOrigin ?? [0, 0], k = P.dimensions?.width ?? 150, R = P.dimensions?.height ?? 40;
+        e.style.left = w.x - k * N[0] + "px", e.style.top = w.y - R * N[1] + "px";
       }), i(() => {
         if (!e.isConnected) return;
-        const k = o(n);
-        if (!k) return;
-        if (e.dataset.flowNodeId = k.id, k.type && (e.dataset.flowNodeType = k.type), !P) {
+        const P = o(n);
+        if (!P) return;
+        if (e.dataset.flowNodeId = P.id, P.type && (e.dataset.flowNodeType = P.type), !S) {
           const z = e.closest("[x-data]"), Y = z ? t.$data(z) : null;
-          let X = !1;
+          let W = !1;
           if (Y?._config?.nodeTypes) {
-            const j = k.type ?? "default", H = Y._config.nodeTypes[j] ?? Y._config.nodeTypes.default;
+            const j = P.type ?? "default", H = Y._config.nodeTypes[j] ?? Y._config.nodeTypes.default;
             if (typeof H == "string") {
               const te = document.querySelector(H);
-              te?.content && (e.appendChild(te.content.cloneNode(!0)), X = !0);
-            } else typeof H == "function" && (H(k, e), X = !0);
+              te?.content && (e.appendChild(te.content.cloneNode(!0)), W = !0);
+            } else typeof H == "function" && (H(P, e), W = !0);
           }
-          if (!X && e.children.length === 0) {
+          if (!W && e.children.length === 0) {
             const j = document.createElement("div");
             j.setAttribute("x-flow-handle:target", "");
             const H = document.createElement("span");
             H.setAttribute("x-text", "node.data.label");
             const te = document.createElement("div");
-            te.setAttribute("x-flow-handle:source", ""), e.appendChild(j), e.appendChild(H), e.appendChild(te), X = !0;
+            te.setAttribute("x-flow-handle:source", ""), e.appendChild(j), e.appendChild(H), e.appendChild(te), W = !0;
           }
-          if (X)
+          if (W)
             for (const j of Array.from(e.children))
-              t.addScopeToNode(j, { node: k }), t.initTree(j);
-          P = !0;
+              t.addScopeToNode(j, { node: P }), t.initTree(j);
+          S = !0;
         }
-        if (k.hidden) {
+        if (P.hidden) {
           e.classList.add("flow-node-hidden"), e.removeAttribute("tabindex"), e.removeAttribute("role"), e.removeAttribute("aria-label"), s?.destroy(), s = null;
           return;
         }
-        e.classList.remove("flow-node-hidden"), E !== k.id && (s?.destroy(), s = null, E = k.id);
+        e.classList.remove("flow-node-hidden"), E !== P.id && (s?.destroy(), s = null, E = P.id);
         const v = t.$data(e.closest("[x-data]"));
         if (!v?.viewport) return;
-        if (e.classList.add("flow-node", "nopan"), k.type === "group" ? e.classList.add("flow-node-group") : e.classList.remove("flow-node-group"), k.dimensions) {
-          const z = k.childLayout, Y = k.fixedDimensions, X = (v._childrenIds?.get(k.id)?.length ?? 0) > 0;
-          e.style.width = k.dimensions.width + "px", z || Y || X ? e.style.height = k.dimensions.height + "px" : e.style.height = "";
+        if (e.classList.add("flow-node", "nopan"), P.type === "group" ? e.classList.add("flow-node-group") : e.classList.remove("flow-node-group"), P.dimensions) {
+          const z = P.childLayout, Y = P.fixedDimensions, W = (v._childrenIds?.get(P.id)?.length ?? 0) > 0;
+          e.style.width = P.dimensions.width + "px", z || Y || W ? e.style.height = P.dimensions.height + "px" : e.style.height = "";
         }
-        v.selectedNodes.has(k.id) ? e.classList.add("flow-node-selected") : e.classList.remove("flow-node-selected"), e.setAttribute("aria-selected", String(!!k.selected)), k._validationErrors && k._validationErrors.length > 0 ? e.classList.add("flow-node-invalid") : e.classList.remove("flow-node-invalid");
-        const w = ["flow-node-running", "flow-node-completed", "flow-node-failed", "flow-node-skipped"], N = k.runState;
+        v.selectedNodes.has(P.id) ? e.classList.add("flow-node-selected") : e.classList.remove("flow-node-selected"), e.setAttribute("aria-selected", String(!!P.selected)), P._validationErrors && P._validationErrors.length > 0 ? e.classList.add("flow-node-invalid") : e.classList.remove("flow-node-invalid");
+        const w = ["flow-node-running", "flow-node-completed", "flow-node-failed", "flow-node-skipped"], N = P.runState;
         for (const z of w)
           e.classList.remove(z);
         N && N !== "pending" && e.classList.add(`flow-node-${N}`);
-        for (const z of _)
+        for (const z of b)
           e.classList.remove(z);
-        const S = k.class ? k.class.split(/\s+/).filter(Boolean) : [];
-        for (const z of S)
+        const k = P.class ? P.class.split(/\s+/).filter(Boolean) : [];
+        for (const z of k)
           e.classList.add(z);
-        _ = S;
-        const R = k.shape ? `flow-node-${k.shape}` : "";
-        b !== R && (b && e.classList.remove(b), R && e.classList.add(R), b = R);
-        const O = t.$data(e.closest("[data-flow-canvas]")), q = k.shape && O?._shapeRegistry?.[k.shape];
-        if (q?.clipPath ? e.style.clipPath = q.clipPath : e.style.clipPath = "", k.style) {
-          const z = typeof k.style == "string" ? Object.fromEntries(k.style.split(";").filter(Boolean).map((X) => X.split(":").map((j) => j.trim()))) : k.style, Y = [];
-          for (const [X, j] of Object.entries(z))
-            X && j && (e.style.setProperty(X, j), Y.push(X));
-          for (const X of C)
-            Y.includes(X) || e.style.removeProperty(X);
+        b = k;
+        const R = P.shape ? `flow-node-${P.shape}` : "";
+        x !== R && (x && e.classList.remove(x), R && e.classList.add(R), x = R);
+        const O = t.$data(e.closest("[data-flow-canvas]")), q = P.shape && O?._shapeRegistry?.[P.shape];
+        if (q?.clipPath ? e.style.clipPath = q.clipPath : e.style.clipPath = "", P.style) {
+          const z = typeof P.style == "string" ? Object.fromEntries(P.style.split(";").filter(Boolean).map((W) => W.split(":").map((j) => j.trim()))) : P.style, Y = [];
+          for (const [W, j] of Object.entries(z))
+            W && j && (e.style.setProperty(W, j), Y.push(W));
+          for (const W of C)
+            Y.includes(W) || e.style.removeProperty(W);
           C = Y;
         } else if (C.length > 0) {
           for (const z of C)
             e.style.removeProperty(z);
           C = [];
         }
-        if (k.rotation ? (e.style.transform = `rotate(${k.rotation}deg)`, e.style.transformOrigin = "center") : e.style.transform = "", k.focusable ?? v._config?.nodesFocusable !== !1 ? (e.setAttribute("tabindex", "0"), e.setAttribute("role", k.ariaRole ?? "group"), e.setAttribute("aria-label", k.ariaLabel ?? (k.data?.label ? `Node: ${k.data.label}` : `Node ${k.id}`))) : (e.removeAttribute("tabindex"), e.removeAttribute("role"), e.removeAttribute("aria-label")), k.domAttributes)
-          for (const [z, Y] of Object.entries(k.domAttributes))
-            z.startsWith("on") || up.has(z.toLowerCase()) || e.setAttribute(z, Y);
-        Be(k) ? e.classList.remove("flow-node-no-connect") : e.classList.add("flow-node-no-connect"), k.collapsed ? e.classList.add("flow-node-collapsed") : e.classList.remove("flow-node-collapsed");
-        const M = e.classList.contains("flow-node-condensed");
-        k.condensed ? e.classList.add("flow-node-condensed") : e.classList.remove("flow-node-condensed"), !!k.condensed !== M && requestAnimationFrame(() => {
-          k.dimensions = {
+        if (P.rotation ? (e.style.transform = `rotate(${P.rotation}deg)`, e.style.transformOrigin = "center") : e.style.transform = "", P.focusable ?? v._config?.nodesFocusable !== !1 ? (e.setAttribute("tabindex", "0"), e.setAttribute("role", P.ariaRole ?? "group"), e.setAttribute("aria-label", P.ariaLabel ?? (P.data?.label ? `Node: ${P.data.label}` : `Node ${P.id}`))) : (e.removeAttribute("tabindex"), e.removeAttribute("role"), e.removeAttribute("aria-label")), P.domAttributes)
+          for (const [z, Y] of Object.entries(P.domAttributes))
+            z.startsWith("on") || pp.has(z.toLowerCase()) || e.setAttribute(z, Y);
+        Be(P) ? e.classList.remove("flow-node-no-connect") : e.classList.add("flow-node-no-connect"), P.collapsed ? e.classList.add("flow-node-collapsed") : e.classList.remove("flow-node-collapsed");
+        const L = e.classList.contains("flow-node-condensed");
+        P.condensed ? e.classList.add("flow-node-condensed") : e.classList.remove("flow-node-condensed"), !!P.condensed !== L && requestAnimationFrame(() => {
+          P.dimensions = {
             width: e.offsetWidth,
             height: e.offsetHeight
-          }, V("condense", `Node "${k.id}" re-measured after condense toggle`, k.dimensions);
-        }), k.filtered ? e.classList.add("flow-node-filtered") : e.classList.remove("flow-node-filtered");
-        const I = k.handles ?? "visible";
+          }, V("condense", `Node "${P.id}" re-measured after condense toggle`, P.dimensions);
+        }), P.filtered ? e.classList.add("flow-node-filtered") : e.classList.remove("flow-node-filtered");
+        const I = P.handles ?? "visible";
         e.classList.remove("flow-handles-hidden", "flow-handles-hover", "flow-handles-select"), I !== "visible" && e.classList.add(`flow-handles-${I}`);
-        let F = sa(k, v._nodeMap);
-        v._config?.elevateNodesOnSelect !== !1 && v.selectedNodes.has(k.id) && (F += k.type === "group" ? Math.max(1 - F, 0) : 1e3), m && (F += 1e3);
-        const ne = k.type === "group" ? 0 : 2;
-        if (F !== ne ? e.style.zIndex = String(F) : e.style.removeProperty("z-index"), !Xr(k)) {
+        let F = ca(P, v._nodeMap);
+        v._config?.elevateNodesOnSelect !== !1 && v.selectedNodes.has(P.id) && (F += P.type === "group" ? Math.max(1 - F, 0) : 1e3), m && (F += 1e3);
+        const ne = P.type === "group" ? 0 : 2;
+        if (F !== ne ? e.style.zIndex = String(F) : e.style.removeProperty("z-index"), !Gr(P)) {
           e.classList.add("flow-node-locked"), s?.destroy(), s = null;
           return;
         }
         e.classList.remove("flow-node-locked"), e.querySelector("[data-flow-drag-handle]") ? e.classList.add("flow-node-has-handle") : e.classList.remove("flow-node-has-handle");
         const B = e.closest(".flow-container");
-        s || (s = rp(e, k.id, {
+        s || (s = dp(e, P.id, {
           container: B ?? void 0,
           filterSelector: "[data-flow-drag-handle]",
           isLocked: () => v._animationLocked,
@@ -13843,18 +13942,18 @@ function mp(t) {
           dragThreshold: v._config?.nodeDragThreshold ?? 0,
           getViewport: () => v.viewport,
           getNodePosition: () => {
-            const z = v.getNode(k.id);
+            const z = v.getNode(P.id);
             return z ? z.parentId ? v.getAbsolutePosition(z.id) : { x: z.position.x, y: z.position.y } : { x: 0, y: 0 };
           },
           snapToGrid: v._config?.snapToGrid ?? !1,
-          onDragStart({ nodeId: z, position: Y, sourceEvent: X }) {
+          onDragStart({ nodeId: z, position: Y, sourceEvent: W }) {
             e.classList.add("flow-node-dragging"), a = !1, c = !1, d = null;
             const j = v._container ? He.get(v._container) : void 0;
             j?.bridge && j.bridge.setDragging(z, !0), h?.destroy(), h = null, g = null, p && B && B.querySelector(`[data-flow-node-id="${CSS.escape(p)}"]`)?.classList.remove("flow-node-drop-target"), p = null, l = v._snapshotHistory?.() ?? null, V("drag", `Node "${z}" drag start`, Y);
             const H = v.getNode(z);
             if (H) {
-              if (v._config?.selectNodesOnDrag !== !1 && H.selectable !== !1 && !v.selectedNodes.has(z) && (mt(X, v._shortcuts?.multiSelect) || v.deselectAll(), v.selectedNodes.add(z), H.selected = !0, v._emitSelectionChange(), c = !0), v._emit("node-drag-start", { node: H }), v.selectedNodes.has(z) && v.selectedNodes.size > 1) {
-                const te = yt(z, v.nodes);
+              if (v._config?.selectNodesOnDrag !== !1 && H.selectable !== !1 && !v.selectedNodes.has(z) && (mt(W, v._shortcuts?.multiSelect) || v.deselectAll(), v.selectedNodes.add(z), H.selected = !0, v._emitSelectionChange(), c = !0), v._emit("node-drag-start", { node: H }), v.selectedNodes.has(z) && v.selectedNodes.size > 1) {
+                const te = wt(z, v.nodes);
                 d = /* @__PURE__ */ new Map();
                 for (const Q of v.selectedNodes) {
                   if (Q === z || te.has(Q))
@@ -13867,7 +13966,7 @@ function mp(t) {
                 for (const te of d.keys())
                   v._draggingNodeIds.add(te);
             }
-            v._config?.autoPanOnNodeDrag !== !1 && B && (u = jr({
+            v._config?.autoPanOnNodeDrag !== !1 && B && (u = Kr({
               container: B,
               speed: v._config?.autoPanSpeed ?? 15,
               onPan(te, Q) {
@@ -13877,142 +13976,142 @@ function mp(t) {
                   y: U().y - Q,
                   zoom: J
                 });
-                const ie = se.x - U().x, G = se.y - U().y, ee = ie === 0 && G === 0, he = v.getNode(z);
-                let ce = !1;
-                if (he) {
-                  const oe = he.position.x, ge = he.position.y;
-                  he.position.x += ie / J, he.position.y += G / J;
-                  const re = Rn(he.position, he, v._config?.nodeExtent);
-                  he.position.x = re.x, he.position.y = re.y, ce = he.position.x === oe && he.position.y === ge;
+                const oe = se.x - U().x, Z = se.y - U().y, ee = oe === 0 && Z === 0, ge = v.getNode(z);
+                let fe = !1;
+                if (ge) {
+                  const ie = ge.position.x, pe = ge.position.y;
+                  ge.position.x += oe / J, ge.position.y += Z / J;
+                  const re = Rn(ge.position, ge, v._config?.nodeExtent);
+                  ge.position.x = re.x, ge.position.y = re.y, fe = ge.position.x === ie && ge.position.y === pe;
                 }
                 if (d)
-                  for (const [oe] of d) {
-                    const ge = v.getNode(oe);
-                    if (ge) {
-                      ge.position.x += ie / J, ge.position.y += G / J;
-                      const re = Rn(ge.position, ge, v._config?.nodeExtent);
-                      ge.position.x = re.x, ge.position.y = re.y;
+                  for (const [ie] of d) {
+                    const pe = v.getNode(ie);
+                    if (pe) {
+                      pe.position.x += oe / J, pe.position.y += Z / J;
+                      const re = Rn(pe.position, pe, v._config?.nodeExtent);
+                      pe.position.x = re.x, pe.position.y = re.y;
                     }
                   }
-                return ee && ce;
+                return ee && fe;
               }
-            }), X instanceof MouseEvent && u.updatePointer(X.clientX, X.clientY), u.start());
+            }), W instanceof MouseEvent && u.updatePointer(W.clientX, W.clientY), u.start());
           },
-          onDrag({ nodeId: z, position: Y, delta: X, sourceEvent: j }) {
+          onDrag({ nodeId: z, position: Y, delta: W, sourceEvent: j }) {
             a = !0;
             const H = v.getNode(z);
             if (H) {
               if (H.parentId) {
                 const U = v.getAbsolutePosition(H.parentId);
                 let J = Y.x - U.x, se = Y.y - U.y;
-                const ie = H.dimensions ?? { width: 150, height: 50 }, G = v.getNode(H.parentId);
-                if (G?.childLayout) {
-                  m || (e.classList.add("flow-reorder-dragging"), x = H.parentId), m = !0;
+                const oe = H.dimensions ?? { width: 150, height: 50 }, Z = v.getNode(H.parentId);
+                if (Z?.childLayout) {
+                  m || (e.classList.add("flow-reorder-dragging"), _ = H.parentId), m = !0;
                   const ee = H.extent !== "parent";
-                  if (H.position.x = Y.x - U.x, H.position.y = Y.y - U.y, !ee && G.dimensions) {
-                    const oe = Lo({ x: H.position.x, y: H.position.y }, ie, G.dimensions);
-                    H.position.x = oe.x, H.position.y = oe.y;
+                  if (H.position.x = Y.x - U.x, H.position.y = Y.y - U.y, !ee && Z.dimensions) {
+                    const ie = Po({ x: H.position.x, y: H.position.y }, oe, Z.dimensions);
+                    H.position.x = ie.x, H.position.y = ie.y;
                   }
-                  const he = H.dimensions?.width ?? 150, ce = H.dimensions?.height ?? 50;
+                  const ge = H.dimensions?.width ?? 150, fe = H.dimensions?.height ?? 50;
                   if (ee) {
-                    const oe = G.dimensions?.width ?? 150, ge = G.dimensions?.height ?? 50, re = H.position.x + he / 2, pe = H.position.y + ce / 2, me = 12, Oe = x === H.parentId ? 0 : me, Pe = re >= Oe && re <= oe - Oe && pe >= Oe && pe <= ge - Oe, Ee = /* @__PURE__ */ new Set();
-                    let ue = H.parentId;
-                    for (; ue; )
-                      Ee.add(ue), ue = v.getNode(ue)?.parentId;
-                    const be = Y.x + he / 2, Me = Y.y + ce / 2, W = yt(H.id, v.nodes);
+                    const ie = Z.dimensions?.width ?? 150, pe = Z.dimensions?.height ?? 50, re = H.position.x + ge / 2, me = H.position.y + fe / 2, ye = 12, Oe = _ === H.parentId ? 0 : ye, Pe = re >= Oe && re <= ie - Oe && me >= Oe && me <= pe - Oe, Ee = /* @__PURE__ */ new Set();
+                    let he = H.parentId;
+                    for (; he; )
+                      Ee.add(he), he = v.getNode(he)?.parentId;
+                    const be = Y.x + ge / 2, Me = Y.y + fe / 2, X = wt(H.id, v.nodes);
                     let ae = null;
-                    const fe = v.nodes.filter(
-                      (le) => le.id !== H.id && (le.droppable || le.childLayout) && !le.hidden && !W.has(le.id) && (Pe ? !Ee.has(le.id) : le.id !== H.parentId) && (!le.acceptsDrop || le.acceptsDrop(H))
+                    const ue = v.nodes.filter(
+                      (le) => le.id !== H.id && (le.droppable || le.childLayout) && !le.hidden && !X.has(le.id) && (Pe ? !Ee.has(le.id) : le.id !== H.parentId) && (!le.acceptsDrop || le.acceptsDrop(H))
                     );
-                    for (const le of fe) {
-                      const de = le.parentId ? v.getAbsolutePosition(le.id) : le.position, xe = le.dimensions?.width ?? 150, Se = le.dimensions?.height ?? 50, Te = le.id === p ? 0 : me;
+                    for (const le of ue) {
+                      const de = le.parentId ? v.getAbsolutePosition(le.id) : le.position, xe = le.dimensions?.width ?? 150, Se = le.dimensions?.height ?? 50, Te = le.id === p ? 0 : ye;
                       be >= de.x + Te && be <= de.x + xe - Te && Me >= de.y + Te && Me <= de.y + Se - Te && (ae = le);
                     }
-                    const ye = ae?.id ?? null;
-                    if (ye !== p) {
-                      p && B && B.querySelector(`[data-flow-node-id="${CSS.escape(p)}"]`)?.classList.remove("flow-node-drop-target"), ye && B && B.querySelector(`[data-flow-node-id="${CSS.escape(ye)}"]`)?.classList.add("flow-node-drop-target"), p = ye;
-                      const le = ye ? v.getNode(ye) : null, de = x;
-                      if (le?.childLayout && ye !== x) {
-                        de && (v.layoutChildren(de, { omitFromComputation: z, shallow: !0 }), v.propagateLayoutUp(de, { omitFromComputation: z })), x = ye;
-                        const xe = v.nodes.filter(($e) => $e.parentId === ye && $e.id !== z).sort(($e, qe) => ($e.order ?? 1 / 0) - (qe.order ?? 1 / 0)), Se = xe.length, Te = [...xe];
+                    const ce = ae?.id ?? null;
+                    if (ce !== p) {
+                      p && B && B.querySelector(`[data-flow-node-id="${CSS.escape(p)}"]`)?.classList.remove("flow-node-drop-target"), ce && B && B.querySelector(`[data-flow-node-id="${CSS.escape(ce)}"]`)?.classList.add("flow-node-drop-target"), p = ce;
+                      const le = ce ? v.getNode(ce) : null, de = _;
+                      if (le?.childLayout && ce !== _) {
+                        de && (v.layoutChildren(de, { omitFromComputation: z, shallow: !0 }), v.propagateLayoutUp(de, { omitFromComputation: z })), _ = ce;
+                        const xe = v.nodes.filter(($e) => $e.parentId === ce && $e.id !== z).sort(($e, qe) => ($e.order ?? 1 / 0) - (qe.order ?? 1 / 0)), Se = xe.length, Te = [...xe];
                         Te.splice(Se, 0, H);
                         for (let $e = 0; $e < Te.length; $e++)
                           Te[$e].order = $e;
                         y = Se;
                         const Le = v._initialDimensions?.get(z), ze = { ...H, dimensions: Le ? { ...Le } : void 0 };
-                        v.layoutChildren(ye, { excludeId: z, includeNode: ze, shallow: !0 }), v.propagateLayoutUp(ye, { includeNode: ze });
-                      } else Pe && x !== H.parentId ? (de && de !== H.parentId && (v.layoutChildren(de, { omitFromComputation: z, shallow: !0 }), v.propagateLayoutUp(de, { omitFromComputation: z })), x = H.parentId, y = -1) : !ye && !Pe && (de && (v.layoutChildren(de, { omitFromComputation: z, shallow: !0 }), v.propagateLayoutUp(de, { omitFromComputation: z })), x = null, y = -1);
+                        v.layoutChildren(ce, { excludeId: z, includeNode: ze, shallow: !0 }), v.propagateLayoutUp(ce, { includeNode: ze });
+                      } else Pe && _ !== H.parentId ? (de && de !== H.parentId && (v.layoutChildren(de, { omitFromComputation: z, shallow: !0 }), v.propagateLayoutUp(de, { omitFromComputation: z })), _ = H.parentId, y = -1) : !ce && !Pe && (de && (v.layoutChildren(de, { omitFromComputation: z, shallow: !0 }), v.propagateLayoutUp(de, { omitFromComputation: z })), _ = null, y = -1);
                     }
                   }
-                  if (x) {
-                    const oe = v.getNode(x), ge = oe?.childLayout ?? G.childLayout, re = v.nodes.filter((ue) => ue.parentId === x && ue.id !== z).sort((ue, be) => (ue.order ?? 1 / 0) - (be.order ?? 1 / 0));
-                    let pe, me;
-                    if (x !== H.parentId) {
-                      const ue = oe?.parentId ? v.getAbsolutePosition(x) : oe?.position ?? { x: 0, y: 0 };
-                      pe = Y.x - ue.x, me = Y.y - ue.y;
+                  if (_) {
+                    const ie = v.getNode(_), pe = ie?.childLayout ?? Z.childLayout, re = v.nodes.filter((he) => he.parentId === _ && he.id !== z).sort((he, be) => (he.order ?? 1 / 0) - (be.order ?? 1 / 0));
+                    let me, ye;
+                    if (_ !== H.parentId) {
+                      const he = ie?.parentId ? v.getAbsolutePosition(_) : ie?.position ?? { x: 0, y: 0 };
+                      me = Y.x - he.x, ye = Y.y - he.y;
                     } else
-                      pe = H.position.x, me = H.position.y;
-                    const Oe = ge.swapThreshold ?? 0.5;
+                      me = H.position.x, ye = H.position.y;
+                    const Oe = pe.swapThreshold ?? 0.5;
                     if (y === -1)
-                      if (x === H.parentId) {
-                        const ue = H.order ?? 0;
-                        y = re.filter((be) => (be.order ?? 0) < ue).length;
+                      if (_ === H.parentId) {
+                        const he = H.order ?? 0;
+                        y = re.filter((be) => (be.order ?? 0) < he).length;
                       } else
                         y = re.length;
                     const Pe = y;
                     let Ee = re.length;
-                    for (let ue = 0; ue < re.length; ue++) {
-                      const be = re[ue], Me = be.dimensions?.width ?? 150, W = be.dimensions?.height ?? 50, ae = ue < Pe ? 1 - Oe : Oe, fe = be.position.y + W * ae, ye = be.position.x + Me * ae;
-                      if (ge.direction === "grid") {
+                    for (let he = 0; he < re.length; he++) {
+                      const be = re[he], Me = be.dimensions?.width ?? 150, X = be.dimensions?.height ?? 50, ae = he < Pe ? 1 - Oe : Oe, ue = be.position.y + X * ae, ce = be.position.x + Me * ae;
+                      if (pe.direction === "grid") {
                         const le = {
-                          x: pe + he / 2,
-                          y: me + ce / 2
-                        }, de = be.position.y + W / 2;
+                          x: me + ge / 2,
+                          y: ye + fe / 2
+                        }, de = be.position.y + X / 2;
                         if (le.y < be.position.y) {
-                          Ee = ue;
+                          Ee = he;
                           break;
                         }
-                        if (Math.abs(le.y - de) < W / 2 && le.x < ye) {
-                          Ee = ue;
+                        if (Math.abs(le.y - de) < X / 2 && le.x < ce) {
+                          Ee = he;
                           break;
                         }
-                      } else if (ge.direction === "vertical") {
-                        if ((ue < Pe ? me : me + ce) < fe) {
-                          Ee = ue;
+                      } else if (pe.direction === "vertical") {
+                        if ((he < Pe ? ye : ye + fe) < ue) {
+                          Ee = he;
                           break;
                         }
-                      } else if ((ue < Pe ? pe : pe + he) < ye) {
-                        Ee = ue;
+                      } else if ((he < Pe ? me : me + ge) < ce) {
+                        Ee = he;
                         break;
                       }
                     }
                     if (Ee !== y) {
                       y = Ee;
-                      const ue = [...re];
-                      ue.splice(Ee, 0, H);
-                      for (let fe = 0; fe < ue.length; fe++)
-                        ue[fe].order = fe;
+                      const he = [...re];
+                      he.splice(Ee, 0, H);
+                      for (let ue = 0; ue < he.length; ue++)
+                        he[ue].order = ue;
                       e.closest(".flow-container")?.classList.add("flow-layout-animating"), v._layoutAnimFrame && cancelAnimationFrame(v._layoutAnimFrame);
-                      const Me = H.id, W = x, ae = W !== H.parentId;
+                      const Me = H.id, X = _, ae = X !== H.parentId;
                       v._layoutAnimFrame = requestAnimationFrame(() => {
-                        if (ae && W) {
+                        if (ae && X) {
                           const de = v.getNode(Me);
                           let xe;
                           if (de) {
                             const Se = v._initialDimensions?.get(Me);
                             xe = { ...de, dimensions: Se ? { ...Se } : void 0 };
                           }
-                          v.layoutChildren(W, {
+                          v.layoutChildren(X, {
                             excludeId: Me,
                             includeNode: xe,
                             shallow: !0
-                          }), v.propagateLayoutUp(W, {
+                          }), v.propagateLayoutUp(X, {
                             includeNode: xe
                           });
                         } else
-                          v.layoutChildren(W, Me, !0);
-                        const fe = performance.now(), ye = 300, le = () => {
-                          v._layoutAnimTick++, performance.now() - fe < ye ? v._layoutAnimFrame = requestAnimationFrame(le) : v._layoutAnimFrame = 0;
+                          v.layoutChildren(X, Me, !0);
+                        const ue = performance.now(), ce = 300, le = () => {
+                          v._layoutAnimTick++, performance.now() - ue < ce ? v._layoutAnimFrame = requestAnimationFrame(le) : v._layoutAnimFrame = 0;
                         };
                         v._layoutAnimFrame = requestAnimationFrame(le);
                       });
@@ -14021,35 +14120,35 @@ function mp(t) {
                   u && j instanceof MouseEvent && u.updatePointer(j.clientX, j.clientY);
                   return;
                 }
-                if (H.extent === "parent" && G?.dimensions) {
-                  const ee = Lo(
+                if (H.extent === "parent" && Z?.dimensions) {
+                  const ee = Po(
                     { x: J, y: se },
-                    ie,
-                    G.dimensions
+                    oe,
+                    Z.dimensions
                   );
                   J = ee.x, se = ee.y;
                 } else if (Array.isArray(H.extent)) {
-                  const ee = ra({ x: J, y: se }, H.extent, ie);
+                  const ee = da({ x: J, y: se }, H.extent, oe);
                   J = ee.x, se = ee.y;
                 }
                 if ((!H.extent || H.extent !== "parent") && (un(
-                  G,
+                  Z,
                   v._config?.childValidationRules ?? {}
-                )?.preventChildEscape || !!G?.childLayout) && G?.dimensions) {
-                  const ce = Lo(
+                )?.preventChildEscape || !!Z?.childLayout) && Z?.dimensions) {
+                  const fe = Po(
                     { x: J, y: se },
-                    ie,
-                    G.dimensions
+                    oe,
+                    Z.dimensions
                   );
-                  J = ce.x, se = ce.y;
+                  J = fe.x, se = fe.y;
                 }
-                if (H.expandParent && G?.dimensions) {
-                  const ee = lh(
+                if (H.expandParent && Z?.dimensions) {
+                  const ee = fh(
                     { x: J, y: se },
-                    ie,
-                    G.dimensions
+                    oe,
+                    Z.dimensions
                   );
-                  ee && (G.dimensions.width = ee.width, G.dimensions.height = ee.height);
+                  ee && (Z.dimensions.width = ee.width, Z.dimensions.height = ee.height);
                 }
                 H.position.x = J, H.position.y = se;
               } else {
@@ -14057,85 +14156,85 @@ function mp(t) {
                 H.position.x = U.x, H.position.y = U.y;
               }
               if (v._config?.snapToGrid) {
-                const U = H.nodeOrigin ?? v._config?.nodeOrigin ?? [0, 0], J = H.dimensions?.width ?? 150, se = H.dimensions?.height ?? 40, ie = H.parentId ? v.getAbsolutePosition(H.id) : H.position;
-                e.style.left = ie.x - J * U[0] + "px", e.style.top = ie.y - se * U[1] + "px", v._layoutAnimTick++;
+                const U = H.nodeOrigin ?? v._config?.nodeOrigin ?? [0, 0], J = H.dimensions?.width ?? 150, se = H.dimensions?.height ?? 40, oe = H.parentId ? v.getAbsolutePosition(H.id) : H.position;
+                e.style.left = oe.x - J * U[0] + "px", e.style.top = oe.y - se * U[1] + "px", v._layoutAnimTick++;
               }
               if (v._emit("node-drag", { node: H, position: Y }), d)
                 for (const [U, J] of d) {
                   const se = v.getNode(U);
                   if (se) {
-                    let ie = J.x + X.x, G = J.y + X.y;
-                    const ee = Rn({ x: ie, y: G }, se, v._config?.nodeExtent);
+                    let oe = J.x + W.x, Z = J.y + W.y;
+                    const ee = Rn({ x: oe, y: Z }, se, v._config?.nodeExtent);
                     se.position.x = ee.x, se.position.y = ee.y;
                   }
                 }
               const Q = v._config?.helperLines;
               if (Q) {
-                const U = typeof Q == "object" ? Q.snap ?? !0 : !0, J = typeof Q == "object" ? Q.threshold ?? 5 : 5, se = (oe) => {
-                  const ge = oe.parentId ? v.getAbsolutePosition(oe.id) : oe.position;
-                  return ap({ ...oe, position: ge }, v._config?.nodeOrigin);
-                }, G = (v.selectedNodes.size > 1 && v.selectedNodes.has(z) ? v.nodes.filter((oe) => v.selectedNodes.has(oe.id)) : [H]).map(se), ee = {
-                  x: Math.min(...G.map((oe) => oe.x)),
-                  y: Math.min(...G.map((oe) => oe.y)),
-                  width: Math.max(...G.map((oe) => oe.x + oe.width)) - Math.min(...G.map((oe) => oe.x)),
-                  height: Math.max(...G.map((oe) => oe.y + oe.height)) - Math.min(...G.map((oe) => oe.y))
-                }, he = v.nodes.filter(
-                  (oe) => !v.selectedNodes.has(oe.id) && oe.id !== z && oe.hidden !== !0 && oe.filtered !== !0
-                ).map(se), ce = lp(ee, he, J);
-                if (U && (ce.snapOffset.x !== 0 || ce.snapOffset.y !== 0) && (H.position.x += ce.snapOffset.x, H.position.y += ce.snapOffset.y, d))
-                  for (const [oe] of d) {
-                    const ge = v.getNode(oe);
-                    ge && (ge.position.x += ce.snapOffset.x, ge.position.y += ce.snapOffset.y);
+                const U = typeof Q == "object" ? Q.snap ?? !0 : !0, J = typeof Q == "object" ? Q.threshold ?? 5 : 5, se = (ie) => {
+                  const pe = ie.parentId ? v.getAbsolutePosition(ie.id) : ie.position;
+                  return up({ ...ie, position: pe }, v._config?.nodeOrigin);
+                }, Z = (v.selectedNodes.size > 1 && v.selectedNodes.has(z) ? v.nodes.filter((ie) => v.selectedNodes.has(ie.id)) : [H]).map(se), ee = {
+                  x: Math.min(...Z.map((ie) => ie.x)),
+                  y: Math.min(...Z.map((ie) => ie.y)),
+                  width: Math.max(...Z.map((ie) => ie.x + ie.width)) - Math.min(...Z.map((ie) => ie.x)),
+                  height: Math.max(...Z.map((ie) => ie.y + ie.height)) - Math.min(...Z.map((ie) => ie.y))
+                }, ge = v.nodes.filter(
+                  (ie) => !v.selectedNodes.has(ie.id) && ie.id !== z && ie.hidden !== !0 && ie.filtered !== !0
+                ).map(se), fe = fp(ee, ge, J);
+                if (U && (fe.snapOffset.x !== 0 || fe.snapOffset.y !== 0) && (H.position.x += fe.snapOffset.x, H.position.y += fe.snapOffset.y, d))
+                  for (const [ie] of d) {
+                    const pe = v.getNode(ie);
+                    pe && (pe.position.x += fe.snapOffset.x, pe.position.y += fe.snapOffset.y);
                   }
-                if (f?.remove(), ce.horizontal.length > 0 || ce.vertical.length > 0) {
-                  const oe = B?.querySelector(".flow-viewport");
-                  if (oe) {
-                    const ge = v.nodes.map(se);
-                    f = pp(ce.horizontal, ce.vertical, ge), oe.appendChild(f);
+                if (f?.remove(), fe.horizontal.length > 0 || fe.vertical.length > 0) {
+                  const ie = B?.querySelector(".flow-viewport");
+                  if (ie) {
+                    const pe = v.nodes.map(se);
+                    f = vp(fe.horizontal, fe.vertical, pe), ie.appendChild(f);
                   }
                 } else
                   f = null;
                 v._emit("helper-lines-change", {
-                  horizontal: ce.horizontal,
-                  vertical: ce.vertical
+                  horizontal: fe.horizontal,
+                  vertical: fe.vertical
                 });
               }
             }
             if (v._config?.preventOverlap) {
-              const Q = typeof v._config.preventOverlap == "number" ? v._config.preventOverlap : 5, U = H.dimensions?.width ?? we, J = H.dimensions?.height ?? _e, se = v.selectedNodes, ie = v.nodes.filter((ee) => ee.id !== H.id && !ee.hidden && !se.has(ee.id)).map((ee) => jt(ee, v._config?.nodeOrigin)), G = Rh(H.position, U, J, ie, Q);
-              H.position.x = G.x, H.position.y = G.y;
+              const Q = typeof v._config.preventOverlap == "number" ? v._config.preventOverlap : 5, U = H.dimensions?.width ?? we, J = H.dimensions?.height ?? _e, se = v.selectedNodes, oe = v.nodes.filter((ee) => ee.id !== H.id && !ee.hidden && !se.has(ee.id)).map((ee) => jt(ee, v._config?.nodeOrigin)), Z = Vh(H.position, U, J, oe, Q);
+              H.position.x = Z.x, H.position.y = Z.y;
             }
             if (!H.parentId) {
-              const Q = yt(H.id, v.nodes), U = v.nodes.filter(
+              const Q = wt(H.id, v.nodes), U = v.nodes.filter(
                 (ee) => ee.id !== H.id && ee.droppable && !ee.hidden && !Q.has(ee.id) && (!ee.acceptsDrop || ee.acceptsDrop(H))
               ), J = jt(H, v._config?.nodeOrigin);
               let se = null;
-              const ie = 12;
+              const oe = 12;
               for (const ee of U) {
-                const he = ee.parentId ? v.getAbsolutePosition(ee.id) : ee.position, ce = ee.dimensions?.width ?? we, oe = ee.dimensions?.height ?? _e, ge = J.x + J.width / 2, re = J.y + J.height / 2, pe = ee.id === p ? 0 : ie;
-                ge >= he.x + pe && ge <= he.x + ce - pe && re >= he.y + pe && re <= he.y + oe - pe && (se = ee);
+                const ge = ee.parentId ? v.getAbsolutePosition(ee.id) : ee.position, fe = ee.dimensions?.width ?? we, ie = ee.dimensions?.height ?? _e, pe = J.x + J.width / 2, re = J.y + J.height / 2, me = ee.id === p ? 0 : oe;
+                pe >= ge.x + me && pe <= ge.x + fe - me && re >= ge.y + me && re <= ge.y + ie - me && (se = ee);
               }
-              const G = se?.id ?? null;
-              G !== p && (p && B && B.querySelector(`[data-flow-node-id="${CSS.escape(p)}"]`)?.classList.remove("flow-node-drop-target"), G && B && B.querySelector(`[data-flow-node-id="${CSS.escape(G)}"]`)?.classList.add("flow-node-drop-target"), p = G);
+              const Z = se?.id ?? null;
+              Z !== p && (p && B && B.querySelector(`[data-flow-node-id="${CSS.escape(p)}"]`)?.classList.remove("flow-node-drop-target"), Z && B && B.querySelector(`[data-flow-node-id="${CSS.escape(Z)}"]`)?.classList.add("flow-node-drop-target"), p = Z);
             }
             if (v._config?.proximityConnect) {
               const Q = v._config.proximityConnectDistance ?? 150, U = H.dimensions ?? { width: 150, height: 50 }, J = {
                 x: H.position.x + U.width / 2,
                 y: H.position.y + U.height / 2
-              }, se = v.nodes.filter((G) => G.id !== H.id && !G.hidden).map((G) => ({
-                id: G.id,
+              }, se = v.nodes.filter((Z) => Z.id !== H.id && !Z.hidden).map((Z) => ({
+                id: Z.id,
                 center: {
-                  x: G.position.x + (G.dimensions?.width ?? 150) / 2,
-                  y: G.position.y + (G.dimensions?.height ?? 50) / 2
+                  x: Z.position.x + (Z.dimensions?.width ?? 150) / 2,
+                  y: Z.position.y + (Z.dimensions?.height ?? 50) / 2
                 }
-              })), ie = dp(H.id, J, se, Q);
-              if (ie)
+              })), oe = gp(H.id, J, se, Q);
+              if (oe)
                 if (v.edges.some(
-                  (ee) => ee.source === ie.source && ee.target === ie.target || ee.source === ie.target && ee.target === ie.source
+                  (ee) => ee.source === oe.source && ee.target === oe.target || ee.source === oe.target && ee.target === oe.source
                 ))
                   h?.destroy(), h = null, g = null;
                 else {
-                  if (g = ie, !h) {
+                  if (g = oe, !h) {
                     h = Wt({
                       connectionLineType: v._config?.connectionLineType,
                       connectionLineStyle: v._config?.connectionLineStyle,
@@ -14147,9 +14246,9 @@ function mp(t) {
                   h.update({
                     fromX: J.x,
                     fromY: J.y,
-                    toX: ie.targetCenter.x,
-                    toY: ie.targetCenter.y,
-                    source: ie.source
+                    toX: oe.targetCenter.x,
+                    toY: oe.targetCenter.y,
+                    source: oe.source
                   });
                 }
               else
@@ -14170,15 +14269,15 @@ function mp(t) {
             u && j instanceof MouseEvent && u.updatePointer(j.clientX, j.clientY);
           },
           onDragEnd({ nodeId: z, position: Y }) {
-            const X = d ? [z, ...d.keys()] : [z];
+            const W = d ? [z, ...d.keys()] : [z];
             v._draggingNodeIds.clear(), e.classList.remove("flow-node-dragging"), V("drag", `Node "${z}" drag end`, Y);
             const j = v._container ? He.get(v._container) : void 0;
             j?.bridge && j.bridge.setDragging(z, !1), u?.stop(), u = null, f?.remove(), f = null, v._config?.helperLines && v._emit("helper-lines-change", { horizontal: [], vertical: [] });
             const H = v.getNode(z);
             if (H && v._emit("node-drag-end", { node: H, position: Y }), m && H?.parentId) {
               e.classList.remove("flow-reorder-dragging");
-              const te = x;
-              m = !1, y = -1, x = null, v._layoutAnimFrame && (cancelAnimationFrame(v._layoutAnimFrame), v._layoutAnimFrame = 0), e.closest(".flow-container")?.classList.remove("flow-layout-animating"), p ? (B && B.querySelector(`[data-flow-node-id="${CSS.escape(p)}"]`)?.classList.remove("flow-node-drop-target"), $o(v, z, p), p = null) : te && te !== H.parentId ? (v.layoutChildren(te, { omitFromComputation: z, shallow: !0 }), v.propagateLayoutUp(te, { omitFromComputation: z }), v.layoutChildren(H.parentId), v._emit("child-reorder", {
+              const te = _;
+              m = !1, y = -1, _ = null, v._layoutAnimFrame && (cancelAnimationFrame(v._layoutAnimFrame), v._layoutAnimFrame = 0), e.closest(".flow-container")?.classList.remove("flow-layout-animating"), p ? (B && B.querySelector(`[data-flow-node-id="${CSS.escape(p)}"]`)?.classList.remove("flow-node-drop-target"), Do(v, z, p), p = null) : te && te !== H.parentId ? (v.layoutChildren(te, { omitFromComputation: z, shallow: !0 }), v.propagateLayoutUp(te, { omitFromComputation: z }), v.layoutChildren(H.parentId), v._emit("child-reorder", {
                 nodeId: z,
                 parentId: H.parentId,
                 order: H.order
@@ -14186,19 +14285,19 @@ function mp(t) {
                 nodeId: z,
                 parentId: H.parentId,
                 order: H.order
-              })), d = null, v._layoutAnimTick++, v._commitNodeGeometry(X), Bs(v, a, l), l = null, a = !1;
+              })), d = null, v._layoutAnimTick++, v._commitNodeGeometry(W), Ws(v, a, l), l = null, a = !1;
               return;
             }
             if (H && p)
-              B && B.querySelector(`[data-flow-node-id="${CSS.escape(p)}"]`)?.classList.remove("flow-node-drop-target"), $o(v, z, p), p = null;
+              B && B.querySelector(`[data-flow-node-id="${CSS.escape(p)}"]`)?.classList.remove("flow-node-drop-target"), Do(v, z, p), p = null;
             else if (H && H.parentId && !p) {
               const te = un(
                 v.getNode(H.parentId),
                 v._config?.childValidationRules ?? {}
               ), Q = v.getNode(H.parentId);
               if (!te?.preventChildEscape && !Q?.childLayout && Q?.dimensions) {
-                const U = H.position.x, J = H.position.y, se = H.dimensions?.width ?? 150, ie = H.dimensions?.height ?? 50;
-                (U + se < 0 || J + ie < 0 || U > Q.dimensions.width || J > Q.dimensions.height) && $o(v, z, null);
+                const U = H.position.x, J = H.position.y, se = H.dimensions?.width ?? 150, oe = H.dimensions?.height ?? 50;
+                (U + se < 0 || J + oe < 0 || U > Q.dimensions.width || J > Q.dimensions.height) && Do(v, z, null);
               }
               p = null;
             } else
@@ -14220,83 +14319,83 @@ function mp(t) {
                 };
                 if (pt(U, v.edges, { preventCycles: v._config?.preventCycles }) && gt(U, v._config?.connectionRules, v._nodeMap) && (B ? nt(B, U, v.edges) : !0) && (B ? tt(B, U) : !0) && (!v._config.isValidConnection || v._config.isValidConnection(U))) {
                   if (v._config.proximityConnectConfirm) {
-                    const he = B?.querySelector(`[data-flow-node-id="${CSS.escape(te.source)}"]`), ce = B?.querySelector(`[data-flow-node-id="${CSS.escape(te.target)}"]`);
-                    he?.classList.add("flow-proximity-confirm"), ce?.classList.add("flow-proximity-confirm"), setTimeout(() => {
-                      he?.classList.remove("flow-proximity-confirm"), ce?.classList.remove("flow-proximity-confirm");
+                    const ge = B?.querySelector(`[data-flow-node-id="${CSS.escape(te.source)}"]`), fe = B?.querySelector(`[data-flow-node-id="${CSS.escape(te.target)}"]`);
+                    ge?.classList.add("flow-proximity-confirm"), fe?.classList.add("flow-proximity-confirm"), setTimeout(() => {
+                      ge?.classList.remove("flow-proximity-confirm"), fe?.classList.remove("flow-proximity-confirm");
                     }, 400);
                   }
-                  const ee = `e-${te.source}-${te.target}-${Date.now()}-${fp++}`;
+                  const ee = `e-${te.source}-${te.target}-${Date.now()}-${mp++}`;
                   v.addEdges({ id: ee, ...U }), v._emit("connect", { connection: U });
                 }
               }
             } else
               h?.destroy(), h = null, g = null;
-            d = null, a && (v._layoutAnimTick++, v._commitNodeGeometry(X)), Bs(v, a, l), l = null, a = !1;
+            d = null, a && (v._layoutAnimTick++, v._commitNodeGeometry(W)), Ws(v, a, l), l = null, a = !1;
           }
         }));
       });
       {
-        const k = t.$data(e.closest("[x-data]"));
-        if (k?._config?.easyConnect) {
-          const v = k._config.easyConnectKey ?? "alt", w = (N) => {
-            if (!hp(N, v) || N.target.closest("[data-flow-handle-type]")) return;
-            const S = t.$data(e.closest("[x-data]"));
-            if (!S || S._animationLocked || S._connectValidating) return;
+        const P = t.$data(e.closest("[x-data]"));
+        if (P?._config?.easyConnect) {
+          const v = P._config.easyConnectKey ?? "alt", w = (N) => {
+            if (!yp(N, v) || N.target.closest("[data-flow-handle-type]")) return;
+            const k = t.$data(e.closest("[x-data]"));
+            if (!k || k._animationLocked || k._connectValidating) return;
             const R = o(n);
             if (!R) return;
-            const O = S.getNode(R.id);
+            const O = k.getNode(R.id);
             if (!O || O.connectable === !1) return;
             N.preventDefault(), N.stopPropagation(), N.stopImmediatePropagation();
-            const q = gp(e, N.clientX, N.clientY), D = q?.dataset.flowHandleId ?? "source";
+            const q = wp(e, N.clientX, N.clientY), D = q?.dataset.flowHandleId ?? "source";
             e.classList.add("flow-easy-connecting");
-            const M = e.closest(".flow-container");
-            if (!M) return;
-            const I = S._viewportLive ?? S.viewport, F = I?.zoom || 1, K = I?.x || 0, ne = I?.y || 0, Z = M.getBoundingClientRect();
+            const L = e.closest(".flow-container");
+            if (!L) return;
+            const I = k._viewportLive ?? k.viewport, F = I?.zoom || 1, K = I?.x || 0, ne = I?.y || 0, G = L.getBoundingClientRect();
             let B, z;
             if (q) {
               const J = q.getBoundingClientRect();
-              B = (J.left + J.width / 2 - Z.left - K) / F, z = (J.top + J.height / 2 - Z.top - ne) / F;
+              B = (J.left + J.width / 2 - G.left - K) / F, z = (J.top + J.height / 2 - G.top - ne) / F;
             } else {
               const J = e.getBoundingClientRect();
-              B = (J.left + J.width / 2 - Z.left - K) / F, z = (J.top + J.height / 2 - Z.top - ne) / F;
+              B = (J.left + J.width / 2 - G.left - K) / F, z = (J.top + J.height / 2 - G.top - ne) / F;
             }
-            S._emit("connect-start", { source: R.id, sourceHandle: D });
+            k._emit("connect-start", { source: R.id, sourceHandle: D });
             const Y = Wt({
-              connectionLineType: S._config?.connectionLineType,
-              connectionLineStyle: S._config?.connectionLineStyle,
-              connectionLine: S._config?.connectionLine
-            }), X = M.querySelector(".flow-viewport");
-            X && X.appendChild(Y.svg), Y.update({ fromX: B, fromY: z, toX: B, toY: z, source: R.id, sourceHandle: D }), S.pendingConnection = { source: R.id, sourceHandle: D, position: { x: B, y: z } }, bn(M, R.id, D, S);
-            let j = wo(M, S, N.clientX, N.clientY), H = null;
-            const te = S._config?.connectionSnapRadius ?? 20, Q = (J) => {
-              const se = S.screenToFlowPosition(J.clientX, J.clientY), ie = _n({
-                containerEl: M,
+              connectionLineType: k._config?.connectionLineType,
+              connectionLineStyle: k._config?.connectionLineStyle,
+              connectionLine: k._config?.connectionLine
+            }), W = L.querySelector(".flow-viewport");
+            W && W.appendChild(Y.svg), Y.update({ fromX: B, fromY: z, toX: B, toY: z, source: R.id, sourceHandle: D }), k.pendingConnection = { source: R.id, sourceHandle: D, position: { x: B, y: z } }, bn(L, R.id, D, k);
+            let j = vo(L, k, N.clientX, N.clientY), H = null;
+            const te = k._config?.connectionSnapRadius ?? 20, Q = (J) => {
+              const se = k.screenToFlowPosition(J.clientX, J.clientY), oe = _n({
+                containerEl: L,
                 handleType: "target",
                 excludeNodeId: R.id,
                 cursorFlowPos: se,
                 connectionSnapRadius: te,
-                getNode: (G) => S.getNode(G),
-                toFlowPosition: (G, ee) => S.screenToFlowPosition(G, ee)
+                getNode: (Z) => k.getNode(Z),
+                toFlowPosition: (Z, ee) => k.screenToFlowPosition(Z, ee)
               });
-              ie.element !== H && (H?.classList.remove("flow-handle-active"), ie.element?.classList.add("flow-handle-active"), H = ie.element), Y.update({ fromX: B, fromY: z, toX: ie.position.x, toY: ie.position.y, source: R.id, sourceHandle: D }), S.pendingConnection = { ...S.pendingConnection, position: ie.position }, j?.updatePointer(J.clientX, J.clientY);
+              oe.element !== H && (H?.classList.remove("flow-handle-active"), oe.element?.classList.add("flow-handle-active"), H = oe.element), Y.update({ fromX: B, fromY: z, toX: oe.position.x, toY: oe.position.y, source: R.id, sourceHandle: D }), k.pendingConnection = { ...k.pendingConnection, position: oe.position }, j?.updatePointer(J.clientX, J.clientY);
             }, U = async (J) => {
-              j?.stop(), j = null, document.removeEventListener("pointermove", Q), document.removeEventListener("pointerup", U), Y.destroy(), H?.classList.remove("flow-handle-active"), ke(M), e.classList.remove("flow-easy-connecting");
-              const se = S.screenToFlowPosition(J.clientX, J.clientY), ie = { source: R.id, sourceHandle: D, position: se };
-              S.pendingConnection = null;
-              let G = H;
-              if (G || (G = document.elementFromPoint(J.clientX, J.clientY)?.closest('[data-flow-handle-type="target"]')), !G) {
-                S._emit("connect-end", { connection: null, ...ie });
+              j?.stop(), j = null, document.removeEventListener("pointermove", Q), document.removeEventListener("pointerup", U), Y.destroy(), H?.classList.remove("flow-handle-active"), ke(L), e.classList.remove("flow-easy-connecting");
+              const se = k.screenToFlowPosition(J.clientX, J.clientY), oe = { source: R.id, sourceHandle: D, position: se };
+              k.pendingConnection = null;
+              let Z = H;
+              if (Z || (Z = document.elementFromPoint(J.clientX, J.clientY)?.closest('[data-flow-handle-type="target"]')), !Z) {
+                k._emit("connect-end", { connection: null, ...oe });
                 return;
               }
-              const he = G.closest("[x-flow-node]")?.dataset.flowNodeId, ce = G.dataset.flowHandleId ?? "target";
-              if (!he) {
-                S._emit("connect-end", { connection: null, ...ie });
+              const ge = Z.closest("[x-flow-node]")?.dataset.flowNodeId, fe = Z.dataset.flowHandleId ?? "target";
+              if (!ge) {
+                k._emit("connect-end", { connection: null, ...oe });
                 return;
               }
-              const oe = { source: R.id, sourceHandle: D, target: he, targetHandle: ce }, ge = await Gr({ connection: oe, canvas: S, containerEl: M });
-              S._emit("connect-end", {
-                connection: ge.applied ? oe : null,
-                ...ie
+              const ie = { source: R.id, sourceHandle: D, target: ge, targetHandle: fe }, pe = await ea({ connection: ie, canvas: k, containerEl: L });
+              k._emit("connect-end", {
+                connection: pe.applied ? ie : null,
+                ...oe
               });
             };
             document.addEventListener("pointermove", Q), document.addEventListener("pointerup", U);
@@ -14306,68 +14405,68 @@ function mp(t) {
           });
         }
       }
-      const T = (k) => {
-        if (k.key !== "Enter" && k.key !== " ") return;
-        k.preventDefault();
+      const T = (P) => {
+        if (P.key !== "Enter" && P.key !== " ") return;
+        P.preventDefault();
         const v = o(n);
         if (!v) return;
         const w = t.$data(e.closest("[x-data]"));
-        w && (w._animationLocked || Qo(v) && (w._emit("node-click", { node: v, event: k }), k.stopPropagation(), mt(k, w._shortcuts?.multiSelect) ? w.selectedNodes.has(v.id) ? (w.selectedNodes.delete(v.id), v.selected = !1) : (w.selectedNodes.add(v.id), v.selected = !0) : (w.deselectAll(), w.selectedNodes.add(v.id), v.selected = !0), w._emitSelectionChange()));
+        w && (w._animationLocked || ei(v) && (w._emit("node-click", { node: v, event: P }), P.stopPropagation(), mt(P, w._shortcuts?.multiSelect) ? w.selectedNodes.has(v.id) ? (w.selectedNodes.delete(v.id), v.selected = !1) : (w.selectedNodes.add(v.id), v.selected = !0) : (w.deselectAll(), w.selectedNodes.add(v.id), v.selected = !0), w._emitSelectionChange()));
       };
       e.addEventListener("keydown", T);
       const $ = () => {
-        const k = t.$data(e.closest("[x-data]"));
-        if (!k?._config?.autoPanOnNodeFocus) return;
+        const P = t.$data(e.closest("[x-data]"));
+        if (!P?._config?.autoPanOnNodeFocus) return;
         const v = o(n);
         if (!v) return;
-        const w = v.parentId ? k.getAbsolutePosition(v.id) : v.position;
-        k.setCenter(
+        const w = v.parentId ? P.getAbsolutePosition(v.id) : v.position;
+        P.setCenter(
           w.x + (v.dimensions?.width ?? 150) / 2,
           w.y + (v.dimensions?.height ?? 40) / 2
         );
       };
       e.addEventListener("focus", $);
-      const L = (k) => {
+      const M = (P) => {
         if (a) return;
         const v = o(n);
         if (!v) return;
         const w = t.$data(e.closest("[x-data]"));
-        if (w && !w._animationLocked && (w._emit("node-click", { node: v, event: k }), !!Qo(v))) {
-          if (k.stopPropagation(), c) {
+        if (w && !w._animationLocked && (w._emit("node-click", { node: v, event: P }), !!ei(v))) {
+          if (P.stopPropagation(), c) {
             c = !1;
             return;
           }
-          mt(k, w._shortcuts?.multiSelect) ? w.selectedNodes.has(v.id) ? (w.selectedNodes.delete(v.id), v.selected = !1, e.classList.remove("flow-node-selected"), V("selection", `Node "${v.id}" deselected (shift)`)) : (w.selectedNodes.add(v.id), v.selected = !0, e.classList.add("flow-node-selected"), V("selection", `Node "${v.id}" selected (shift)`)) : (w.deselectAll(), w.selectedNodes.add(v.id), v.selected = !0, e.classList.add("flow-node-selected"), V("selection", `Node "${v.id}" selected`)), w._emitSelectionChange();
+          mt(P, w._shortcuts?.multiSelect) ? w.selectedNodes.has(v.id) ? (w.selectedNodes.delete(v.id), v.selected = !1, e.classList.remove("flow-node-selected"), V("selection", `Node "${v.id}" deselected (shift)`)) : (w.selectedNodes.add(v.id), v.selected = !0, e.classList.add("flow-node-selected"), V("selection", `Node "${v.id}" selected (shift)`)) : (w.deselectAll(), w.selectedNodes.add(v.id), v.selected = !0, e.classList.add("flow-node-selected"), V("selection", `Node "${v.id}" selected`)), w._emitSelectionChange();
         }
       };
-      e.addEventListener("click", L);
-      const A = (k) => {
-        k.preventDefault(), k.stopPropagation();
+      e.addEventListener("click", M);
+      const A = (P) => {
+        P.preventDefault(), P.stopPropagation();
         const v = o(n);
         if (!v) return;
         const w = t.$data(e.closest("[x-data]"));
         if (w)
           if (w.selectedNodes.size > 1 && w.selectedNodes.has(v.id)) {
-            const N = w.nodes.filter((S) => w.selectedNodes.has(S.id));
-            w._emit("selection-context-menu", { nodes: N, event: k });
+            const N = w.nodes.filter((k) => w.selectedNodes.has(k.id));
+            w._emit("selection-context-menu", { nodes: N, event: P });
           } else
-            w._emit("node-context-menu", { node: v, event: k });
+            w._emit("node-context-menu", { node: v, event: P });
       };
       e.addEventListener("contextmenu", A), requestAnimationFrame(() => {
         if (!e.isConnected) return;
-        const k = o(n);
-        if (!k) return;
+        const P = o(n);
+        if (!P) return;
         const v = t.$data(e.closest("[x-data]"));
-        k.dimensions = {
+        P.dimensions = {
           width: e.offsetWidth,
           height: e.offsetHeight
-        }, V("init", `Node "${k.id}" measured`, k.dimensions), v?._nodeElements?.set(k.id, e), k.resizeObserver !== !1 && v?._resizeObserver && v._resizeObserver.observe(e);
+        }, V("init", `Node "${P.id}" measured`, P.dimensions), v?._nodeElements?.set(P.id, e), P.resizeObserver !== !1 && v?._resizeObserver && v._resizeObserver.observe(e);
       }), r(() => {
-        s?.destroy(), f?.remove(), f = null, h?.destroy(), h = null, e.removeEventListener("keydown", T), e.removeEventListener("focus", $), e.removeEventListener("click", L), e.removeEventListener("contextmenu", A);
-        const k = e.dataset.flowNodeId;
-        if (k) {
+        s?.destroy(), f?.remove(), f = null, h?.destroy(), h = null, e.removeEventListener("keydown", T), e.removeEventListener("focus", $), e.removeEventListener("click", M), e.removeEventListener("contextmenu", A);
+        const P = e.dataset.flowNodeId;
+        if (P) {
           const v = t.$data(e.closest("[x-data]"));
-          v?._nodeElements?.delete(k), v?._resizeObserver?.unobserve(e), v?._draggingNodeIds?.delete(k);
+          v?._nodeElements?.delete(P), v?._resizeObserver?.unobserve(e), v?._draggingNodeIds?.delete(P);
         }
       });
     }
@@ -14379,19 +14478,19 @@ const At = {
   maxWidth: 1 / 0,
   maxHeight: 1 / 0
 };
-function yp(t, e, n, o, i, r) {
+function bp(t, e, n, o, i, r) {
   const { minWidth: s, minHeight: a, maxWidth: l, maxHeight: c } = i, d = t.includes("left"), u = t.includes("right"), f = t.includes("top"), h = t.includes("bottom");
   let g = o.width;
   u ? g = o.width + e.x : d && (g = o.width - e.x);
   let p = o.height;
   h ? p = o.height + e.y : f && (p = o.height - e.y), g = Math.max(s, Math.min(l, g)), p = Math.max(a, Math.min(c, p)), r && (g = r[0] * Math.round(g / r[0]), p = r[1] * Math.round(p / r[1]), g = Math.max(s, Math.min(l, g)), p = Math.max(a, Math.min(c, p)));
-  const m = g - o.width, y = p - o.height, x = d ? n.x - m : n.x, P = f ? n.y - y : n.y;
+  const m = g - o.width, y = p - o.height, _ = d ? n.x - m : n.x, S = f ? n.y - y : n.y;
   return {
-    position: { x, y: P },
+    position: { x: _, y: S },
     dimensions: { width: g, height: p }
   };
 }
-const Ca = ["top-left", "top-right", "bottom-left", "bottom-right"], Sa = ["top", "right", "bottom", "left"], wp = [...Ca, ...Sa], vp = {
+const Pa = ["top-left", "top-right", "bottom-left", "bottom-right"], Ma = ["top", "right", "bottom", "left"], xp = [...Pa, ...Ma], Ep = {
   "top-left": "nwse-resize",
   "top-right": "nesw-resize",
   "bottom-left": "nesw-resize",
@@ -14401,11 +14500,11 @@ const Ca = ["top-left", "top-right", "bottom-left", "bottom-right"], Sa = ["top"
   left: "ew-resize",
   right: "ew-resize"
 };
-function _p(t) {
+function Cp(t) {
   t.directive(
     "flow-resizer",
     (e, { expression: n, modifiers: o }, { evaluate: i, effect: r, cleanup: s }) => {
-      const a = bp(o);
+      const a = Sp(o);
       let l = { ...At };
       if (n)
         try {
@@ -14416,7 +14515,7 @@ function _p(t) {
       const c = [];
       for (const d of a) {
         const u = document.createElement("div");
-        u.className = `flow-resizer-handle flow-resizer-handle-${d}`, u.style.cursor = vp[d], u.dataset.flowResizeDirection = d, e.appendChild(u), c.push(u), u.addEventListener("pointerdown", (f) => {
+        u.className = `flow-resizer-handle flow-resizer-handle-${d}`, u.style.cursor = Ep[d], u.dataset.flowResizeDirection = d, e.appendChild(u), c.push(u), u.addEventListener("pointerdown", (f) => {
           f.preventDefault(), f.stopPropagation();
           const h = e.closest("[x-flow-node]");
           if (!h) return;
@@ -14425,33 +14524,33 @@ function _p(t) {
           const p = t.$data(g), m = h.dataset.flowNodeId;
           if (!m || !p) return;
           const y = p.getNode(m);
-          if (!y || !us(y)) return;
+          if (!y || !fs(y)) return;
           y.fixedDimensions = !0;
-          const x = { ...l };
-          if (y.minDimensions?.width != null && l.minWidth === At.minWidth && (x.minWidth = y.minDimensions.width), y.minDimensions?.height != null && l.minHeight === At.minHeight && (x.minHeight = y.minDimensions.height), y.maxDimensions?.width != null && l.maxWidth === At.maxWidth && (x.maxWidth = y.maxDimensions.width), y.maxDimensions?.height != null && l.maxHeight === At.maxHeight && (x.maxHeight = y.maxDimensions.height), !y.dimensions) {
-            const L = p.viewport?.zoom || 1, A = h.getBoundingClientRect();
-            y.dimensions = { width: A.width / L, height: A.height / L };
+          const _ = { ...l };
+          if (y.minDimensions?.width != null && l.minWidth === At.minWidth && (_.minWidth = y.minDimensions.width), y.minDimensions?.height != null && l.minHeight === At.minHeight && (_.minHeight = y.minDimensions.height), y.maxDimensions?.width != null && l.maxWidth === At.maxWidth && (_.maxWidth = y.maxDimensions.width), y.maxDimensions?.height != null && l.maxHeight === At.maxHeight && (_.maxHeight = y.maxDimensions.height), !y.dimensions) {
+            const M = p.viewport?.zoom || 1, A = h.getBoundingClientRect();
+            y.dimensions = { width: A.width / M, height: A.height / M };
           }
-          const P = { x: y.position.x, y: y.position.y }, _ = { width: y.dimensions.width, height: y.dimensions.height }, b = p.viewport?.zoom || 1, C = f.clientX, E = f.clientY;
-          p._captureHistory?.(), V("resize", `Resize start on "${m}" (${d})`, _), p._emit("node-resize-start", { node: y, dimensions: { ..._ } });
-          const T = (L) => {
+          const S = { x: y.position.x, y: y.position.y }, b = { width: y.dimensions.width, height: y.dimensions.height }, x = p.viewport?.zoom || 1, C = f.clientX, E = f.clientY;
+          p._captureHistory?.(), V("resize", `Resize start on "${m}" (${d})`, b), p._emit("node-resize-start", { node: y, dimensions: { ...b } });
+          const T = (M) => {
             const A = {
-              x: (L.clientX - C) / b,
-              y: (L.clientY - E) / b
-            }, k = yp(
+              x: (M.clientX - C) / x,
+              y: (M.clientY - E) / x
+            }, P = bp(
               d,
               A,
-              P,
+              S,
+              b,
               _,
-              x,
               p._config?.snapToGrid ?? !1
             );
-            if (y.position.x = k.position.x, y.position.y = k.position.y, y.dimensions.width = k.dimensions.width, y.dimensions.height = k.dimensions.height, y.parentId) {
+            if (y.position.x = P.position.x, y.position.y = P.position.y, y.dimensions.width = P.dimensions.width, y.dimensions.height = P.dimensions.height, y.parentId) {
               const v = p.getAbsolutePosition(y.id);
               h.style.left = `${v.x}px`, h.style.top = `${v.y}px`;
             } else
-              h.style.left = `${k.position.x}px`, h.style.top = `${k.position.y}px`;
-            h.style.width = `${k.dimensions.width}px`, h.style.height = `${k.dimensions.height}px`, p._layoutAnimTick++, p._emit("node-resize", { node: y, dimensions: { ...k.dimensions } });
+              h.style.left = `${P.position.x}px`, h.style.top = `${P.position.y}px`;
+            h.style.width = `${P.dimensions.width}px`, h.style.height = `${P.dimensions.height}px`, p._layoutAnimTick++, p._emit("node-resize", { node: y, dimensions: { ...P.dimensions } });
           }, $ = () => {
             document.removeEventListener("pointermove", T), document.removeEventListener("pointerup", $), document.removeEventListener("pointercancel", $), V("resize", `Resize end on "${m}"`, y.dimensions), p._emit("node-resize-end", { node: y, dimensions: { ...y.dimensions } });
           };
@@ -14467,7 +14566,7 @@ function _p(t) {
         if (!h || !f) return;
         const g = f.getNode(h);
         if (!g) return;
-        const p = !us(g);
+        const p = !fs(g);
         for (const m of c)
           m.style.display = p ? "none" : "";
       }), s(() => {
@@ -14477,11 +14576,11 @@ function _p(t) {
     }
   );
 }
-function bp(t) {
+function Sp(t) {
   if (t.includes("corners"))
-    return Ca;
+    return Pa;
   if (t.includes("edges"))
-    return Sa;
+    return Ma;
   const e = t.includes("top"), n = t.includes("bottom"), o = t.includes("left"), i = t.includes("right");
   if (e || n || o || i) {
     if (e && o) return ["top-left"];
@@ -14493,15 +14592,15 @@ function bp(t) {
     if (o) return ["left"];
     if (i) return ["right"];
   }
-  return wp;
+  return xp;
 }
-function xp(t, e, n, o) {
+function kp(t, e, n, o) {
   return (Math.atan2(t - n, -(e - o)) * 180 / Math.PI % 360 + 360) % 360;
 }
-function Ep(t, e) {
+function Lp(t, e) {
   return (Math.round(t / e) * e % 360 + 360) % 360;
 }
-function Cp(t) {
+function Pp(t) {
   t.directive(
     "flow-rotate",
     (e, { expression: n, modifiers: o }, { evaluate: i, effect: r, cleanup: s }) => {
@@ -14517,20 +14616,20 @@ function Cp(t) {
         if (!g || !h) return;
         const p = h.getNode(g);
         if (!p) return;
-        const m = u.getBoundingClientRect(), y = m.left + m.width / 2, x = m.top + m.height / 2;
+        const m = u.getBoundingClientRect(), y = m.left + m.width / 2, _ = m.top + m.height / 2;
         h._captureHistory(), e.style.cursor = "grabbing";
-        const P = (b) => {
-          let C = xp(
-            b.clientX,
-            b.clientY,
+        const S = (x) => {
+          let C = kp(
+            x.clientX,
+            x.clientY,
             y,
-            x
+            _
           );
-          a && (C = Ep(C, l)), p.rotation = C;
-        }, _ = () => {
-          document.removeEventListener("pointermove", P), document.removeEventListener("pointerup", _), e.style.cursor = "grab", h._emit("node-rotate-end", { node: p, rotation: p.rotation });
+          a && (C = Lp(C, l)), p.rotation = C;
+        }, b = () => {
+          document.removeEventListener("pointermove", S), document.removeEventListener("pointerup", b), e.style.cursor = "grab", h._emit("node-rotate-end", { node: p, rotation: p.rotation });
         };
-        document.addEventListener("pointermove", P), document.addEventListener("pointerup", _);
+        document.addEventListener("pointermove", S), document.addEventListener("pointerup", b);
       };
       e.addEventListener("pointerdown", c), s(() => {
         e.removeEventListener("pointerdown", c), e.classList.remove("flow-rotate-handle");
@@ -14538,7 +14637,7 @@ function Cp(t) {
     }
   );
 }
-function Sp(t) {
+function Mp(t) {
   t.directive(
     "flow-drag-handle",
     (e) => {
@@ -14548,20 +14647,20 @@ function Sp(t) {
     }
   );
 }
-const kp = "application/alpineflow";
-function Lp(t) {
+const Tp = "application/alpineflow";
+function Ap(t) {
   t.directive(
     "flow-draggable",
     (e, { expression: n }, { evaluate: o }) => {
       e.setAttribute("draggable", "true"), e.style.cursor = "grab", e.addEventListener("dragstart", (i) => {
         if (!i.dataTransfer) return;
         const r = o(n), s = typeof r == "string" ? r : JSON.stringify(r);
-        i.dataTransfer.setData(kp, s), i.dataTransfer.effectAllowed = "move";
+        i.dataTransfer.setData(Tp, s), i.dataTransfer.effectAllowed = "move";
       });
     }
   );
 }
-function Pp(t) {
+function Np(t) {
   const e = [], n = /* @__PURE__ */ new Set();
   for (const o of t) {
     if (n.has(o.id) || o.source === o.target)
@@ -14573,7 +14672,7 @@ function Pp(t) {
   }
   return e;
 }
-function Mp(t) {
+function Ip(t) {
   t.directive(
     "flow-viewport",
     (e, {}, { effect: n, cleanup: o }) => {
@@ -14603,7 +14702,7 @@ function Mp(t) {
         u && u.remove();
         const f = !!i._config?.collapseBidirectionalEdges, h = /* @__PURE__ */ new Set(), g = /* @__PURE__ */ new Set();
         if (f) {
-          const p = Pp(
+          const p = Np(
             l
           );
           for (const m of p)
@@ -14616,14 +14715,14 @@ function Mp(t) {
         for (const p of l) {
           const m = a.get(p.id);
           if (!m) continue;
-          const y = i.getNode?.(p.source), x = i.getNode?.(p.target), P = p.hidden || p._hiddenByCollapse || y?.hidden || x?.hidden;
-          m.style.display = P ? "none" : "";
+          const y = i.getNode?.(p.source), _ = i.getNode?.(p.target), S = p.hidden || p._hiddenByCollapse || y?.hidden || _?.hidden;
+          m.style.display = S ? "none" : "";
         }
         for (const p of l) {
           const m = a.get(p.id);
           if (!m) continue;
-          const y = i.getNode?.(p.source), x = i.getNode?.(p.target);
-          y?.filtered || x?.filtered ? m.classList.add("flow-edge-filtered") : m.classList.remove("flow-edge-filtered");
+          const y = i.getNode?.(p.source), _ = i.getNode?.(p.target);
+          y?.filtered || _?.filtered ? m.classList.add("flow-edge-filtered") : m.classList.remove("flow-edge-filtered");
         }
       }), o(() => {
         for (const [l, c] of a)
@@ -14633,7 +14732,7 @@ function Mp(t) {
     }
   );
 }
-const Tp = [
+const $p = [
   "top",
   "bottom",
   "left",
@@ -14642,11 +14741,11 @@ const Tp = [
   "top-right",
   "bottom-left",
   "bottom-right"
-], Ap = "a, button, input, textarea, select, [contenteditable]", Np = 100, Ip = 60, $p = /* @__PURE__ */ new Set(["top", "top-left", "top-right"]), Dp = /* @__PURE__ */ new Set(["bottom", "bottom-left", "bottom-right"]), Hp = /* @__PURE__ */ new Set(["left", "top-left", "bottom-left"]), Rp = /* @__PURE__ */ new Set(["right", "top-right", "bottom-right"]);
-function Fp(t, e) {
+], Dp = "a, button, input, textarea, select, [contenteditable]", Hp = 100, Rp = 60, Fp = /* @__PURE__ */ new Set(["top", "top-left", "top-right"]), Op = /* @__PURE__ */ new Set(["bottom", "bottom-left", "bottom-right"]), zp = /* @__PURE__ */ new Set(["left", "top-left", "bottom-left"]), Vp = /* @__PURE__ */ new Set(["right", "top-right", "bottom-right"]);
+function Bp(t, e) {
   const n = new Set(e), o = n.has("static"), i = n.has("no-resize") || n.has("noresize"), r = n.has("locked"), s = n.has("constrained");
   let a = n.has("fill-width") || n.has("fill"), l = n.has("fill-height") || n.has("fill");
-  return { position: t && Tp.includes(t) ? t : "top-right", isStatic: o, isFixed: r, noResize: i, constrained: s, fillWidth: a, fillHeight: l };
+  return { position: t && $p.includes(t) ? t : "top-right", isStatic: o, isFixed: r, noResize: i, constrained: s, fillWidth: a, fillHeight: l };
 }
 function Nt(t, e, n) {
   t.dispatchEvent(new CustomEvent(`flow-${e}`, {
@@ -14654,16 +14753,16 @@ function Nt(t, e, n) {
     detail: n
   }));
 }
-function Op(t, e, n, o, i, r) {
+function qp(t, e, n, o, i, r) {
   return {
     left: Math.max(0, Math.min(t, i - n)),
     top: Math.max(0, Math.min(e, r - o))
   };
 }
-function zp(t, e, n, o) {
-  t.style.transform = "none", t.style.borderRadius = "0", n && (t.style.left = "0", t.style.right = "0", t.style.width = "auto"), o && (t.style.top = "0", t.style.bottom = "0", t.style.height = "auto"), n && !o && ($p.has(e) && (t.style.top = "0"), Dp.has(e) && (t.style.bottom = "0")), o && !n && (Hp.has(e) && (t.style.left = "0"), Rp.has(e) && (t.style.right = "0"));
+function Yp(t, e, n, o) {
+  t.style.transform = "none", t.style.borderRadius = "0", n && (t.style.left = "0", t.style.right = "0", t.style.width = "auto"), o && (t.style.top = "0", t.style.bottom = "0", t.style.height = "auto"), n && !o && (Fp.has(e) && (t.style.top = "0"), Op.has(e) && (t.style.bottom = "0")), o && !n && (zp.has(e) && (t.style.left = "0"), Vp.has(e) && (t.style.right = "0"));
 }
-function Vp(t) {
+function Xp(t) {
   t.directive(
     "flow-panel",
     (e, { value: n, modifiers: o }, { cleanup: i }) => {
@@ -14675,9 +14774,9 @@ function Vp(t) {
         constrained: c,
         fillWidth: d,
         fillHeight: u
-      } = Fp(n, o), f = d || u, h = !s && !a && !f, g = !s && !l && !f;
-      e.classList.add("flow-panel", `flow-panel-${r}`), s && e.classList.add("flow-panel-static"), (a || f) && e.classList.add("flow-panel-locked"), (l || f) && e.classList.add("flow-panel-no-resize"), d && e.classList.add("flow-panel-fill-width"), u && e.classList.add("flow-panel-fill-height"), f && zp(e, r, d, u);
-      const p = (b) => b.stopPropagation();
+      } = Bp(n, o), f = d || u, h = !s && !a && !f, g = !s && !l && !f;
+      e.classList.add("flow-panel", `flow-panel-${r}`), s && e.classList.add("flow-panel-static"), (a || f) && e.classList.add("flow-panel-locked"), (l || f) && e.classList.add("flow-panel-no-resize"), d && e.classList.add("flow-panel-fill-width"), u && e.classList.add("flow-panel-fill-height"), f && Yp(e, r, d, u);
+      const p = (x) => x.stopPropagation();
       e.addEventListener("mousedown", p), e.addEventListener("pointerdown", p), e.addEventListener("wheel", p);
       const m = e.parentElement, y = {
         left: e.style.left,
@@ -14688,62 +14787,62 @@ function Vp(t) {
         width: e.style.width,
         height: e.style.height,
         borderRadius: e.style.borderRadius
-      }, x = `flow-panel-${r}`, P = () => {
-        e.style.left = y.left, e.style.top = y.top, e.style.right = y.right, e.style.bottom = y.bottom, e.style.transform = y.transform, e.style.width = y.width, e.style.height = y.height, e.style.borderRadius = y.borderRadius, e.classList.contains(x) || e.classList.add(x);
+      }, _ = `flow-panel-${r}`, S = () => {
+        e.style.left = y.left, e.style.top = y.top, e.style.right = y.right, e.style.bottom = y.bottom, e.style.transform = y.transform, e.style.width = y.width, e.style.height = y.height, e.style.borderRadius = y.borderRadius, e.classList.contains(_) || e.classList.add(_);
       };
-      m.addEventListener("flow-panel-reset", P), m.__flowPanels || (m.__flowPanels = /* @__PURE__ */ new Set()), m.__flowPanels.add(e);
-      let _ = null;
+      m.addEventListener("flow-panel-reset", S), m.__flowPanels || (m.__flowPanels = /* @__PURE__ */ new Set()), m.__flowPanels.add(e);
+      let b = null;
       if (h) {
-        let b = !1, C = 0, E = 0, T = 0, $ = 0;
-        const L = () => {
+        let x = !1, C = 0, E = 0, T = 0, $ = 0;
+        const M = () => {
           const w = e.getBoundingClientRect(), N = m.getBoundingClientRect();
           return {
             x: w.left - N.left,
             y: w.top - N.top
           };
         }, A = (w) => {
-          if (!b) return;
-          let N = T + (w.clientX - C), S = $ + (w.clientY - E);
+          if (!x) return;
+          let N = T + (w.clientX - C), k = $ + (w.clientY - E);
           if (c) {
-            const R = Op(
+            const R = qp(
               N,
-              S,
+              k,
               e.offsetWidth,
               e.offsetHeight,
               m.clientWidth,
               m.clientHeight
             );
-            N = R.left, S = R.top;
+            N = R.left, k = R.top;
           }
-          e.style.left = `${N}px`, e.style.top = `${S}px`, Nt(m, "panel-drag", {
+          e.style.left = `${N}px`, e.style.top = `${k}px`, Nt(m, "panel-drag", {
             panel: e,
-            position: { x: N, y: S }
+            position: { x: N, y: k }
           });
-        }, k = () => {
-          if (!b) return;
-          b = !1, document.removeEventListener("pointermove", A), document.removeEventListener("pointerup", k), document.removeEventListener("pointercancel", k);
-          const w = L();
+        }, P = () => {
+          if (!x) return;
+          x = !1, document.removeEventListener("pointermove", A), document.removeEventListener("pointerup", P), document.removeEventListener("pointercancel", P);
+          const w = M();
           Nt(m, "panel-drag-end", {
             panel: e,
             position: w
           });
         }, v = (w) => {
           const N = w.target;
-          if (N.closest(Ap) || N.closest(".flow-panel-resize-handle"))
+          if (N.closest(Dp) || N.closest(".flow-panel-resize-handle"))
             return;
-          b = !0, C = w.clientX, E = w.clientY;
-          const S = e.getBoundingClientRect(), R = m.getBoundingClientRect();
-          T = S.left - R.left, $ = S.top - R.top, e.style.bottom = "auto", e.style.right = "auto", e.style.transform = "none", e.style.left = `${T}px`, e.style.top = `${$}px`, document.addEventListener("pointermove", A), document.addEventListener("pointerup", k), document.addEventListener("pointercancel", k), Nt(m, "panel-drag-start", {
+          x = !0, C = w.clientX, E = w.clientY;
+          const k = e.getBoundingClientRect(), R = m.getBoundingClientRect();
+          T = k.left - R.left, $ = k.top - R.top, e.style.bottom = "auto", e.style.right = "auto", e.style.transform = "none", e.style.left = `${T}px`, e.style.top = `${$}px`, document.addEventListener("pointermove", A), document.addEventListener("pointerup", P), document.addEventListener("pointercancel", P), Nt(m, "panel-drag-start", {
             panel: e,
             position: { x: T, y: $ }
           });
         };
         if (e.addEventListener("pointerdown", v), g) {
-          _ = document.createElement("div"), _.classList.add("flow-panel-resize-handle"), e.appendChild(_);
-          let w = !1, N = 0, S = 0, R = 0, O = 0;
+          b = document.createElement("div"), b.classList.add("flow-panel-resize-handle"), e.appendChild(b);
+          let w = !1, N = 0, k = 0, R = 0, O = 0;
           const q = (I) => {
             if (!w) return;
-            const F = Math.max(Np, R + (I.clientX - N)), K = Math.max(Ip, O + (I.clientY - S));
+            const F = Math.max(Hp, R + (I.clientX - N)), K = Math.max(Rp, O + (I.clientY - k));
             e.style.width = `${F}px`, e.style.height = `${K}px`, Nt(m, "panel-resize", {
               panel: e,
               dimensions: { width: F, height: K }
@@ -14753,31 +14852,31 @@ function Vp(t) {
               panel: e,
               dimensions: { width: e.offsetWidth, height: e.offsetHeight }
             }));
-          }, M = (I) => {
-            I.stopPropagation(), w = !0, N = I.clientX, S = I.clientY, R = e.offsetWidth, O = e.offsetHeight, document.addEventListener("pointermove", q), document.addEventListener("pointerup", D), document.addEventListener("pointercancel", D), Nt(m, "panel-resize-start", {
+          }, L = (I) => {
+            I.stopPropagation(), w = !0, N = I.clientX, k = I.clientY, R = e.offsetWidth, O = e.offsetHeight, document.addEventListener("pointermove", q), document.addEventListener("pointerup", D), document.addEventListener("pointercancel", D), Nt(m, "panel-resize-start", {
               panel: e,
               dimensions: { width: R, height: O }
             });
           };
-          _.addEventListener("pointerdown", M), i(() => {
-            e.removeEventListener("pointerdown", v), _?.removeEventListener("pointerdown", M), document.removeEventListener("pointermove", A), document.removeEventListener("pointerup", k), document.removeEventListener("pointercancel", k), document.removeEventListener("pointermove", q), document.removeEventListener("pointerup", D), document.removeEventListener("pointercancel", D), _?.remove(), e.removeEventListener("mousedown", p), e.removeEventListener("pointerdown", p), e.removeEventListener("wheel", p), m.removeEventListener("flow-panel-reset", P), m.__flowPanels?.delete(e);
+          b.addEventListener("pointerdown", L), i(() => {
+            e.removeEventListener("pointerdown", v), b?.removeEventListener("pointerdown", L), document.removeEventListener("pointermove", A), document.removeEventListener("pointerup", P), document.removeEventListener("pointercancel", P), document.removeEventListener("pointermove", q), document.removeEventListener("pointerup", D), document.removeEventListener("pointercancel", D), b?.remove(), e.removeEventListener("mousedown", p), e.removeEventListener("pointerdown", p), e.removeEventListener("wheel", p), m.removeEventListener("flow-panel-reset", S), m.__flowPanels?.delete(e);
           });
         } else
           i(() => {
-            e.removeEventListener("pointerdown", v), document.removeEventListener("pointermove", A), document.removeEventListener("pointerup", k), document.removeEventListener("pointercancel", k), e.removeEventListener("mousedown", p), e.removeEventListener("pointerdown", p), e.removeEventListener("wheel", p), m.removeEventListener("flow-panel-reset", P), m.__flowPanels?.delete(e);
+            e.removeEventListener("pointerdown", v), document.removeEventListener("pointermove", A), document.removeEventListener("pointerup", P), document.removeEventListener("pointercancel", P), e.removeEventListener("mousedown", p), e.removeEventListener("pointerdown", p), e.removeEventListener("wheel", p), m.removeEventListener("flow-panel-reset", S), m.__flowPanels?.delete(e);
           });
       } else
         i(() => {
-          e.removeEventListener("mousedown", p), e.removeEventListener("pointerdown", p), e.removeEventListener("wheel", p), m.removeEventListener("flow-panel-reset", P), m.__flowPanels?.delete(e);
+          e.removeEventListener("mousedown", p), e.removeEventListener("pointerdown", p), e.removeEventListener("wheel", p), m.removeEventListener("flow-panel-reset", S), m.__flowPanels?.delete(e);
         });
     }
   );
 }
-function Bp(t) {
+function Wp(t) {
   t.directive(
     "flow-node-toolbar",
     (e, { value: n, modifiers: o }, { effect: i, cleanup: r }) => {
-      const s = qp(n), a = Yp(o);
+      const s = jp(n), a = Up(o);
       e.classList.add("flow-node-toolbar"), e.style.position = "absolute";
       const l = (d) => {
         d.stopPropagation();
@@ -14791,22 +14890,22 @@ function Bp(t) {
         if (!u) return;
         const f = t.$data(u);
         if (!f?.viewport) return;
-        const h = f.viewport.zoom || 1, g = parseInt(e.getAttribute("data-flow-offset") ?? "10", 10), p = d.dataset.flowNodeId, m = p ? f.getNode(p) : null, y = m?.dimensions?.width ?? d.offsetWidth, x = m?.dimensions?.height ?? d.offsetHeight, P = g / h;
-        let _, b, C, E;
-        s === "top" || s === "bottom" ? (b = s === "top" ? -P : x + P, E = s === "top" ? "-100%" : "0%", a === "start" ? (_ = 0, C = "0%") : a === "end" ? (_ = y, C = "-100%") : (_ = y / 2, C = "-50%")) : (_ = s === "left" ? -P : y + P, C = s === "left" ? "-100%" : "0%", a === "start" ? (b = 0, E = "0%") : a === "end" ? (b = x, E = "-100%") : (b = x / 2, E = "-50%")), e.style.left = `${_}px`, e.style.top = `${b}px`, e.style.transformOrigin = "0 0", e.style.transform = `scale(${1 / h}) translate(${C}, ${E})`;
+        const h = f.viewport.zoom || 1, g = parseInt(e.getAttribute("data-flow-offset") ?? "10", 10), p = d.dataset.flowNodeId, m = p ? f.getNode(p) : null, y = m?.dimensions?.width ?? d.offsetWidth, _ = m?.dimensions?.height ?? d.offsetHeight, S = g / h;
+        let b, x, C, E;
+        s === "top" || s === "bottom" ? (x = s === "top" ? -S : _ + S, E = s === "top" ? "-100%" : "0%", a === "start" ? (b = 0, C = "0%") : a === "end" ? (b = y, C = "-100%") : (b = y / 2, C = "-50%")) : (b = s === "left" ? -S : y + S, C = s === "left" ? "-100%" : "0%", a === "start" ? (x = 0, E = "0%") : a === "end" ? (x = _, E = "-100%") : (x = _ / 2, E = "-50%")), e.style.left = `${b}px`, e.style.top = `${x}px`, e.style.transformOrigin = "0 0", e.style.transform = `scale(${1 / h}) translate(${C}, ${E})`;
       }), r(() => {
         e.removeEventListener("pointerdown", l), e.removeEventListener("click", c), e.classList.remove("flow-node-toolbar");
       });
     }
   );
 }
-function qp(t) {
+function jp(t) {
   return t === "bottom" ? "bottom" : t === "left" ? "left" : t === "right" ? "right" : "top";
 }
-function Yp(t) {
+function Up(t) {
   return t.includes("start") ? "start" : t.includes("end") ? "end" : "center";
 }
-function Xp(t) {
+function Gp(t) {
   t.directive(
     "flow-context-menu",
     (e, { modifiers: n, expression: o }, { effect: i, evaluate: r, cleanup: s }) => {
@@ -14833,9 +14932,9 @@ function Xp(t) {
         l.style.display = "", l.style.position = "fixed", l.style.left = C + "px", l.style.top = E + "px", l.style.zIndex = "5000", l.querySelectorAll(':scope > button, :scope > [role="menuitem"]').forEach((v) => {
           v.setAttribute("role", "menuitem"), v.hasAttribute("tabindex") || v.setAttribute("tabindex", "-1");
         });
-        const T = l.getBoundingClientRect(), $ = window.innerWidth, L = window.innerHeight;
-        let A = C, k = E;
-        T.right > $ - p && (A = $ - T.width - p), T.bottom > L - p && (k = L - T.height - p), A < p && (A = p), k < p && (k = p), l.style.left = A + "px", l.style.top = k + "px", h.style.display = "", l.focus({ preventScroll: !0 });
+        const T = l.getBoundingClientRect(), $ = window.innerWidth, M = window.innerHeight;
+        let A = C, P = E;
+        T.right > $ - p && (A = $ - T.width - p), T.bottom > M - p && (P = M - T.height - p), A < p && (A = p), P < p && (P = p), l.style.left = A + "px", l.style.top = P + "px", h.style.display = "", l.focus({ preventScroll: !0 });
       }, y = () => {
         l.style.display = "none", h.style.display = "none", g && document.contains(g) && (g.focus({ preventScroll: !0 }), g = null);
       };
@@ -14845,38 +14944,38 @@ function Xp(t) {
       }), h.addEventListener("click", () => d.closeContextMenu()), h.addEventListener("contextmenu", (C) => {
         C.preventDefault(), d.closeContextMenu();
       });
-      const x = () => {
+      const _ = () => {
         d.contextMenu.show && d.contextMenu.type === a && d.closeContextMenu();
       };
-      window.addEventListener("scroll", x, !0);
-      const P = () => Array.from(l.querySelectorAll(
+      window.addEventListener("scroll", _, !0);
+      const S = () => Array.from(l.querySelectorAll(
         ':scope > button:not([disabled]), :scope > [role="menuitem"]:not([disabled])'
-      )), _ = (C) => Array.from(C.querySelectorAll(
+      )), b = (C) => Array.from(C.querySelectorAll(
         "button:not([disabled])"
-      )), b = (C) => {
+      )), x = (C) => {
         if (!d.contextMenu.show || d.contextMenu.type !== a || l.style.display === "none") return;
-        const E = document.activeElement, T = E?.closest(".flow-context-submenu"), $ = T ? _(T) : P();
+        const E = document.activeElement, T = E?.closest(".flow-context-submenu"), $ = T ? b(T) : S();
         if ($.length === 0) return;
-        const L = $.indexOf(E);
+        const M = $.indexOf(E);
         switch (C.key) {
           case "ArrowDown": {
             C.preventDefault();
-            const A = L < $.length - 1 ? L + 1 : 0;
+            const A = M < $.length - 1 ? M + 1 : 0;
             $[A].focus({ preventScroll: !0 });
             break;
           }
           case "ArrowUp": {
             C.preventDefault();
-            const A = L > 0 ? L - 1 : $.length - 1;
+            const A = M > 0 ? M - 1 : $.length - 1;
             $[A].focus({ preventScroll: !0 });
             break;
           }
           case "Tab": {
             if (C.preventDefault(), C.shiftKey) {
-              const A = L > 0 ? L - 1 : $.length - 1;
+              const A = M > 0 ? M - 1 : $.length - 1;
               $[A].focus({ preventScroll: !0 });
             } else {
-              const A = L < $.length - 1 ? L + 1 : 0;
+              const A = M < $.length - 1 ? M + 1 : 0;
               $[A].focus({ preventScroll: !0 });
             }
             break;
@@ -14899,38 +14998,38 @@ function Xp(t) {
           }
         }
       };
-      l.addEventListener("keydown", b), s(() => {
-        h.remove(), window.removeEventListener("scroll", x, !0), l.removeEventListener("keydown", b);
+      l.addEventListener("keydown", x), s(() => {
+        h.remove(), window.removeEventListener("scroll", _, !0), l.removeEventListener("keydown", x);
       });
     }
   );
 }
-const Wp = {
+const Zp = {
   mouseenter: "mouseleave",
   click: "click"
   // toggle behavior
 };
-function jp(t) {
+function Kp(t) {
   t.directive(
     "flow-animate",
     (e, { value: n, modifiers: o, expression: i }, { evaluate: r, effect: s, cleanup: a }) => {
       const l = new Set(o), c = l.has("once"), d = l.has("reverse"), u = l.has("queue"), f = n || "";
       let h = "click";
       l.has("mouseenter") ? h = "mouseenter" : l.has("click") && (h = "click");
-      let g = null, p = [], m = !1, y = !1, x = !1;
-      function P() {
+      let g = null, p = [], m = !1, y = !1, _ = !1;
+      function S() {
         const A = r(i);
         return Array.isArray(A) ? A : A && typeof A == "object" ? [A] : [];
       }
-      function _() {
+      function b() {
         const A = e.closest("[x-data]");
         return A ? t.$data(A) : null;
       }
-      function b(A, k = !1) {
-        const v = _();
+      function x(A, P = !1) {
+        const v = b();
         if (!v?.timeline) return Promise.resolve();
         const w = v.timeline();
-        if (k) {
+        if (P) {
           for (let N = A.length - 1; N >= 0; N--)
             w.step(A[N]);
           w.reverse();
@@ -14944,9 +15043,9 @@ function jp(t) {
       function C(A = !1) {
         if (c && y) return;
         y = !0;
-        const k = P();
-        if (k.length === 0) return;
-        const v = () => b(k, A);
+        const P = S();
+        if (P.length === 0) return;
+        const v = () => x(P, A);
         u ? (p.push(v), E()) : (g?.stop(), g = null, p = [], m = !1, v());
       }
       async function E() {
@@ -14958,40 +15057,40 @@ function jp(t) {
       }
       if (f) {
         s(() => {
-          const A = P(), k = _();
-          k?.registerAnimation && k.registerAnimation(f, A);
+          const A = S(), P = b();
+          P?.registerAnimation && P.registerAnimation(f, A);
         }), a(() => {
-          const A = _();
+          const A = b();
           A?.unregisterAnimation && A.unregisterAnimation(f);
         });
         return;
       }
       const T = () => {
-        d && h === "click" ? (C(x), x = !x) : C(!1);
+        d && h === "click" ? (C(_), _ = !_) : C(!1);
       };
       e.addEventListener(h, T);
-      let $ = null, L = null;
-      d && h !== "click" && (L = Wp[h] ?? null, L && ($ = () => C(!0), e.addEventListener(L, $))), a(() => {
-        g?.stop(), e.removeEventListener(h, T), L && $ && e.removeEventListener(L, $);
+      let $ = null, M = null;
+      d && h !== "click" && (M = Zp[h] ?? null, M && ($ = () => C(!0), e.addEventListener(M, $))), a(() => {
+        g?.stop(), e.removeEventListener(h, T), M && $ && e.removeEventListener(M, $);
       });
     }
   );
 }
-function Up(t, e, n, o, i) {
+function Jp(t, e, n, o, i) {
   const r = e.position?.x ?? t.position.x, s = e.position?.y ?? t.position.y, a = t.dimensions?.width ?? we, l = t.dimensions?.height ?? _e, c = r * n.zoom + n.x, d = s * n.zoom + n.y, u = (r + a) * n.zoom + n.x, f = (s + l) * n.zoom + n.y;
   return u > 0 && c < o && f > 0 && d < i;
 }
-function Zp(t, e, n, o, i) {
+function Qp(t, e, n, o, i) {
   const r = t.nodes;
   if (!r || r.length === 0) return !1;
   for (const s of r) {
     const a = e.getNode?.(s) ?? e.nodes?.find((l) => l.id === s);
-    if (a && !Up(a, t, n, o, i))
+    if (a && !Jp(a, t, n, o, i))
       return !0;
   }
   return !1;
 }
-function Gp(t) {
+function em(t) {
   t.directive(
     "flow-timeline",
     (e, { expression: n }, { evaluate: o, effect: i, cleanup: r }) => {
@@ -15001,54 +15100,54 @@ function Gp(t) {
         return m ? t.$data(m) : null;
       }
       function h(m, y) {
-        const x = f();
-        if (!x?.timeline) return Promise.resolve();
-        const P = x.timeline(), _ = y.speed ?? 1, b = y.autoFitView === !0, C = y.fitViewPadding ?? 0.1, E = x.viewport, T = x.getContainerDimensions?.();
+        const _ = f();
+        if (!_?.timeline) return Promise.resolve();
+        const S = _.timeline(), b = y.speed ?? 1, x = y.autoFitView === !0, C = y.fitViewPadding ?? 0.1, E = _.viewport, T = _.getContainerDimensions?.();
         for (const $ of m) {
-          const L = _ !== 1 ? {
+          const M = b !== 1 ? {
             ...$,
-            duration: $.duration !== void 0 ? $.duration / _ : void 0,
-            delay: $.delay !== void 0 ? $.delay / _ : void 0
+            duration: $.duration !== void 0 ? $.duration / b : void 0,
+            delay: $.delay !== void 0 ? $.delay / b : void 0
           } : $;
-          if (L.parallel) {
-            const A = L.parallel.map(
-              (k) => _ !== 1 ? {
-                ...k,
-                duration: k.duration !== void 0 ? k.duration / _ : void 0,
-                delay: k.delay !== void 0 ? k.delay / _ : void 0
-              } : k
+          if (M.parallel) {
+            const A = M.parallel.map(
+              (P) => b !== 1 ? {
+                ...P,
+                duration: P.duration !== void 0 ? P.duration / b : void 0,
+                delay: P.delay !== void 0 ? P.delay / b : void 0
+              } : P
             );
-            P.parallel(A);
-          } else if (b && E && T && Zp(L, x, E, T.width, T.height)) {
+            S.parallel(A);
+          } else if (x && E && T && Qp(M, _, E, T.width, T.height)) {
             const A = {
               fitView: !0,
               fitViewPadding: C,
-              duration: L.duration,
-              easing: L.easing
+              duration: M.duration,
+              easing: M.easing
             };
-            P.parallel([L, A]);
+            S.parallel([M, A]);
           } else
-            P.step(L);
+            S.step(M);
         }
-        if (y.lock && P.lock(!0), y.loop !== void 0 && y.loop !== !1) {
+        if (y.lock && S.lock(!0), y.loop !== void 0 && y.loop !== !1) {
           const $ = y.loop === !0 ? 0 : y.loop;
-          P.loop($);
+          S.loop($);
         }
-        return y.respectReducedMotion !== void 0 && P.respectReducedMotion(y.respectReducedMotion), a = P, d = "playing", c = !0, P.play().then(() => {
-          a === P && (a = null, d = "idle", c = !1);
+        return y.respectReducedMotion !== void 0 && S.respectReducedMotion(y.respectReducedMotion), a = S, d = "playing", c = !0, S.play().then(() => {
+          a === S && (a = null, d = "idle", c = !1);
         });
       }
       async function g(m) {
         if (l.length === 0) return;
         if ((m.overflow ?? "queue") === "latest" && c) {
           a?.stop(), a = null, c = !1, d = "idle";
-          const x = [l[l.length - 1]];
-          s += l.length, l = [], await h(x, m);
+          const _ = [l[l.length - 1]];
+          s += l.length, l = [], await h(_, m);
         } else {
-          const x = [...l];
-          s += x.length, l = [], c && await new Promise((_) => {
-            a ? (a.on("complete", () => _()), a.on("stop", () => _())) : _();
-          }), await h(x, m);
+          const _ = [...l];
+          s += _.length, l = [], c && await new Promise((b) => {
+            a ? (a.on("complete", () => b()), a.on("stop", () => b())) : b();
+          }), await h(_, m);
         }
       }
       const p = {
@@ -15061,9 +15160,9 @@ function Gp(t) {
         },
         reset(m) {
           if (a?.stop(), a = null, c = !1, d = "idle", s = 0, l = [], u = 0, m) {
-            const y = o(n), x = y.steps ?? [];
-            if (x.length > 0)
-              return l = [...x], g(y);
+            const y = o(n), _ = y.steps ?? [];
+            if (_.length > 0)
+              return l = [..._], g(y);
           }
         },
         get state() {
@@ -15073,10 +15172,10 @@ function Gp(t) {
       e.__timeline = p, i(() => {
         const m = o(n);
         if (!m || !m.steps) return;
-        const y = m.steps, x = m.autoplay !== !1;
+        const y = m.steps, _ = m.autoplay !== !1;
         if (y.length > u) {
-          const P = y.slice(Math.max(s, u));
-          u = y.length, P.length > 0 && x && (l.push(...P), g(m));
+          const S = y.slice(Math.max(s, u));
+          u = y.length, S.length > 0 && _ && (l.push(...S), g(m));
         } else
           u = y.length;
       }), r(() => {
@@ -15085,7 +15184,7 @@ function Gp(t) {
     }
   );
 }
-function Kp(t) {
+function tm(t) {
   t.directive(
     "flow-collapse",
     (e, { expression: n, modifiers: o }, { evaluate: i, effect: r, cleanup: s }) => {
@@ -15128,7 +15227,7 @@ function Kp(t) {
     }
   );
 }
-function Jp(t) {
+function nm(t) {
   t.directive(
     "flow-condense",
     (e, { expression: n, modifiers: o }, { evaluate: i, effect: r, cleanup: s }) => {
@@ -15155,10 +15254,10 @@ function Jp(t) {
     }
   );
 }
-function Do(t) {
+function Ho(t) {
   for (; t.firstChild; ) t.removeChild(t.firstChild);
 }
-function Qp(t) {
+function om(t) {
   t.directive("flow-schema", (e, n, { evaluate: o, effect: i, cleanup: r }) => {
     const s = e, a = () => {
       try {
@@ -15168,58 +15267,58 @@ function Qp(t) {
       }
     }, l = () => {
       try {
-        const b = s.closest(".flow-container");
-        return b ? !!t.$data?.(b)?._config?.rowsReorderable : !1;
+        const x = s.closest(".flow-container");
+        return x ? !!t.$data?.(x)?._config?.rowsReorderable : !1;
       } catch {
         return !1;
       }
     }, c = () => {
       try {
-        const b = s.closest(".flow-container");
-        return b ? !!t.$data?.(b)?._config?.keyboardConnect : !1;
+        const x = s.closest(".flow-container");
+        return x ? !!t.$data?.(x)?._config?.keyboardConnect : !1;
       } catch {
         return !1;
       }
     }, d = () => {
       try {
-        const b = s.closest(".flow-container");
-        return b ? t.$data?.(b) ?? null : null;
+        const x = s.closest(".flow-container");
+        return x ? t.$data?.(x) ?? null : null;
       } catch {
         return null;
       }
     }, u = () => {
       t.nextTick(() => {
-        const b = d();
-        if (!b) return;
-        const C = t.raw(b);
+        const x = d();
+        if (!x) return;
+        const C = t.raw(x);
         if (C._schemaMetrics != null) return;
         const E = s.querySelector(":scope > .flow-schema-header"), T = s.querySelector(":scope > .flow-schema-body"), $ = s.querySelectorAll(".flow-schema-row");
         if ($.length < 2) return;
-        const L = $[0], A = $[1], k = $[$.length - 1], v = L.querySelector(".flow-schema-handle"), w = k.querySelector(".flow-schema-handle");
+        const M = $[0], A = $[1], P = $[$.length - 1], v = M.querySelector(".flow-schema-handle"), w = P.querySelector(".flow-schema-handle");
         if (!E || !T || !v || !w) return;
-        const N = s.closest("[data-flow-node-id]") ?? s, S = C.viewport?.zoom || 1, R = N.getBoundingClientRect(), O = E.getBoundingClientRect(), q = T.getBoundingClientRect(), D = L.getBoundingClientRect(), M = A.getBoundingClientRect(), I = k.getBoundingClientRect(), F = v.getBoundingClientRect(), K = w.getBoundingClientRect(), ne = (M.top - D.top) / S, Z = I.height / S;
-        if (ne <= 0 || Z <= 0) return;
+        const N = s.closest("[data-flow-node-id]") ?? s, k = C.viewport?.zoom || 1, R = N.getBoundingClientRect(), O = E.getBoundingClientRect(), q = T.getBoundingClientRect(), D = M.getBoundingClientRect(), L = A.getBoundingClientRect(), I = P.getBoundingClientRect(), F = v.getBoundingClientRect(), K = w.getBoundingClientRect(), ne = (L.top - D.top) / k, G = I.height / k;
+        if (ne <= 0 || G <= 0) return;
         const B = {
-          headerHeight: O.height / S,
+          headerHeight: O.height / k,
           rowHeight: ne,
           // NOT the same as `rowHeight` under the shipped theme — the last row loses
           // its border-bottom. See SchemaMetrics.rowHeightLast.
-          rowHeightLast: Z,
+          rowHeightLast: G,
           // Where the handle actually sits inside its row. MEASURED, not `rowHeight / 2`:
           // `top: 50%` resolves against the row's PADDING box, which the theme's
           // border-bottom shrinks. See SchemaMetrics.handleOffsetY.
-          handleOffsetY: (F.top + F.height / 2 - D.top) / S,
-          handleOffsetYLast: (K.top + K.height / 2 - I.top) / S,
-          insetLeft: (D.left - R.left) / S,
-          insetRight: (R.right - D.right) / S,
-          insetTop: (O.top - R.top) / S,
+          handleOffsetY: (F.top + F.height / 2 - D.top) / k,
+          handleOffsetYLast: (K.top + K.height / 2 - I.top) / k,
+          insetLeft: (D.left - R.left) / k,
+          insetRight: (R.right - D.right) / k,
+          insetTop: (O.top - R.top) / k,
           // Closes the row model: with insetBottom, a consumer can reconstruct the
           // node's expected border-box height and so DETECT non-uniform rows (a
           // wrapped field name — nothing in the CSS forces `white-space: nowrap`)
           // instead of assuming uniformity. See `flow-edge.ts`'s eligibility check.
-          insetBottom: (R.bottom - q.bottom) / S,
-          handleWidth: F.width / S,
-          handleHeight: F.height / S
+          insetBottom: (R.bottom - q.bottom) / k,
+          handleWidth: F.width / k,
+          handleHeight: F.height / k
         };
         C._schemaMetrics = B;
       });
@@ -15231,87 +15330,87 @@ function Qp(t) {
     });
     let g = null, p = null;
     const m = /* @__PURE__ */ new Map(), y = () => {
-      g && p || (Do(s), m.clear(), g = document.createElement("div"), g.className = "flow-schema-header", s.appendChild(g), p = document.createElement("div"), p.className = "flow-schema-body", s.appendChild(p));
-    }, x = () => {
-      const b = a(), C = b?.data;
+      g && p || (Ho(s), m.clear(), g = document.createElement("div"), g.className = "flow-schema-header", s.appendChild(g), p = document.createElement("div"), p.className = "flow-schema-body", s.appendChild(p));
+    }, _ = () => {
+      const x = a(), C = x?.data;
       if (!C) {
         for (const w of m.values())
           t.destroyTree(w);
-        m.clear(), Do(s), g = null, p = null;
+        m.clear(), Ho(s), g = null, p = null;
         return;
       }
       y();
-      const E = typeof C.label == "string" ? C.label : "", T = Array.isArray(C.fields) ? C.fields : [], $ = typeof b?.id == "string" ? b.id : "";
+      const E = typeof C.label == "string" ? C.label : "", T = Array.isArray(C.fields) ? C.fields : [], $ = typeof x?.id == "string" ? x.id : "";
       typeof C.kind == "string" && C.kind ? s.setAttribute("data-flow-schema-kind", C.kind) : s.removeAttribute("data-flow-schema-kind"), g.textContent !== E && (g.textContent = E);
-      const L = l(), A = c(), k = /* @__PURE__ */ new Set();
+      const M = l(), A = c(), P = /* @__PURE__ */ new Set();
       for (const w of T) {
-        k.add(w.name);
+        P.add(w.name);
         const N = m.get(w.name);
         if (N)
-          P(N, w);
+          S(N, w);
         else {
-          const S = _(w, $, L, A);
-          m.set(w.name, S), p.appendChild(S), t.initTree(S);
+          const k = b(w, $, M, A);
+          m.set(w.name, k), p.appendChild(k), t.initTree(k);
         }
       }
       for (const [w, N] of m)
-        k.has(w) || (t.destroyTree(N), N.remove(), m.delete(w));
+        P.has(w) || (t.destroyTree(N), N.remove(), m.delete(w));
       let v = p.firstChild;
       for (const w of T) {
         const N = m.get(w.name);
         N && (v === N ? v = v.nextSibling : p.insertBefore(N, v));
       }
       u();
-    }, P = (b, C) => {
-      b.dataset.flowSchemaField !== C.name && (b.dataset.flowSchemaField = C.name), b.classList.toggle("flow-schema-row--pk", C.key === "primary"), b.classList.toggle("flow-schema-row--fk", C.key === "foreign"), b.classList.toggle("flow-schema-row--required", !!C.required);
-      let E = b.querySelector(".flow-schema-row-icon");
-      const T = b.querySelector(".flow-schema-row-name");
-      C.icon ? (E || (E = document.createElement("span"), E.className = "flow-schema-row-icon", b.insertBefore(E, T)), E.textContent !== C.icon && (E.textContent = C.icon)) : E && E.remove(), T && T.textContent !== C.name && (T.textContent = C.name);
-      const $ = b.querySelector(".flow-schema-row-type");
+    }, S = (x, C) => {
+      x.dataset.flowSchemaField !== C.name && (x.dataset.flowSchemaField = C.name), x.classList.toggle("flow-schema-row--pk", C.key === "primary"), x.classList.toggle("flow-schema-row--fk", C.key === "foreign"), x.classList.toggle("flow-schema-row--required", !!C.required);
+      let E = x.querySelector(".flow-schema-row-icon");
+      const T = x.querySelector(".flow-schema-row-name");
+      C.icon ? (E || (E = document.createElement("span"), E.className = "flow-schema-row-icon", x.insertBefore(E, T)), E.textContent !== C.icon && (E.textContent = C.icon)) : E && E.remove(), T && T.textContent !== C.name && (T.textContent = C.name);
+      const $ = x.querySelector(".flow-schema-row-type");
       $ && $.textContent !== C.type && ($.textContent = C.type);
-    }, _ = (b, C, E, T) => {
+    }, b = (x, C, E, T) => {
       const $ = document.createElement("div");
-      $.className = "flow-schema-row", $.dataset.flowSchemaField = b.name, b.key === "primary" && $.classList.add("flow-schema-row--pk"), b.key === "foreign" && $.classList.add("flow-schema-row--fk"), b.required && $.classList.add("flow-schema-row--required"), C && $.setAttribute(
+      $.className = "flow-schema-row", $.dataset.flowSchemaField = x.name, x.key === "primary" && $.classList.add("flow-schema-row--pk"), x.key === "foreign" && $.classList.add("flow-schema-row--fk"), x.required && $.classList.add("flow-schema-row--required"), C && $.setAttribute(
         "x-flow-row-select",
-        JSON.stringify(`${C}.${b.name}`)
+        JSON.stringify(`${C}.${x.name}`)
       ), E && $.setAttribute("x-schema-reorderable", ""), T && C && $.setAttribute(
         "x-schema-keyboard-nav",
-        JSON.stringify(`${C}.${b.name}`)
+        JSON.stringify(`${C}.${x.name}`)
       );
-      const L = document.createElement("div");
-      if (L.className = "flow-schema-handle flow-schema-handle--target", L.setAttribute("x-flow-handle:target.left", JSON.stringify(b.name)), $.appendChild(L), b.icon) {
-        const S = document.createElement("span");
-        S.className = "flow-schema-row-icon", S.textContent = b.icon, $.appendChild(S);
+      const M = document.createElement("div");
+      if (M.className = "flow-schema-handle flow-schema-handle--target", M.setAttribute("x-flow-handle:target.left", JSON.stringify(x.name)), $.appendChild(M), x.icon) {
+        const k = document.createElement("span");
+        k.className = "flow-schema-row-icon", k.textContent = x.icon, $.appendChild(k);
       }
       const A = document.createElement("span");
-      A.className = "flow-schema-row-name", A.textContent = b.name, $.appendChild(A);
-      const k = document.createElement("span");
-      k.className = "flow-schema-row-type", k.textContent = b.type, $.appendChild(k);
+      A.className = "flow-schema-row-name", A.textContent = x.name, $.appendChild(A);
+      const P = document.createElement("span");
+      P.className = "flow-schema-row-type", P.textContent = x.type, $.appendChild(P);
       const v = document.createElement("div");
-      v.className = "flow-schema-handle flow-schema-handle--source", v.setAttribute("x-flow-handle:source.right", JSON.stringify(b.name)), $.appendChild(v);
+      v.className = "flow-schema-handle flow-schema-handle--source", v.setAttribute("x-flow-handle:source.right", JSON.stringify(x.name)), $.appendChild(v);
       const w = document.createElement("div");
-      w.className = "flow-schema-handle flow-schema-handle--target flow-schema-handle--mirror", w.setAttribute("x-flow-handle:target.right", JSON.stringify(b.name)), $.appendChild(w);
+      w.className = "flow-schema-handle flow-schema-handle--target flow-schema-handle--mirror", w.setAttribute("x-flow-handle:target.right", JSON.stringify(x.name)), $.appendChild(w);
       const N = document.createElement("div");
-      return N.className = "flow-schema-handle flow-schema-handle--source flow-schema-handle--mirror", N.setAttribute("x-flow-handle:source.left", JSON.stringify(b.name)), $.appendChild(N), $;
+      return N.className = "flow-schema-handle flow-schema-handle--source flow-schema-handle--mirror", N.setAttribute("x-flow-handle:source.left", JSON.stringify(x.name)), $.appendChild(N), $;
     };
     i(() => {
       if (!s.isConnected) return;
-      const b = a()?.data;
-      b?.label, b?.kind;
-      const C = b?.fields;
+      const x = a()?.data;
+      x?.label, x?.kind;
+      const C = x?.fields;
       if (Array.isArray(C))
         for (const E of C)
           E.name, E.type, E.key, E.required, E.icon;
-      x();
+      _();
     }), r(() => {
       h = !0;
-      for (const b of m.values())
-        t.destroyTree(b);
-      m.clear(), Do(s), g = null, p = null, s.classList.remove("flow-schema-node"), f?.removeAttribute("data-flow-schema-node");
+      for (const x of m.values())
+        t.destroyTree(x);
+      m.clear(), Ho(s), g = null, p = null, s.classList.remove("flow-schema-node"), f?.removeAttribute("data-flow-schema-node");
     });
   });
 }
-function em(t) {
+function im(t) {
   if (!Number.isFinite(t) || t < 0) return "";
   if (t < 1e3) return `${t}ms`;
   if (t < 6e4) {
@@ -15321,10 +15420,10 @@ function em(t) {
   const e = Math.floor(t / 6e4), n = Math.floor(t % 6e4 / 1e3);
   return n === 0 ? `${e}m` : `${e}m ${n}s`;
 }
-function qs(t) {
+function js(t) {
   for (; t.firstChild; ) t.removeChild(t.firstChild);
 }
-function tm(t) {
+function sm(t) {
   t.directive("flow-wait", (e, n, { evaluate: o, effect: i, cleanup: r }) => {
     const s = e, a = () => {
       try {
@@ -15335,33 +15434,33 @@ function tm(t) {
     };
     s.classList.add("flow-wait-node"), s.setAttribute("data-flow-wait", "true");
     const l = () => {
-      qs(s);
+      js(s);
       const d = a()?.data;
       if (!d) return;
       const u = typeof d.label == "string" && d.label ? d.label : "Wait", f = typeof d.icon == "string" && d.icon ? d.icon : "", h = typeof d.durationMs == "number" ? d.durationMs : NaN, g = document.createElement("div");
       if (g.className = "flow-wait-header", f) {
-        const P = document.createElement("span");
-        P.className = "flow-wait-icon", P.textContent = f, g.appendChild(P);
+        const S = document.createElement("span");
+        S.className = "flow-wait-icon", S.textContent = f, g.appendChild(S);
       }
       const p = document.createElement("span");
       p.className = "flow-wait-label", p.textContent = u, g.appendChild(p);
       const m = document.createElement("span");
-      m.className = "flow-wait-duration", m.textContent = em(h), g.appendChild(m), s.appendChild(g);
+      m.className = "flow-wait-duration", m.textContent = im(h), g.appendChild(m), s.appendChild(g);
       const y = document.createElement("div");
       y.className = "flow-wait-handle flow-wait-handle--target", y.setAttribute("x-flow-handle:target.top", JSON.stringify("in")), s.appendChild(y);
-      const x = document.createElement("div");
-      x.className = "flow-wait-handle flow-wait-handle--source", x.setAttribute("x-flow-handle:source.bottom", JSON.stringify("out")), s.appendChild(x), t.initTree(s);
+      const _ = document.createElement("div");
+      _.className = "flow-wait-handle flow-wait-handle--source", _.setAttribute("x-flow-handle:source.bottom", JSON.stringify("out")), s.appendChild(_), t.initTree(s);
     };
     i(() => {
       if (!s.isConnected) return;
       const c = a()?.data;
       c?.durationMs, c?.label, c?.icon, l();
     }), r(() => {
-      qs(s), s.classList.remove("flow-wait-node"), s.removeAttribute("data-flow-wait");
+      js(s), s.classList.remove("flow-wait-node"), s.removeAttribute("data-flow-wait");
     });
   });
 }
-const Ys = {
+const Us = {
   equals: "==",
   notEquals: "!=",
   greaterThan: ">",
@@ -15372,17 +15471,17 @@ const Ys = {
 function cn(t) {
   return t === null || t === void 0 ? "null" : typeof t == "string" ? `'${t}'` : Array.isArray(t) ? `[${t.map(cn).join(", ")}]` : String(t);
 }
-function nm(t) {
+function rm(t) {
   const { field: e, op: n, value: o } = t;
-  return n in Ys ? `${e} ${Ys[n]} ${cn(o)}` : n === "in" ? `${e} in ${cn(o)}` : n === "notIn" ? `${e} not in ${cn(o)}` : n === "exists" ? `${e} exists` : n === "matches" ? `${e} ~ /${String(o)}/` : `${e} ${n} ${cn(o)}`;
+  return n in Us ? `${e} ${Us[n]} ${cn(o)}` : n === "in" ? `${e} in ${cn(o)}` : n === "notIn" ? `${e} not in ${cn(o)}` : n === "exists" ? `${e} exists` : n === "matches" ? `${e} ~ /${String(o)}/` : `${e} ${n} ${cn(o)}`;
 }
-function Xs(t) {
+function Gs(t) {
   for (; t.firstChild; ) t.removeChild(t.firstChild);
 }
-function om(t, e) {
+function am(t, e) {
   return t === "vertical" || t === "horizontal" ? t : e === "vertical" || e === "horizontal" ? e : "horizontal";
 }
-function im(t) {
+function lm(t) {
   t.directive("flow-condition", (e, { expression: n }, { evaluate: o, effect: i, cleanup: r }) => {
     const s = e, a = () => {
       try {
@@ -15400,31 +15499,31 @@ function im(t) {
     };
     s.classList.add("flow-condition-node");
     const c = () => {
-      const u = a()?.data ?? {}, f = om(l(), u.direction);
+      const u = a()?.data ?? {}, f = am(l(), u.direction);
       s.setAttribute("data-flow-condition-direction", f);
       const h = u._branchTaken;
-      h === "true" || h === "false" ? s.setAttribute("data-flow-condition-branch-taken", h) : s.removeAttribute("data-flow-condition-branch-taken"), Xs(s);
+      h === "true" || h === "false" ? s.setAttribute("data-flow-condition-branch-taken", h) : s.removeAttribute("data-flow-condition-branch-taken"), Gs(s);
       const g = typeof u.label == "string" && u.label ? u.label : "Condition", p = document.createElement("div");
       p.className = "flow-condition-header", p.textContent = g, s.appendChild(p);
       const m = document.createElement("div");
-      m.className = "flow-condition-body", u.condition && typeof u.condition == "object" ? m.textContent = nm(u.condition) : typeof u.evaluate == "function" ? m.textContent = typeof u.evaluateLabel == "string" && u.evaluateLabel ? u.evaluateLabel : "[custom evaluator]" : m.textContent = "", s.appendChild(m);
+      m.className = "flow-condition-body", u.condition && typeof u.condition == "object" ? m.textContent = rm(u.condition) : typeof u.evaluate == "function" ? m.textContent = typeof u.evaluateLabel == "string" && u.evaluateLabel ? u.evaluateLabel : "[custom evaluator]" : m.textContent = "", s.appendChild(m);
       const y = document.createElement("div");
       y.className = "flow-condition-handle-target", y.setAttribute("data-flow-handle-direction", "target"), y.setAttribute("x-flow-handle:target", JSON.stringify("in")), s.appendChild(y);
-      const x = document.createElement("div");
-      x.className = "flow-condition-handle-source flow-condition-handle--true", x.setAttribute("data-flow-handle-direction", "source"), x.setAttribute("data-source-handle", "true"), x.setAttribute("x-flow-handle:source", JSON.stringify("true")), s.appendChild(x);
-      const P = document.createElement("div");
-      P.className = "flow-condition-handle-source flow-condition-handle--false", P.setAttribute("data-flow-handle-direction", "source"), P.setAttribute("data-source-handle", "false"), P.setAttribute("x-flow-handle:source", JSON.stringify("false")), s.appendChild(P), t.initTree(s);
+      const _ = document.createElement("div");
+      _.className = "flow-condition-handle-source flow-condition-handle--true", _.setAttribute("data-flow-handle-direction", "source"), _.setAttribute("data-source-handle", "true"), _.setAttribute("x-flow-handle:source", JSON.stringify("true")), s.appendChild(_);
+      const S = document.createElement("div");
+      S.className = "flow-condition-handle-source flow-condition-handle--false", S.setAttribute("data-flow-handle-direction", "source"), S.setAttribute("data-source-handle", "false"), S.setAttribute("x-flow-handle:source", JSON.stringify("false")), s.appendChild(S), t.initTree(s);
     };
     i(() => {
       if (!s.isConnected) return;
       const d = a()?.data;
       d?.label, d?.condition, d?.condition?.field, d?.condition?.op, d?.condition?.value, d?.evaluate, d?.evaluateLabel, d?.direction, d?._branchTaken, c();
     }), r(() => {
-      Xs(s), s.classList.remove("flow-condition-node"), s.removeAttribute("data-flow-condition-direction"), s.removeAttribute("data-flow-condition-branch-taken");
+      Gs(s), s.classList.remove("flow-condition-node"), s.removeAttribute("data-flow-condition-direction"), s.removeAttribute("data-flow-condition-branch-taken");
     });
   });
 }
-function sm(t) {
+function cm(t) {
   t.directive(
     "flow-row-select",
     (e, { expression: n }, { evaluate: o, effect: i, cleanup: r }) => {
@@ -15453,7 +15552,7 @@ function sm(t) {
     }
   );
 }
-function rm(t) {
+function dm(t) {
   t.directive(
     "flow-detail",
     (e, { expression: n, modifiers: o }, { evaluate: i, effect: r, cleanup: s }) => {
@@ -15487,11 +15586,11 @@ function rm(t) {
     }
   );
 }
-const am = ["perf", "events", "viewport", "state", "activity"], Ws = ["fps", "memory", "counts", "visible"], js = 30;
-function lm(t, e) {
+const um = ["perf", "events", "viewport", "state", "activity"], Zs = ["fps", "memory", "counts", "visible"], Ks = 30;
+function fm(t, e) {
   if (t && typeof t == "object" && Object.keys(t).length > 0)
     return t;
-  const n = e.filter((i) => am.includes(i));
+  const n = e.filter((i) => um.includes(i));
   if (n.length === 0)
     return { perf: !0, events: !0, viewport: !0, state: !0, activity: !0 };
   const o = {};
@@ -15499,11 +15598,11 @@ function lm(t, e) {
     o[i] = !0;
   return o;
 }
-function cm(t) {
-  return t.perf ? t.perf === !0 ? [...Ws] : t.perf.filter((e) => Ws.includes(e)) : [];
+function hm(t) {
+  return t.perf ? t.perf === !0 ? [...Zs] : t.perf.filter((e) => Zs.includes(e)) : [];
 }
-function dm(t) {
-  return t.events ? t.events === !0 ? js : t.events.max ?? js : 0;
+function gm(t) {
+  return t.events ? t.events === !0 ? Ks : t.events.max ?? Ks : 0;
 }
 function sn(t, e) {
   const n = document.createElement("div");
@@ -15521,7 +15620,7 @@ function Ve(t, e) {
   const i = document.createElement("span");
   return i.className = "flow-devtools-value", i.textContent = "—", n.appendChild(o), n.appendChild(i), { row: n, valueEl: i };
 }
-function um(t) {
+function pm(t) {
   t.directive(
     "flow-devtools",
     (e, { expression: n, modifiers: o }, { evaluate: i, effect: r, cleanup: s }) => {
@@ -15531,7 +15630,7 @@ function um(t) {
           a = i(n);
         } catch {
         }
-      const l = lm(a, o), c = e.closest("[x-data]");
+      const l = fm(a, o), c = e.closest("[x-data]");
       if (!c) return;
       const d = e.closest(".flow-container");
       if (!d) return;
@@ -15551,74 +15650,74 @@ function um(t) {
         m = !m, p.style.display = m ? "" : "none", f.title = m ? "Collapse" : "Devtools", m ? K() : ne();
       };
       f.addEventListener("click", y);
-      const x = cm(l);
-      let P = null, _ = null, b = null, C = null, E = null;
-      if (x.length > 0) {
-        const { wrapper: Y, content: X } = sn("Performance", "flow-devtools-perf");
-        if (x.includes("fps")) {
+      const _ = hm(l);
+      let S = null, b = null, x = null, C = null, E = null;
+      if (_.length > 0) {
+        const { wrapper: Y, content: W } = sn("Performance", "flow-devtools-perf");
+        if (_.includes("fps")) {
           const { row: j, valueEl: H } = Ve("FPS", "flow-devtools-fps");
-          P = H, X.appendChild(j);
+          S = H, W.appendChild(j);
         }
-        if (x.includes("memory")) {
+        if (_.includes("memory")) {
           const { row: j, valueEl: H } = Ve("Memory", "flow-devtools-memory");
-          _ = H, X.appendChild(j);
+          b = H, W.appendChild(j);
         }
-        if (x.includes("counts")) {
+        if (_.includes("counts")) {
           const j = Ve("Nodes", "flow-devtools-counts");
-          b = j.valueEl, X.appendChild(j.row);
+          x = j.valueEl, W.appendChild(j.row);
           const H = Ve("Edges", "flow-devtools-counts");
-          C = H.valueEl, X.appendChild(H.row);
+          C = H.valueEl, W.appendChild(H.row);
         }
-        if (x.includes("visible")) {
+        if (_.includes("visible")) {
           const { row: j, valueEl: H } = Ve("Visible", "flow-devtools-visible");
-          E = H, X.appendChild(j);
+          E = H, W.appendChild(j);
         }
         p.appendChild(Y);
       }
-      const T = dm(l);
+      const T = gm(l);
       let $ = null;
       if (T > 0) {
-        const { wrapper: Y, content: X } = sn("Events", "flow-devtools-events"), j = document.createElement("button");
+        const { wrapper: Y, content: W } = sn("Events", "flow-devtools-events"), j = document.createElement("button");
         j.className = "flow-devtools-clear-btn nopan", j.textContent = "Clear", j.addEventListener("click", () => {
-          $ && ($.textContent = ""), Z.length = 0;
-        }), Y.querySelector(".flow-devtools-section-title").appendChild(j), $ = document.createElement("div"), $.className = "flow-devtools-event-list", X.appendChild($), p.appendChild(Y);
+          $ && ($.textContent = ""), G.length = 0;
+        }), Y.querySelector(".flow-devtools-section-title").appendChild(j), $ = document.createElement("div"), $.className = "flow-devtools-event-list", W.appendChild($), p.appendChild(Y);
       }
-      let L = null, A = null, k = null;
+      let M = null, A = null, P = null;
       if (l.viewport) {
-        const { wrapper: Y, content: X } = sn("Viewport", "flow-devtools-viewport"), j = Ve("X", "flow-devtools-vp-x");
-        L = j.valueEl, X.appendChild(j.row);
+        const { wrapper: Y, content: W } = sn("Viewport", "flow-devtools-viewport"), j = Ve("X", "flow-devtools-vp-x");
+        M = j.valueEl, W.appendChild(j.row);
         const H = Ve("Y", "flow-devtools-vp-y");
-        A = H.valueEl, X.appendChild(H.row);
+        A = H.valueEl, W.appendChild(H.row);
         const te = Ve("Zoom", "flow-devtools-vp-zoom");
-        k = te.valueEl, X.appendChild(te.row), p.appendChild(Y);
+        P = te.valueEl, W.appendChild(te.row), p.appendChild(Y);
       }
       let v = null;
       if (l.state) {
-        const { wrapper: Y, content: X } = sn("Selection", "flow-devtools-state");
-        v = document.createElement("div"), v.className = "flow-devtools-state-content", v.textContent = "No selection", X.appendChild(v), p.appendChild(Y);
+        const { wrapper: Y, content: W } = sn("Selection", "flow-devtools-state");
+        v = document.createElement("div"), v.className = "flow-devtools-state-content", v.textContent = "No selection", W.appendChild(v), p.appendChild(Y);
       }
-      let w = null, N = null, S = null, R = null;
+      let w = null, N = null, k = null, R = null;
       if (l.activity) {
-        const { wrapper: Y, content: X } = sn("Activity", "flow-devtools-activity"), j = Ve("Animations", "flow-devtools-anim");
-        w = j.valueEl, X.appendChild(j.row);
+        const { wrapper: Y, content: W } = sn("Activity", "flow-devtools-activity"), j = Ve("Animations", "flow-devtools-anim");
+        w = j.valueEl, W.appendChild(j.row);
         const H = Ve("Particles", "flow-devtools-particles");
-        N = H.valueEl, X.appendChild(H.row);
+        N = H.valueEl, W.appendChild(H.row);
         const te = Ve("Follow", "flow-devtools-follow");
-        S = te.valueEl, X.appendChild(te.row);
+        k = te.valueEl, W.appendChild(te.row);
         const Q = Ve("Timelines", "flow-devtools-timelines");
-        R = Q.valueEl, X.appendChild(Q.row), p.appendChild(Y);
+        R = Q.valueEl, W.appendChild(Q.row), p.appendChild(Y);
       }
-      let O = null, q = !1, D = 0, M = performance.now();
-      const I = !!(P || _), F = () => {
+      let O = null, q = !1, D = 0, L = performance.now();
+      const I = !!(S || b), F = () => {
         if (!q) return;
         D++;
         const Y = performance.now();
-        Y - M >= 1e3 && (P && (P.textContent = String(Math.round(D * 1e3 / (Y - M)))), D = 0, M = Y, _ && performance.memory && (_.textContent = Math.round(performance.memory.usedJSHeapSize / 1048576) + " MB")), O = requestAnimationFrame(F);
+        Y - L >= 1e3 && (S && (S.textContent = String(Math.round(D * 1e3 / (Y - L)))), D = 0, L = Y, b && performance.memory && (b.textContent = Math.round(performance.memory.usedJSHeapSize / 1048576) + " MB")), O = requestAnimationFrame(F);
       }, K = () => {
-        !I || q || (q = !0, D = 0, M = performance.now(), O = requestAnimationFrame(F));
+        !I || q || (q = !0, D = 0, L = performance.now(), O = requestAnimationFrame(F));
       }, ne = () => {
         q = !1, O !== null && (cancelAnimationFrame(O), O = null);
-      }, Z = [], B = [
+      }, G = [], B = [
         "flow-init",
         "flow-connect",
         "flow-disconnect",
@@ -15645,14 +15744,14 @@ function um(t) {
       if (T > 0 && $) {
         z = (Y) => {
           if (!m) return;
-          const X = Y, j = X.type.replace("flow-", "");
+          const W = Y, j = W.type.replace("flow-", "");
           let H = "";
           try {
-            H = X.detail ? JSON.stringify(X.detail).slice(0, 80) : "";
+            H = W.detail ? JSON.stringify(W.detail).slice(0, 80) : "";
           } catch {
             H = "[circular]";
           }
-          Z.unshift({ name: j, time: Date.now(), detail: H });
+          G.unshift({ name: j, time: Date.now(), detail: H });
           const te = $, Q = document.createElement("div");
           Q.className = "flow-devtools-event-entry";
           const U = document.createElement("span");
@@ -15661,24 +15760,24 @@ function um(t) {
           J.className = "flow-devtools-event-age", J.textContent = "now";
           const se = document.createElement("span");
           for (se.className = "flow-devtools-event-detail", se.textContent = H, Q.appendChild(U), Q.appendChild(J), Q.appendChild(se), te.prepend(Q); te.children.length > T; )
-            te.removeChild(te.lastChild), Z.pop();
+            te.removeChild(te.lastChild), G.pop();
         };
         for (const Y of B)
           d.addEventListener(Y, z);
       }
       r(() => {
         const Y = t.$data(c);
-        !Y || !Y.viewport || (L && (L.textContent = Math.round(Y.viewport.x).toString()), A && (A.textContent = Math.round(Y.viewport.y).toString()), k && (k.textContent = Y.viewport.zoom.toFixed(2)));
+        !Y || !Y.viewport || (M && (M.textContent = Math.round(Y.viewport.x).toString()), A && (A.textContent = Math.round(Y.viewport.y).toString()), P && (P.textContent = Y.viewport.zoom.toFixed(2)));
       }), r(() => {
         const Y = t.$data(c);
         if (Y) {
-          if (b && (b.textContent = String(Y.nodes?.length ?? 0)), C && (C.textContent = String(Y.edges?.length ?? 0)), E && Y._getVisibleNodeIds && (E.textContent = String(Y._getVisibleNodeIds().size)), v) {
-            const X = Y.selectedNodes, j = Y.selectedEdges;
-            if (!((X?.size ?? 0) > 0 || (j?.size ?? 0) > 0))
+          if (x && (x.textContent = String(Y.nodes?.length ?? 0)), C && (C.textContent = String(Y.edges?.length ?? 0)), E && Y._getVisibleNodeIds && (E.textContent = String(Y._getVisibleNodeIds().size)), v) {
+            const W = Y.selectedNodes, j = Y.selectedEdges;
+            if (!((W?.size ?? 0) > 0 || (j?.size ?? 0) > 0))
               v.textContent = "No selection";
             else {
-              if (v.textContent = "", X && X.size > 0)
-                for (const te of X) {
+              if (v.textContent = "", W && W.size > 0)
+                for (const te of W) {
                   const Q = Y.getNode?.(te);
                   if (!Q) continue;
                   const U = document.createElement("pre");
@@ -15694,21 +15793,21 @@ function um(t) {
             }
           }
           if (w) {
-            const X = Y._animator?._groups?.size ?? 0;
-            w.textContent = String(X);
+            const W = Y._animator?._groups?.size ?? 0;
+            w.textContent = String(W);
           }
-          N && (N.textContent = String(Y._activeParticles?.size ?? 0)), S && (S.textContent = Y._followHandle ? "Active" : "Idle"), R && (R.textContent = String(Y._activeTimelines?.size ?? 0));
+          N && (N.textContent = String(Y._activeParticles?.size ?? 0)), k && (k.textContent = Y._followHandle ? "Active" : "Idle"), R && (R.textContent = String(Y._activeTimelines?.size ?? 0));
         }
       }), s(() => {
         if (ne(), f.removeEventListener("click", y), z)
           for (const Y of B)
             d.removeEventListener(Y, z);
-        e.removeEventListener("wheel", u), e.textContent = "", P = null, _ = null, b = null, C = null, E = null, $ = null, L = null, A = null, k = null, v = null, w = null, N = null, S = null, R = null;
+        e.removeEventListener("wheel", u), e.textContent = "", S = null, b = null, x = null, C = null, E = null, $ = null, M = null, A = null, P = null, v = null, w = null, N = null, k = null, R = null;
       });
     }
   );
 }
-const fm = {
+const mm = {
   undo: { method: "undo", disabledWhen: (t) => !t.canUndo, aria: "disabled" },
   redo: { method: "redo", disabledWhen: (t) => !t.canRedo, aria: "disabled" },
   "fit-view": { method: "fitView", passExpression: !0 },
@@ -15727,14 +15826,14 @@ const fm = {
   reset: { method: "$reset" },
   export: { method: "toImage", passExpression: !0 }
 };
-function hm(t) {
-  return fm[t] ?? null;
+function ym(t) {
+  return mm[t] ?? null;
 }
-function gm(t) {
+function wm(t) {
   t.directive(
     "flow-action",
     (e, { value: n, expression: o }, { evaluate: i, effect: r, cleanup: s }) => {
-      const l = hm(n);
+      const l = ym(n);
       if (!l)
         return;
       const c = e.closest("[data-flow-canvas]");
@@ -15759,17 +15858,17 @@ function gm(t) {
     }
   );
 }
-function pm(t, e) {
+function vm(t, e) {
   if (t !== "node" && t !== "row") return null;
   const n = e.includes("clear");
   return { type: t, isClear: n };
 }
-const Ho = /* @__PURE__ */ new WeakMap();
-function mm(t) {
+const Ro = /* @__PURE__ */ new WeakMap();
+function _m(t) {
   t.directive(
     "flow-filter",
     (e, { value: n, expression: o, modifiers: i }, { evaluate: r, effect: s, cleanup: a }) => {
-      const l = pm(n, i);
+      const l = vm(n, i);
       if (!l) return;
       const c = e.closest("[data-flow-canvas]");
       if (!c) return;
@@ -15779,14 +15878,14 @@ function mm(t) {
       const f = () => {
         if (l.isClear) {
           if (l.type === "node")
-            d.clearNodeFilter(), Ho.set(c, null);
+            d.clearNodeFilter(), Ro.set(c, null);
           else
             for (const h of d.nodes)
               h.rowFilter && h.rowFilter !== "all" && d.setRowFilter(h.id, "all");
           return;
         }
         if (l.type === "node" && o)
-          u = r(`[${o}]`)[0], d.setNodeFilter(u), Ho.set(c, u);
+          u = r(`[${o}]`)[0], d.setNodeFilter(u), Ro.set(c, u);
         else if (l.type === "row" && o) {
           const h = r(o);
           d.setRowFilter(h.node, h.predicate);
@@ -15794,7 +15893,7 @@ function mm(t) {
       };
       e.addEventListener("click", f), e.style.cursor = "pointer", l.type === "node" && !l.isClear && s(() => {
         d.nodes.length;
-        const h = Ho.get(c) === u && u !== null;
+        const h = Ro.get(c) === u && u !== null;
         e.classList.toggle("flow-filter-active", h), e.setAttribute("aria-pressed", String(h));
       }), a(() => {
         e.removeEventListener("click", f);
@@ -15802,7 +15901,7 @@ function mm(t) {
     }
   );
 }
-function ym(t) {
+function bm(t) {
   if (typeof t == "string")
     return { target: t };
   if (t && typeof t == "object" && "target" in t) {
@@ -15815,7 +15914,7 @@ function ym(t) {
   }
   return null;
 }
-function wm(t) {
+function xm(t) {
   t.directive(
     "flow-follow",
     (e, { expression: n, modifiers: o }, { evaluate: i, effect: r, cleanup: s }) => {
@@ -15828,7 +15927,7 @@ function wm(t) {
         e.classList.toggle("flow-following", h), e.setAttribute("aria-pressed", String(h));
       }, f = () => {
         if (!n) return;
-        const h = i(n), g = ym(h);
+        const h = i(n), g = bm(h);
         if (!g) return;
         if (a && d) {
           d.stop(), d = null, u(!1);
@@ -15846,27 +15945,27 @@ function wm(t) {
     }
   );
 }
-function vm(t, e) {
+function Em(t, e) {
   return t !== "save" && t !== "restore" ? null : { action: t, persist: e.includes("persist") };
 }
-const Mi = /* @__PURE__ */ new Map();
-function _m(t, e) {
-  Mi.set(t, e);
+const Ti = /* @__PURE__ */ new Map();
+function Cm(t, e) {
+  Ti.set(t, e);
 }
-function bm(t) {
-  return Mi.get(t) ?? null;
+function Sm(t) {
+  return Ti.get(t) ?? null;
 }
-function xm(t) {
-  return Mi.has(t);
+function km(t) {
+  return Ti.has(t);
 }
-function Ro(t) {
+function Fo(t) {
   return `alpineflow-snapshot-${t}`;
 }
-function Em(t) {
+function Lm(t) {
   t.directive(
     "flow-snapshot",
     (e, { value: n, expression: o, modifiers: i }, { evaluate: r, effect: s, cleanup: a }) => {
-      const l = vm(n, i);
+      const l = Em(n, i);
       if (!l) return;
       const c = e.closest("[data-flow-canvas]");
       if (!c) return;
@@ -15878,18 +15977,18 @@ function Em(t) {
         if (f)
           if (l.action === "save") {
             const h = d.toObject();
-            l.persist ? localStorage.setItem(Ro(f), JSON.stringify(h)) : _m(f, h);
+            l.persist ? localStorage.setItem(Fo(f), JSON.stringify(h)) : Cm(f, h);
           } else {
             let h = null;
             if (l.persist) {
-              const g = localStorage.getItem(Ro(f));
+              const g = localStorage.getItem(Fo(f));
               if (g)
                 try {
                   h = JSON.parse(g);
                 } catch {
                 }
             } else
-              h = bm(f);
+              h = Sm(f);
             h && d.fromObject(h);
           }
       };
@@ -15898,14 +15997,14 @@ function Em(t) {
         const f = r(o);
         if (!f) return;
         let h;
-        l.persist ? h = localStorage.getItem(Ro(f)) !== null : (d.nodes.length, h = xm(f)), e.disabled = !h, e.setAttribute("aria-disabled", String(!h));
+        l.persist ? h = localStorage.getItem(Fo(f)) !== null : (d.nodes.length, h = km(f)), e.disabled = !h, e.setAttribute("aria-disabled", String(!h));
       }), a(() => {
         e.removeEventListener("click", u);
       });
     }
   );
 }
-function Cm(t) {
+function Pm(t) {
   const e = document.createElement("div");
   e.className = "flow-loading-indicator";
   const n = document.createElement("div");
@@ -15913,7 +16012,7 @@ function Cm(t) {
   const o = document.createElement("div");
   return o.className = "flow-loading-indicator-text", o.textContent = t ?? "Loading…", e.appendChild(n), e.appendChild(o), e;
 }
-function Sm(t) {
+function Mm(t) {
   t.directive(
     "flow-loading",
     (e, { modifiers: n }, { effect: o, cleanup: i }) => {
@@ -15921,7 +16020,7 @@ function Sm(t) {
       if (!r) return;
       const s = t.$data(r);
       if (!s) return;
-      e.classList.add("flow-loading-overlay"), e.childElementCount > 0 || e.textContent.trim().length > 0 || e.appendChild(Cm(s._loadingText));
+      e.classList.add("flow-loading-overlay"), e.childElementCount > 0 || e.textContent.trim().length > 0 || e.appendChild(Pm(s._loadingText));
       const l = n.includes("fade");
       l && e.classList.add("flow-loading-fade"), r.setAttribute("data-flow-loading-directive", "");
       let c = null;
@@ -15942,7 +16041,7 @@ function Sm(t) {
     }
   );
 }
-function km(t) {
+function Tm(t) {
   t.directive(
     "flow-edge-toolbar",
     (e, { expression: n, modifiers: o }, { evaluate: i, effect: r, cleanup: s }) => {
@@ -15973,16 +16072,16 @@ function km(t) {
           return;
         }
         const m = d.viewport?.zoom || 1, y = parseInt(e.getAttribute("data-flow-offset") ?? String(p), 10);
-        let x = 0.5;
+        let _ = 0.5;
         if (n) {
           const $ = i(n);
-          typeof $ == "number" && (x = $);
+          typeof $ == "number" && (_ = $);
         }
-        const P = a.querySelectorAll("path"), _ = P.length > 1 ? P[1] : P[0];
-        if (!_) return;
-        const b = _.getTotalLength?.();
+        const S = a.querySelectorAll("path"), b = S.length > 1 ? S[1] : S[0];
         if (!b) return;
-        const C = _.getPointAtLength(b * Math.max(0, Math.min(1, x))), E = y / m, T = g ? E : -E;
+        const x = b.getTotalLength?.();
+        if (!x) return;
+        const C = b.getPointAtLength(x * Math.max(0, Math.min(1, _))), E = y / m, T = g ? E : -E;
         e.style.left = `${C.x}px`, e.style.top = `${C.y + T}px`, e.style.transformOrigin = "0 0", e.style.transform = `scale(${1 / m}) translate(-50%, ${g ? "0%" : "-100%"})`;
       }), s(() => {
         e.removeEventListener("pointerdown", f), e.removeEventListener("click", h), e.classList.remove("flow-edge-toolbar"), e.remove();
@@ -15990,13 +16089,13 @@ function km(t) {
     }
   );
 }
-function Lm(t) {
+function Am(t) {
   t.magic("flow", (e) => {
     const n = e.closest("[data-flow-canvas]");
     return n ? t.$data(n) : (console.warn("[alpinejs-flow] $flow used outside of a flowCanvas context"), {});
   });
 }
-function Pm(t) {
+function Nm(t) {
   t.store("flow", {
     instances: {},
     activeId: null,
@@ -16021,7 +16120,7 @@ function Pm(t) {
     }
   });
 }
-function Ry(t, e, n) {
+function Vy(t, e, n) {
   const o = n?.defaultDimensions?.width ?? we, i = n?.defaultDimensions?.height ?? _e, r = n?.padding ?? 20, s = n?.flowId ?? "ssr", l = t.filter((y) => !y.hidden).map((y) => ({
     ...y,
     dimensions: {
@@ -16039,49 +16138,49 @@ function Ry(t, e, n) {
     height: y.dimensions.height,
     ...y.class ? { class: y.class } : {},
     ...y.style ? {
-      style: typeof y.style == "string" ? y.style : Object.entries(y.style).map(([x, P]) => `${x}:${P}`).join(";")
+      style: typeof y.style == "string" ? y.style : Object.entries(y.style).map(([_, S]) => `${_}:${S}`).join(";")
     } : {},
     data: y.data ?? {}
   })), u = e.filter((y) => !y.hidden), f = [], h = /* @__PURE__ */ new Map();
   for (const y of u) {
-    const x = c.get(y.source), P = c.get(y.target);
-    if (!x || !P)
+    const _ = c.get(y.source), S = c.get(y.target);
+    if (!_ || !S)
       continue;
-    let _, b;
+    let b, x;
     try {
-      const L = ao(
+      const M = lo(
         y,
-        x,
-        P,
-        x.sourcePosition ?? "bottom",
-        P.targetPosition ?? "top"
+        _,
+        S,
+        _.sourcePosition ?? "bottom",
+        S.targetPosition ?? "top"
       );
-      _ = L.path, b = L.labelPosition;
+      b = M.path, x = M.labelPosition;
     } catch {
       continue;
     }
     let C, E;
     if (y.markerStart) {
-      const L = Ot(y.markerStart), A = zt(L, s);
-      h.has(A) || h.set(A, no(L, A)), C = `url(#${A})`;
+      const M = Ot(y.markerStart), A = zt(M, s);
+      h.has(A) || h.set(A, no(M, A)), C = `url(#${A})`;
     }
     if (y.markerEnd) {
-      const L = Ot(y.markerEnd), A = zt(L, s);
-      h.has(A) || h.set(A, no(L, A)), E = `url(#${A})`;
+      const M = Ot(y.markerEnd), A = zt(M, s);
+      h.has(A) || h.set(A, no(M, A)), E = `url(#${A})`;
     }
     let T, $;
     if (y.label)
-      if (b)
-        T = b.x, $ = b.y;
+      if (x)
+        T = x.x, $ = x.y;
       else {
-        const L = x.position.x + x.dimensions.width / 2, A = x.position.y + x.dimensions.height / 2, k = P.position.x + P.dimensions.width / 2, v = P.position.y + P.dimensions.height / 2;
-        T = (L + k) / 2, $ = (A + v) / 2;
+        const M = _.position.x + _.dimensions.width / 2, A = _.position.y + _.dimensions.height / 2, P = S.position.x + S.dimensions.width / 2, v = S.position.y + S.dimensions.height / 2;
+        T = (M + P) / 2, $ = (A + v) / 2;
       }
     f.push({
       id: y.id,
       source: y.source,
       target: y.target,
-      pathD: _,
+      pathD: b,
       ...C ? { markerStart: C } : {},
       ...E ? { markerEnd: E } : {},
       ...y.class ? { class: y.class } : {},
@@ -16116,14 +16215,14 @@ function Ry(t, e, n) {
     viewport: m
   };
 }
-const Us = /* @__PURE__ */ new WeakSet();
-function Fy(t) {
-  Us.has(t) || (Us.add(t), Ha(t), Pm(t), sp(t), mp(t), Bf(t), Af(t), Nf(t), If(t), Qg(t), _p(t), Cp(t), Sp(t), Lp(t), Mp(t), Vp(t), Bp(t), Xp(t), jp(t), Gp(t), Kp(t), Jp(t), sm(t), rm(t), um(t), gm(t), mm(t), wm(t), Em(t), Sm(t), km(t), Qp(t), tm(t), im(t), Lm(t));
+const Js = /* @__PURE__ */ new WeakSet();
+function By(t) {
+  Js.has(t) || (Js.add(t), za(t), Nm(t), cp(t), _p(t), Wf(t), Df(t), Hf(t), Rf(t), op(t), Cp(t), Pp(t), Mp(t), Ap(t), Ip(t), Xp(t), Wp(t), Gp(t), Kp(t), em(t), tm(t), nm(t), cm(t), dm(t), pm(t), wm(t), _m(t), xm(t), Lm(t), Mm(t), Tm(t), om(t), sm(t), lm(t), Am(t));
 }
-function Mm(t) {
+function Im(t) {
   return t.replace(/\s+(?:@|:|x-)[\w.:-]*="[^"]*"/g, "").replace(/\s+externalResourcesRequired="[^"]*"/g, "");
 }
-function Tm(t, e, n, o) {
+function $m(t, e, n, o) {
   return new Promise((i, r) => {
     const s = new Image();
     s.onload = () => {
@@ -16136,21 +16235,21 @@ function Tm(t, e, n, o) {
     }, s.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(t);
   });
 }
-async function Am(t, e, n, o, i = {}) {
+async function Dm(t, e, n, o, i = {}) {
   let r;
   try {
-    ({ toSvg: r } = await Promise.resolve().then(() => Py));
+    ({ toSvg: r } = await Promise.resolve().then(() => Ny));
   } catch {
     throw new Error("toImage() requires html-to-image. Install it with: npm install html-to-image");
   }
   const s = i.scope ?? "all", a = t.getBoundingClientRect(), l = s === "viewport" ? a.width : i.width ?? 1920, c = s === "viewport" ? a.height : i.height ?? 1080, d = i.background ?? (getComputedStyle(t).getPropertyValue("--flow-bg-color").trim() || "#ffffff"), u = e.style.transform, f = e.style.width, h = e.style.height, g = t.style.width, p = t.style.height, m = t.style.overflow, y = [];
   try {
     if (s === "all") {
-      const L = t.querySelectorAll("[data-flow-culled]");
-      for (const N of L)
+      const M = t.querySelectorAll("[data-flow-culled]");
+      for (const N of M)
         N.style.display = "", y.push(N);
-      const A = n.filter((N) => !N.hidden), k = Yt(A), v = i.padding ?? 0.1, w = Jn(
-        k,
+      const A = n.filter((N) => !N.hidden), P = Yt(A), v = i.padding ?? 0.1, w = Jn(
+        P,
         l,
         c,
         0.1,
@@ -16161,41 +16260,41 @@ async function Am(t, e, n, o, i = {}) {
       );
       e.style.transform = `translate(${w.x}px, ${w.y}px) scale(${w.zoom})`, e.style.width = `${l}px`, e.style.height = `${c}px`;
     }
-    t.style.width = `${l}px`, t.style.height = `${c}px`, t.style.overflow = "hidden", await new Promise((L) => requestAnimationFrame(L));
-    const x = i.includeOverlays, P = x === !0, _ = typeof x == "object" ? x : {}, b = [
-      ["canvas-overlay", P || (_.toolbar ?? !1)],
-      ["flow-minimap", P || (_.minimap ?? !1)],
-      ["flow-controls", P || (_.controls ?? !1)],
-      ["flow-panel", P || (_.panels ?? !1)],
+    t.style.width = `${l}px`, t.style.height = `${c}px`, t.style.overflow = "hidden", await new Promise((M) => requestAnimationFrame(M));
+    const _ = i.includeOverlays, S = _ === !0, b = typeof _ == "object" ? _ : {}, x = [
+      ["canvas-overlay", S || (b.toolbar ?? !1)],
+      ["flow-minimap", S || (b.minimap ?? !1)],
+      ["flow-controls", S || (b.controls ?? !1)],
+      ["flow-panel", S || (b.panels ?? !1)],
       ["flow-selection-box", !1]
     ], C = await r(t, {
       width: l,
       height: c,
       skipFonts: !0,
-      filter: (L) => {
-        if (L.classList) {
-          for (const [A, k] of b)
-            if (L.classList.contains(A) && !k) return !1;
+      filter: (M) => {
+        if (M.classList) {
+          for (const [A, P] of x)
+            if (M.classList.contains(A) && !P) return !1;
         }
         return !0;
       }
-    }), T = Mm(decodeURIComponent(C.substring("data:image/svg+xml;charset=utf-8,".length))), $ = await Tm(T, l, c, d);
+    }), T = Im(decodeURIComponent(C.substring("data:image/svg+xml;charset=utf-8,".length))), $ = await $m(T, l, c, d);
     if (i.filename) {
-      const L = document.createElement("a");
-      L.download = i.filename, L.href = $, L.click();
+      const M = document.createElement("a");
+      M.download = i.filename, M.href = $, M.click();
     }
     return $;
   } finally {
     e.style.transform = u, e.style.width = f, e.style.height = h, t.style.width = g, t.style.height = p, t.style.overflow = m;
-    for (const x of y)
-      x.style.display = "none";
+    for (const _ of y)
+      _.style.display = "none";
   }
 }
-const Nm = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const Hm = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  captureFlowImage: Am
+  captureFlowImage: Dm
 }, Symbol.toStringTag, { value: "Module" }));
-function Im(t, e) {
+function Rm(t, e) {
   if (t.match(/^[a-z]+:\/\//i))
     return t;
   if (t.match(/^\/\//))
@@ -16205,7 +16304,7 @@ function Im(t, e) {
   const n = document.implementation.createHTMLDocument(), o = n.createElement("base"), i = n.createElement("a");
   return n.head.appendChild(o), n.body.appendChild(i), e && (o.href = e), i.href = t, i.href;
 }
-const $m = /* @__PURE__ */ (() => {
+const Fm = /* @__PURE__ */ (() => {
   let t = 0;
   const e = () => (
     // eslint-disable-next-line no-bitwise
@@ -16213,33 +16312,33 @@ const $m = /* @__PURE__ */ (() => {
   );
   return () => (t += 1, `u${e()}${t}`);
 })();
-function wt(t) {
+function vt(t) {
   const e = [];
   for (let n = 0, o = t.length; n < o; n++)
     e.push(t[n]);
   return e;
 }
 let It = null;
-function ka(t = {}) {
-  return It || (t.includeStyleProperties ? (It = t.includeStyleProperties, It) : (It = wt(window.getComputedStyle(document.documentElement)), It));
+function Ta(t = {}) {
+  return It || (t.includeStyleProperties ? (It = t.includeStyleProperties, It) : (It = vt(window.getComputedStyle(document.documentElement)), It));
 }
-function uo(t, e) {
+function fo(t, e) {
   const o = (t.ownerDocument.defaultView || window).getComputedStyle(t).getPropertyValue(e);
   return o ? parseFloat(o.replace("px", "")) : 0;
 }
-function Dm(t) {
-  const e = uo(t, "border-left-width"), n = uo(t, "border-right-width");
+function Om(t) {
+  const e = fo(t, "border-left-width"), n = fo(t, "border-right-width");
   return t.clientWidth + e + n;
 }
-function Hm(t) {
-  const e = uo(t, "border-top-width"), n = uo(t, "border-bottom-width");
+function zm(t) {
+  const e = fo(t, "border-top-width"), n = fo(t, "border-bottom-width");
   return t.clientHeight + e + n;
 }
-function Ti(t, e = {}) {
-  const n = e.width || Dm(t), o = e.height || Hm(t);
+function Ai(t, e = {}) {
+  const n = e.width || Om(t), o = e.height || zm(t);
   return { width: n, height: o };
 }
-function Rm() {
+function Vm() {
   let t, e;
   try {
     e = process;
@@ -16249,10 +16348,10 @@ function Rm() {
   return n && (t = parseInt(n, 10), Number.isNaN(t) && (t = 1)), t || window.devicePixelRatio || 1;
 }
 const De = 16384;
-function Fm(t) {
+function Bm(t) {
   (t.width > De || t.height > De) && (t.width > De && t.height > De ? t.width > t.height ? (t.height *= De / t.width, t.width = De) : (t.width *= De / t.height, t.height = De) : t.width > De ? (t.height *= De / t.width, t.width = De) : (t.width *= De / t.height, t.height = De));
 }
-function Om(t, e = {}) {
+function qm(t, e = {}) {
   return t.toBlob ? new Promise((n) => {
     t.toBlob(n, e.type ? e.type : "image/png", e.quality ? e.quality : 1);
   }) : new Promise((n) => {
@@ -16264,7 +16363,7 @@ function Om(t, e = {}) {
     }));
   });
 }
-function fo(t) {
+function ho(t) {
   return new Promise((e, n) => {
     const o = new Image();
     o.onload = () => {
@@ -16274,12 +16373,12 @@ function fo(t) {
     }, o.onerror = n, o.crossOrigin = "anonymous", o.decoding = "async", o.src = t;
   });
 }
-async function zm(t) {
+async function Ym(t) {
   return Promise.resolve().then(() => new XMLSerializer().serializeToString(t)).then(encodeURIComponent).then((e) => `data:image/svg+xml;charset=utf-8,${e}`);
 }
-async function Vm(t, e, n) {
+async function Xm(t, e, n) {
   const o = "http://www.w3.org/2000/svg", i = document.createElementNS(o, "svg"), r = document.createElementNS(o, "foreignObject");
-  return i.setAttribute("width", `${e}`), i.setAttribute("height", `${n}`), i.setAttribute("viewBox", `0 0 ${e} ${n}`), r.setAttribute("width", "100%"), r.setAttribute("height", "100%"), r.setAttribute("x", "0"), r.setAttribute("y", "0"), r.setAttribute("externalResourcesRequired", "true"), i.appendChild(r), r.appendChild(t), zm(i);
+  return i.setAttribute("width", `${e}`), i.setAttribute("height", `${n}`), i.setAttribute("viewBox", `0 0 ${e} ${n}`), r.setAttribute("width", "100%"), r.setAttribute("height", "100%"), r.setAttribute("x", "0"), r.setAttribute("y", "0"), r.setAttribute("externalResourcesRequired", "true"), i.appendChild(r), r.appendChild(t), Ym(i);
 }
 const Ie = (t, e) => {
   if (t instanceof e)
@@ -16287,67 +16386,67 @@ const Ie = (t, e) => {
   const n = Object.getPrototypeOf(t);
   return n === null ? !1 : n.constructor.name === e.name || Ie(n, e);
 };
-function Bm(t) {
+function Wm(t) {
   const e = t.getPropertyValue("content");
   return `${t.cssText} content: '${e.replace(/'|"/g, "")}';`;
 }
-function qm(t, e) {
-  return ka(e).map((n) => {
+function jm(t, e) {
+  return Ta(e).map((n) => {
     const o = t.getPropertyValue(n), i = t.getPropertyPriority(n);
     return `${n}: ${o}${i ? " !important" : ""};`;
   }).join(" ");
 }
-function Ym(t, e, n, o) {
-  const i = `.${t}:${e}`, r = n.cssText ? Bm(n) : qm(n, o);
+function Um(t, e, n, o) {
+  const i = `.${t}:${e}`, r = n.cssText ? Wm(n) : jm(n, o);
   return document.createTextNode(`${i}{${r}}`);
 }
-function Zs(t, e, n, o) {
+function Qs(t, e, n, o) {
   const i = window.getComputedStyle(t, n), r = i.getPropertyValue("content");
   if (r === "" || r === "none")
     return;
-  const s = $m();
+  const s = Fm();
   try {
     e.className = `${e.className} ${s}`;
   } catch {
     return;
   }
   const a = document.createElement("style");
-  a.appendChild(Ym(s, n, i, o)), e.appendChild(a);
+  a.appendChild(Um(s, n, i, o)), e.appendChild(a);
 }
-function Xm(t, e, n) {
-  Zs(t, e, ":before", n), Zs(t, e, ":after", n);
+function Gm(t, e, n) {
+  Qs(t, e, ":before", n), Qs(t, e, ":after", n);
 }
-const Gs = "application/font-woff", Ks = "image/jpeg", Wm = {
-  woff: Gs,
-  woff2: Gs,
+const er = "application/font-woff", tr = "image/jpeg", Zm = {
+  woff: er,
+  woff2: er,
   ttf: "application/font-truetype",
   eot: "application/vnd.ms-fontobject",
   png: "image/png",
-  jpg: Ks,
-  jpeg: Ks,
+  jpg: tr,
+  jpeg: tr,
   gif: "image/gif",
   tiff: "image/tiff",
   svg: "image/svg+xml",
   webp: "image/webp"
 };
-function jm(t) {
+function Km(t) {
   const e = /\.([^./]*?)$/g.exec(t);
   return e ? e[1] : "";
 }
-function Ai(t) {
-  const e = jm(t).toLowerCase();
-  return Wm[e] || "";
+function Ni(t) {
+  const e = Km(t).toLowerCase();
+  return Zm[e] || "";
 }
-function Um(t) {
+function Jm(t) {
   return t.split(/,/)[1];
 }
-function li(t) {
+function ci(t) {
   return t.search(/^(data:)/) !== -1;
 }
-function Zm(t, e) {
+function Qm(t, e) {
   return `data:${e};base64,${t}`;
 }
-async function La(t, e, n) {
+async function Aa(t, e, n) {
   const o = await fetch(t, e);
   if (o.status === 404)
     throw new Error(`Resource "${o.url}" not found`);
@@ -16363,86 +16462,86 @@ async function La(t, e, n) {
     }, a.readAsDataURL(i);
   });
 }
-const Fo = {};
-function Gm(t, e, n) {
+const Oo = {};
+function ey(t, e, n) {
   let o = t.replace(/\?.*/, "");
   return n && (o = t), /ttf|otf|eot|woff2?/i.test(o) && (o = o.replace(/.*\//, "")), e ? `[${e}]${o}` : o;
 }
-async function Ni(t, e, n) {
-  const o = Gm(t, e, n.includeQueryParams);
-  if (Fo[o] != null)
-    return Fo[o];
+async function Ii(t, e, n) {
+  const o = ey(t, e, n.includeQueryParams);
+  if (Oo[o] != null)
+    return Oo[o];
   n.cacheBust && (t += (/\?/.test(t) ? "&" : "?") + (/* @__PURE__ */ new Date()).getTime());
   let i;
   try {
-    const r = await La(t, n.fetchRequestInit, ({ res: s, result: a }) => (e || (e = s.headers.get("Content-Type") || ""), Um(a)));
-    i = Zm(r, e);
+    const r = await Aa(t, n.fetchRequestInit, ({ res: s, result: a }) => (e || (e = s.headers.get("Content-Type") || ""), Jm(a)));
+    i = Qm(r, e);
   } catch (r) {
     i = n.imagePlaceholder || "";
     let s = `Failed to fetch resource: ${t}`;
     r && (s = typeof r == "string" ? r : r.message), s && console.warn(s);
   }
-  return Fo[o] = i, i;
+  return Oo[o] = i, i;
 }
-async function Km(t) {
+async function ty(t) {
   const e = t.toDataURL();
-  return e === "data:," ? t.cloneNode(!1) : fo(e);
+  return e === "data:," ? t.cloneNode(!1) : ho(e);
 }
-async function Jm(t, e) {
+async function ny(t, e) {
   if (t.currentSrc) {
     const r = document.createElement("canvas"), s = r.getContext("2d");
     r.width = t.clientWidth, r.height = t.clientHeight, s?.drawImage(t, 0, 0, r.width, r.height);
     const a = r.toDataURL();
-    return fo(a);
+    return ho(a);
   }
-  const n = t.poster, o = Ai(n), i = await Ni(n, o, e);
-  return fo(i);
+  const n = t.poster, o = Ni(n), i = await Ii(n, o, e);
+  return ho(i);
 }
-async function Qm(t, e) {
+async function oy(t, e) {
   var n;
   try {
     if (!((n = t?.contentDocument) === null || n === void 0) && n.body)
-      return await bo(t.contentDocument.body, e, !0);
+      return await xo(t.contentDocument.body, e, !0);
   } catch {
   }
   return t.cloneNode(!1);
 }
-async function ey(t, e) {
-  return Ie(t, HTMLCanvasElement) ? Km(t) : Ie(t, HTMLVideoElement) ? Jm(t, e) : Ie(t, HTMLIFrameElement) ? Qm(t, e) : t.cloneNode(Pa(t));
+async function iy(t, e) {
+  return Ie(t, HTMLCanvasElement) ? ty(t) : Ie(t, HTMLVideoElement) ? ny(t, e) : Ie(t, HTMLIFrameElement) ? oy(t, e) : t.cloneNode(Na(t));
 }
-const ty = (t) => t.tagName != null && t.tagName.toUpperCase() === "SLOT", Pa = (t) => t.tagName != null && t.tagName.toUpperCase() === "SVG";
-async function ny(t, e, n) {
+const sy = (t) => t.tagName != null && t.tagName.toUpperCase() === "SLOT", Na = (t) => t.tagName != null && t.tagName.toUpperCase() === "SVG";
+async function ry(t, e, n) {
   var o, i;
-  if (Pa(e))
+  if (Na(e))
     return e;
   let r = [];
-  return ty(t) && t.assignedNodes ? r = wt(t.assignedNodes()) : Ie(t, HTMLIFrameElement) && (!((o = t.contentDocument) === null || o === void 0) && o.body) ? r = wt(t.contentDocument.body.childNodes) : r = wt(((i = t.shadowRoot) !== null && i !== void 0 ? i : t).childNodes), r.length === 0 || Ie(t, HTMLVideoElement) || await r.reduce((s, a) => s.then(() => bo(a, n)).then((l) => {
+  return sy(t) && t.assignedNodes ? r = vt(t.assignedNodes()) : Ie(t, HTMLIFrameElement) && (!((o = t.contentDocument) === null || o === void 0) && o.body) ? r = vt(t.contentDocument.body.childNodes) : r = vt(((i = t.shadowRoot) !== null && i !== void 0 ? i : t).childNodes), r.length === 0 || Ie(t, HTMLVideoElement) || await r.reduce((s, a) => s.then(() => xo(a, n)).then((l) => {
     l && e.appendChild(l);
   }), Promise.resolve()), e;
 }
-function oy(t, e, n) {
+function ay(t, e, n) {
   const o = e.style;
   if (!o)
     return;
   const i = window.getComputedStyle(t);
-  i.cssText ? (o.cssText = i.cssText, o.transformOrigin = i.transformOrigin) : ka(n).forEach((r) => {
+  i.cssText ? (o.cssText = i.cssText, o.transformOrigin = i.transformOrigin) : Ta(n).forEach((r) => {
     let s = i.getPropertyValue(r);
     r === "font-size" && s.endsWith("px") && (s = `${Math.floor(parseFloat(s.substring(0, s.length - 2))) - 0.1}px`), Ie(t, HTMLIFrameElement) && r === "display" && s === "inline" && (s = "block"), r === "d" && e.getAttribute("d") && (s = `path(${e.getAttribute("d")})`), o.setProperty(r, s, i.getPropertyPriority(r));
   });
 }
-function iy(t, e) {
+function ly(t, e) {
   Ie(t, HTMLTextAreaElement) && (e.innerHTML = t.value), Ie(t, HTMLInputElement) && e.setAttribute("value", t.value);
 }
-function sy(t, e) {
+function cy(t, e) {
   if (Ie(t, HTMLSelectElement)) {
     const o = Array.from(e.children).find((i) => t.value === i.getAttribute("value"));
     o && o.setAttribute("selected", "");
   }
 }
-function ry(t, e, n) {
-  return Ie(e, Element) && (oy(t, e, n), Xm(t, e, n), iy(t, e), sy(t, e)), e;
+function dy(t, e, n) {
+  return Ie(e, Element) && (ay(t, e, n), Gm(t, e, n), ly(t, e), cy(t, e)), e;
 }
-async function ay(t, e) {
+async function uy(t, e) {
   const n = t.querySelectorAll ? t.querySelectorAll("use") : [];
   if (n.length === 0)
     return t;
@@ -16451,7 +16550,7 @@ async function ay(t, e) {
     const a = n[r].getAttribute("xlink:href");
     if (a) {
       const l = t.querySelector(a), c = document.querySelector(a);
-      !l && c && !o[a] && (o[a] = await bo(c, e, !0));
+      !l && c && !o[a] && (o[a] = await xo(c, e, !0));
     }
   }
   const i = Object.values(o);
@@ -16466,31 +16565,31 @@ async function ay(t, e) {
   }
   return t;
 }
-async function bo(t, e, n) {
-  return !n && e.filter && !e.filter(t) ? null : Promise.resolve(t).then((o) => ey(o, e)).then((o) => ny(t, o, e)).then((o) => ry(t, o, e)).then((o) => ay(o, e));
+async function xo(t, e, n) {
+  return !n && e.filter && !e.filter(t) ? null : Promise.resolve(t).then((o) => iy(o, e)).then((o) => ry(t, o, e)).then((o) => dy(t, o, e)).then((o) => uy(o, e));
 }
-const Ma = /url\((['"]?)([^'"]+?)\1\)/g, ly = /url\([^)]+\)\s*format\((["']?)([^"']+)\1\)/g, cy = /src:\s*(?:url\([^)]+\)\s*format\([^)]+\)[,;]\s*)+/g;
-function dy(t) {
+const Ia = /url\((['"]?)([^'"]+?)\1\)/g, fy = /url\([^)]+\)\s*format\((["']?)([^"']+)\1\)/g, hy = /src:\s*(?:url\([^)]+\)\s*format\([^)]+\)[,;]\s*)+/g;
+function gy(t) {
   const e = t.replace(/([.*+?^${}()|\[\]\/\\])/g, "\\$1");
   return new RegExp(`(url\\(['"]?)(${e})(['"]?\\))`, "g");
 }
-function uy(t) {
+function py(t) {
   const e = [];
-  return t.replace(Ma, (n, o, i) => (e.push(i), n)), e.filter((n) => !li(n));
+  return t.replace(Ia, (n, o, i) => (e.push(i), n)), e.filter((n) => !ci(n));
 }
-async function fy(t, e, n, o, i) {
+async function my(t, e, n, o, i) {
   try {
-    const r = n ? Im(e, n) : e, s = Ai(e);
+    const r = n ? Rm(e, n) : e, s = Ni(e);
     let a;
-    return i || (a = await Ni(r, s, o)), t.replace(dy(e), `$1${a}$3`);
+    return i || (a = await Ii(r, s, o)), t.replace(gy(e), `$1${a}$3`);
   } catch {
   }
   return t;
 }
-function hy(t, { preferredFontFormat: e }) {
-  return e ? t.replace(cy, (n) => {
+function yy(t, { preferredFontFormat: e }) {
+  return e ? t.replace(hy, (n) => {
     for (; ; ) {
-      const [o, , i] = ly.exec(n) || [];
+      const [o, , i] = fy.exec(n) || [];
       if (!i)
         return "";
       if (i === e)
@@ -16498,32 +16597,32 @@ function hy(t, { preferredFontFormat: e }) {
     }
   }) : t;
 }
-function Ta(t) {
-  return t.search(Ma) !== -1;
+function $a(t) {
+  return t.search(Ia) !== -1;
 }
-async function Aa(t, e, n) {
-  if (!Ta(t))
+async function Da(t, e, n) {
+  if (!$a(t))
     return t;
-  const o = hy(t, n);
-  return uy(o).reduce((r, s) => r.then((a) => fy(a, s, e, n)), Promise.resolve(o));
+  const o = yy(t, n);
+  return py(o).reduce((r, s) => r.then((a) => my(a, s, e, n)), Promise.resolve(o));
 }
 async function $t(t, e, n) {
   var o;
   const i = (o = e.style) === null || o === void 0 ? void 0 : o.getPropertyValue(t);
   if (i) {
-    const r = await Aa(i, null, n);
+    const r = await Da(i, null, n);
     return e.style.setProperty(t, r, e.style.getPropertyPriority(t)), !0;
   }
   return !1;
 }
-async function gy(t, e) {
+async function wy(t, e) {
   await $t("background", t, e) || await $t("background-image", t, e), await $t("mask", t, e) || await $t("-webkit-mask", t, e) || await $t("mask-image", t, e) || await $t("-webkit-mask-image", t, e);
 }
-async function py(t, e) {
+async function vy(t, e) {
   const n = Ie(t, HTMLImageElement);
-  if (!(n && !li(t.src)) && !(Ie(t, SVGImageElement) && !li(t.href.baseVal)))
+  if (!(n && !ci(t.src)) && !(Ie(t, SVGImageElement) && !ci(t.href.baseVal)))
     return;
-  const o = n ? t.src : t.href.baseVal, i = await Ni(o, Ai(o), e);
+  const o = n ? t.src : t.href.baseVal, i = await Ii(o, Ni(o), e);
   await new Promise((r, s) => {
     t.onload = r, t.onerror = e.onImageErrorHandler ? (...l) => {
       try {
@@ -16536,14 +16635,14 @@ async function py(t, e) {
     a.decode && (a.decode = r), a.loading === "lazy" && (a.loading = "eager"), n ? (t.srcset = "", t.src = i) : t.href.baseVal = i;
   });
 }
-async function my(t, e) {
-  const o = wt(t.childNodes).map((i) => Na(i, e));
+async function _y(t, e) {
+  const o = vt(t.childNodes).map((i) => Ha(i, e));
   await Promise.all(o).then(() => t);
 }
-async function Na(t, e) {
-  Ie(t, Element) && (await gy(t, e), await py(t, e), await my(t, e));
+async function Ha(t, e) {
+  Ie(t, Element) && (await wy(t, e), await vy(t, e), await _y(t, e));
 }
-function yy(t, e) {
+function by(t, e) {
   const { style: n } = t;
   e.backgroundColor && (n.backgroundColor = e.backgroundColor), e.width && (n.width = `${e.width}px`), e.height && (n.height = `${e.height}px`);
   const o = e.style;
@@ -16551,23 +16650,23 @@ function yy(t, e) {
     n[i] = o[i];
   }), t;
 }
-const Js = {};
-async function Qs(t) {
-  let e = Js[t];
+const nr = {};
+async function or(t) {
+  let e = nr[t];
   if (e != null)
     return e;
   const o = await (await fetch(t)).text();
-  return e = { url: t, cssText: o }, Js[t] = e, e;
+  return e = { url: t, cssText: o }, nr[t] = e, e;
 }
-async function er(t, e) {
+async function ir(t, e) {
   let n = t.cssText;
   const o = /url\(["']?([^"')]+)["']?\)/g, r = (n.match(/url\([^)]+\)/g) || []).map(async (s) => {
     let a = s.replace(o, "$1");
-    return a.startsWith("https://") || (a = new URL(a, t.url).href), La(a, e.fetchRequestInit, ({ result: l }) => (n = n.replace(s, `url(${l})`), [s, l]));
+    return a.startsWith("https://") || (a = new URL(a, t.url).href), Aa(a, e.fetchRequestInit, ({ result: l }) => (n = n.replace(s, `url(${l})`), [s, l]));
   });
   return Promise.all(r).then(() => n);
 }
-function tr(t) {
+function sr(t) {
   if (t == null)
     return [];
   const e = [], n = /(\/\*[\s\S]*?\*\/)/gi;
@@ -16593,15 +16692,15 @@ function tr(t) {
   }
   return e;
 }
-async function wy(t, e) {
+async function xy(t, e) {
   const n = [], o = [];
   return t.forEach((i) => {
     if ("cssRules" in i)
       try {
-        wt(i.cssRules || []).forEach((r, s) => {
+        vt(i.cssRules || []).forEach((r, s) => {
           if (r.type === CSSRule.IMPORT_RULE) {
             let a = s + 1;
-            const l = r.href, c = Qs(l).then((d) => er(d, e)).then((d) => tr(d).forEach((u) => {
+            const l = r.href, c = or(l).then((d) => ir(d, e)).then((d) => sr(d).forEach((u) => {
               try {
                 i.insertRule(u, u.startsWith("@import") ? a += 1 : i.cssRules.length);
               } catch (f) {
@@ -16618,7 +16717,7 @@ async function wy(t, e) {
         });
       } catch (r) {
         const s = t.find((a) => a.href == null) || document.styleSheets[0];
-        i.href != null && o.push(Qs(i.href).then((a) => er(a, e)).then((a) => tr(a).forEach((l) => {
+        i.href != null && o.push(or(i.href).then((a) => ir(a, e)).then((a) => sr(a).forEach((l) => {
           s.insertRule(l, s.cssRules.length);
         })).catch((a) => {
           console.error("Error loading remote stylesheet", a);
@@ -16627,7 +16726,7 @@ async function wy(t, e) {
   }), Promise.all(o).then(() => (t.forEach((i) => {
     if ("cssRules" in i)
       try {
-        wt(i.cssRules || []).forEach((r) => {
+        vt(i.cssRules || []).forEach((r) => {
           n.push(r);
         });
       } catch (r) {
@@ -16635,135 +16734,135 @@ async function wy(t, e) {
       }
   }), n));
 }
-function vy(t) {
-  return t.filter((e) => e.type === CSSRule.FONT_FACE_RULE).filter((e) => Ta(e.style.getPropertyValue("src")));
+function Ey(t) {
+  return t.filter((e) => e.type === CSSRule.FONT_FACE_RULE).filter((e) => $a(e.style.getPropertyValue("src")));
 }
-async function _y(t, e) {
+async function Cy(t, e) {
   if (t.ownerDocument == null)
     throw new Error("Provided element is not within a Document");
-  const n = wt(t.ownerDocument.styleSheets), o = await wy(n, e);
-  return vy(o);
+  const n = vt(t.ownerDocument.styleSheets), o = await xy(n, e);
+  return Ey(o);
 }
-function Ia(t) {
+function Ra(t) {
   return t.trim().replace(/["']/g, "");
 }
-function by(t) {
+function Sy(t) {
   const e = /* @__PURE__ */ new Set();
   function n(o) {
     (o.style.fontFamily || getComputedStyle(o).fontFamily).split(",").forEach((r) => {
-      e.add(Ia(r));
+      e.add(Ra(r));
     }), Array.from(o.children).forEach((r) => {
       r instanceof HTMLElement && n(r);
     });
   }
   return n(t), e;
 }
-async function $a(t, e) {
-  const n = await _y(t, e), o = by(t);
-  return (await Promise.all(n.filter((r) => o.has(Ia(r.style.fontFamily))).map((r) => {
+async function Fa(t, e) {
+  const n = await Cy(t, e), o = Sy(t);
+  return (await Promise.all(n.filter((r) => o.has(Ra(r.style.fontFamily))).map((r) => {
     const s = r.parentStyleSheet ? r.parentStyleSheet.href : null;
-    return Aa(r.cssText, s, e);
+    return Da(r.cssText, s, e);
   }))).join(`
 `);
 }
-async function xy(t, e) {
-  const n = e.fontEmbedCSS != null ? e.fontEmbedCSS : e.skipFonts ? null : await $a(t, e);
+async function ky(t, e) {
+  const n = e.fontEmbedCSS != null ? e.fontEmbedCSS : e.skipFonts ? null : await Fa(t, e);
   if (n) {
     const o = document.createElement("style"), i = document.createTextNode(n);
     o.appendChild(i), t.firstChild ? t.insertBefore(o, t.firstChild) : t.appendChild(o);
   }
 }
-async function Da(t, e = {}) {
-  const { width: n, height: o } = Ti(t, e), i = await bo(t, e, !0);
-  return await xy(i, e), await Na(i, e), yy(i, e), await Vm(i, n, o);
+async function Oa(t, e = {}) {
+  const { width: n, height: o } = Ai(t, e), i = await xo(t, e, !0);
+  return await ky(i, e), await Ha(i, e), by(i, e), await Xm(i, n, o);
 }
 async function kn(t, e = {}) {
-  const { width: n, height: o } = Ti(t, e), i = await Da(t, e), r = await fo(i), s = document.createElement("canvas"), a = s.getContext("2d"), l = e.pixelRatio || Rm(), c = e.canvasWidth || n, d = e.canvasHeight || o;
-  return s.width = c * l, s.height = d * l, e.skipAutoScale || Fm(s), s.style.width = `${c}`, s.style.height = `${d}`, e.backgroundColor && (a.fillStyle = e.backgroundColor, a.fillRect(0, 0, s.width, s.height)), a.drawImage(r, 0, 0, s.width, s.height), s;
-}
-async function Ey(t, e = {}) {
-  const { width: n, height: o } = Ti(t, e);
-  return (await kn(t, e)).getContext("2d").getImageData(0, 0, n, o).data;
-}
-async function Cy(t, e = {}) {
-  return (await kn(t, e)).toDataURL();
-}
-async function Sy(t, e = {}) {
-  return (await kn(t, e)).toDataURL("image/jpeg", e.quality || 1);
-}
-async function ky(t, e = {}) {
-  const n = await kn(t, e);
-  return await Om(n);
+  const { width: n, height: o } = Ai(t, e), i = await Oa(t, e), r = await ho(i), s = document.createElement("canvas"), a = s.getContext("2d"), l = e.pixelRatio || Vm(), c = e.canvasWidth || n, d = e.canvasHeight || o;
+  return s.width = c * l, s.height = d * l, e.skipAutoScale || Bm(s), s.style.width = `${c}`, s.style.height = `${d}`, e.backgroundColor && (a.fillStyle = e.backgroundColor, a.fillRect(0, 0, s.width, s.height)), a.drawImage(r, 0, 0, s.width, s.height), s;
 }
 async function Ly(t, e = {}) {
-  return $a(t, e);
+  const { width: n, height: o } = Ai(t, e);
+  return (await kn(t, e)).getContext("2d").getImageData(0, 0, n, o).data;
 }
-const Py = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+async function Py(t, e = {}) {
+  return (await kn(t, e)).toDataURL();
+}
+async function My(t, e = {}) {
+  return (await kn(t, e)).toDataURL("image/jpeg", e.quality || 1);
+}
+async function Ty(t, e = {}) {
+  const n = await kn(t, e);
+  return await qm(n);
+}
+async function Ay(t, e = {}) {
+  return Fa(t, e);
+}
+const Ny = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  getFontEmbedCSS: Ly,
-  toBlob: ky,
+  getFontEmbedCSS: Ay,
+  toBlob: Ty,
   toCanvas: kn,
-  toJpeg: Sy,
-  toPixelData: Ey,
-  toPng: Cy,
-  toSvg: Da
+  toJpeg: My,
+  toPixelData: Ly,
+  toPng: Py,
+  toSvg: Oa
 }, Symbol.toStringTag, { value: "Module" }));
 export {
-  _h as ComputeEngine,
-  ef as FlowHistory,
-  ps as SHORTCUT_DEFAULTS,
-  Ny as along,
-  Mf as areNodesConnected,
-  ia as buildNodeMap,
-  ra as clampToExtent,
-  Lo as clampToParent,
-  Ry as computeRenderPlan,
-  bs as computeValidationErrors,
-  sa as computeZIndex,
-  Fy as default,
-  $y as drift,
-  lh as expandParentToFitChild,
-  ti as getAbsolutePosition,
-  Ff as getAutoPanDelta,
+  Ch as ComputeEngine,
+  sf as FlowHistory,
+  ms as SHORTCUT_DEFAULTS,
+  Hy as along,
+  If as areNodesConnected,
+  la as buildNodeMap,
+  da as clampToExtent,
+  Po as clampToParent,
+  Vy as computeRenderPlan,
+  Ss as computeValidationErrors,
+  ca as computeZIndex,
+  By as default,
+  Fy as drift,
+  fh as expandParentToFitChild,
+  ni as getAbsolutePosition,
+  Bf as getAutoPanDelta,
   oo as getBezierPath,
-  kf as getConnectedEdges,
-  yt as getDescendantIds,
-  Is as getEdgePosition,
-  va as getFloatingEdgeParams,
-  Lf as getIncomers,
-  Ns as getNodeIntersection,
+  Tf as getConnectedEdges,
+  wt as getDescendantIds,
+  Rs as getEdgePosition,
+  Ea as getFloatingEdgeParams,
+  Af as getIncomers,
+  Hs as getNodeIntersection,
   Yt as getNodesBounds,
-  Sf as getNodesFullyInPolygon,
-  Uu as getNodesFullyInRect,
-  Cf as getNodesInPolygon,
-  ju as getNodesInRect,
-  Jo as getOutgoers,
-  My as getSimpleBezierPath,
-  Hy as getSimpleFloatingPosition,
+  Mf as getNodesFullyInPolygon,
+  Ju as getNodesFullyInRect,
+  Pf as getNodesInPolygon,
+  Ku as getNodesInRect,
+  Qo as getOutgoers,
+  Iy as getSimpleBezierPath,
+  zy as getSimpleFloatingPosition,
   vn as getSmoothStepPath,
-  Rf as getStepPath,
-  Wr as getStraightPath,
+  Vf as getStepPath,
+  Zr as getStraightPath,
   Jn as getViewportForBounds,
   Be as isConnectable,
-  $f as isDeletable,
-  Xr as isDraggable,
-  us as isResizable,
-  Qo as isSelectable,
-  Ze as matchesKey,
+  Ff as isDeletable,
+  Gr as isDraggable,
+  fs as isResizable,
+  ei as isSelectable,
+  Ge as matchesKey,
   mt as matchesModifier,
-  Ty as orbit,
-  Iy as pendulum,
-  xi as pointInPolygon,
-  Ef as polygonIntersectsAABB,
-  df as registerMarker,
+  $y as orbit,
+  Ry as pendulum,
+  Ei as pointInPolygon,
+  Lf as polygonIntersectsAABB,
+  gf as registerMarker,
   un as resolveChildValidation,
-  qf as resolveShortcuts,
+  jf as resolveShortcuts,
   Mt as sortNodesTopological,
-  Dy as stagger,
-  kt as toAbsoluteNode,
-  io as toAbsoluteNodes,
-  da as validateChildAdd,
-  so as validateChildRemove,
-  Ay as wave
+  Oy as stagger,
+  yt as toAbsoluteNode,
+  so as toAbsoluteNodes,
+  ga as validateChildAdd,
+  ro as validateChildRemove,
+  Dy as wave
 };
 //# sourceMappingURL=alpineflow.bundle.esm.js.map
