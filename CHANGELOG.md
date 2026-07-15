@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed — schema edges detached after `animate()`
+
+`animate()` (and the `scramble` / reset-grid layout moves built on it) drives edges each frame through `_refreshEdgePaths`, a simplified imperative path that draws a node-centre, no-obstacle bezier for speed. Once the animation settled, nothing re-ran the reactive edge effect, so **schema edges stayed detached at the node centre with their avoidant routing lost** (worst on a layout move whose final positions equal the current ones, e.g. reset-grid on an already-gridded graph — the reactive position write is a no-op so it never re-triggers). `animate()` now runs the same settle the history-restore path uses — bump `_layoutAnimTick` (re-measure) + `_commitNodeGeometry` (rebuild the obstacle snapshot) once on completion — so edges snap back to their real handles and routes. Pre-existing; unrelated to the routing-quality workstreams.
+
 Schema-scale performance pass — fixes undo/zoom/edge performance at Draftsman scale (~50 nodes × 25 fields, ~100 edges). Landed as independent workstreams.
 
 ### Node drag — split position effect
