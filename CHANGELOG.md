@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed — avoidant edges use rounded corners, not a Catmull-Rom spline
+
+Avoidant edges smoothed their orthogonal route with a Catmull-Rom spline, whose tangents overshoot: the curve hooked at the handle stub and bulged *past* every sharp corner, so the edges looked exaggerated. Avoidant now keeps the straight runs and rounds each corner with a **bounded cubic-bezier fillet** (`buildRoundedPath`, default radius `AVOIDANT_CORNER_RADIUS = 40`, clamped per-corner to half the shorter adjacent segment). The fillet lives inside the corner, so the curve **hugs the route and can't overshoot** — smooth and bezier-like, but visually distinct from `orthogonal`'s tight bends. This changes the exact `d` string of every avoidant edge. The Catmull-Rom builder is retained for the freeform `editable` edge type, which is unchanged.
+
 ### Fixed — schema edges detached after `animate()`
 
 `animate()` (and the `scramble` / reset-grid layout moves built on it) drives edges each frame through `_refreshEdgePaths`, a simplified imperative path that draws a node-centre, no-obstacle bezier for speed. Once the animation settled, nothing re-ran the reactive edge effect, so **schema edges stayed detached at the node centre with their avoidant routing lost** (worst on a layout move whose final positions equal the current ones, e.g. reset-grid on an already-gridded graph — the reactive position write is a no-op so it never re-triggers). `animate()` now runs the same settle the history-restore path uses — bump `_layoutAnimTick` (re-measure) + `_commitNodeGeometry` (rebuild the obstacle snapshot) once on completion — so edges snap back to their real handles and routes. Pre-existing; unrelated to the routing-quality workstreams.
