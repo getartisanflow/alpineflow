@@ -330,6 +330,44 @@ function fanGrouping(): EndpointSpreadGrouping {
   ]);
 }
 
+/** `n` source schema nodes stacked in ascending Y, all into `hub|email`, + hub. */
+function bigFanFixture(n: number): FixtureNode[] {
+  const h = schemaHeight(FIELDS.length, SYMMETRIC);
+  const nodes: FixtureNode[] = [];
+  for (let i = 0; i < n; i++) {
+    nodes.push({ id: `s${i}`, position: { x: 0, y: i * 120 }, dimensions: { width: 220, height: h }, data: { label: `S${i}`, fields: schemaFields(FIELDS) } });
+  }
+  nodes.push({ id: 'hub', position: { x: 600, y: (n * 120) / 2 }, dimensions: { width: 220, height: h }, data: { label: 'HUB', fields: schemaFields(FIELDS) } });
+  return nodes;
+}
+
+function bigFanEdges(n: number): FixtureEdge[] {
+  return Array.from({ length: n }, (_, i) => ({ id: `e${i}`, source: `s${i}`, target: 'hub', sourceHandle: 'id', targetHandle: 'email', type: 'avoidant' as const }));
+}
+
+function bigFanGrouping(n: number): EndpointSpreadGrouping {
+  const lanes = new Map<string, number>();
+  for (let i = 0; i < n; i++) lanes.set(`e${i}`, i); // sources already ascending in Y
+  return new Map([['hub|email', { count: n, lanes }]]);
+}
+
+/** A hub target handle carrying exactly one edge. */
+function singleFixture(): FixtureNode[] {
+  const h = schemaHeight(FIELDS.length, SYMMETRIC);
+  return [
+    { id: 'src1', position: { x: 0, y: 0 }, dimensions: { width: 220, height: h }, data: { label: 'S1', fields: schemaFields(FIELDS) } },
+    { id: 'hub', position: { x: 600, y: 0 }, dimensions: { width: 220, height: h }, data: { label: 'HUB', fields: schemaFields(FIELDS) } },
+  ];
+}
+
+function singleEdges(): FixtureEdge[] {
+  return [{ id: 'e1', source: 'src1', target: 'hub', sourceHandle: 'id', targetHandle: 'email', type: 'avoidant' }];
+}
+
+function singleGrouping(): EndpointSpreadGrouping {
+  return new Map([['hub|email', { count: 1, lanes: new Map([['e1', 0]]) }]]);
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('endpoint spread — seam integration', () => {
@@ -350,5 +388,65 @@ describe('endpoint spread — seam integration', () => {
     });
     const offEnds = fanEdges().map((_, i) => targetEndpoint(off.pathD(i)));
     expect(new Set(offEnds).size).toBe(1); // all stacked on the handle centre
+  });
+
+  it('off === baseline: routes are byte-identical when the config gate is off, even if a grouping exists', async () => {
+    // Baseline: spread fully off (no config, no grouping).
+    const baseline = await mountSettled({ nodes: fanFixture(), edges: fanEdges() });
+    const baseDs = fanEdges().map((_, i) => baseline.pathD(i));
+
+    // Config-gate proof: grouping present but `avoidantEndpointSpread` UNSET →
+    // resolveSpreadSpacing(undefined) === null → the seam must skip the offset.
+    const configOff = await mountSettled({ nodes: fanFixture(), edges: fanEdges(), grouping: fanGrouping() });
+    fanEdges().forEach((edge, i) => {
+      expect(`${edge.id}: ${configOff.pathD(i)}`).toBe(`${edge.id}: ${baseDs[i]}`);
+    });
+
+    // Grouping-presence gate proof: config ON but grouping null → `if (grouping)`
+    // is false → identical to baseline.
+    const groupingNull = await mountSettled({ nodes: fanFixture(), edges: fanEdges(), config: { avoidantEndpointSpread: true }, grouping: null });
+    fanEdges().forEach((edge, i) => {
+      expect(`${edge.id}: ${groupingNull.pathD(i)}`).toBe(`${edge.id}: ${baseDs[i]}`);
+    });
+  });
+
+  it('condenses a high fan-in within the row extent (never grows the row)', async () => {
+    const N = 12;
+    const ROW_EXTENT = ROW_H; // _schemaMetrics.rowHeight under this box model
+
+    // Centre = the un-fanned target Y (spread off).
+    const off = await mountSettled({ nodes: bigFanFixture(N), edges: bigFanEdges(N) });
+    const centre = targetY(off.pathD(0));
+
+    const on = await mountSettled({
+      nodes: bigFanFixture(N),
+      edges: bigFanEdges(N),
+      config: { avoidantEndpointSpread: { spacing: 5 } },
+      grouping: bigFanGrouping(N),
+    });
+    for (let i = 0; i < N; i++) {
+      const y = targetY(on.pathD(i));
+      // Desired span 11×5 = 55 > 26 → clamped to the row extent; every endpoint
+      // stays within extent/2 of the centre, so the row never grows.
+      expect(Math.abs(y - centre)).toBeLessThanOrEqual(ROW_EXTENT / 2 + 0.5);
+    }
+  });
+
+  it('is deterministic: the same spread fixture renders identical d strings twice', async () => {
+    const a = await mountSettled({ nodes: fanFixture(), edges: fanEdges(), config: { avoidantEndpointSpread: true }, grouping: fanGrouping() });
+    const aDs = fanEdges().map((_, i) => a.pathD(i));
+
+    const b = await mountSettled({ nodes: fanFixture(), edges: fanEdges(), config: { avoidantEndpointSpread: true }, grouping: fanGrouping() });
+    fanEdges().forEach((edge, i) => {
+      expect(`${edge.id}: ${b.pathD(i)}`).toBe(`${edge.id}: ${aDs[i]}`);
+    });
+  });
+
+  it('leaves a single-edge handle untouched whether spread is on or off (lane 0, count 1)', async () => {
+    const on = await mountSettled({ nodes: singleFixture(), edges: singleEdges(), config: { avoidantEndpointSpread: true }, grouping: singleGrouping() });
+    const onD = on.pathD(0);
+
+    const off = await mountSettled({ nodes: singleFixture(), edges: singleEdges() });
+    expect(onD).toBe(off.pathD(0));
   });
 });
