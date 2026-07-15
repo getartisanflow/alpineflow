@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { getAvoidantPath } from './avoidant';
+import { getAvoidantPath, buildRoundedPath } from './avoidant';
+import type { RoutePoint } from './orthogonal';
+
+/** Every coordinate pair in a path `d` string (endpoints + bezier control points). */
+function pathCoords(d: string): Array<{ x: number; y: number }> {
+  return [...d.matchAll(/(-?\d+\.?\d*),(-?\d+\.?\d*)/g)].map((m) => ({ x: +m[1], y: +m[2] }));
+}
 
 describe('getAvoidantPath', () => {
   it('falls back to bezier-like path when no obstacles', () => {
@@ -100,6 +106,33 @@ describe('getAvoidantPath', () => {
     // Should still return a valid path (bezier fallback)
     expect(result.path).toMatch(/^M/);
     expect(result.path).toContain('C');
+  });
+
+  it('rounded smoothing hugs the route and does not overshoot the corner', () => {
+    // Short handle stub (0→21) then a sharp 90° turn — the case where a
+    // Catmull-Rom spline (uniform OR centripetal) bulges well past the corner.
+    // The rounded fillet lives inside the corner, so no coordinate (endpoint or
+    // control point) crosses above the corner's y (20).
+    const pts: RoutePoint[] = [
+      { x: 0, y: 100, index: 0 },
+      { x: 21, y: 100, index: 1 },
+      { x: 21, y: 20, index: 2 },
+      { x: 200, y: 20, index: 3 },
+    ];
+    const coords = pathCoords(buildRoundedPath(pts));
+    // Waypoint min-y is 20; the rounded curve never rises above it.
+    expect(Math.min(...coords.map((c) => c.y))).toBeGreaterThanOrEqual(20);
+  });
+
+  it('rounds corners with cubic beziers and no sharp quadratic bends', () => {
+    const pts: RoutePoint[] = [
+      { x: 0, y: 0, index: 0 },
+      { x: 100, y: 0, index: 1 },
+      { x: 100, y: 100, index: 2 },
+    ];
+    const d = buildRoundedPath(pts);
+    expect(d).toContain('C'); // smooth cubic fillet
+    expect(d).not.toContain('Q'); // stays distinct from orthogonal's tight bends
   });
 
   it('returns all required EdgePathResult properties', () => {
