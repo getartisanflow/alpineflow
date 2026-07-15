@@ -290,6 +290,26 @@ describe('createAnimationMixin — animate (instant)', () => {
     expect(onComplete).toHaveBeenCalledOnce();
   });
 
+  it('re-runs the reactive edge geometry after a node move (schema edges must not stay node-centred)', async () => {
+    // _refreshEdgePaths draws a simplified node-centre/no-obstacle path during
+    // the imperative animation flush. On settle, the full reactive edge effect
+    // must be re-triggered (via _layoutAnimTick) and the obstacle snapshot
+    // rebuilt (_commitNodeGeometry) so schema edges snap back to their field
+    // handles + avoidant routing. Without this, they stay detached at the node
+    // centre (the reset-grid / scramble regression). Mirrors the history settle.
+    const n1 = makeNode('n1', { position: { x: 10, y: 20 } });
+    const ctx = mockCtx();
+    ctx._nodeMap.set('n1', n1);
+    const mixin = createAnimationMixin(ctx);
+    const tickBefore = ctx._layoutAnimTick;
+
+    mixin.animate({ nodes: { n1: { position: { x: 300, y: 400 } } } }, { duration: 0 });
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
+    expect(ctx._layoutAnimTick).toBeGreaterThan(tickBefore);
+    expect(ctx._commitNodeGeometry).toHaveBeenCalled();
+  });
+
   it('instantly applies node position and flushes', () => {
     const n1 = makeNode('n1', { position: { x: 10, y: 20 } });
     const ctx = mockCtx();
