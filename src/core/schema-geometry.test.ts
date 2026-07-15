@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeSchemaHandlePoint, schemaFieldIndex } from './schema-geometry';
+import { computeSchemaHandlePoint, schemaFieldIndex, schemaSidePin, splitHandleSide } from './schema-geometry';
 import type { SchemaMetrics } from './types';
 
 // Realistic metrics fixture, hand-computed against in each test. Modelled on the SHIPPED
@@ -42,14 +42,20 @@ describe('schemaFieldIndex', () => {
     expect(schemaFieldIndex(node.data.fields, 'created_at')).toBe(3);
   });
 
-  it('resolves an EXACT match only — a `-l`/`-r` suffix is never stripped', () => {
-    // The DOM oracle does not strip suffixes: on a rendered schema node no handle
-    // with id `user_id-l` exists, so `measureHandleCoords` falls through to
-    // `inferSideFromHandleId` and lands on the node's FIRST left handle (row 0) —
-    // NOT the stripped field's row. Stripping here would silently disagree with it.
-    expect(schemaFieldIndex([{ name: 'user_id' }], 'user_id-l')).toBe(-1);
-    // And a field genuinely named `email-r` must still resolve to itself.
+  it('resolves a `-l`/`-r` suffix to the NAMED field\'s row (the side is pinned separately)', () => {
+    // A trailing suffix names a side, not a distinct handle: `user_id-l` is the
+    // `user_id` row's left handle. The DOM oracle now resolves the same row + side,
+    // so this must land on the field's row, not row 0.
+    expect(schemaFieldIndex([{ name: 'id' }, { name: 'user_id' }], 'user_id-l')).toBe(1);
+    expect(schemaFieldIndex([{ name: 'id' }, { name: 'user_id' }], 'user_id-r')).toBe(1);
+  });
+
+  it('prefers an EXACT match — a field genuinely named `email-r` resolves to itself', () => {
     expect(schemaFieldIndex([{ name: 'email-r' }, { name: 'email' }], 'email-r')).toBe(0);
+  });
+
+  it('returns -1 when the stripped field does not exist either', () => {
+    expect(schemaFieldIndex([{ name: 'id' }], 'missing-l')).toBe(-1);
   });
 
   it('returns -1 when no field matches', () => {
@@ -59,6 +65,43 @@ describe('schemaFieldIndex', () => {
   it('returns -1 when fields is missing or not an array', () => {
     expect(schemaFieldIndex(undefined, 'id')).toBe(-1);
     expect(schemaFieldIndex('not-an-array' as unknown as Array<{ name: string }>, 'id')).toBe(-1);
+  });
+});
+
+describe('splitHandleSide', () => {
+  it('splits a trailing -l/-r into field + side', () => {
+    expect(splitHandleSide('team_id-l')).toEqual({ field: 'team_id', side: 'left' });
+    expect(splitHandleSide('team_id-r')).toEqual({ field: 'team_id', side: 'right' });
+  });
+
+  it('leaves an unsuffixed id whole with no side', () => {
+    expect(splitHandleSide('team_id')).toEqual({ field: 'team_id', side: null });
+  });
+});
+
+describe('schemaSidePin', () => {
+  const fields = [{ name: 'id' }, { name: 'team_id' }];
+
+  it('returns the pinned side for a suffixed id whose bare field exists', () => {
+    expect(schemaSidePin(fields, 'team_id-l')).toBe('left');
+    expect(schemaSidePin(fields, 'team_id-r')).toBe('right');
+  });
+
+  it('returns null for an unsuffixed id — the geometric pick applies', () => {
+    expect(schemaSidePin(fields, 'team_id')).toBeNull();
+  });
+
+  it('returns null when the whole id matches a field exactly (not a pin)', () => {
+    expect(schemaSidePin([{ name: 'email-r' }, { name: 'email' }], 'email-r')).toBeNull();
+  });
+
+  it('returns null when the stripped field does not exist', () => {
+    expect(schemaSidePin(fields, 'missing-l')).toBeNull();
+  });
+
+  it('returns null on a missing handle id or fields', () => {
+    expect(schemaSidePin(fields, undefined)).toBeNull();
+    expect(schemaSidePin(undefined, 'team_id-l')).toBeNull();
   });
 });
 

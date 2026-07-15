@@ -17,21 +17,57 @@ export interface SchemaHandlePoint {
 }
 
 /**
+ * Split a handle id into its field name and an optional PINNED side. A trailing
+ * `-l`/`-r` names a side explicitly — schema rows stamp a real source+target
+ * handle on BOTH sides, so `team_id-r` means "team_id's right-side handle".
+ *
+ * This is only a fallback: callers must try an EXACT field match on the whole id
+ * FIRST, so a field genuinely named `foo-r` still resolves to itself and never
+ * gets read as a side pin.
+ */
+export function splitHandleSide(handleId: string): { field: string; side: 'left' | 'right' | null } {
+  if (handleId.endsWith('-l')) return { field: handleId.slice(0, -2), side: 'left' };
+  if (handleId.endsWith('-r')) return { field: handleId.slice(0, -2), side: 'right' };
+  return { field: handleId, side: null };
+}
+
+/**
  * Row index of the field a handle id names, or `-1` when it names none.
  *
- * The match is EXACT — a trailing `-l`/`-r` is never stripped. That suffix is the
- * CONDENSED-node convention: on a rendered schema node no handle carries it, so the
- * DOM path (`measureHandleCoords`) finds no matching handle, falls through to
- * `inferSideFromHandleId`, and lands on the node's FIRST left/right handle — row 0,
- * not the stripped field's row. Stripping here would silently disagree with that
- * oracle, so an inexact id resolves to nothing and the caller falls back to the DOM.
+ * EXACT match wins first — a field literally named `email-r` resolves to itself.
+ * Only when nothing matches the whole id AND it carries a `-l`/`-r` suffix does the
+ * suffix get stripped and the bare field looked up: `team_id-r` → the `team_id`
+ * row. The suffix pins the SIDE (see `schemaSidePin`); the ROW is that same field's,
+ * NOT the node's row 0. The DOM path (`resolveHandlePosition`/`measureHandleCoords`)
+ * resolves the identical row + side, so the two oracles agree.
  */
 export function schemaFieldIndex(
   fields: ReadonlyArray<{ name: string }> | undefined,
   handleId: string,
 ): number {
   if (!Array.isArray(fields)) return -1;
-  return fields.findIndex((f) => f?.name === handleId);
+  const exact = fields.findIndex((f) => f?.name === handleId);
+  if (exact >= 0) return exact;
+  const { field, side } = splitHandleSide(handleId);
+  if (side === null) return -1;
+  return fields.findIndex((f) => f?.name === field);
+}
+
+/**
+ * The side a handle id pins via its `-l`/`-r` suffix, or `null` when it pins none
+ * — meaning the caller should fall back to the geometric side pick. Returns null
+ * when the whole id names a field exactly (that's a normal handle, not a pin) or
+ * when the stripped field doesn't exist.
+ */
+export function schemaSidePin(
+  fields: ReadonlyArray<{ name: string }> | undefined,
+  handleId: string | undefined,
+): 'left' | 'right' | null {
+  if (!Array.isArray(fields) || !handleId) return null;
+  if (fields.some((f) => f?.name === handleId)) return null;
+  const { field, side } = splitHandleSide(handleId);
+  if (side === null) return null;
+  return fields.some((f) => f?.name === field) ? side : null;
 }
 
 /**

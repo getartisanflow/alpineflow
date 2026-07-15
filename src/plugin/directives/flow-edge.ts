@@ -11,7 +11,7 @@
 import type { Alpine } from 'alpinejs';
 import type { FlowEdge, FlowNode, HandlePosition, HandleType, Rect, Connection, XYPosition, SchemaMetrics, EndpointSpreadGrouping } from '../../core/types';
 import type { MarkerType, MarkerConfig } from '../../core/markers';
-import { computeSchemaHandlePoint, schemaFieldIndex } from '../../core/schema-geometry';
+import { computeSchemaHandlePoint, schemaFieldIndex, schemaSidePin, splitHandleSide } from '../../core/schema-geometry';
 import { laneOffset, applyLaneOffset, resolveSpreadSpacing } from '../../core/endpoint-spread';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { normalizeMarker, getMarkerId } from '../../core/markers';
@@ -108,15 +108,6 @@ function resolveAnimationMode(animated: boolean | string | undefined): 'none' | 
 }
 
 
-/**
- * Infer which side a handle belongs to from its ID suffix.
- * Returns 'left' or 'right' if the ID ends with '-l' or '-r', else null.
- */
-function inferSideFromHandleId(handleId: string): HandlePosition | null {
-  if (handleId.endsWith('-l')) return 'left';
-  if (handleId.endsWith('-r')) return 'right';
-  return null;
-}
 
 /**
  * Rotate a cardinal handle position to account for node rotation.
@@ -229,11 +220,17 @@ export function resolveHandlePosition(
           ?? (handleType === 'source' ? 'bottom' : 'top');
       }
     }
-    // If exact ID not found (e.g. condensed node), try a handle on the same
-    // side inferred from the handle ID suffix ('-l' → left, '-r' → right).
+    // If exact ID not found, a trailing '-l'/'-r' pins a side. Scope to that
+    // field's row (id + type + side) so a schema node lands on the NAMED field's
+    // handle, not the node's first left/right handle. Fall back to any handle on
+    // that side for condensed nodes, which carry no per-field id.
     if (handleId) {
-      const side = inferSideFromHandleId(handleId);
+      const { field, side } = splitHandleSide(handleId);
       if (side) {
+        const pinned = nodeEl.querySelector(
+          `[data-flow-handle-id="${CSS.escape(field)}"][data-flow-handle-type="${handleType}"][data-flow-handle-position="${side}"]`,
+        );
+        if (pinned) return side;
         const sideEl = nodeEl.querySelector(`[data-flow-handle-position="${side}"]`);
         if (sideEl) return side;
       }
@@ -449,8 +446,17 @@ function resolveSchemaEndpoints(
   const tgtIndex = schemaFieldIndexForEndpoint(rawTarget, targetHandle, nodeElements?.get(rawTarget.id), metrics);
   if (tgtIndex < 0) return null;
 
-  const srcSide = schemaHandleSide(rawSource, sourceNode.position, 'source', nodeCenterX(targetNode), metrics);
-  const tgtSide = schemaHandleSide(rawTarget, targetNode.position, 'target', nodeCenterX(sourceNode), metrics);
+  // A '-l'/'-r' suffix on the handle id pins the side explicitly; otherwise fall
+  // back to the geometric pick. Keeps the state fast path in lockstep with the DOM
+  // oracle, which resolves the same pinned side in measureHandleCoords.
+  const srcFields = (rawSource.data as { fields?: Array<{ name: string }> } | undefined)?.fields;
+  const tgtFields = (rawTarget.data as { fields?: Array<{ name: string }> } | undefined)?.fields;
+  const srcSide =
+    schemaSidePin(srcFields, sourceHandle)
+    ?? schemaHandleSide(rawSource, sourceNode.position, 'source', nodeCenterX(targetNode), metrics);
+  const tgtSide =
+    schemaSidePin(tgtFields, targetHandle)
+    ?? schemaHandleSide(rawTarget, targetNode.position, 'target', nodeCenterX(sourceNode), metrics);
 
   const src = computeSchemaHandlePoint(rawSource, sourceNode.position, srcIndex, srcSide, metrics);
   const tgt = computeSchemaHandlePoint(rawTarget, targetNode.position, tgtIndex, tgtSide, metrics);
@@ -510,11 +516,16 @@ function measureHandleCoords(
       );
       handleEl = pickClosestHandle(untyped, opposingCenter) as HTMLElement | null;
     }
-    // 2. If not found, try a handle on the same side (for condensed nodes)
+    // 2. If not found, a trailing '-l'/'-r' pins a side. Scope to the named
+    //    field's row (id + type + side) so a schema node lands on that field's
+    //    handle; fall back to any handle on that side for condensed nodes.
     if (!handleEl) {
-      const side = inferSideFromHandleId(handleId);
+      const { field, side } = splitHandleSide(handleId);
       if (side) {
-        handleEl = nodeEl.querySelector(`[data-flow-handle-position="${side}"]`);
+        handleEl =
+          nodeEl.querySelector(
+            `[data-flow-handle-id="${CSS.escape(field)}"][data-flow-handle-type="${handleType}"][data-flow-handle-position="${side}"]`,
+          ) ?? nodeEl.querySelector(`[data-flow-handle-position="${side}"]`);
       }
     }
   } else {
