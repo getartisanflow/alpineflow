@@ -35,6 +35,7 @@ import type {
   ToImageOptions,
   StopOptions,
   SchemaMetrics,
+  EndpointSpreadGrouping,
 } from '../../core/types';
 import type { FlowGroup } from '../../animate/flow-group';
 import type { Transaction } from '../../animate/transaction';
@@ -434,6 +435,12 @@ export interface CanvasContext {
     changedNodeIds?: string[],
     prevSnapshot?: Array<{ id: string; x: number; y: number; width: number; height: number }> | null,
   ): void;
+  /** WS-2 endpoint-spread lanes; null until first computed. Mutated in place. */
+  _endpointSpreadGrouping: EndpointSpreadGrouping | null;
+  /** WS-2: recompute endpoint-spread lanes; returns the re-laned edge ids. */
+  _computeEndpointGrouping(): Set<string>;
+  /** WS-2: bump the routing dirty tick for a specific set of edge ids. */
+  _markEdgesDirtyById(ids: Set<string>): void;
 
   // === Auto-Layout state ===
 
