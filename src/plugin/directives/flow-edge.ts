@@ -108,17 +108,6 @@ function resolveAnimationMode(animated: boolean | string | undefined): 'none' | 
 }
 
 /**
- * Infer which side a handle belongs to from a trailing `-l`/`-r` suffix on its id.
- * Returns 'left' or 'right', else null — the condensed-node convention, where a
- * node carries a single left and single right handle.
- */
-export function inferSideFromHandleId(handleId: string): HandlePosition | null {
-  if (handleId.endsWith('-l')) return 'left';
-  if (handleId.endsWith('-r')) return 'right';
-  return null;
-}
-
-/**
  * Rotate a cardinal handle position to account for node rotation.
  * Maps the handle's local outward direction through the node's rotation
  * and returns the nearest world-space cardinal direction. This ensures
