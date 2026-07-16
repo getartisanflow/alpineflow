@@ -26,6 +26,7 @@ import type {
   PatchableConfig,
   SchemaMetrics,
   EndpointSpreadGrouping,
+  HandlePosition,
 } from '../../core/types';
 import { createPanZoom, type PanZoomInstance } from '../../core/pan-zoom';
 import { screenToFlowPosition, getVisibleBounds, type Bounds } from '../../core/geometry';
@@ -48,8 +49,9 @@ import { resolveShortcuts, matchesKey, matchesModifier, shouldCaptureNudge } fro
 import { isDraggable, isSelectable } from '../../core/node-flags';
 import { attachLongPress } from '../../core/long-press';
 import { getNodesInRect, getNodesFullyInRect, SpatialGrid, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
-import { CORRIDOR_MARGIN } from '../../core/edge-paths/orthogonal';
+import { CORRIDOR_MARGIN, findRoute } from '../../core/edge-paths/orthogonal';
 import { resolveSpreadSpacing } from '../../core/endpoint-spread';
+import { resolveChannelGap, dominantRun, groupChannels, assignOffsets, type ChannelMember } from '../../core/crossing-reduction';
 import {
   buildNodeMap,
   reconcileChildrenIndex,
@@ -425,6 +427,8 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
     /** WS-2 endpoint-spread lanes; null until first computed. Mutated in place (see _obstacleSnapshot). */
     _endpointSpreadGrouping: null as EndpointSpreadGrouping | null,
+    /** WS-3 crossing-reduction lane offsets, edgeId → signed px; null until first computed. Mutated in place. */
+    _crossingPlan: null as Map<string, number> | null,
     /** Reactive epoch bumped by _commitNodeGeometry (internal signal; edges must NOT subscribe to it). Reserved for the interaction-degradation/LOD workstream (WS D), which will consume it — do not delete as dead code even though only WS C currently reads it. */
     _obstacleEpoch: 0,
     /** REACTIVE Map edge id → tick. Edge effects read key-scoped `.get(edge.id)`; bumped by _markDirtyEdges. */
@@ -606,6 +610,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
       // dirty exactly the edges whose lane changed so they re-route.
       const relaned = this._computeEndpointGrouping();
       if (relaned.size > 0) this._markEdgesDirtyById(relaned);
+
+      // WS-3: recompute crossing-reduction lane offsets and dirty the changed edges.
+      const rerouted = this._computeCrossingPlan();
+      if (rerouted.size > 0) this._markEdgesDirtyById(rerouted);
     },
 
     /**
@@ -683,6 +691,82 @@ export function registerFlowCanvas(Alpine: Alpine) {
         this._endpointSpreadGrouping = next; // first commit only: null → Map (real assignment)
       }
       return changed;
+    },
+
+    /**
+     * WS-3: assign each avoidant/orthogonal edge a signed lane offset so edges
+     * sharing a routing corridor separate into ordered lanes. Base-routes each
+     * opted-in edge (cached findRoute) against the shared obstacle snapshot,
+     * extracts its dominant interior run, groups runs into channels, orders each
+     * group by endpoint barycenter, and centres signed offsets by channelGap.
+     * No-op (empty plan) when the flag is off. Returns the edge ids whose offset
+     * changed since the last run. Mutated in place (see _endpointSpreadGrouping).
+     */
+    _computeCrossingPlan(): Set<string> {
+      const changed = new Set<string>();
+      const gap = resolveChannelGap(this._config?.avoidantCrossingReduction);
+      const old = Alpine.raw(this._crossingPlan) as Map<string, number> | null;
+
+      const finish = (next: Map<string, number>): Set<string> => {
+        // diff for the dirty set (offset added/removed/changed)
+        const keys = new Set<string>([...(old?.keys() ?? []), ...next.keys()]);
+        for (const id of keys) {
+          if ((old?.get(id) ?? 0) !== (next.get(id) ?? 0)) changed.add(id);
+        }
+        if (old) { old.clear(); for (const [k, v] of next) old.set(k, v); }
+        else { this._crossingPlan = next; }
+        return changed;
+      };
+
+      if (gap === null) return finish(new Map()); // flag off → empty plan (off === baseline)
+
+      const rawNodes = Alpine.raw(this.nodes) as FlowNode[];
+      const nodeMap = new Map<string, FlowNode>(rawNodes.map((n): [string, FlowNode] => [n.id, n]));
+      const nodeOrigin = this._config?.nodeOrigin;
+      const snapshot = (Alpine.raw(this._obstacleSnapshot) as
+        Array<{ id: string; x: number; y: number; width: number; height: number }> | null) ?? [];
+
+      // Approx handle centre for an edge endpoint (good enough for channel detection;
+      // the edge applies the offset to its own REAL route at render time).
+      const handleCentre = (id: string): { x: number; y: number } => {
+        const n = nodeMap.get(id);
+        if (!n) return { x: 0, y: 0 };
+        const abs = toAbsoluteNode(n, nodeMap, nodeOrigin);
+        return {
+          x: abs.position.x + (abs.dimensions?.width ?? 0) / 2,
+          y: abs.position.y + (abs.dimensions?.height ?? 0) / 2,
+        };
+      };
+
+      const rawEdges = Alpine.raw(this.edges) as FlowEdge[];
+      const members: ChannelMember[] = [];
+      for (const e of rawEdges) {
+        const t = e.type ?? this._config?.defaultEdgeType;
+        if (t !== 'avoidant' && t !== 'orthogonal') continue;
+        const s = handleCentre(e.source), tg = handleCentre(e.target);
+        // side facing the other endpoint (matches the router's expected HandlePosition)
+        const sp: HandlePosition = Math.abs(tg.x - s.x) >= Math.abs(tg.y - s.y) ? (tg.x >= s.x ? 'right' : 'left') : (tg.y >= s.y ? 'bottom' : 'top');
+        const tp: HandlePosition = Math.abs(tg.x - s.x) >= Math.abs(tg.y - s.y) ? (tg.x >= s.x ? 'left' : 'right') : (tg.y >= s.y ? 'top' : 'bottom');
+        const obstacles = snapshot.filter((r) => r.id !== e.source && r.id !== e.target);
+        const route = findRoute(s.x, s.y, sp, tg.x, tg.y, tp, obstacles);
+        if (!route) continue;
+        const run = dominantRun(route);
+        if (!run) continue; // no interior run → not eligible (degrades to no shift)
+        const bary = run.axis === 'h' ? (s.y + tg.y) / 2 : (s.x + tg.x) / 2;
+        members.push({ edgeId: e.id, run, bary });
+      }
+
+      // Stable input order (edgeId) → deterministic grouping.
+      members.sort((p, q) => (p.edgeId < q.edgeId ? -1 : p.edgeId > q.edgeId ? 1 : 0));
+      const BAND_TOL = Math.max(8, gap * 2); // runs within ~2 lanes count as one channel
+      const next = new Map<string, number>();
+      for (const group of groupChannels(members, BAND_TOL)) {
+        if (group.length < 2) continue; // singletons keep offset 0 (absent)
+        for (const [edgeId, offset] of assignOffsets(group, gap)) {
+          if (offset !== 0) next.set(edgeId, offset);
+        }
+      }
+      return finish(next);
     },
 
     /**
