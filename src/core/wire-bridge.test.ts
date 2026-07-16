@@ -167,6 +167,7 @@ describe('WIRE_COMMAND_MAP', () => {
     expect(WIRE_COMMAND_MAP['flow:panBy']).toBe('panBy');
     expect(WIRE_COMMAND_MAP['flow:fitBounds']).toBe('fitBounds');
     expect(WIRE_COMMAND_MAP['flow:patchConfig']).toBe('patchConfig');
+    expect(WIRE_COMMAND_MAP['flow:setCrossingReduction']).toBe('setCrossingReduction');
     expect(WIRE_COMMAND_MAP['flow:deselectAll']).toBe('deselectAll');
     expect(WIRE_COMMAND_MAP['flow:collapseNode']).toBe('collapseNode');
     expect(WIRE_COMMAND_MAP['flow:expandNode']).toBe('expandNode');
@@ -240,6 +241,7 @@ describe('registerWireCommands', () => {
       panBy: vi.fn(),
       fitBounds: vi.fn(),
       patchConfig: vi.fn(),
+      setCrossingReduction: vi.fn(),
       deselectAll: vi.fn(),
       collapseNode: vi.fn(),
       expandNode: vi.fn(),
@@ -264,6 +266,9 @@ describe('registerWireCommands', () => {
 
     listeners['flow:patchConfig']({ changes: { panOnDrag: false } });
     expect(mockCanvas.patchConfig).toHaveBeenCalledWith({ panOnDrag: false });
+
+    listeners['flow:setCrossingReduction']({ value: { channelGap: 10 } });
+    expect(mockCanvas.setCrossingReduction).toHaveBeenCalledWith({ channelGap: 10 });
 
     listeners['flow:deselectAll']({});
     expect(mockCanvas.deselectAll).toHaveBeenCalled();

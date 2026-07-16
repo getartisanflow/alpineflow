@@ -2639,6 +2639,18 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._applyConfigPatch(changes as Record<string, any>);
     },
 
+    /**
+     * WS-3: toggle/tune crossing reduction at runtime and re-route immediately.
+     * Mutates the live config then forces a geometry recommit so the crossing
+     * plan is recomputed and affected edges re-route without waiting for a node
+     * move. `value`: `boolean | { channelGap?: number }`.
+     */
+    setCrossingReduction(value: boolean | { channelGap?: number }): void {
+      if (!this._config) return;
+      this._config.avoidantCrossingReduction = value;
+      this._commitNodeGeometry();
+    },
+
     // ── Context Menu ──────────────────────────────────────────────────
     closeContextMenu() {
       this.contextMenu.show = false;

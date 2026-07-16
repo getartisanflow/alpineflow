@@ -986,6 +986,15 @@ export interface FlowCanvasConfig {
    */
   avoidantEndpointSpread?: EndpointSpreadConfig;
 
+  /**
+   * Reorder avoidant/orthogonal edges that share a routing corridor into ordered
+   * parallel lanes to reduce crossings. `true` uses the default channel gap;
+   * `{ channelGap }` tunes the px separation between lanes. Canvas-level only —
+   * crossing reduction is a corridor concern, not owned by a node. Off (the
+   * default) is byte-identical to the non-reduced route. See spec §5.
+   */
+  avoidantCrossingReduction?: boolean | { channelGap?: number };
+
   /** When true, pairs of reciprocal edges (A→B + B→A) render as a single
    *  dual-marker path. The mirror edge is hidden from rendering; the primary
    *  edge gains a `marker-start` attribute mirroring its `marker-end`.
