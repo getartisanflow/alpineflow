@@ -12,7 +12,15 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
-import type { FlowSchemaField, SchemaMetrics } from '../../core/types';
+import type {
+  FlowNode,
+  FlowSchemaField,
+  SchemaMetrics,
+  SchemaNodeData,
+  SchemaNodeDecorator,
+  SchemaRowDecorator,
+  SchemaRowSlots,
+} from '../../core/types';
 
 type SchemaData = { label?: string; fields?: FlowSchemaField[]; [k: string]: unknown };
 type NodeRef = { data?: SchemaData } | undefined | null;
@@ -86,6 +94,22 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       } catch {
         return null;
       }
+    };
+
+    /**
+     * Resolve the consumer's render decorators from `canvas._config`, or nulls
+     * when none / no canvas. Read fresh each render (same `.flow-container` walk
+     * as the flags above) so a decorator set after mount still takes effect.
+     */
+    const readSchemaDecorators = (): {
+      node: SchemaNodeDecorator | null;
+      row: SchemaRowDecorator | null;
+    } => {
+      const cfg = readCanvas()?._config;
+      return {
+        node: typeof cfg?.schemaNodeDecorator === 'function' ? cfg.schemaNodeDecorator : null,
+        row: typeof cfg?.schemaRowDecorator === 'function' ? cfg.schemaRowDecorator : null,
+      };
     };
 
     /**
@@ -250,8 +274,10 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
     let bodyEl: HTMLElement | null = null;
     const rowByName = new Map<string, HTMLElement>();
 
-    const ensureScaffold = (): void => {
-      if (headerEl && bodyEl) return;
+    // Returns true when it just built the scaffold (a fresh header/body), false
+    // when reusing the existing one — the `isNew` signal for a node decorator.
+    const ensureScaffold = (): boolean => {
+      if (headerEl && bodyEl) return false;
       clearChildren(host);
       rowByName.clear();
       headerEl = document.createElement('div');
@@ -260,6 +286,7 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       bodyEl = document.createElement('div');
       bodyEl.className = 'flow-schema-body';
       host.appendChild(bodyEl);
+      return true;
     };
 
     const render = (): void => {
@@ -280,11 +307,42 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
         return;
       }
 
-      ensureScaffold();
+      const scaffoldCreated = ensureScaffold();
+      const decorators = readSchemaDecorators();
 
       const label = typeof data.label === 'string' ? data.label : '';
       const fields = Array.isArray(data.fields) ? data.fields : [];
       const nodeId = typeof node?.id === 'string' ? node.id : '';
+
+      // Hand one built/updated row + its sub-slots to the consumer's row
+      // decorator. Runs on every render (after the directive set its own row
+      // content), so decorators must be idempotent — see SchemaRowDecoratorContext.
+      // Errors are contained so a throwing decorator can't abort the render.
+      const decorateRow = (row: HTMLElement, field: FlowSchemaField, isNew: boolean): void => {
+        if (!decorators.row) return;
+        const slots: SchemaRowSlots = {
+          icon: row.querySelector<HTMLElement>('.flow-schema-row-icon'),
+          name: row.querySelector<HTMLElement>('.flow-schema-row-name')!,
+          type: row.querySelector<HTMLElement>('.flow-schema-row-type')!,
+          target: row.querySelector<HTMLElement>(
+            '.flow-schema-handle--target:not(.flow-schema-handle--mirror)',
+          )!,
+          source: row.querySelector<HTMLElement>(
+            '.flow-schema-handle--source:not(.flow-schema-handle--mirror)',
+          )!,
+          mirrorTarget: row.querySelector<HTMLElement>(
+            '.flow-schema-handle--target.flow-schema-handle--mirror',
+          )!,
+          mirrorSource: row.querySelector<HTMLElement>(
+            '.flow-schema-handle--source.flow-schema-handle--mirror',
+          )!,
+        };
+        try {
+          decorators.row({ row, field, nodeId, slots, isNew });
+        } catch (err) {
+          console.error('[alpineflow] schemaRowDecorator threw:', err);
+        }
+      };
 
       if (typeof data.kind === 'string' && data.kind) {
         host.setAttribute('data-flow-schema-kind', data.kind);
@@ -305,12 +363,14 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
         const existing = rowByName.get(field.name);
         if (existing) {
           updateRow(existing, field);
+          decorateRow(existing, field, false);
         } else {
           const row = renderRow(field, nodeId, rowsReorderable, keyboardNav);
           rowByName.set(field.name, row);
           bodyEl!.appendChild(row);
           // Activate x-flow-handle + x-flow-row-select on this one new row.
           Alpine.initTree(row);
+          decorateRow(row, field, true);
         }
       }
       // 2. Destroy rows whose fields are gone.
@@ -332,6 +392,24 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
           cursor = cursor.nextSibling;
         } else {
           bodyEl!.insertBefore(row, cursor);
+        }
+      }
+
+      // Node-level decoration runs LAST, after the body is fully reconciled, so a
+      // decorator can read the finished rows. Same idempotency contract as rows —
+      // it re-runs every render, after the directive wrote the header text (which
+      // clobbers any child a prior decoration added to the header).
+      if (decorators.node) {
+        try {
+          decorators.node({
+            host,
+            header: headerEl!,
+            body: bodyEl!,
+            node: node as unknown as FlowNode<SchemaNodeData>,
+            isNew: scaffoldCreated,
+          });
+        } catch (err) {
+          console.error('[alpineflow] schemaNodeDecorator threw:', err);
         }
       }
 
@@ -490,6 +568,14 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
           void f.key;
           void f.required;
           void f.icon;
+          // Metadata the base row omits but a schemaRowDecorator may render.
+          // Touch them so a mutation re-runs render() → re-decorates. (Reads the
+          // property reference; deep mutation of `tags`/`defaultValue` still needs
+          // a reassignment to re-trigger, same as the `fields` array itself.)
+          void f.description;
+          void f.deprecated;
+          void f.tags;
+          void f.defaultValue;
         }
       }
       render();

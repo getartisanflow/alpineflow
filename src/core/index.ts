@@ -16,6 +16,11 @@ export type {
   FlowEvents,
   FlowCanvasConfig,
   FlowInstance,
+  SchemaNodeDecorator,
+  SchemaRowDecorator,
+  SchemaNodeDecoratorContext,
+  SchemaRowDecoratorContext,
+  SchemaRowSlots,
 } from './types';
 
 // Type guard functions (runtime values, not type-only)

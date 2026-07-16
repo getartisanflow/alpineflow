@@ -4,6 +4,7 @@ import Alpine from 'alpinejs';
 import { registerFlowSchemaDirective } from './flow-schema';
 import { registerFlowHandleDirective } from './flow-handle';
 import { registerFlowNodeDirective } from './flow-node';
+import type { FlowCanvasConfig } from '../../core/types';
 
 /**
  * Clear a DOM node without using innerHTML (XSS-safe pattern).
@@ -923,6 +924,222 @@ describe('x-flow-schema directive', () => {
       expect(countsB.count()).toBe(0);
       countsA.disconnect();
       countsB.disconnect();
+    });
+  });
+
+  // ── Render decorators ──────────────────────────────────────────────────────
+  // `schemaRowDecorator` / `schemaNodeDecorator` hand the directive-built slot
+  // elements back to the consumer to augment, without forking the directive.
+  describe('render decorators', () => {
+    /**
+     * Mount a schema node under a `.flow-container` whose canvas scope carries
+     * a real `_config` (functions and all) via a window factory — a JSON x-data
+     * string can't carry function values, and the directive resolves decorators
+     * off `canvas._config` the same way it resolves `rowsReorderable`.
+     */
+    function mountWithConfig(
+      data: { label: string; fields: Array<Record<string, unknown>>; kind?: string },
+      config: Partial<FlowCanvasConfig>,
+    ) {
+      clearChildren(document.body);
+      const container = document.createElement('div');
+      container.classList.add('flow-container');
+      (window as any).__decoratorScope = () => ({
+        _schemaMetrics: null,
+        viewport: { zoom: 1 },
+        _config: config,
+        node: { id: 't', data },
+      });
+      container.setAttribute('x-data', '__decoratorScope()');
+      const target = document.createElement('div');
+      target.setAttribute('x-flow-schema', '');
+      target.className = 'flow-node';
+      target.setAttribute('data-flow-node-id', 't');
+      container.appendChild(target);
+      document.body.appendChild(container);
+      Alpine.initTree(container);
+      return { target, canvas: (Alpine as any).$data(container) };
+    }
+    const flush = () => new Promise((r) => setTimeout(r, 20));
+
+    it('calls schemaRowDecorator once per field with row, field, nodeId, and slots', () => {
+      const calls: any[] = [];
+      mountWithConfig(
+        {
+          label: 'User',
+          fields: [
+            { name: 'id', type: 'uuid', icon: '🔑' },
+            { name: 'email', type: 'text' },
+          ],
+        },
+        { schemaRowDecorator: (ctx) => calls.push(ctx) },
+      );
+      expect(calls.map((c) => c.field.name)).toEqual(['id', 'email']);
+      expect(calls.every((c) => c.isNew === true)).toBe(true);
+      expect(calls.every((c) => c.nodeId === 't')).toBe(true);
+
+      const first = calls[0];
+      expect(first.row.classList.contains('flow-schema-row')).toBe(true);
+      expect(first.slots.name.textContent).toBe('id');
+      expect(first.slots.type.textContent).toBe('uuid');
+      expect(first.slots.icon?.textContent).toBe('🔑');
+      // The real + mirror handles are exposed on the correct sides.
+      expect(first.slots.target.getAttribute('data-flow-handle-position')).toBe('left');
+      expect(first.slots.source.getAttribute('data-flow-handle-position')).toBe('right');
+      expect(first.slots.mirrorTarget.getAttribute('data-flow-handle-position')).toBe('right');
+      expect(first.slots.mirrorSource.getAttribute('data-flow-handle-position')).toBe('left');
+      // icon slot is null for a field without an icon.
+      expect(calls[1].slots.icon).toBeNull();
+    });
+
+    it('lets a row decorator render field metadata the base row omits (description)', () => {
+      const { target } = mountWithConfig(
+        { label: 'User', fields: [{ name: 'id', type: 'uuid', description: 'primary key' }] },
+        {
+          schemaRowDecorator: ({ row, field, slots }) => {
+            if (!field.description) return;
+            let d = row.querySelector<HTMLElement>('.desc');
+            if (!d) {
+              d = document.createElement('span');
+              d.className = 'desc';
+              slots.type.after(d);
+            }
+            d.textContent = field.description;
+          },
+        },
+      );
+      expect(target.querySelector('.flow-schema-row .desc')?.textContent).toBe('primary key');
+    });
+
+    it('re-invokes the row decorator on re-render with isNew=false and a guarded add does not duplicate', async () => {
+      const isNewSeen: boolean[] = [];
+      const { target, canvas } = mountWithConfig(
+        { label: 'User', fields: [{ name: 'id', type: 'uuid', description: 'pk' }] },
+        {
+          schemaRowDecorator: ({ row, field, slots, isNew }) => {
+            isNewSeen.push(isNew);
+            let d = row.querySelector<HTMLElement>('.desc');
+            if (!d) {
+              d = document.createElement('span');
+              d.className = 'desc';
+              slots.type.after(d);
+            }
+            d.textContent = field.description ?? '';
+          },
+        },
+      );
+      expect(isNewSeen).toEqual([true]);
+
+      // A label change re-renders; the row survives (updateRow path), so the
+      // decorator runs again with isNew=false.
+      canvas.node.data.label = 'Users';
+      await flush();
+      expect(isNewSeen).toEqual([true, false]);
+      // The querySelector guard means the surviving `.desc` is reused, not doubled.
+      expect(target.querySelectorAll('.flow-schema-row .desc').length).toBe(1);
+    });
+
+    it('re-runs the row decorator when a metadata field mutates reactively', async () => {
+      const { target, canvas } = mountWithConfig(
+        { label: 'User', fields: [{ name: 'id', type: 'uuid', description: 'old' }] },
+        {
+          schemaRowDecorator: ({ row, field, slots }) => {
+            let d = row.querySelector<HTMLElement>('.desc');
+            if (!d) {
+              d = document.createElement('span');
+              d.className = 'desc';
+              slots.type.after(d);
+            }
+            d.textContent = (field.description as string) ?? '';
+          },
+        },
+      );
+      expect(target.querySelector('.desc')?.textContent).toBe('old');
+
+      canvas.node.data.fields[0].description = 'new';
+      await flush();
+      expect(target.querySelector('.desc')?.textContent).toBe('new');
+    });
+
+    it('calls schemaNodeDecorator with host/header/body and isNew true only on the first render', async () => {
+      const calls: any[] = [];
+      const { target, canvas } = mountWithConfig(
+        { label: 'User', fields: [{ name: 'id', type: 'uuid' }] },
+        {
+          schemaNodeDecorator: (ctx) =>
+            calls.push({
+              isNew: ctx.isNew,
+              host: ctx.host,
+              headerIsHeader: ctx.header.classList.contains('flow-schema-header'),
+              bodyIsBody: ctx.body.classList.contains('flow-schema-body'),
+              label: ctx.node.data.label,
+            }),
+        },
+      );
+      expect(calls.length).toBe(1);
+      expect(calls[0].isNew).toBe(true);
+      expect(calls[0].host).toBe(target);
+      expect(calls[0].headerIsHeader).toBe(true);
+      expect(calls[0].bodyIsBody).toBe(true);
+
+      canvas.node.data.label = 'Users';
+      await flush();
+      expect(calls.length).toBe(2);
+      expect(calls[1].isNew).toBe(false);
+      expect(calls[1].label).toBe('Users');
+    });
+
+    it('re-applies header decoration that the directive\'s own textContent write clobbers', async () => {
+      // The directive owns `header.textContent`; a badge child a decorator adds is
+      // wiped when the directive rewrites the header on the next render. Because the
+      // node decorator runs AFTER that write, every render, it restores the badge.
+      const { target, canvas } = mountWithConfig(
+        { label: 'User', fields: [{ name: 'id', type: 'uuid' }] },
+        {
+          schemaNodeDecorator: ({ header, node }) => {
+            let badge = header.querySelector<HTMLElement>('.badge');
+            if (!badge) {
+              badge = document.createElement('span');
+              badge.className = 'badge';
+              header.appendChild(badge);
+            }
+            badge.textContent = String(node.data.fields.length);
+          },
+        },
+      );
+      expect(target.querySelector('.flow-schema-header .badge')?.textContent).toBe('1');
+
+      canvas.node.data.fields.push({ name: 'email', type: 'text' });
+      await flush();
+      expect(target.querySelector('.flow-schema-header .badge')?.textContent).toBe('2');
+    });
+
+    it('contains a throwing decorator — the render still completes and the error is logged', () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { target } = mountWithConfig(
+        {
+          label: 'User',
+          fields: [{ name: 'id', type: 'uuid' }, { name: 'email', type: 'text' }],
+        },
+        {
+          schemaRowDecorator: () => {
+            throw new Error('boom');
+          },
+        },
+      );
+      // Both rows still rendered despite the decorator throwing on each.
+      expect(target.querySelectorAll('.flow-schema-row').length).toBe(2);
+      expect(errSpy).toHaveBeenCalled();
+      errSpy.mockRestore();
+    });
+
+    it('renders normally when no decorators are configured', () => {
+      const { target } = mountWithConfig(
+        { label: 'User', fields: [{ name: 'id', type: 'uuid' }] },
+        {},
+      );
+      expect(target.querySelectorAll('.flow-schema-row').length).toBe(1);
+      expect(target.querySelector('.flow-schema-header')?.textContent).toBe('User');
     });
   });
 });
