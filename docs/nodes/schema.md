@@ -170,65 +170,11 @@ Users drag from a row's right-edge handle to another row's left-edge handle — 
 ```
 ::enddemo
 
-## Custom rendering
+## Customizing rendering
 
-The directive fully owns the node element's contents. For custom rendering, skip the directive and write your own template:
+You rarely have to fork the directive to customize it — style fields with metadata + CSS, augment the rendered output per-render with **hooks** (class resolvers and decorators), or skip the directive and roll your own template. The full guide, with live examples, lives in the Schema addon docs:
 
-```html
-<div x-flow-node="node" class="w-96">
-  <div class="my-header text-center text-2xl" x-text="node.data.label"></div>
-  <div class="flex w-full">
-    <template x-for="field in node.data.fields" :key="field.name">
-      <div class="p-2 flex-1 text-center" x-text="field.name"></div>
-    </template>
-  </div>
-</div>
-```
-
-
-::demo
-```html
-<div x-data="flowCanvas({
-    nodes: [
-        {
-            id: 'user',
-            position: { x: 0, y: 0 },
-            data: {
-                label: 'User',
-                fields: [
-                    { name: 'id',         type: 'uuid',      key: 'primary' },
-                    { name: 'email',      type: 'text',      required: true },
-                    { name: 'team_id',    type: 'uuid',      },
-                    { name: 'created_at', type: 'timestamp' },
-                ],
-            },
-        }
-    ],
-    edges: [
-    ],
-    background: 'dots',
-    fitViewOnInit: true,
-    controls: false,
-    pannable: false,
-    zoomable: false,
-})" class="flow-container" style="height: 340px;">
-    <div x-flow-viewport>
-        <template x-for="node in nodes" :key="node.id">
-            <div x-flow-node="node" class="w-96">
-                <div class="my-header text-center text-2xl" x-text="node.data.label"></div>
-                <div class="flex w-full">
-                    <template x-for="field in node.data.fields" :key="field.name">
-                        <div class="p-2 flex-1 text-center" x-text="field.name"></div>
-                    </template>
-                </div>
-            </div>
-        </template>
-    </div>
-</div>
-```
-::enddemo
-
-The handle ids + positions + per-row structure are the only things edge wiring cares about — everything else is yours.
+**→ [Customizing rendering](../addons/schema.md#customizing-rendering)**
 
 ## See Also
 
