@@ -1141,5 +1141,230 @@ describe('x-flow-schema directive', () => {
       expect(target.querySelectorAll('.flow-schema-row').length).toBe(1);
       expect(target.querySelector('.flow-schema-header')?.textContent).toBe('User');
     });
+
+    // ── Declarative class resolvers ─────────────────────────────────────────
+    // schemaRowClass / schemaNodeClass return class names as a pure function of
+    // the data; the directive applies + reconciles them (adds new, removes ones
+    // the resolver stops returning) without touching its own structural classes.
+    describe('class resolvers', () => {
+      it('applies schemaRowClass to each row (string and array forms)', () => {
+        const { target } = mountWithConfig(
+          {
+            label: 'User',
+            fields: [
+              { name: 'email', type: 'text' },
+              { name: 'id', type: 'uuid' },
+            ],
+          },
+          {
+            schemaRowClass: ({ field }) =>
+              field.name === 'email' ? 'text-brand' : ['muted', 'italic'],
+          },
+        );
+        const rows = Array.from(target.querySelectorAll('.flow-schema-row')) as HTMLElement[];
+        expect(rows[0].classList.contains('text-brand')).toBe(true);
+        expect(rows[1].classList.contains('muted')).toBe(true);
+        expect(rows[1].classList.contains('italic')).toBe(true);
+        // The structural class is untouched.
+        expect(rows[0].classList.contains('flow-schema-row')).toBe(true);
+      });
+
+      it('reconciles — a class the resolver stops returning is removed', async () => {
+        const { target, canvas } = mountWithConfig(
+          { label: 'User', fields: [{ name: 'status', type: 'text' }] },
+          {
+            // Class tracks the field's live type value.
+            schemaRowClass: ({ field }) => `type-${field.type}`,
+          },
+        );
+        const row = target.querySelector('.flow-schema-row') as HTMLElement;
+        expect(row.classList.contains('type-text')).toBe(true);
+
+        canvas.node.data.fields[0].type = 'enum';
+        await flush();
+        expect(row.classList.contains('type-enum')).toBe(true);
+        // The stale class from the previous value is gone.
+        expect(row.classList.contains('type-text')).toBe(false);
+      });
+
+      it('never removes the directive\'s own classes or a decorator\'s classes', async () => {
+        const { target, canvas } = mountWithConfig(
+          { label: 'User', fields: [{ name: 'id', type: 'uuid', key: 'primary' }] },
+          {
+            schemaRowClass: ({ field }) => `k-${field.type}`,
+            schemaRowDecorator: ({ row }) => row.classList.add('decorated'),
+          },
+        );
+        const row = target.querySelector('.flow-schema-row') as HTMLElement;
+        expect(row.classList.contains('flow-schema-row--pk')).toBe(true);
+        expect(row.classList.contains('decorated')).toBe(true);
+        expect(row.classList.contains('k-uuid')).toBe(true);
+
+        // Re-render with a new resolved value — structural + decorator classes survive.
+        canvas.node.data.fields[0].type = 'bigint';
+        await flush();
+        expect(row.classList.contains('flow-schema-row--pk')).toBe(true);
+        expect(row.classList.contains('decorated')).toBe(true);
+        expect(row.classList.contains('k-bigint')).toBe(true);
+        expect(row.classList.contains('k-uuid')).toBe(false);
+      });
+
+      it('treats a falsy return as "no classes" and clears prior ones', async () => {
+        const { target, canvas } = mountWithConfig(
+          { label: 'User', fields: [{ name: 'id', type: 'uuid' }] },
+          {
+            schemaRowClass: ({ field }) => (field.type === 'uuid' ? 'is-uuid' : null),
+          },
+        );
+        const row = target.querySelector('.flow-schema-row') as HTMLElement;
+        expect(row.classList.contains('is-uuid')).toBe(true);
+
+        canvas.node.data.fields[0].type = 'text';
+        await flush();
+        expect(row.classList.contains('is-uuid')).toBe(false);
+      });
+
+      it('applies schemaNodeClass to the host and reconciles it', async () => {
+        const { target, canvas } = mountWithConfig(
+          { label: 'User', kind: 'entity', fields: [{ name: 'id', type: 'uuid' }] },
+          { schemaNodeClass: ({ node }) => `kind-${node.data.kind}` },
+        );
+        expect(target.classList.contains('kind-entity')).toBe(true);
+
+        canvas.node.data.kind = 'lookup';
+        await flush();
+        expect(target.classList.contains('kind-lookup')).toBe(true);
+        expect(target.classList.contains('kind-entity')).toBe(false);
+        // Structural class untouched.
+        expect(target.classList.contains('flow-schema-node')).toBe(true);
+      });
+
+      it('contains a throwing resolver and leaves prior classes in place', async () => {
+        const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        let boom = false;
+        const { target, canvas } = mountWithConfig(
+          { label: 'User', fields: [{ name: 'id', type: 'uuid' }] },
+          {
+            schemaRowClass: ({ field }) => {
+              if (boom) throw new Error('boom');
+              return `t-${field.type}`;
+            },
+          },
+        );
+        const row = target.querySelector('.flow-schema-row') as HTMLElement;
+        expect(row.classList.contains('t-uuid')).toBe(true);
+
+        // Next render throws — the row keeps the class it had, render still completes.
+        boom = true;
+        canvas.node.data.label = 'Users';
+        await flush();
+        expect(row.classList.contains('t-uuid')).toBe(true);
+        expect(target.querySelector('.flow-schema-header')?.textContent).toBe('Users');
+        expect(errSpy).toHaveBeenCalled();
+        errSpy.mockRestore();
+      });
+
+      // ── Per-slot map form ──────────────────────────────────────────────────
+      it('a schemaRowClass map targets the row sub-slots (name/type/icon/handles)', () => {
+        const { target } = mountWithConfig(
+          { label: 'User', fields: [{ name: 'email', type: 'text', icon: '✉️' }] },
+          {
+            schemaRowClass: () => ({
+              row: 'r',
+              icon: 'i',
+              name: 'n',
+              type: 't',
+              target: 'tg',
+              source: 'sr',
+              mirrorTarget: 'mt',
+              mirrorSource: 'ms',
+            }),
+          },
+        );
+        const row = target.querySelector('.flow-schema-row') as HTMLElement;
+        expect(row.classList.contains('r')).toBe(true);
+        expect(row.querySelector('.flow-schema-row-icon')?.classList.contains('i')).toBe(true);
+        expect(row.querySelector('.flow-schema-row-name')?.classList.contains('n')).toBe(true);
+        expect(row.querySelector('.flow-schema-row-type')?.classList.contains('t')).toBe(true);
+        expect(
+          row
+            .querySelector('.flow-schema-handle--target:not(.flow-schema-handle--mirror)')
+            ?.classList.contains('tg'),
+        ).toBe(true);
+        expect(
+          row
+            .querySelector('.flow-schema-handle--source:not(.flow-schema-handle--mirror)')
+            ?.classList.contains('sr'),
+        ).toBe(true);
+        expect(
+          row
+            .querySelector('.flow-schema-handle--target.flow-schema-handle--mirror')
+            ?.classList.contains('mt'),
+        ).toBe(true);
+        expect(
+          row
+            .querySelector('.flow-schema-handle--source.flow-schema-handle--mirror')
+            ?.classList.contains('ms'),
+        ).toBe(true);
+      });
+
+      it('reconciles a sub-slot — dropping a slot key clears its class', async () => {
+        const { target, canvas } = mountWithConfig(
+          { label: 'User', fields: [{ name: 'email', type: 'text' }] },
+          {
+            // Class the name slot only while the type is still 'text'.
+            schemaRowClass: ({ field }) =>
+              field.type === 'text' ? { name: 'highlight' } : { row: 'plain' },
+          },
+        );
+        const row = target.querySelector('.flow-schema-row') as HTMLElement;
+        expect(row.querySelector('.flow-schema-row-name')?.classList.contains('highlight')).toBe(true);
+
+        canvas.node.data.fields[0].type = 'json';
+        await flush();
+        // name slot key dropped from the map → its class is removed…
+        expect(row.querySelector('.flow-schema-row-name')?.classList.contains('highlight')).toBe(false);
+        // …and the newly-returned row class is applied.
+        expect(row.classList.contains('plain')).toBe(true);
+      });
+
+      it('clears sub-slot classes when the resolver switches from map to bare form', async () => {
+        const { target, canvas } = mountWithConfig(
+          { label: 'User', fields: [{ name: 'email', type: 'text' }] },
+          {
+            schemaRowClass: ({ node }) =>
+              node.data.label === 'User' ? { name: 'n', type: 't' } : 'bare-row',
+          },
+        );
+        const row = target.querySelector('.flow-schema-row') as HTMLElement;
+        expect(row.querySelector('.flow-schema-row-name')?.classList.contains('n')).toBe(true);
+        expect(row.querySelector('.flow-schema-row-type')?.classList.contains('t')).toBe(true);
+
+        canvas.node.data.label = 'Users';
+        await flush();
+        expect(row.querySelector('.flow-schema-row-name')?.classList.contains('n')).toBe(false);
+        expect(row.querySelector('.flow-schema-row-type')?.classList.contains('t')).toBe(false);
+        expect(row.classList.contains('bare-row')).toBe(true);
+      });
+
+      it('a schemaNodeClass map targets the host, header, and body', async () => {
+        const { target, canvas } = mountWithConfig(
+          { label: 'User', fields: [{ name: 'id', type: 'uuid' }] },
+          { schemaNodeClass: () => ({ node: 'h', header: 'hd', body: 'bd' }) },
+        );
+        expect(target.classList.contains('h')).toBe(true);
+        expect(target.querySelector('.flow-schema-header')?.classList.contains('hd')).toBe(true);
+        expect(target.querySelector('.flow-schema-body')?.classList.contains('bd')).toBe(true);
+
+        // Switch to bare form → header/body classes clear, host keeps the bare class.
+        (canvas._config as any).schemaNodeClass = () => 'just-host';
+        canvas.node.data.label = 'Users';
+        await flush();
+        expect(target.classList.contains('just-host')).toBe(true);
+        expect(target.classList.contains('h')).toBe(false);
+        expect(target.querySelector('.flow-schema-header')?.classList.contains('hd')).toBe(false);
+        expect(target.querySelector('.flow-schema-body')?.classList.contains('bd')).toBe(false);
+      });
+    });
   });
 });

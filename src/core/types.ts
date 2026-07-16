@@ -962,6 +962,98 @@ export type SchemaNodeDecorator = (ctx: SchemaNodeDecoratorContext) => void;
 /** Augments one row and its sub-slots (icon/name/type/handles) of a schema node. */
 export type SchemaRowDecorator = (ctx: SchemaRowDecoratorContext) => void;
 
+// ── Schema class resolvers ──────────────────────────────────────────────────
+// The declarative, styling-only counterpart to the decorators above. Where a
+// decorator gets the DOM to mutate imperatively, a class resolver is a PURE
+// FUNCTION of the field/node data that returns CSS class names — the directive
+// applies them and reconciles: classes the resolver stops returning are removed,
+// and it never touches the directive's own structural classes (`flow-schema-row`,
+// `--pk`/`--fk`/`--required`, `flow-schema-node`) or anything a decorator added.
+// No idempotency burden on the consumer — returning the same value twice is a
+// no-op. Both no-op unless the schema addon is registered.
+
+/**
+ * A class list a resolver returns: a class string (space-separated allowed), an
+ * array of such strings, or a falsy value meaning "no classes for this element".
+ */
+export type SchemaClassValue = string | string[] | null | undefined | false;
+
+/**
+ * Per-slot class map a node resolver may return to target individual node slots
+ * instead of just the host. Each slot reconciles independently. Omit a slot to
+ * leave it alone; return it as falsy to clear the classes previously applied there.
+ */
+export interface SchemaNodeClassMap {
+  /** Classes for the `.flow-schema-node` host (same as returning a bare value). */
+  node?: SchemaClassValue;
+  /** Classes for the `.flow-schema-header`. */
+  header?: SchemaClassValue;
+  /** Classes for the `.flow-schema-body` (the rows container). */
+  body?: SchemaClassValue;
+}
+
+/**
+ * Per-slot class map a row resolver may return to target individual row slots
+ * instead of just the row. Each slot reconciles independently. Omit a slot to
+ * leave it alone; return it as falsy to clear the classes previously applied there.
+ */
+export interface SchemaRowClassMap {
+  /** Classes for the `.flow-schema-row` (same as returning a bare value). */
+  row?: SchemaClassValue;
+  /** Classes for the `.flow-schema-row-icon` (present only when `field.icon` is set). */
+  icon?: SchemaClassValue;
+  /** Classes for the `.flow-schema-row-name`. */
+  name?: SchemaClassValue;
+  /** Classes for the `.flow-schema-row-type`. */
+  type?: SchemaClassValue;
+  /** Classes for the interactive target handle (left edge). */
+  target?: SchemaClassValue;
+  /** Classes for the interactive source handle (right edge). */
+  source?: SchemaClassValue;
+  /** Classes for the hidden mirror target handle (right edge). */
+  mirrorTarget?: SchemaClassValue;
+  /** Classes for the hidden mirror source handle (left edge). */
+  mirrorSource?: SchemaClassValue;
+}
+
+/** Context handed to a {@link SchemaRowClassResolver}. */
+export interface SchemaRowClassContext {
+  /** The field data driving this row. */
+  field: FlowSchemaField;
+  /** The owning node (for cross-field styling decisions). */
+  node: FlowNode<SchemaNodeData>;
+  /** The owning node's id. */
+  nodeId: string;
+  /** True when this row was just created this render (vs. updated in place). */
+  isNew: boolean;
+}
+
+/** Context handed to a {@link SchemaNodeClassResolver}. */
+export interface SchemaNodeClassContext {
+  /** The bound node. */
+  node: FlowNode<SchemaNodeData>;
+  /** True only on the render that first created the header/body scaffold. */
+  isNew: boolean;
+}
+
+/**
+ * Resolves CSS classes for a `.flow-schema-row` from its data. Return a bare class
+ * value to class the row itself, or a {@link SchemaRowClassMap} to target the row
+ * plus any of its sub-slots (icon/name/type/handles) independently.
+ */
+export type SchemaRowClassResolver = (
+  ctx: SchemaRowClassContext,
+) => SchemaClassValue | SchemaRowClassMap;
+
+/**
+ * Resolves CSS classes for a schema node from its data. Return a bare class value
+ * to class the `.flow-schema-node` host, or a {@link SchemaNodeClassMap} to target
+ * the host, header, and body independently.
+ */
+export type SchemaNodeClassResolver = (
+  ctx: SchemaNodeClassContext,
+) => SchemaClassValue | SchemaNodeClassMap;
+
 export interface FlowCanvasConfig {
   nodes?: FlowNode[];
   edges?: FlowEdge[];
@@ -1439,6 +1531,26 @@ export interface FlowCanvasConfig {
    * schema addon is registered.
    */
   schemaRowDecorator?: SchemaRowDecorator;
+
+  /**
+   * Resolve CSS classes to apply to each `.flow-schema-row`, as a pure function of
+   * the field/node data — the declarative, styling-only counterpart to
+   * `schemaRowDecorator`. Return a class string / array to class the row, or a
+   * {@link SchemaRowClassMap} to target the row's sub-slots (icon/name/type/handles)
+   * individually. The directive reconciles them per slot (classes you stop
+   * returning are removed) and never touches its own structural classes.
+   * See {@link SchemaRowClassResolver}. No-op unless the schema addon is registered.
+   */
+  schemaRowClass?: SchemaRowClassResolver;
+
+  /**
+   * Resolve CSS classes to apply to a schema node, as a pure function of the node
+   * data. Return a class string / array to class the `.flow-schema-node` host, or a
+   * {@link SchemaNodeClassMap} to target the host, header, and body individually.
+   * Same reconcile semantics as `schemaRowClass`. See {@link SchemaNodeClassResolver}.
+   * No-op unless the schema addon is registered.
+   */
+  schemaNodeClass?: SchemaNodeClassResolver;
 
   // ── History (Undo/Redo) ─────────────────────────────────────────
   /** Enable undo/redo history tracking. Default: false */

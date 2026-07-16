@@ -127,6 +127,13 @@ export type {
   SchemaNodeDecoratorContext,
   SchemaRowDecoratorContext,
   SchemaRowSlots,
+  SchemaClassValue,
+  SchemaRowClassResolver,
+  SchemaNodeClassResolver,
+  SchemaRowClassContext,
+  SchemaNodeClassContext,
+  SchemaRowClassMap,
+  SchemaNodeClassMap,
 } from './core/types';
 
 export type { MarkerType, MarkerConfig, CustomMarkerRenderer } from './core/markers';
