@@ -9,7 +9,7 @@
 // (the neighbour segments, perpendicular to the run, merely lengthen).
 // ============================================================================
 
-import type { RoutePoint } from './edge-paths/orthogonal';
+import { OBSTACLE_PADDING, type RoutePoint } from './edge-paths/orthogonal';
 import type { Rect } from './types';
 
 export type CrossingReductionConfig = boolean | { channelGap?: number };
@@ -173,6 +173,27 @@ export function offsetRun(waypoints: RoutePoint[], run: Run, offset: number): Ro
     out[run.j].x += offset;
   }
   return out;
+}
+
+/**
+ * WS-3: shift the dominant interior run by `channelOffset`, reverting to the
+ * base route if the shift would collide with an obstacle. No offset → base
+ * route (byte-identical). Shared by the avoidant + orthogonal path builders.
+ * Lives here (not in a router) so both routers import it without an
+ * avoidant↔orthogonal import cycle; only the leaf constant `OBSTACLE_PADDING`
+ * is pulled from `./edge-paths/orthogonal`.
+ */
+export function applyChannelOffset(
+  waypoints: RoutePoint[],
+  channelOffset: number | undefined,
+  obstacles: Rect[] | undefined,
+): RoutePoint[] {
+  if (!channelOffset) return waypoints;
+  const run = dominantRun(waypoints);
+  if (!run) return waypoints;
+  const shifted = offsetRun(waypoints, run, channelOffset);
+  if (obstacles && routeHitsObstacles(shifted, obstacles, OBSTACLE_PADDING)) return waypoints;
+  return shifted;
 }
 
 /** Axis-aligned test: does any segment of `waypoints` pass through a padded rect interior? */
