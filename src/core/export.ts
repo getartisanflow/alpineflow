@@ -27,6 +27,73 @@ function sanitizeSvg(svg: string): string {
 }
 
 /**
+ * SVG paint properties that must survive the capture. Edges (and any other SVG
+ * geometry) are painted from stylesheets, not markup — `.flow-edge-svg path` has
+ * no `stroke` attribute of its own.
+ */
+const SVG_PAINT_PROPS = [
+  'stroke',
+  'stroke-width',
+  'stroke-opacity',
+  'stroke-dasharray',
+  'stroke-dashoffset',
+  'stroke-linecap',
+  'stroke-linejoin',
+  'fill',
+  'fill-opacity',
+  'fill-rule',
+  'opacity',
+  'marker-start',
+  'marker-mid',
+  'marker-end',
+] as const;
+
+/**
+ * Bake each SVG shape's COMPUTED paint into presentation attributes for the
+ * duration of a capture, returning an undo function.
+ *
+ * html-to-image serializes the DOM into an SVG `foreignObject`. It preserves SVG
+ * paint expressed as presentation attributes, but drops paint that comes from a
+ * stylesheet — so CSS-styled geometry silently renders unpainted. AlpineFlow's
+ * edges are exactly that case (their stroke lives in CSS, not on the element), so
+ * without this every edge exports invisible while the nodes come through fine.
+ *
+ * Copying the *computed* value also resolves `var(--flow-edge-stroke)` and friends
+ * to concrete colours, which the serialized document can't resolve on its own.
+ */
+function inlineSvgPaint(container: HTMLElement): () => void {
+  const shapes = container.querySelectorAll<SVGElement>(
+    'svg path, svg line, svg polyline, svg polygon, svg circle, svg ellipse, svg rect, svg text',
+  );
+  const undo: Array<() => void> = [];
+
+  for (const el of shapes) {
+    const computed = getComputedStyle(el);
+    const previous: Array<[string, string | null]> = [];
+
+    for (const prop of SVG_PAINT_PROPS) {
+      const value = computed.getPropertyValue(prop);
+      if (!value) continue;
+      previous.push([prop, el.getAttribute(prop)]);
+      el.setAttribute(prop, value);
+    }
+
+    if (previous.length > 0) {
+      undo.push(() => {
+        for (const [prop, original] of previous) {
+          if (original === null) el.removeAttribute(prop);
+          else el.setAttribute(prop, original);
+        }
+      });
+    }
+  }
+
+  return () => {
+    for (const restore of undo) restore();
+  };
+}
+
+/**
  * Render a sanitized SVG string to a PNG data URL via canvas.
  */
 function svgToPng(svgString: string, width: number, height: number, background: string): Promise<string> {
@@ -105,6 +172,10 @@ export async function captureFlowImage(
   // Track culled nodes to temporarily reveal them
   const revealedNodes: HTMLElement[] = [];
 
+  // Bake CSS-driven SVG paint into attributes so edges survive the capture.
+  // Undone in the `finally` alongside the other DOM restorations.
+  let restoreSvgPaint: (() => void) | null = null;
+
   try {
     if (scope === 'all') {
       // Temporarily reveal all culled nodes
@@ -140,6 +211,10 @@ export async function captureFlowImage(
 
     // Wait one frame for the DOM to settle
     await new Promise(resolve => requestAnimationFrame(resolve));
+
+    // Snapshot SVG paint AFTER layout settles, so computed values reflect the
+    // export transform/zoom rather than the pre-export state.
+    restoreSvgPaint = inlineSvgPaint(container);
 
     // Generate SVG via html-to-image, then sanitize and render manually.
     // We use toSvg + manual canvas instead of toPng because Alpine.js
@@ -190,6 +265,7 @@ export async function captureFlowImage(
     return dataUrl;
   } finally {
     // Restore original state
+    restoreSvgPaint?.();
     viewportEl.style.transform = origTransform;
     viewportEl.style.width = origWidth;
     viewportEl.style.height = origHeight;
