@@ -100,7 +100,6 @@
         "d3-selection": "^3.0.0",
         "d3-timer": "^3.0.1",
         "d3-zoom": "^3.0.0",
-        "html-to-image": "^1.11.11",
         "perfect-freehand": "^1.2.3"
     },
     "peerDependencies": {
@@ -157,6 +156,7 @@
         "d3-force": "^3.0.0",
         "d3-hierarchy": "^3.1.2",
         "elkjs": "^0.11.1",
+        "html-to-image": "^1.11.13",
         "jsdom": "^28.1.0",
         "playwright": "^1.59.1",
         "typescript": "^5.9.3",
