@@ -721,6 +721,8 @@ interface ToImageOptions {
   background?: string;
   /** 'all' fits every node; 'viewport' captures current view. Default: 'all' */
   scope?: 'all' | 'viewport';
+  /** Resolution multiplier — `2` renders a 1920x1080 export at 3840x2160. Default: 1 */
+  scale?: number;
   /** Triggers a browser download with this filename. */
   filename?: string;
   /** Include UI overlays. true = all, object = selective. Default: false */
@@ -778,7 +780,7 @@ All exported types at a glance:
 | `ChildLayout` | Layout | `{ direction, gap, padding, ... }` |
 | `KeyboardShortcuts` | Input | Customizable key bindings map |
 | `FlowCanvasConfig` | Config | Full canvas configuration (see [Configuration](../configuration/index.md)) |
-| `ToImageOptions` | Export | `{ width?, height?, padding?, background?, scope?, filename? }` |
+| `ToImageOptions` | Export | `{ width?, height?, padding?, background?, scope?, scale?, filename? }` |
 | `ToImageOverlays` | Export | `{ toolbar?, minimap?, controls?, panels? }` |
 | `ResizeDirection` | Resize | `'top' \| 'right' \| 'bottom' \| 'left'` + corners |
 | `ResizeConstraints` | Resize | `{ minWidth?, maxWidth?, minHeight?, maxHeight? }` |

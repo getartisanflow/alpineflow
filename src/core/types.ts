@@ -604,6 +604,13 @@ export interface ToImageOptions {
   /** Export scope. 'all' fits every non-hidden node; 'viewport' captures current view. Default: 'all' */
   scope?: 'all' | 'viewport';
 
+  /** Resolution multiplier for the output image — `2` renders a 1920x1080 export at
+   *  3840x2160 for crisp/retina output. The layout is unchanged; only the raster
+   *  resolution increases (the capture is vector, so it re-renders sharp rather than
+   *  upscaling). Values are clamped so the canvas stays within browser limits.
+   *  Default: 1 */
+  scale?: number;
+
   /** When provided, triggers a browser download with this filename. */
   filename?: string;
 
