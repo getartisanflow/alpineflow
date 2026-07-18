@@ -93,21 +93,59 @@ function inlineSvgPaint(container: HTMLElement): () => void {
   };
 }
 
+/** Largest canvas edge browsers reliably allocate. */
+const MAX_CANVAS_DIMENSION = 16384;
+/** Total-pixel budget (~160MB at 4 bytes/px). Exceeding it fails allocation, not just size. */
+const MAX_CANVAS_PIXELS = 40_000_000;
+/** Practical ceiling — beyond this is a mistake, not a request. */
+const MAX_SCALE = 8;
+
+/**
+ * Resolve the requested `scale` into a multiplier the canvas can actually render.
+ *
+ * Bounded three ways: an absolute ceiling, the max canvas edge, and a total-pixel
+ * budget — the last matters most, since an over-large canvas fails on *allocation*
+ * (a 16384-wide canvas is fine until you multiply by the height). Over-range values
+ * are clamped rather than thrown, because the failure mode of an unrenderable canvas
+ * is a silently BLANK png, which is far worse to debug than a slightly smaller image.
+ * Never clamps below 1, so a plain 1x export always works. Non-finite/non-positive
+ * values fall back to 1.
+ */
+function resolveScale(scale: number | undefined, width: number, height: number): number {
+  if (typeof scale !== 'number' || !Number.isFinite(scale) || scale <= 0) return 1;
+  const byDimension = MAX_CANVAS_DIMENSION / Math.max(width, height);
+  const byArea = Math.sqrt(MAX_CANVAS_PIXELS / Math.max(1, width * height));
+  const ceiling = Math.max(1, Math.min(MAX_SCALE, byDimension, byArea));
+  return Math.min(scale, ceiling);
+}
+
 /**
  * Render a sanitized SVG string to a PNG data URL via canvas.
+ *
+ * `scale` multiplies the raster resolution while leaving the logical layout alone:
+ * the canvas is allocated `scale` times larger and the context scaled to match, so
+ * the (vector) SVG re-rasterizes at the higher resolution instead of being upscaled.
  */
-function svgToPng(svgString: string, width: number, height: number, background: string): Promise<string> {
+function svgToPng(
+  svgString: string,
+  width: number,
+  height: number,
+  background: string,
+  scale = 1,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
 
     img.onload = () => {
       const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
       const ctx = canvas.getContext('2d')!;
+      ctx.scale(scale, scale);
       ctx.fillStyle = background;
       ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0);
+      // Draw at the LOGICAL size — the context scale maps it onto the larger canvas.
+      ctx.drawImage(img, 0, 0, width, height);
       resolve(canvas.toDataURL('image/png'));
     };
 
@@ -252,7 +290,8 @@ export async function captureFlowImage(
     // Decode the SVG, sanitize invalid XML, render to PNG
     const prefix = 'data:image/svg+xml;charset=utf-8,';
     const svgString = sanitizeSvg(decodeURIComponent(svgDataUrl.substring(prefix.length)));
-    const dataUrl = await svgToPng(svgString, imageWidth, imageHeight, background);
+    const scale = resolveScale(options.scale, imageWidth, imageHeight);
+    const dataUrl = await svgToPng(svgString, imageWidth, imageHeight, background, scale);
 
     // Auto-download if filename provided
     if (options.filename) {
