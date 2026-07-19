@@ -153,7 +153,13 @@ The `x-flow-action:export` directive exports the canvas as an image file:
 <button x-flow-action:export="{ filename: 'my-diagram.png', scale: 2 }">
   Export HD
 </button>
+
+<button x-flow-action:export="{ filename: 'flow.svg', format: 'svg' }">
+  Export SVG
+</button>
 ```
+
+It accepts the same options as [`toImage`](../api/flow-magic/state-management.md#toimage), including `format` (`'png'`, `'jpeg'`, `'svg'`) and `quality`. Keep the `filename` extension in step with `format` — the option decides the bytes, not the name.
 
 Click "Export PNG" to download the canvas as an image:
 

@@ -60,9 +60,35 @@ Clear all nodes and edges, resetting the viewport to origin `{ x: 0, y: 0, zoom:
 $flow.toImage(options?: ToImageOptions): Promise<string>
 ```
 
-Export the canvas as a data URL image. Requires `html-to-image` as a peer dependency. Supports custom width, height, padding, background, scope (`'all'` or `'viewport'`), overlay inclusion, resolution multiplier via `scale`, and automatic file download via `filename`.
+Export the canvas as a data URL image. Requires `html-to-image` as a peer dependency. Supports custom width, height, padding, background, scope (`'all'` or `'viewport'`), output `format`, overlay inclusion, resolution multiplier via `scale`, and automatic file download via `filename`.
 
-`scale` raises the raster resolution without changing the layout — `scale: 2` renders a 1920x1080 export at 3840x2160. The capture is vector, so it re-renders sharp rather than upscaling. It's clamped to what the browser can actually allocate (an over-large canvas would otherwise produce a silently blank image).
+#### Formats
+
+`format` selects what you get back. The capture is vector either way, so SVG is the intermediate handed straight back rather than extra work.
+
+| Format | Output | Notes |
+|---|---|---|
+| `'png'` (default) | Rasterized, lossless | Honours `scale`. Best for diagrams — flat colour and text compress well. |
+| `'jpeg'` | Rasterized, lossy | Honours `scale` and `quality`. Usually *larger* than PNG for schema-style graphs; prefer it for photo-heavy content. |
+| `'svg'` | Vector | Ignores `scale`. Sharp at any size and resolution-independent. |
+
+```js
+// A 2x PNG of the whole graph
+await $flow.toImage({ scale: 2, filename: 'graph.png' })
+
+// Vector export — no resolution to pick
+await $flow.toImage({ format: 'svg', filename: 'graph.svg' })
+```
+
+`quality` (0-1, default `0.92`) applies to JPEG only and is ignored for other formats. Out-of-range values clamp; invalid ones fall back to the default.
+
+#### Scale
+
+`scale` raises the raster resolution without changing the layout — `scale: 2` renders a 1920x1080 export at 3840x2160. The capture is vector, so it re-renders sharp rather than upscaling. It's clamped to what the browser can actually allocate (an over-large canvas would otherwise produce a silently blank image). It has no effect on `format: 'svg'`, which has no raster resolution to multiply.
+
+#### Background
+
+`background` fills behind the capture. It is a *backdrop*, not an override — where the canvas paints its own background (as the default themes do), that wins, and `background` shows through only in transparent regions. This is consistent across all three formats. It matters most for JPEG, which has no alpha channel: without a fill, transparent areas would encode as solid black.
 
 ### setLoading
 
