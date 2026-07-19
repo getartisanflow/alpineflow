@@ -1,13 +1,14 @@
 // ============================================================================
 // Export Utilities
 //
-// Captures the flow canvas as a PNG image via html-to-image (dynamically
-// imported). Supports full-graph and viewport-only capture modes.
+// Captures the flow canvas as a PNG, JPEG or SVG image via html-to-image
+// (dynamically imported). Supports full-graph and viewport-only capture modes.
 //
-// Uses toSvg() + manual canvas rendering instead of toPng() directly,
+// Uses toSvg() + manual canvas rendering instead of toPng()/toJpeg() directly,
 // because Alpine.js directives (@click, x-data, :class) produce attribute
 // names with @ and : that are invalid XML — breaking the SVG foreignObject
-// when loaded as an <img>.
+// when loaded as an <img>. Capturing vector-first also means the SVG format
+// is just the intermediate handed back before rasterization, not extra work.
 // ============================================================================
 
 import { getNodesBounds, getViewportForBounds } from './geometry';
@@ -119,19 +120,54 @@ function resolveScale(scale: number | undefined, width: number, height: number):
   return Math.min(scale, ceiling);
 }
 
+/** Default JPEG quality. Passed explicitly rather than left to the browser, whose
+ *  own default for a missing argument is unspecified and varies by engine. */
+const DEFAULT_JPEG_QUALITY = 0.92;
+
+/** Clamp to the 0-1 range canvas expects; anything invalid falls back to the default. */
+function resolveQuality(quality: number | undefined): number {
+  if (typeof quality !== 'number' || !Number.isFinite(quality)) return DEFAULT_JPEG_QUALITY;
+  return Math.min(1, Math.max(0, quality));
+}
+
+/** Escape a value for use inside a double-quoted XML attribute. */
+function escapeXmlAttribute(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
 /**
- * Render a sanitized SVG string to a PNG data URL via canvas.
+ * Paint the background into the SVG markup itself.
+ *
+ * The raster path fills the canvas before drawing, but an SVG file has no canvas —
+ * html-to-image emits no background of its own, so without this the export is
+ * transparent, which most viewers and editors render against black or a checkerboard.
+ * Inserting the rect immediately after the opening tag puts it behind all content.
+ */
+function withSvgBackground(svgString: string, background: string): string {
+  const openTagEnd = svgString.indexOf('>');
+  if (openTagEnd === -1) return svgString;
+  const rect = `<rect width="100%" height="100%" fill="${escapeXmlAttribute(background)}"/>`;
+  return svgString.slice(0, openTagEnd + 1) + rect + svgString.slice(openTagEnd + 1);
+}
+
+/**
+ * Render a sanitized SVG string to a raster data URL via canvas.
  *
  * `scale` multiplies the raster resolution while leaving the logical layout alone:
  * the canvas is allocated `scale` times larger and the context scaled to match, so
  * the (vector) SVG re-rasterizes at the higher resolution instead of being upscaled.
+ *
+ * The background fill is not optional for JPEG: it has no alpha channel, so an
+ * unpainted canvas would encode as solid black rather than staying transparent.
  */
-function svgToPng(
+function svgToRaster(
   svgString: string,
   width: number,
   height: number,
   background: string,
   scale = 1,
+  format: 'png' | 'jpeg' = 'png',
+  quality?: number,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -146,7 +182,11 @@ function svgToPng(
       ctx.fillRect(0, 0, width, height);
       // Draw at the LOGICAL size — the context scale maps it onto the larger canvas.
       ctx.drawImage(img, 0, 0, width, height);
-      resolve(canvas.toDataURL('image/png'));
+      resolve(
+        format === 'jpeg'
+          ? canvas.toDataURL('image/jpeg', resolveQuality(quality))
+          : canvas.toDataURL('image/png'),
+      );
     };
 
     img.onerror = () => {
@@ -287,11 +327,23 @@ export async function captureFlowImage(
       },
     });
 
-    // Decode the SVG, sanitize invalid XML, render to PNG
+    // Decode the SVG and sanitize invalid XML, then either hand back the vector
+    // capture as-is or rasterize it.
     const prefix = 'data:image/svg+xml;charset=utf-8,';
     const svgString = sanitizeSvg(decodeURIComponent(svgDataUrl.substring(prefix.length)));
-    const scale = resolveScale(options.scale, imageWidth, imageHeight);
-    const dataUrl = await svgToPng(svgString, imageWidth, imageHeight, background, scale);
+    const format = options.format ?? 'png';
+
+    let dataUrl: string;
+    if (format === 'svg') {
+      // No canvas involved, so `scale` has nothing to multiply and the size clamps
+      // don't apply — a vector export is resolution-independent by definition.
+      dataUrl = prefix + encodeURIComponent(withSvgBackground(svgString, background));
+    } else {
+      const scale = resolveScale(options.scale, imageWidth, imageHeight);
+      dataUrl = await svgToRaster(
+        svgString, imageWidth, imageHeight, background, scale, format, options.quality,
+      );
+    }
 
     // Auto-download if filename provided
     if (options.filename) {

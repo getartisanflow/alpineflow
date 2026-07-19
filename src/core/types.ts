@@ -611,6 +611,16 @@ export interface ToImageOptions {
    *  Default: 1 */
   scale?: number;
 
+  /** Output format. `'svg'` returns the vector capture itself rather than rasterising
+   *  it — sharp at any size and usually far smaller for schema-style graphs, but it
+   *  ignores `scale` (there is no raster resolution to multiply). `'jpeg'` is lossy;
+   *  prefer it only when file size matters more than crisp text edges.
+   *  Default: 'png' */
+  format?: 'png' | 'jpeg' | 'svg';
+
+  /** JPEG quality, 0-1. Ignored for other formats. Default: 0.92 */
+  quality?: number;
+
   /** When provided, triggers a browser download with this filename. */
   filename?: string;
 
