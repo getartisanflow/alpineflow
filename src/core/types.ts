@@ -612,9 +612,12 @@ export interface ToImageOptions {
   scale?: number;
 
   /** Output format. `'svg'` returns the vector capture itself rather than rasterising
-   *  it — sharp at any size and usually far smaller for schema-style graphs, but it
-   *  ignores `scale` (there is no raster resolution to multiply). `'jpeg'` is lossy;
-   *  prefer it only when file size matters more than crisp text edges.
+   *  it — sharp at any size, and it ignores `scale` (there is no raster resolution to
+   *  multiply). Note that SVG files are typically MUCH larger than the raster formats,
+   *  not smaller — a shortcoming of html-to-image, which inlines every element's entire
+   *  computed style rather than sharing one stylesheet, so output grows with element
+   *  count. `'jpeg'` is lossy; prefer it only when file size matters more than crisp
+   *  text edges.
    *  Default: 'png' */
   format?: 'png' | 'jpeg' | 'svg';
 
