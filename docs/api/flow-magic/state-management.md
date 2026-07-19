@@ -60,7 +60,7 @@ Clear all nodes and edges, resetting the viewport to origin `{ x: 0, y: 0, zoom:
 $flow.toImage(options?: ToImageOptions): Promise<string>
 ```
 
-Export the canvas as a data URL image. Requires `html-to-image` as a peer dependency. Supports custom width, height, padding, background, scope (`'all'` or `'viewport'`), overlay inclusion, resolution multiplier via `scale`, and automatic file download via `filename`.
+Export the canvas as a data URL image. `html-to-image` ships as a dependency of AlpineFlow, so this works out of the box. Supports custom width, height, padding, background, scope (`'all'` or `'viewport'`), overlay inclusion, resolution multiplier via `scale`, and automatic file download via `filename`.
 
 `scale` raises the raster resolution without changing the layout — `scale: 2` renders a 1920x1080 export at 3840x2160. The capture is vector, so it re-renders sharp rather than upscaling. It's clamped to what the browser can actually allocate (an over-large canvas would otherwise produce a silently blank image).
 
