@@ -69,8 +69,25 @@ Export the canvas as a data URL image. Requires `html-to-image` as a peer depend
 | Format | Output | Notes |
 |---|---|---|
 | `'png'` (default) | Rasterized, lossless | Honours `scale`. Best for diagrams — flat colour and text compress well. |
-| `'jpeg'` | Rasterized, lossy | Honours `scale` and `quality`. Usually *larger* than PNG for schema-style graphs; prefer it for photo-heavy content. |
-| `'svg'` | Vector | Ignores `scale`. Sharp at any size and resolution-independent. |
+| `'jpeg'` | Rasterized, lossy | Honours `scale` and `quality`. Smaller than PNG, but lossy compression fringes text edges. |
+| `'svg'` | Vector | Ignores `scale`. Sharp at any size — but see the file-size warning below. |
+
+> **Warning: SVG files are much larger than you'd expect.** Vector output is *not* the
+> small option here. A real 44-node schema graph measured **0.32 MB as PNG and 49.5 MB
+> as SVG**.
+>
+> This is a shortcoming of `html-to-image`, the library that performs the capture — not
+> of SVG itself, which is a compact format, nor of anything AlpineFlow controls. Rather
+> than emitting the stylesheet once and letting elements share it, html-to-image inlines
+> each element's **entire computed style** into its own `style` attribute. Every node
+> row, badge and handle ends up carrying a full style declaration, most of it identical
+> to its neighbours' and most of it irrelevant. In the capture above, 4,908 `style`
+> attributes averaging ~10 KB each accounted for about **98% of the file**. Size
+> therefore tracks element count, not visual complexity.
+>
+> SVG is still the right choice when you need to edit the result as vectors (Figma,
+> Illustrator, Inkscape) or scale it arbitrarily. Just don't reach for it to save space,
+> and think twice before offering it as a one-click download on large canvases.
 
 ```js
 // A 2x PNG of the whole graph
