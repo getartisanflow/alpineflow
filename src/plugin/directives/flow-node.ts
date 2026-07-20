@@ -390,8 +390,13 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
           prevShapeClass = newShape;
         }
 
-        // Apply inline clip-path for custom (non-built-in) shapes
-        const canvasData = Alpine.$data(el.closest('[data-flow-canvas]') as HTMLElement);
+        // Apply inline clip-path for custom (non-built-in) shapes.
+        // Guard the canvas lookup: if this effect fires one last time after the
+        // node is detached (a teardown race), `closest` returns null and
+        // `Alpine.$data(null)` throws `_x_dataStack` of null asynchronously —
+        // an unhandled error. A detached node simply has no custom shape to apply.
+        const canvasEl = el.closest('[data-flow-canvas]');
+        const canvasData = canvasEl ? Alpine.$data(canvasEl as HTMLElement) : null;
         const customShapeDef = node.shape && canvasData?._shapeRegistry?.[node.shape];
         if (customShapeDef?.clipPath) {
           el.style.clipPath = customShapeDef.clipPath;

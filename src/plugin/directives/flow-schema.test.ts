@@ -21,6 +21,26 @@ describe('x-flow-schema directive', () => {
     registerFlowSchemaDirective(Alpine);
   });
 
+  // Every Alpine tree these tests mount, so it can be torn down afterward.
+  const mountedTrees: HTMLElement[] = [];
+
+  afterEach(() => {
+    // Destroy the Alpine trees each test mounted. clearChildren() alone strips the
+    // DOM but leaves Alpine's reactive effects registered; a later test can then
+    // flush a stale effect that reads a null `_x_dataStack` off a detached node —
+    // an intermittent, cross-test failure. destroyTree tears the reactivity down
+    // too, keeping the shared suite deterministic.
+    for (const tree of mountedTrees.splice(0)) {
+      try {
+        Alpine.destroyTree(tree);
+      } catch {
+        /* already destroyed by the test itself */
+      }
+    }
+    delete (window as { __decoratorScope?: unknown }).__decoratorScope;
+    clearChildren(document.body);
+  });
+
   /**
    * Mount a minimal scope that exposes `node` with data.label and data.fields.
    * Doesn't require the full flowCanvas scope — the directive only reads
@@ -37,6 +57,7 @@ describe('x-flow-schema directive', () => {
     host.appendChild(target);
     document.body.appendChild(host);
     Alpine.initTree(host);
+    mountedTrees.push(host);
     return target;
   }
 
@@ -534,6 +555,7 @@ describe('x-flow-schema directive', () => {
       container.appendChild(target);
       document.body.appendChild(container);
       Alpine.initTree(container);
+      mountedTrees.push(container);
       return { target, canvas: (Alpine as any).$data(container) };
     }
 
@@ -958,6 +980,7 @@ describe('x-flow-schema directive', () => {
       container.appendChild(target);
       document.body.appendChild(container);
       Alpine.initTree(container);
+      mountedTrees.push(container);
       return { target, canvas: (Alpine as any).$data(container) };
     }
     const flush = () => new Promise((r) => setTimeout(r, 20));
