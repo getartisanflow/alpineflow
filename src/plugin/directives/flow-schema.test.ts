@@ -4,6 +4,7 @@ import Alpine from 'alpinejs';
 import { registerFlowSchemaDirective } from './flow-schema';
 import { registerFlowHandleDirective } from './flow-handle';
 import { registerFlowNodeDirective } from './flow-node';
+import type { FlowCanvasConfig } from '../../core/types';
 
 /**
  * Clear a DOM node without using innerHTML (XSS-safe pattern).
@@ -18,6 +19,26 @@ describe('x-flow-schema directive', () => {
     // both directives are always registered together.
     registerFlowHandleDirective(Alpine);
     registerFlowSchemaDirective(Alpine);
+  });
+
+  // Every Alpine tree these tests mount, so it can be torn down afterward.
+  const mountedTrees: HTMLElement[] = [];
+
+  afterEach(() => {
+    // Destroy the Alpine trees each test mounted. clearChildren() alone strips the
+    // DOM but leaves Alpine's reactive effects registered; a later test can then
+    // flush a stale effect that reads a null `_x_dataStack` off a detached node —
+    // an intermittent, cross-test failure. destroyTree tears the reactivity down
+    // too, keeping the shared suite deterministic.
+    for (const tree of mountedTrees.splice(0)) {
+      try {
+        Alpine.destroyTree(tree);
+      } catch {
+        /* already destroyed by the test itself */
+      }
+    }
+    delete (window as { __decoratorScope?: unknown }).__decoratorScope;
+    clearChildren(document.body);
   });
 
   /**
@@ -36,6 +57,7 @@ describe('x-flow-schema directive', () => {
     host.appendChild(target);
     document.body.appendChild(host);
     Alpine.initTree(host);
+    mountedTrees.push(host);
     return target;
   }
 
@@ -533,6 +555,7 @@ describe('x-flow-schema directive', () => {
       container.appendChild(target);
       document.body.appendChild(container);
       Alpine.initTree(container);
+      mountedTrees.push(container);
       return { target, canvas: (Alpine as any).$data(container) };
     }
 
@@ -923,6 +946,448 @@ describe('x-flow-schema directive', () => {
       expect(countsB.count()).toBe(0);
       countsA.disconnect();
       countsB.disconnect();
+    });
+  });
+
+  // ── Render decorators ──────────────────────────────────────────────────────
+  // `schemaRowDecorator` / `schemaNodeDecorator` hand the directive-built slot
+  // elements back to the consumer to augment, without forking the directive.
+  describe('render decorators', () => {
+    /**
+     * Mount a schema node under a `.flow-container` whose canvas scope carries
+     * a real `_config` (functions and all) via a window factory — a JSON x-data
+     * string can't carry function values, and the directive resolves decorators
+     * off `canvas._config` the same way it resolves `rowsReorderable`.
+     */
+    function mountWithConfig(
+      data: { label: string; fields: Array<Record<string, unknown>>; kind?: string },
+      config: Partial<FlowCanvasConfig>,
+    ) {
+      clearChildren(document.body);
+      const container = document.createElement('div');
+      container.classList.add('flow-container');
+      (window as any).__decoratorScope = () => ({
+        _schemaMetrics: null,
+        viewport: { zoom: 1 },
+        _config: config,
+        node: { id: 't', data },
+      });
+      container.setAttribute('x-data', '__decoratorScope()');
+      const target = document.createElement('div');
+      target.setAttribute('x-flow-schema', '');
+      target.className = 'flow-node';
+      target.setAttribute('data-flow-node-id', 't');
+      container.appendChild(target);
+      document.body.appendChild(container);
+      Alpine.initTree(container);
+      mountedTrees.push(container);
+      return { target, canvas: (Alpine as any).$data(container) };
+    }
+    const flush = () => new Promise((r) => setTimeout(r, 20));
+
+    it('calls schemaRowDecorator once per field with row, field, nodeId, and slots', () => {
+      const calls: any[] = [];
+      mountWithConfig(
+        {
+          label: 'User',
+          fields: [
+            { name: 'id', type: 'uuid', icon: '🔑' },
+            { name: 'email', type: 'text' },
+          ],
+        },
+        { schemaRowDecorator: (ctx) => calls.push(ctx) },
+      );
+      expect(calls.map((c) => c.field.name)).toEqual(['id', 'email']);
+      expect(calls.every((c) => c.isNew === true)).toBe(true);
+      expect(calls.every((c) => c.nodeId === 't')).toBe(true);
+
+      const first = calls[0];
+      expect(first.row.classList.contains('flow-schema-row')).toBe(true);
+      expect(first.slots.name.textContent).toBe('id');
+      expect(first.slots.type.textContent).toBe('uuid');
+      expect(first.slots.icon?.textContent).toBe('🔑');
+      // The real + mirror handles are exposed on the correct sides.
+      expect(first.slots.target.getAttribute('data-flow-handle-position')).toBe('left');
+      expect(first.slots.source.getAttribute('data-flow-handle-position')).toBe('right');
+      expect(first.slots.mirrorTarget.getAttribute('data-flow-handle-position')).toBe('right');
+      expect(first.slots.mirrorSource.getAttribute('data-flow-handle-position')).toBe('left');
+      // icon slot is null for a field without an icon.
+      expect(calls[1].slots.icon).toBeNull();
+    });
+
+    it('lets a row decorator render field metadata the base row omits (description)', () => {
+      const { target } = mountWithConfig(
+        { label: 'User', fields: [{ name: 'id', type: 'uuid', description: 'primary key' }] },
+        {
+          schemaRowDecorator: ({ row, field, slots }) => {
+            if (!field.description) return;
+            let d = row.querySelector<HTMLElement>('.desc');
+            if (!d) {
+              d = document.createElement('span');
+              d.className = 'desc';
+              slots.type.after(d);
+            }
+            d.textContent = field.description;
+          },
+        },
+      );
+      expect(target.querySelector('.flow-schema-row .desc')?.textContent).toBe('primary key');
+    });
+
+    it('re-invokes the row decorator on re-render with isNew=false and a guarded add does not duplicate', async () => {
+      const isNewSeen: boolean[] = [];
+      const { target, canvas } = mountWithConfig(
+        { label: 'User', fields: [{ name: 'id', type: 'uuid', description: 'pk' }] },
+        {
+          schemaRowDecorator: ({ row, field, slots, isNew }) => {
+            isNewSeen.push(isNew);
+            let d = row.querySelector<HTMLElement>('.desc');
+            if (!d) {
+              d = document.createElement('span');
+              d.className = 'desc';
+              slots.type.after(d);
+            }
+            d.textContent = field.description ?? '';
+          },
+        },
+      );
+      expect(isNewSeen).toEqual([true]);
+
+      // A label change re-renders; the row survives (updateRow path), so the
+      // decorator runs again with isNew=false.
+      canvas.node.data.label = 'Users';
+      await flush();
+      expect(isNewSeen).toEqual([true, false]);
+      // The querySelector guard means the surviving `.desc` is reused, not doubled.
+      expect(target.querySelectorAll('.flow-schema-row .desc').length).toBe(1);
+    });
+
+    it('re-runs the row decorator when a metadata field mutates reactively', async () => {
+      const { target, canvas } = mountWithConfig(
+        { label: 'User', fields: [{ name: 'id', type: 'uuid', description: 'old' }] },
+        {
+          schemaRowDecorator: ({ row, field, slots }) => {
+            let d = row.querySelector<HTMLElement>('.desc');
+            if (!d) {
+              d = document.createElement('span');
+              d.className = 'desc';
+              slots.type.after(d);
+            }
+            d.textContent = (field.description as string) ?? '';
+          },
+        },
+      );
+      expect(target.querySelector('.desc')?.textContent).toBe('old');
+
+      canvas.node.data.fields[0].description = 'new';
+      await flush();
+      expect(target.querySelector('.desc')?.textContent).toBe('new');
+    });
+
+    it('calls schemaNodeDecorator with host/header/body and isNew true only on the first render', async () => {
+      const calls: any[] = [];
+      const { target, canvas } = mountWithConfig(
+        { label: 'User', fields: [{ name: 'id', type: 'uuid' }] },
+        {
+          schemaNodeDecorator: (ctx) =>
+            calls.push({
+              isNew: ctx.isNew,
+              host: ctx.host,
+              headerIsHeader: ctx.header.classList.contains('flow-schema-header'),
+              bodyIsBody: ctx.body.classList.contains('flow-schema-body'),
+              label: ctx.node.data.label,
+            }),
+        },
+      );
+      expect(calls.length).toBe(1);
+      expect(calls[0].isNew).toBe(true);
+      expect(calls[0].host).toBe(target);
+      expect(calls[0].headerIsHeader).toBe(true);
+      expect(calls[0].bodyIsBody).toBe(true);
+
+      canvas.node.data.label = 'Users';
+      await flush();
+      expect(calls.length).toBe(2);
+      expect(calls[1].isNew).toBe(false);
+      expect(calls[1].label).toBe('Users');
+    });
+
+    it('re-applies header decoration that the directive\'s own textContent write clobbers', async () => {
+      // The directive owns `header.textContent`; a badge child a decorator adds is
+      // wiped when the directive rewrites the header on the next render. Because the
+      // node decorator runs AFTER that write, every render, it restores the badge.
+      const { target, canvas } = mountWithConfig(
+        { label: 'User', fields: [{ name: 'id', type: 'uuid' }] },
+        {
+          schemaNodeDecorator: ({ header, node }) => {
+            let badge = header.querySelector<HTMLElement>('.badge');
+            if (!badge) {
+              badge = document.createElement('span');
+              badge.className = 'badge';
+              header.appendChild(badge);
+            }
+            badge.textContent = String(node.data.fields.length);
+          },
+        },
+      );
+      expect(target.querySelector('.flow-schema-header .badge')?.textContent).toBe('1');
+
+      canvas.node.data.fields.push({ name: 'email', type: 'text' });
+      await flush();
+      expect(target.querySelector('.flow-schema-header .badge')?.textContent).toBe('2');
+    });
+
+    it('contains a throwing decorator — the render still completes and the error is logged', () => {
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const { target } = mountWithConfig(
+        {
+          label: 'User',
+          fields: [{ name: 'id', type: 'uuid' }, { name: 'email', type: 'text' }],
+        },
+        {
+          schemaRowDecorator: () => {
+            throw new Error('boom');
+          },
+        },
+      );
+      // Both rows still rendered despite the decorator throwing on each.
+      expect(target.querySelectorAll('.flow-schema-row').length).toBe(2);
+      expect(errSpy).toHaveBeenCalled();
+      errSpy.mockRestore();
+    });
+
+    it('renders normally when no decorators are configured', () => {
+      const { target } = mountWithConfig(
+        { label: 'User', fields: [{ name: 'id', type: 'uuid' }] },
+        {},
+      );
+      expect(target.querySelectorAll('.flow-schema-row').length).toBe(1);
+      expect(target.querySelector('.flow-schema-header')?.textContent).toBe('User');
+    });
+
+    // ── Declarative class resolvers ─────────────────────────────────────────
+    // schemaRowClass / schemaNodeClass return class names as a pure function of
+    // the data; the directive applies + reconciles them (adds new, removes ones
+    // the resolver stops returning) without touching its own structural classes.
+    describe('class resolvers', () => {
+      it('applies schemaRowClass to each row (string and array forms)', () => {
+        const { target } = mountWithConfig(
+          {
+            label: 'User',
+            fields: [
+              { name: 'email', type: 'text' },
+              { name: 'id', type: 'uuid' },
+            ],
+          },
+          {
+            schemaRowClass: ({ field }) =>
+              field.name === 'email' ? 'text-brand' : ['muted', 'italic'],
+          },
+        );
+        const rows = Array.from(target.querySelectorAll('.flow-schema-row')) as HTMLElement[];
+        expect(rows[0].classList.contains('text-brand')).toBe(true);
+        expect(rows[1].classList.contains('muted')).toBe(true);
+        expect(rows[1].classList.contains('italic')).toBe(true);
+        // The structural class is untouched.
+        expect(rows[0].classList.contains('flow-schema-row')).toBe(true);
+      });
+
+      it('reconciles — a class the resolver stops returning is removed', async () => {
+        const { target, canvas } = mountWithConfig(
+          { label: 'User', fields: [{ name: 'status', type: 'text' }] },
+          {
+            // Class tracks the field's live type value.
+            schemaRowClass: ({ field }) => `type-${field.type}`,
+          },
+        );
+        const row = target.querySelector('.flow-schema-row') as HTMLElement;
+        expect(row.classList.contains('type-text')).toBe(true);
+
+        canvas.node.data.fields[0].type = 'enum';
+        await flush();
+        expect(row.classList.contains('type-enum')).toBe(true);
+        // The stale class from the previous value is gone.
+        expect(row.classList.contains('type-text')).toBe(false);
+      });
+
+      it('never removes the directive\'s own classes or a decorator\'s classes', async () => {
+        const { target, canvas } = mountWithConfig(
+          { label: 'User', fields: [{ name: 'id', type: 'uuid', key: 'primary' }] },
+          {
+            schemaRowClass: ({ field }) => `k-${field.type}`,
+            schemaRowDecorator: ({ row }) => row.classList.add('decorated'),
+          },
+        );
+        const row = target.querySelector('.flow-schema-row') as HTMLElement;
+        expect(row.classList.contains('flow-schema-row--pk')).toBe(true);
+        expect(row.classList.contains('decorated')).toBe(true);
+        expect(row.classList.contains('k-uuid')).toBe(true);
+
+        // Re-render with a new resolved value — structural + decorator classes survive.
+        canvas.node.data.fields[0].type = 'bigint';
+        await flush();
+        expect(row.classList.contains('flow-schema-row--pk')).toBe(true);
+        expect(row.classList.contains('decorated')).toBe(true);
+        expect(row.classList.contains('k-bigint')).toBe(true);
+        expect(row.classList.contains('k-uuid')).toBe(false);
+      });
+
+      it('treats a falsy return as "no classes" and clears prior ones', async () => {
+        const { target, canvas } = mountWithConfig(
+          { label: 'User', fields: [{ name: 'id', type: 'uuid' }] },
+          {
+            schemaRowClass: ({ field }) => (field.type === 'uuid' ? 'is-uuid' : null),
+          },
+        );
+        const row = target.querySelector('.flow-schema-row') as HTMLElement;
+        expect(row.classList.contains('is-uuid')).toBe(true);
+
+        canvas.node.data.fields[0].type = 'text';
+        await flush();
+        expect(row.classList.contains('is-uuid')).toBe(false);
+      });
+
+      it('applies schemaNodeClass to the host and reconciles it', async () => {
+        const { target, canvas } = mountWithConfig(
+          { label: 'User', kind: 'entity', fields: [{ name: 'id', type: 'uuid' }] },
+          { schemaNodeClass: ({ node }) => `kind-${node.data.kind}` },
+        );
+        expect(target.classList.contains('kind-entity')).toBe(true);
+
+        canvas.node.data.kind = 'lookup';
+        await flush();
+        expect(target.classList.contains('kind-lookup')).toBe(true);
+        expect(target.classList.contains('kind-entity')).toBe(false);
+        // Structural class untouched.
+        expect(target.classList.contains('flow-schema-node')).toBe(true);
+      });
+
+      it('contains a throwing resolver and leaves prior classes in place', async () => {
+        const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        let boom = false;
+        const { target, canvas } = mountWithConfig(
+          { label: 'User', fields: [{ name: 'id', type: 'uuid' }] },
+          {
+            schemaRowClass: ({ field }) => {
+              if (boom) throw new Error('boom');
+              return `t-${field.type}`;
+            },
+          },
+        );
+        const row = target.querySelector('.flow-schema-row') as HTMLElement;
+        expect(row.classList.contains('t-uuid')).toBe(true);
+
+        // Next render throws — the row keeps the class it had, render still completes.
+        boom = true;
+        canvas.node.data.label = 'Users';
+        await flush();
+        expect(row.classList.contains('t-uuid')).toBe(true);
+        expect(target.querySelector('.flow-schema-header')?.textContent).toBe('Users');
+        expect(errSpy).toHaveBeenCalled();
+        errSpy.mockRestore();
+      });
+
+      // ── Per-slot map form ──────────────────────────────────────────────────
+      it('a schemaRowClass map targets the row sub-slots (name/type/icon/handles)', () => {
+        const { target } = mountWithConfig(
+          { label: 'User', fields: [{ name: 'email', type: 'text', icon: '✉️' }] },
+          {
+            schemaRowClass: () => ({
+              row: 'r',
+              icon: 'i',
+              name: 'n',
+              type: 't',
+              target: 'tg',
+              source: 'sr',
+              mirrorTarget: 'mt',
+              mirrorSource: 'ms',
+            }),
+          },
+        );
+        const row = target.querySelector('.flow-schema-row') as HTMLElement;
+        expect(row.classList.contains('r')).toBe(true);
+        expect(row.querySelector('.flow-schema-row-icon')?.classList.contains('i')).toBe(true);
+        expect(row.querySelector('.flow-schema-row-name')?.classList.contains('n')).toBe(true);
+        expect(row.querySelector('.flow-schema-row-type')?.classList.contains('t')).toBe(true);
+        expect(
+          row
+            .querySelector('.flow-schema-handle--target:not(.flow-schema-handle--mirror)')
+            ?.classList.contains('tg'),
+        ).toBe(true);
+        expect(
+          row
+            .querySelector('.flow-schema-handle--source:not(.flow-schema-handle--mirror)')
+            ?.classList.contains('sr'),
+        ).toBe(true);
+        expect(
+          row
+            .querySelector('.flow-schema-handle--target.flow-schema-handle--mirror')
+            ?.classList.contains('mt'),
+        ).toBe(true);
+        expect(
+          row
+            .querySelector('.flow-schema-handle--source.flow-schema-handle--mirror')
+            ?.classList.contains('ms'),
+        ).toBe(true);
+      });
+
+      it('reconciles a sub-slot — dropping a slot key clears its class', async () => {
+        const { target, canvas } = mountWithConfig(
+          { label: 'User', fields: [{ name: 'email', type: 'text' }] },
+          {
+            // Class the name slot only while the type is still 'text'.
+            schemaRowClass: ({ field }) =>
+              field.type === 'text' ? { name: 'highlight' } : { row: 'plain' },
+          },
+        );
+        const row = target.querySelector('.flow-schema-row') as HTMLElement;
+        expect(row.querySelector('.flow-schema-row-name')?.classList.contains('highlight')).toBe(true);
+
+        canvas.node.data.fields[0].type = 'json';
+        await flush();
+        // name slot key dropped from the map → its class is removed…
+        expect(row.querySelector('.flow-schema-row-name')?.classList.contains('highlight')).toBe(false);
+        // …and the newly-returned row class is applied.
+        expect(row.classList.contains('plain')).toBe(true);
+      });
+
+      it('clears sub-slot classes when the resolver switches from map to bare form', async () => {
+        const { target, canvas } = mountWithConfig(
+          { label: 'User', fields: [{ name: 'email', type: 'text' }] },
+          {
+            schemaRowClass: ({ node }) =>
+              node.data.label === 'User' ? { name: 'n', type: 't' } : 'bare-row',
+          },
+        );
+        const row = target.querySelector('.flow-schema-row') as HTMLElement;
+        expect(row.querySelector('.flow-schema-row-name')?.classList.contains('n')).toBe(true);
+        expect(row.querySelector('.flow-schema-row-type')?.classList.contains('t')).toBe(true);
+
+        canvas.node.data.label = 'Users';
+        await flush();
+        expect(row.querySelector('.flow-schema-row-name')?.classList.contains('n')).toBe(false);
+        expect(row.querySelector('.flow-schema-row-type')?.classList.contains('t')).toBe(false);
+        expect(row.classList.contains('bare-row')).toBe(true);
+      });
+
+      it('a schemaNodeClass map targets the host, header, and body', async () => {
+        const { target, canvas } = mountWithConfig(
+          { label: 'User', fields: [{ name: 'id', type: 'uuid' }] },
+          { schemaNodeClass: () => ({ node: 'h', header: 'hd', body: 'bd' }) },
+        );
+        expect(target.classList.contains('h')).toBe(true);
+        expect(target.querySelector('.flow-schema-header')?.classList.contains('hd')).toBe(true);
+        expect(target.querySelector('.flow-schema-body')?.classList.contains('bd')).toBe(true);
+
+        // Switch to bare form → header/body classes clear, host keeps the bare class.
+        (canvas._config as any).schemaNodeClass = () => 'just-host';
+        canvas.node.data.label = 'Users';
+        await flush();
+        expect(target.classList.contains('just-host')).toBe(true);
+        expect(target.classList.contains('h')).toBe(false);
+        expect(target.querySelector('.flow-schema-header')?.classList.contains('hd')).toBe(false);
+        expect(target.querySelector('.flow-schema-body')?.classList.contains('bd')).toBe(false);
+      });
     });
   });
 });

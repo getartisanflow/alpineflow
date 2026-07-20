@@ -12,7 +12,20 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
-import type { FlowSchemaField, SchemaMetrics } from '../../core/types';
+import type {
+  FlowNode,
+  FlowSchemaField,
+  SchemaClassValue,
+  SchemaMetrics,
+  SchemaNodeClassMap,
+  SchemaNodeClassResolver,
+  SchemaNodeData,
+  SchemaNodeDecorator,
+  SchemaRowClassMap,
+  SchemaRowClassResolver,
+  SchemaRowDecorator,
+  SchemaRowSlots,
+} from '../../core/types';
 
 type SchemaData = { label?: string; fields?: FlowSchemaField[]; [k: string]: unknown };
 type NodeRef = { data?: SchemaData } | undefined | null;
@@ -24,6 +37,48 @@ type NodeRef = { data?: SchemaData } | undefined | null;
 function clearChildren(el: HTMLElement): void {
   while (el.firstChild) el.removeChild(el.firstChild);
 }
+
+/**
+ * Apply a consumer-resolved class list to `el`, reconciling against the classes
+ * the SAME resolver applied last render (tracked in `el.dataset[datasetKey]`).
+ * Removes classes it previously added but no longer returns, adds the current
+ * ones, and never touches classes it didn't add — so the directive's own
+ * structural classes and anything a decorator added are left intact. `value` may
+ * be a string (space-separated allowed), a string[] (each entry likewise), or a
+ * falsy value meaning "no classes". Idempotent: same value in ⇒ same DOM out.
+ */
+function applyManagedClasses(el: HTMLElement, datasetKey: string, value: SchemaClassValue): void {
+  const next = (Array.isArray(value) ? value : value ? [value] : [])
+    .flatMap((c) => c.split(/\s+/))
+    .filter(Boolean);
+  const nextSet = new Set(next);
+  const prev = el.dataset[datasetKey] ? el.dataset[datasetKey]!.split(' ') : [];
+  for (const c of prev) if (!nextSet.has(c)) el.classList.remove(c);
+  for (const c of nextSet) el.classList.add(c);
+  if (nextSet.size) el.dataset[datasetKey] = [...nextSet].join(' ');
+  else delete el.dataset[datasetKey];
+}
+
+/**
+ * A class resolver may return a bare class value (string/array/falsy) OR a per-slot
+ * map object. A map is any non-null object that isn't an array or a string — those
+ * are bare class values. Used to route the return to the right slot(s).
+ */
+function isClassMap(v: unknown): v is Record<string, SchemaClassValue> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+// Row sub-slot map keys → the selector that finds that element within a row. The
+// row's own classes use the `row` key (the row element itself), handled separately.
+const ROW_SUBSLOTS: ReadonlyArray<[keyof SchemaRowClassMap, string]> = [
+  ['icon', '.flow-schema-row-icon'],
+  ['name', '.flow-schema-row-name'],
+  ['type', '.flow-schema-row-type'],
+  ['target', '.flow-schema-handle--target:not(.flow-schema-handle--mirror)'],
+  ['source', '.flow-schema-handle--source:not(.flow-schema-handle--mirror)'],
+  ['mirrorTarget', '.flow-schema-handle--target.flow-schema-handle--mirror'],
+  ['mirrorSource', '.flow-schema-handle--source.flow-schema-handle--mirror'],
+];
 
 export function registerFlowSchemaDirective(Alpine: Alpine) {
   Alpine.directive('flow-schema', (el, _spec, { evaluate, effect, cleanup }) => {
@@ -86,6 +141,27 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       } catch {
         return null;
       }
+    };
+
+    /**
+     * Resolve the consumer's render hooks — the imperative decorators and the
+     * declarative class resolvers — from `canvas._config`, or nulls when none / no
+     * canvas. Read fresh each render (same `.flow-container` walk as the flags
+     * above) so a hook set after mount still takes effect.
+     */
+    const readSchemaHooks = (): {
+      nodeDecorator: SchemaNodeDecorator | null;
+      rowDecorator: SchemaRowDecorator | null;
+      nodeClass: SchemaNodeClassResolver | null;
+      rowClass: SchemaRowClassResolver | null;
+    } => {
+      const cfg = readCanvas()?._config;
+      return {
+        nodeDecorator: typeof cfg?.schemaNodeDecorator === 'function' ? cfg.schemaNodeDecorator : null,
+        rowDecorator: typeof cfg?.schemaRowDecorator === 'function' ? cfg.schemaRowDecorator : null,
+        nodeClass: typeof cfg?.schemaNodeClass === 'function' ? cfg.schemaNodeClass : null,
+        rowClass: typeof cfg?.schemaRowClass === 'function' ? cfg.schemaRowClass : null,
+      };
     };
 
     /**
@@ -250,8 +326,10 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
     let bodyEl: HTMLElement | null = null;
     const rowByName = new Map<string, HTMLElement>();
 
-    const ensureScaffold = (): void => {
-      if (headerEl && bodyEl) return;
+    // Returns true when it just built the scaffold (a fresh header/body), false
+    // when reusing the existing one — the `isNew` signal for a node decorator.
+    const ensureScaffold = (): boolean => {
+      if (headerEl && bodyEl) return false;
       clearChildren(host);
       rowByName.clear();
       headerEl = document.createElement('div');
@@ -260,6 +338,7 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       bodyEl = document.createElement('div');
       bodyEl.className = 'flow-schema-body';
       host.appendChild(bodyEl);
+      return true;
     };
 
     const render = (): void => {
@@ -275,16 +354,103 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
         }
         rowByName.clear();
         clearChildren(host);
+        // The host element persists through a data-null state; drop any classes a
+        // nodeClass resolver applied so they don't linger while the node is empty.
+        // (header/body classes vanish with the elements clearChildren just removed.)
+        applyManagedClasses(host, 'flowSchemaNodeClass', null);
+        delete host.dataset.flowSchemaNodeSub;
         headerEl = null;
         bodyEl = null;
         return;
       }
 
-      ensureScaffold();
+      const scaffoldCreated = ensureScaffold();
+      const hooks = readSchemaHooks();
 
       const label = typeof data.label === 'string' ? data.label : '';
       const fields = Array.isArray(data.fields) ? data.fields : [];
       const nodeId = typeof node?.id === 'string' ? node.id : '';
+
+      // Apply the consumer's declarative row classes, reconciled against last
+      // render (see applyManagedClasses). A bare return classes the row; a map
+      // return targets the row's sub-slots (icon/name/type/handles) too. Skips all
+      // work when there's no resolver AND nothing was applied before, so it's free
+      // when unused; the `dataset` markers also let a runtime resolver-removal (or a
+      // map→bare switch) clear what it previously applied. A throwing resolver is
+      // contained and leaves the prior classes in place.
+      const classifyRow = (row: HTMLElement, field: FlowSchemaField, isNew: boolean): void => {
+        const hadSub = row.dataset.flowSchemaRowSub === '1';
+        if (!hooks.rowClass && !row.dataset.flowSchemaRowClass && !hadSub) return;
+
+        let result: SchemaClassValue | SchemaRowClassMap = null;
+        if (hooks.rowClass) {
+          try {
+            result = hooks.rowClass({
+              field,
+              node: node as unknown as FlowNode<SchemaNodeData>,
+              nodeId,
+              isNew,
+            });
+          } catch (err) {
+            console.error('[alpineflow] schemaRowClass threw:', err);
+            return;
+          }
+        }
+
+        if (isClassMap(result)) {
+          const map = result as SchemaRowClassMap;
+          applyManagedClasses(row, 'flowSchemaRowClass', map.row);
+          // Visit every sub-slot (not just the ones present) so a key dropped since
+          // last render gets cleared. querySelector cost is paid only in map mode.
+          for (const [key, selector] of ROW_SUBSLOTS) {
+            const el = row.querySelector<HTMLElement>(selector);
+            if (el) applyManagedClasses(el, 'flowSchemaRowClass', map[key]);
+          }
+          row.dataset.flowSchemaRowSub = '1';
+        } else {
+          // Not a map ⇒ a bare SchemaClassValue (the guard's false branch doesn't
+          // narrow an interface out of the union, so assert it here).
+          applyManagedClasses(row, 'flowSchemaRowClass', result as SchemaClassValue);
+          // Bare/no return: if a prior render used the map form, clear its sub-slots.
+          if (hadSub) {
+            for (const [, selector] of ROW_SUBSLOTS) {
+              const el = row.querySelector<HTMLElement>(selector);
+              if (el) applyManagedClasses(el, 'flowSchemaRowClass', null);
+            }
+            delete row.dataset.flowSchemaRowSub;
+          }
+        }
+      };
+
+      // Hand one built/updated row + its sub-slots to the consumer's row
+      // decorator. Runs on every render (after the directive set its own row
+      // content), so decorators must be idempotent — see SchemaRowDecoratorContext.
+      // Errors are contained so a throwing decorator can't abort the render.
+      const decorateRow = (row: HTMLElement, field: FlowSchemaField, isNew: boolean): void => {
+        if (!hooks.rowDecorator) return;
+        const slots: SchemaRowSlots = {
+          icon: row.querySelector<HTMLElement>('.flow-schema-row-icon'),
+          name: row.querySelector<HTMLElement>('.flow-schema-row-name')!,
+          type: row.querySelector<HTMLElement>('.flow-schema-row-type')!,
+          target: row.querySelector<HTMLElement>(
+            '.flow-schema-handle--target:not(.flow-schema-handle--mirror)',
+          )!,
+          source: row.querySelector<HTMLElement>(
+            '.flow-schema-handle--source:not(.flow-schema-handle--mirror)',
+          )!,
+          mirrorTarget: row.querySelector<HTMLElement>(
+            '.flow-schema-handle--target.flow-schema-handle--mirror',
+          )!,
+          mirrorSource: row.querySelector<HTMLElement>(
+            '.flow-schema-handle--source.flow-schema-handle--mirror',
+          )!,
+        };
+        try {
+          hooks.rowDecorator({ row, field, nodeId, slots, isNew });
+        } catch (err) {
+          console.error('[alpineflow] schemaRowDecorator threw:', err);
+        }
+      };
 
       if (typeof data.kind === 'string' && data.kind) {
         host.setAttribute('data-flow-schema-kind', data.kind);
@@ -305,12 +471,16 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
         const existing = rowByName.get(field.name);
         if (existing) {
           updateRow(existing, field);
+          classifyRow(existing, field, false);
+          decorateRow(existing, field, false);
         } else {
           const row = renderRow(field, nodeId, rowsReorderable, keyboardNav);
           rowByName.set(field.name, row);
           bodyEl!.appendChild(row);
           // Activate x-flow-handle + x-flow-row-select on this one new row.
           Alpine.initTree(row);
+          classifyRow(row, field, true);
+          decorateRow(row, field, true);
         }
       }
       // 2. Destroy rows whose fields are gone.
@@ -332,6 +502,57 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
           cursor = cursor.nextSibling;
         } else {
           bodyEl!.insertBefore(row, cursor);
+        }
+      }
+
+      // Node-level styling + decoration run LAST, after the body is fully
+      // reconciled. Classes first (declarative), then the decorator (imperative) —
+      // both re-run every render, after the directive wrote the header text (which
+      // clobbers any child a prior decoration added to the header).
+      const hadNodeSub = host.dataset.flowSchemaNodeSub === '1';
+      if (hooks.nodeClass || host.dataset.flowSchemaNodeClass || hadNodeSub) {
+        let result: SchemaClassValue | SchemaNodeClassMap = null;
+        let threw = false;
+        if (hooks.nodeClass) {
+          try {
+            result = hooks.nodeClass({
+              node: node as unknown as FlowNode<SchemaNodeData>,
+              isNew: scaffoldCreated,
+            });
+          } catch (err) {
+            console.error('[alpineflow] schemaNodeClass threw:', err);
+            threw = true;
+          }
+        }
+        if (!threw) {
+          if (isClassMap(result)) {
+            const map = result as SchemaNodeClassMap;
+            applyManagedClasses(host, 'flowSchemaNodeClass', map.node);
+            applyManagedClasses(headerEl!, 'flowSchemaNodeClass', map.header);
+            applyManagedClasses(bodyEl!, 'flowSchemaNodeClass', map.body);
+            host.dataset.flowSchemaNodeSub = '1';
+          } else {
+            applyManagedClasses(host, 'flowSchemaNodeClass', result as SchemaClassValue);
+            if (hadNodeSub) {
+              applyManagedClasses(headerEl!, 'flowSchemaNodeClass', null);
+              applyManagedClasses(bodyEl!, 'flowSchemaNodeClass', null);
+              delete host.dataset.flowSchemaNodeSub;
+            }
+          }
+        }
+      }
+
+      if (hooks.nodeDecorator) {
+        try {
+          hooks.nodeDecorator({
+            host,
+            header: headerEl!,
+            body: bodyEl!,
+            node: node as unknown as FlowNode<SchemaNodeData>,
+            isNew: scaffoldCreated,
+          });
+        } catch (err) {
+          console.error('[alpineflow] schemaNodeDecorator threw:', err);
         }
       }
 
@@ -490,6 +711,14 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
           void f.key;
           void f.required;
           void f.icon;
+          // Metadata the base row omits but a schemaRowDecorator may render.
+          // Touch them so a mutation re-runs render() → re-decorates. (Reads the
+          // property reference; deep mutation of `tags`/`defaultValue` still needs
+          // a reassignment to re-trigger, same as the `fields` array itself.)
+          void f.description;
+          void f.deprecated;
+          void f.tags;
+          void f.defaultValue;
         }
       }
       render();
@@ -505,6 +734,9 @@ export function registerFlowSchemaDirective(Alpine: Alpine) {
       headerEl = null;
       bodyEl = null;
       host.classList.remove('flow-schema-node');
+      // Drop any classes a nodeClass resolver applied to the persistent host.
+      applyManagedClasses(host, 'flowSchemaNodeClass', null);
+      delete host.dataset.flowSchemaNodeSub;
       schemaNodeEl?.removeAttribute('data-flow-schema-node');
     });
   });

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added — schema render hooks: `x-flow-schema` customization without forking the directive
+
+`x-flow-schema` owns the DOM it builds, so consumers previously had to replace the whole directive to customize a node. Four new `flowCanvas({ … })` hooks augment its output per-render instead — read from the canvas config on every render, no-ops when unset, and firing only for `x-flow-schema` nodes:
+
+- **`schemaRowClass` / `schemaNodeClass`** — declarative styling. Pure functions of the field/node data that return CSS class names; AlpineFlow applies and **reconciles** them (classes you stop returning are removed) and never touches the directive's own structural classes (`flow-schema-row`, `--pk`/`--fk`/`--required`) or anything a decorator added. Return a bare class value to class the row/host, or a per-slot map to target the row's `icon`/`name`/`type`/handle sub-slots (or a node's `header`/`body`) individually.
+- **`schemaRowDecorator` / `schemaNodeDecorator`** — imperative DOM. Handed the already-built slot elements (`{ row, field, nodeId, slots, isNew }` / `{ host, header, body, node, isNew }`) to mutate — render a field's `description`, add a header badge, etc. They run every render (after the directive writes its own content), so must be idempotent; a throwing hook is caught and logged, never aborting the render.
+
+All hook types are exported from the package root. Height-preserving decoration is free; changing a row's or header's height falls the node back to DOM-measured edge geometry (still correct, not the fast path). Thanks to [@ronnorthrip](https://github.com/ronnorthrip) for the feature.
+
+### Fixed — node effect no longer throws on a detached-node teardown race
+
+A node's reactive style/class effect could fire once more after the node was detached (e.g. rapid mount/unmount); its custom-shape lookup called `Alpine.$data(el.closest('[data-flow-canvas]'))`, and on a detached node `closest` returns `null`, so `Alpine.$data(null)` threw `Cannot read properties of null (reading '_x_dataStack')` asynchronously — a stray unhandled error. The lookup is now guarded (a detached node has no custom shape to apply). Pre-existing; surfaced while stabilizing the schema-directive test suite.
+
 ### Added — `toImage()` exports edges, plus `scale`, `format` (PNG/JPEG/SVG), and `quality` options
 
 `toImage()` / `$flow.toImage()` now renders **edges** into the exported image. `html-to-image` serializes the DOM into an SVG `foreignObject` and preserves paint expressed as presentation *attributes* but drops paint that comes from a stylesheet — and AlpineFlow's edges are stroked purely by CSS, so every edge used to rasterize invisible while nodes came through fine. The capture now bakes each SVG shape's *computed* paint (stroke, fill, markers, dash, opacity) onto the elements for the duration of the capture (resolving `var(--flow-edge-*)` to concrete colours) and restores them afterward.

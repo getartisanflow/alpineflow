@@ -76,7 +76,13 @@ describe('x-flow-node — split position effect (drag perf)', () => {
     expect(nodeEl.style.left).toBe('10px'); // lean position effect ran on mount
     expect(nodeEl.style.top).toBe('20px');
 
-    // Spy AFTER mount so we only observe re-runs, not the initial application.
+    // The heavy effect applies the base classes ("flow-node", "nopan") on its first
+    // run, which can lag the lean position effect under parallel load. Wait for that
+    // initial run to land before spying, so the spy observes only re-runs — not the
+    // initial application (a single nextTick is not enough under CPU contention).
+    await vi.waitFor(() => expect(nodeEl.classList.contains('flow-node')).toBe(true));
+
+    // Spy AFTER the initial heavy run so we only observe re-runs, not the initial application.
     const addSpy = vi.spyOn(nodeEl.classList, 'add');
     const removeSpy = vi.spyOn(nodeEl.classList, 'remove');
 
