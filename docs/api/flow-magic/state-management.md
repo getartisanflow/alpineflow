@@ -60,7 +60,52 @@ Clear all nodes and edges, resetting the viewport to origin `{ x: 0, y: 0, zoom:
 $flow.toImage(options?: ToImageOptions): Promise<string>
 ```
 
-Export the canvas as a data URL image. Requires `html-to-image` as a peer dependency. Supports custom width, height, padding, background, scope (`'all'` or `'viewport'`), overlay inclusion, and automatic file download via `filename`.
+Export the canvas as a data URL image. `html-to-image` ships as a dependency of AlpineFlow, so this works out of the box. Supports custom width, height, padding, background, scope (`'all'` or `'viewport'`), output `format`, overlay inclusion, resolution multiplier via `scale`, and automatic file download via `filename`.
+
+#### Formats
+
+`format` selects what you get back. The capture is vector either way, so SVG is the intermediate handed straight back rather than extra work.
+
+| Format | Output | Notes |
+|---|---|---|
+| `'png'` (default) | Rasterized, lossless | Honours `scale`. Best for diagrams — flat colour and text compress well. |
+| `'jpeg'` | Rasterized, lossy | Honours `scale` and `quality`. Smaller than PNG, but lossy compression fringes text edges. |
+| `'svg'` | Vector | Ignores `scale`. Sharp at any size — but see the file-size warning below. |
+
+> **Warning: SVG files are much larger than you'd expect.** Vector output is *not* the
+> small option here. A real 44-node schema graph measured **0.32 MB as PNG and 49.5 MB
+> as SVG**.
+>
+> This is a shortcoming of `html-to-image`, the library that performs the capture — not
+> of SVG itself, which is a compact format, nor of anything AlpineFlow controls. Rather
+> than emitting the stylesheet once and letting elements share it, html-to-image inlines
+> each element's **entire computed style** into its own `style` attribute. Every node
+> row, badge and handle ends up carrying a full style declaration, most of it identical
+> to its neighbours' and most of it irrelevant. In the capture above, 4,908 `style`
+> attributes averaging ~10 KB each accounted for about **98% of the file**. Size
+> therefore tracks element count, not visual complexity.
+>
+> SVG is still the right choice when you need to edit the result as vectors (Figma,
+> Illustrator, Inkscape) or scale it arbitrarily. Just don't reach for it to save space,
+> and think twice before offering it as a one-click download on large canvases.
+
+```js
+// A 2x PNG of the whole graph
+await $flow.toImage({ scale: 2, filename: 'graph.png' })
+
+// Vector export — no resolution to pick
+await $flow.toImage({ format: 'svg', filename: 'graph.svg' })
+```
+
+`quality` (0-1, default `0.92`) applies to JPEG only and is ignored for other formats. Out-of-range values clamp; invalid ones fall back to the default.
+
+#### Scale
+
+`scale` raises the raster resolution without changing the layout — `scale: 2` renders a 1920x1080 export at 3840x2160. The capture is vector, so it re-renders sharp rather than upscaling. It's clamped to what the browser can actually allocate (an over-large canvas would otherwise produce a silently blank image). It has no effect on `format: 'svg'`, which has no raster resolution to multiply.
+
+#### Background
+
+`background` fills behind the capture. It is a *backdrop*, not an override — where the canvas paints its own background (as the default themes do), that wins, and `background` shows through only in transparent regions. This is consistent across all three formats. It matters most for JPEG, which has no alpha channel: without a fill, transparent areas would encode as solid black.
 
 ### setLoading
 
