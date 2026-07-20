@@ -604,6 +604,26 @@ export interface ToImageOptions {
   /** Export scope. 'all' fits every non-hidden node; 'viewport' captures current view. Default: 'all' */
   scope?: 'all' | 'viewport';
 
+  /** Resolution multiplier for the output image — `2` renders a 1920x1080 export at
+   *  3840x2160 for crisp/retina output. The layout is unchanged; only the raster
+   *  resolution increases (the capture is vector, so it re-renders sharp rather than
+   *  upscaling). Values are clamped so the canvas stays within browser limits.
+   *  Default: 1 */
+  scale?: number;
+
+  /** Output format. `'svg'` returns the vector capture itself rather than rasterising
+   *  it — sharp at any size, and it ignores `scale` (there is no raster resolution to
+   *  multiply). Note that SVG files are typically MUCH larger than the raster formats,
+   *  not smaller — a shortcoming of html-to-image, which inlines every element's entire
+   *  computed style rather than sharing one stylesheet, so output grows with element
+   *  count. `'jpeg'` is lossy; prefer it only when file size matters more than crisp
+   *  text edges.
+   *  Default: 'png' */
+  format?: 'png' | 'jpeg' | 'svg';
+
+  /** JPEG quality, 0-1. Ignored for other formats. Default: 0.92 */
+  quality?: number;
+
   /** When provided, triggers a browser download with this filename. */
   filename?: string;
 
