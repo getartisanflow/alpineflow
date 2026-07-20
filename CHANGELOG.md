@@ -2,13 +2,16 @@
 
 ## Unreleased
 
-### Added — `toImage()` exports edges, and a `scale` option for high-resolution output
+### Added — `toImage()` exports edges, plus `scale`, `format` (PNG/JPEG/SVG), and `quality` options
 
 `toImage()` / `$flow.toImage()` now renders **edges** into the exported image. `html-to-image` serializes the DOM into an SVG `foreignObject` and preserves paint expressed as presentation *attributes* but drops paint that comes from a stylesheet — and AlpineFlow's edges are stroked purely by CSS, so every edge used to rasterize invisible while nodes came through fine. The capture now bakes each SVG shape's *computed* paint (stroke, fill, markers, dash, opacity) onto the elements for the duration of the capture (resolving `var(--flow-edge-*)` to concrete colours) and restores them afterward.
 
-A new `scale` option multiplies the raster resolution without changing the layout — `scale: 2` renders a 1920×1080 export at 3840×2160 for crisp/retina output. The capture is vector, so it re-renders sharp rather than upscaling. `scale` is clamped to what the browser can actually allocate (an over-large canvas otherwise yields a silently blank PNG) and falls back to `1` for non-finite/non-positive values.
+New export options:
+- **`scale`** multiplies the raster resolution without changing the layout — `scale: 2` renders a 1920×1080 export at 3840×2160 for crisp/retina output. The capture is vector, so it re-renders sharp rather than upscaling. Clamped to what the browser can actually allocate (an over-large canvas otherwise yields a silently blank PNG) and falls back to `1` for non-finite/non-positive values.
+- **`format`** selects the output — `'png'` (default, honours `scale`), `'jpeg'` (honours `scale` + `quality`), or `'svg'` (vector, ignores `scale`). Background is carried in the SVG markup for vector output and painted behind the raster for PNG/JPEG, so JPEG's missing alpha channel never encodes as black.
+- **`quality`** (0–1, default `0.92`) applies to JPEG only; out-of-range values clamp, invalid ones fall back. Note: SVG export is currently *much* larger than PNG (a `html-to-image` limitation — it inlines each element's full computed style), so it's the wrong choice for saving space on large canvases; see the [`toImage` docs](docs/api/flow-magic/state-management.md#toimage).
 
-Not a breaking change: edges appearing is a fix (they were meant to be there), `scale` defaults to `1` (previous behaviour), and `html-to-image` remains a regular dependency, so `toImage()` continues to work with no consumer action. Thanks to [@ronnorthrip](https://github.com/ronnorthrip) for the report and fix.
+Not a breaking change: edges appearing is a fix (they were meant to be there), `scale`/`format`/`quality` are optional and default to the previous behaviour (a 1× PNG), and `html-to-image` remains a regular dependency, so `toImage()` continues to work with no consumer action. Thanks to [@ronnorthrip](https://github.com/ronnorthrip) for the report, fix, and format work.
 
 ### Changed — avoidant edges use rounded corners, not a Catmull-Rom spline
 
