@@ -1504,11 +1504,14 @@ export interface FlowCanvasConfig {
   shapeTypes?: Record<string, ShapeDefinition>;
 
   /** Map edge type strings to custom path generator functions.
-   *  Receives the same params as built-in generators, returns { path, labelPosition }. */
+   *  Receives the endpoint params (same as built-in generators) plus the edge itself,
+   *  so a generator can read per-edge routing data off it (e.g. precomputed waypoints
+   *  on `edge.data`) — which, living on the edge, survives serialization. Returns
+   *  { path, labelPosition }. The `edge` arg is optional for backward compatibility. */
   edgeTypes?: Record<string, (params: {
     sourceX: number; sourceY: number; sourcePosition: string;
     targetX: number; targetY: number; targetPosition: string;
-  }) => { path: string; labelPosition: { x: number; y: number } }>;
+  }, edge?: FlowEdge) => { path: string; labelPosition: { x: number; y: number } }>;
 
   /**
    * Optional vocabulary of field types for the schema addon's default-UI
