@@ -131,16 +131,18 @@ function corridorIntersectsBounds(
 }
 
 /** Selector matching the floating overlays that sit above the canvas surface. */
-const OVERLAY_SELECTOR = '.flow-panel, .flow-controls, .flow-minimap';
+const OVERLAY_SELECTOR = '.flow-panel, .flow-controls, .flow-minimap, .canvas-overlay';
 
 /**
  * True when a drag event landed on one of the floating overlays — the panel (which
- * hosts node palettes), the controls, or the minimap. They live *inside* the flow
- * container and take pointer events (`pointer-events: auto`, `z-index` above the
- * surface), so a drop released on one still bubbles to the container's drop
- * listener. Without this check the canvas happily adds a node at the position
- * "behind" the overlay — dragging a palette item out and then changing your mind by
- * releasing it back over the palette created a node instead of cancelling.
+ * hosts node palettes), the controls, the minimap, or a `.canvas-overlay` (e.g. the
+ * devtools panel). They live *inside* the flow container and take pointer events
+ * (`pointer-events: auto`, `z-index` above the surface), so a drop released on one
+ * still bubbles to the container's drop listener. Without this check the canvas
+ * happily adds a node at the position "behind" the overlay — dragging a palette item
+ * out and then changing your mind by releasing it back over the palette created a
+ * node instead of cancelling. `.canvas-overlay` matches the same guard the whiteboard
+ * tools already use, so any overlay carrying that class is covered.
  */
 export function isOverlayDropTarget(el: Element | null): boolean {
   return el != null && el.closest(OVERLAY_SELECTOR) != null;

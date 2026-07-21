@@ -4,7 +4,7 @@
 
 ### Fixed — a drop released over a panel, the controls or the minimap no longer adds a node
 
-The drop-zone listener is attached to the flow container, and the floating overlays (`.flow-panel`, `.flow-controls`, `.flow-minimap`) live *inside* that container with `pointer-events: auto` and a `z-index` above the canvas surface. Their drag events therefore bubbled to the same listener, and the canvas treated them as a drop on the surface — adding a node at the position **behind** the overlay.
+The drop-zone listener is attached to the flow container, and the floating overlays (`.flow-panel`, `.flow-controls`, `.flow-minimap`, and any `.canvas-overlay` such as the devtools panel) live *inside* that container with `pointer-events: auto` and a `z-index` above the canvas surface. Their drag events therefore bubbled to the same listener, and the canvas treated them as a drop on the surface — adding a node at the position **behind** the overlay.
 
 The most common way to hit this is the in-canvas node palette: drag an item out, change your mind, release it back over the palette, and instead of cancelling you got a node hidden underneath the panel. Releasing over the zoom controls or the minimap did the same.
 
