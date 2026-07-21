@@ -169,7 +169,10 @@ describe('resolveDblClickZoom — double-click is a toggle, not zoom-in-only', (
     it('returns the current viewport unchanged instead of a disguised no-op', () => {
       const current = { x: 10, y: 20, zoom: 2 };
       const { next, remember } = resolveDblClickZoom(current, { x: 100, y: 50 }, degenerate());
-      expect(next).toEqual(current);
+      // Reference identity, not just deep equality: the no-headroom branch must hand
+      // back the very object it was given, so callers can cheaply detect "no move" —
+      // a rebuilt look-alike would defeat that and only look like a transition.
+      expect(next).toBe(current);
       expect(remember).toBeNull();
     });
 

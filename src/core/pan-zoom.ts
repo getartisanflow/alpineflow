@@ -252,6 +252,13 @@ export function createPanZoom(
   // Declared here so a user-driven gesture can invalidate it (see 'start' below).
   let rememberedViewport: ViewportTransform | null = null;
 
+  // Live `zoomable`, kept in step with runtime update(). The toggle dblclick handler
+  // reads this rather than the set-up-time value so update({ zoomable: false })
+  // disables the gesture too — not just d3's own filter. (minZoom / dblClickZoomLevel
+  // stay set-up-time: they feed the attach/detach headroom decision below, so making
+  // them live would mean re-running that wiring, which is out of scope here.)
+  let currentZoomable = zoomable;
+
   const zoomBehavior: ZoomBehavior<HTMLElement, unknown> = zoom<HTMLElement, unknown>()
     .scaleExtent([minZoom, maxZoom])
     .on('start', (event) => {
@@ -314,7 +321,7 @@ export function createPanZoom(
   const dblClickHandler = (event: MouseEvent) => {
     // Unlike the old zoom-in-only handler, toggle can animate a zoom-*out* and
     // re-centre, so it honours `zoomable: false` rather than staying live.
-    if (!zoomable) return;
+    if (!currentZoomable) return;
     // Mirror the guards createPanZoomFilter applies to a mouse event.
     if (options.isLocked?.()) return;
     const target = event.target as HTMLElement | null;
@@ -405,6 +412,13 @@ export function createPanZoom(
 
   return {
     setViewport(viewport, opts) {
+      // A programmatic viewport change makes any 'toggle' double-click memory stale:
+      // the viewport we would otherwise return to no longer reflects where the user
+      // is, so a later toggle-out must start fresh rather than jump back to it. The
+      // toggle-out restore path does not route through setViewport, so clearing here
+      // never wipes a value mid-restore.
+      rememberedViewport = null;
+
       const duration = opts?.duration ?? 0;
 
       const transform = zoomIdentity
@@ -434,7 +448,8 @@ export function createPanZoom(
 
       if (newOptions.pannable !== undefined || newOptions.zoomable !== undefined) {
         const pan = newOptions.pannable ?? pannable;
-        const zm = newOptions.zoomable ?? zoomable;
+        const zm = newOptions.zoomable ?? currentZoomable;
+        currentZoomable = zm;
         zoomBehavior.filter(createPanZoomFilter({
           pannable: pan, zoomable: zm,
           isLocked: options.isLocked,
