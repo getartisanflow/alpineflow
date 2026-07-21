@@ -1776,6 +1776,10 @@ export interface FlowCanvasConfig {
   // ── Double-Click Zoom ─────────────────────────────────────────────
   /** Zoom in on double-click. Default: true */
   zoomOnDoubleClick?: boolean;
+  /** Zoom level the first double-click animates to (the "readable" level). A second
+   *  double-click at or above that level restores the viewport from before the
+   *  zoom-in. Clamped to [minZoom, maxZoom]. Default: 1.5 */
+  dblClickZoomLevel?: number;
 
   // ── Select on Drag ────────────────────────────────────────────────
   /** Automatically select nodes when they start being dragged. Default: true */

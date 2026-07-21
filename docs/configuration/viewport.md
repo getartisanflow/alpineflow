@@ -18,7 +18,8 @@ order: 6
 | `panOnScrollSpeed` | `number` | `1` | Scroll pan sensitivity multiplier. |
 | `panActivationKeyCode` | `string \| null` | `'Space'` | Key that temporarily enables panning when held. |
 | `zoomActivationKeyCode` | `string \| null` | `null` | Key that forces zoom-on-wheel, overriding `panOnScroll`. |
-| `zoomOnDoubleClick` | `boolean` | `true` | Zoom in on double-click. |
+| `zoomOnDoubleClick` | `boolean` | `true` | Toggle zoom on double-click. |
+| `dblClickZoomLevel` | `number` | `1.5` | Zoom level the first double-click animates to. A second double-click at or above it restores the previous viewport. Clamped to `[minZoom, maxZoom]`. |
 | `zoomLevels` | `false \| object` | `{ far: 0.4, medium: 0.75 }` | Contextual zoom thresholds. Sets `data-zoom-level` attribute. See [Contextual zoom](../canvas/contextual-zoom.md). |
 | `autoPanSpeed` | `number` | `15` | Auto-pan speed multiplier. |
 | `autoPanOnConnect` | `boolean` | `true` | Auto-pan when drawing connections near canvas edge. |

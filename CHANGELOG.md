@@ -19,6 +19,19 @@ The check now lives in one exported helper, `isEditableTarget(target)`, which re
 A second path had the same shape: `x-flow-node` treats Enter/Space as "select this node", but `keydown` bubbles, so it `preventDefault()`ed those keys for **any** focused descendant — no spaces or newlines in a nested input, and nested `<button>`s could not be activated by keyboard at all. Activation is now gated on the event target being the node wrapper itself, via the exported `isNodeActivationKey(e, el)`.
 
 Not a breaking change: both helpers only *widen* the set of targets the canvas keeps its hands off, so any node that already behaved correctly is unaffected.
+### Changed — double-click zoom is a toggle, plus a new `dblClickZoomLevel`
+
+Double-click zoom came straight from d3-zoom, which only ever zooms **in** — one step per double-click, capped at `maxZoom`. Once there, the gesture silently did nothing, and there was no double-click way back out: the user had to reach for the wheel or the controls. Worse, each double-click stepped by d3's fixed factor, so "get me to a readable level" took an unpredictable number of clicks depending on where the viewport started.
+
+The handler is now AlpineFlow's own and behaves as a toggle:
+
+- **Below the readable level** — animate to `dblClickZoomLevel` (default `1.5`) about the cursor, keeping the point under the pointer fixed, and remember the viewport you came from.
+- **At or above it, with a remembered viewport** — restore that viewport *exactly*, so double-click-in / double-click-out is a true round trip rather than an approximate zoom-out.
+- **At or above it with nothing remembered** (you got there by wheel or `setViewport`) — zoom out to `minZoom` about the cursor, so the gesture never stalls.
+
+New **`dblClickZoomLevel`** option on `flowCanvas({ … })` sets that readable level; it is clamped to `[minZoom, maxZoom]`, so a value outside the configured range degrades to the nearest bound instead of fighting d3's scale extent.
+
+Alpha-breaking only in feel: `zoomOnDoubleClick: false` still disables the gesture entirely, and the default is still "double-click zooms in", but the level reached and the second-click behaviour differ from d3's. Consistent with the previous handler (and with `createPanZoomFilter`, which never filtered `dblclick`), the gesture stays live when `zoomable: false` — that option gates wheel and pinch, not double-click.
 
 ### Added — custom edge generators receive the `edge`
 

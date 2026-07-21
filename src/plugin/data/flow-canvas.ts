@@ -1275,6 +1275,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
         noPanClassName: config.noPanClassName ?? 'nopan',
         noWheelClassName: config.noWheelClassName,
         zoomOnDoubleClick: config.zoomOnDoubleClick,
+        dblClickZoomLevel: config.dblClickZoomLevel,
         panOnDrag: config.panOnDrag,
         panActivationKeyCode: config.panActivationKeyCode,
         zoomActivationKeyCode: config.zoomActivationKeyCode,

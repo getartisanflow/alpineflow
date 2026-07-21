@@ -48,6 +48,10 @@ export interface PanZoomOptions {
   onScrollPan?: (dx: number, dy: number) => void;
   /** Zoom in on double-click. Default: true */
   zoomOnDoubleClick?: boolean;
+  /** Zoom level the first double-click animates to (the "readable" level). A second
+   *  double-click at or above that level restores the viewport from before the
+   *  zoom-in. Clamped to [minZoom, maxZoom]. Default: 1.5 */
+  dblClickZoomLevel?: number;
   /** Key code that temporarily enables panning when held. Default: 'Space' */
   panActivationKeyCode?: string | null;
   /** Key code that forces zoom (overrides panOnScroll) when held with wheel. Default: 'Control'.
@@ -120,6 +124,64 @@ function createPanZoomFilter(opts: PanZoomFilterOptions) {
     }
     return true;
   };
+}
+
+/** How long the double-click zoom transition runs, in ms. */
+export const DBLCLICK_ZOOM_DURATION = 300;
+
+/** Default zoom level the first double-click animates to. */
+export const DEFAULT_DBLCLICK_ZOOM_LEVEL = 1.5;
+
+/** A viewport transform: translation plus scale. */
+interface ViewportTransform {
+  x: number;
+  y: number;
+  zoom: number;
+}
+
+/**
+ * Scale a viewport about a fixed point, keeping whatever is under `px`/`py`
+ * (container-relative coordinates) pinned in place.
+ */
+function scaleAbout(current: ViewportTransform, px: number, py: number, k: number): ViewportTransform {
+  return {
+    x: px - ((px - current.x) / current.zoom) * k,
+    y: py - ((py - current.y) / current.zoom) * k,
+    zoom: k,
+  };
+}
+
+/**
+ * Decide what a double-click does to the viewport.
+ *
+ * d3-zoom's built-in handler only ever zooms *in*, so once the canvas is at
+ * `maxZoom` a double-click is a no-op and the user has no gesture to get back
+ * out. This makes the gesture a toggle instead:
+ *
+ * - below `level` → zoom in to `level` about the cursor, remembering the viewport
+ *   so the next double-click can put it back exactly;
+ * - at or above `level` with a remembered viewport → restore it;
+ * - at or above `level` with nothing remembered (the user got here by wheel or
+ *   `setViewport`) → zoom out to `minZoom` about the cursor, so the gesture always
+ *   does something rather than stalling.
+ *
+ * Pure so the decision can be tested without driving d3-zoom through a real DOM.
+ */
+export function resolveDblClickZoom(
+  current: ViewportTransform,
+  pointer: { x: number; y: number },
+  opts: { level: number; minZoom: number; remembered: ViewportTransform | null },
+): { next: ViewportTransform; remember: ViewportTransform | null } {
+  // Tolerance so floating-point drift at exactly `level` still counts as "at" it.
+  const atOrAboveLevel = current.zoom >= opts.level - 1e-3;
+
+  if (!atOrAboveLevel) {
+    return { next: scaleAbout(current, pointer.x, pointer.y, opts.level), remember: current };
+  }
+  if (opts.remembered) {
+    return { next: opts.remembered, remember: null };
+  }
+  return { next: scaleAbout(current, pointer.x, pointer.y, opts.minZoom), remember: null };
 }
 
 export function createPanZoom(
@@ -203,10 +265,42 @@ export function createPanZoom(
   // Apply zoom behavior to the container
   sel.call(zoomBehavior);
 
-  // Disable d3-zoom's built-in double-click zoom if configured
-  if (options.zoomOnDoubleClick === false) {
-    sel.on('dblclick.zoom', null);
-  }
+  // ── Double-click zoom ────────────────────────────────────────
+  // Replace d3-zoom's built-in handler (zoom-in only, stalls at maxZoom) with a
+  // toggle: see resolveDblClickZoom for the decision it makes.
+  sel.on('dblclick.zoom', null);
+
+  const dblClickZoomLevel = Math.max(
+    minZoom,
+    Math.min(maxZoom, options.dblClickZoomLevel ?? DEFAULT_DBLCLICK_ZOOM_LEVEL),
+  );
+  let rememberedViewport: ViewportTransform | null = null;
+
+  const dblClickHandler = (event: MouseEvent) => {
+    if (options.zoomOnDoubleClick === false) return;
+    // Mirror the guards createPanZoomFilter applies to a mouse event. Note it never
+    // filtered `dblclick` on `zoomable`, so neither do we — d3's built-in handler
+    // was already live with `zoomable: false` and consumers rely on that.
+    if (options.isLocked?.()) return;
+    const target = event.target as HTMLElement | null;
+    if (options.noPanClassName && target?.closest?.('.' + options.noPanClassName)) return;
+
+    event.preventDefault();
+
+    const t = ((container as any).__zoom ?? zoomIdentity) as ZoomTransform;
+    const rect = container.getBoundingClientRect();
+    const { next, remember } = resolveDblClickZoom(
+      { x: t.x, y: t.y, zoom: t.k },
+      { x: event.clientX - rect.left, y: event.clientY - rect.top },
+      { level: dblClickZoomLevel, minZoom, remembered: rememberedViewport },
+    );
+    rememberedViewport = remember;
+
+    sel.transition().duration(DBLCLICK_ZOOM_DURATION)
+      .call(zoomBehavior.transform, zoomIdentity.translate(next.x, next.y).scale(next.zoom));
+  };
+
+  container.addEventListener('dblclick', dblClickHandler);
 
   // ── Pan-on-scroll wheel interceptor ──────────────────────────
   let panOnScroll = options.panOnScroll ?? false;
@@ -319,6 +413,7 @@ export function createPanZoom(
 
     destroy() {
       container.removeEventListener('wheel', wheelHandler, { capture: true } as EventListenerOptions);
+      container.removeEventListener('dblclick', dblClickHandler);
       if (panActivationKeyCode) {
         window.removeEventListener('keydown', onKeyDown);
         window.removeEventListener('keyup', onKeyUp);
