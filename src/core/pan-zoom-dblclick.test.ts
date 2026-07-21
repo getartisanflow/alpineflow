@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createPanZoom, type PanZoomInstance } from './pan-zoom';
+import { createPanZoom, DBLCLICK_ZOOM_DURATION, type PanZoomInstance } from './pan-zoom';
 
 /**
  * The double-click *wiring*: which handler ends up bound for each
@@ -78,5 +78,143 @@ describe('double-click mode wiring', () => {
       dblClickZoomLevel: 3,
     });
     expect(hasD3DblClickZoom(container)).toBe(false);
+  });
+
+  /**
+   * Behaviour of the bound toggle handler once a real double-click drives it. These
+   * exercise the whole path — DOM dblclick → resolveDblClickZoom → d3 transition —
+   * so they wait out the animation (a real timer; the transition is driven by
+   * jsdom's rAF/timeout, not fake timers) before reading the settled transform off
+   * `element.__zoom`.
+   */
+  describe('toggle mode — runtime behaviour & invalidation', () => {
+    // Comfortably past the transition so `__zoom` has reached its final value.
+    const SETTLE_MS = DBLCLICK_ZOOM_DURATION + 120;
+    const settle = () => new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
+
+    /** Pin a deterministic box so cursor→container coordinates don't depend on layout. */
+    const stubRect = (el: HTMLElement) => {
+      el.getBoundingClientRect = () =>
+        ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600, x: 0, y: 0, toJSON() {} }) as DOMRect;
+    };
+
+    const dblclickAt = (el: HTMLElement, x: number, y: number) => {
+      el.dispatchEvent(new MouseEvent('dblclick', { clientX: x, clientY: y, bubbles: true, cancelable: true }));
+    };
+
+    /** The d3-zoom transform d3 stores on the element: { k: scale, x, y }. */
+    const zoomOf = (el: HTMLElement) => (el as any).__zoom as { k: number; x: number; y: number };
+
+    const toggleOpts = { zoomOnDoubleClick: 'toggle' as const, minZoom: 0.5, maxZoom: 2, dblClickZoomLevel: 1.5 };
+
+    it('setViewport() invalidates the remembered viewport so toggle-out does not jump back to it', async () => {
+      create({ onTransformChange: () => {}, ...toggleOpts });
+      stubRect(container);
+
+      // Toggle in from identity (zoom 1): remembers { x:0, y:0, zoom:1 }, animates to 1.5.
+      dblclickAt(container, 100, 50);
+      await settle();
+      expect(zoomOf(container).k).toBeCloseTo(1.5, 5);
+
+      // The consumer moves the viewport itself — the remembered one is now stale.
+      instance!.setViewport({ x: 200, y: 100, zoom: 1.8 });
+      expect(zoomOf(container).k).toBeCloseTo(1.8, 5);
+
+      // Toggle out: with the memory invalidated it behaves as "nothing remembered"
+      // (zoom out to minZoom about the cursor), NOT a jump back to the pre-zoom zoom of 1.
+      dblclickAt(container, 100, 50);
+      await settle();
+      expect(zoomOf(container).k).toBeCloseTo(0.5, 5); // zoomed out to minZoom
+      expect(zoomOf(container).k).not.toBeCloseTo(1, 5); // did not restore the pre-zoom viewport
+    });
+
+    it('the toggle-in\'s own programmatic transition keeps the memory (round-trip restores exactly)', async () => {
+      // Contrast to the setViewport case: a programmatic transition carries no
+      // sourceEvent, so the d3 'start' handler leaves rememberedViewport intact and
+      // the second double-click can put the viewport back.
+      create({ onTransformChange: () => {}, ...toggleOpts });
+      stubRect(container);
+
+      dblclickAt(container, 100, 50); // toggle in from identity → remembers { 0, 0, 1 }
+      await settle();
+      expect(zoomOf(container).k).toBeCloseTo(1.5, 5);
+
+      dblclickAt(container, 100, 50); // toggle out → restores the remembered viewport
+      await settle();
+      const back = zoomOf(container);
+      expect(back.k).toBeCloseTo(1, 5);
+      expect(back.x).toBeCloseTo(0, 5);
+      expect(back.y).toBeCloseTo(0, 5);
+    });
+
+    it('a user gesture (wheel) invalidates the memory via the user-sourced d3 \'start\'', async () => {
+      let moveStarts = 0;
+      create({ onTransformChange: () => {}, onMoveStart: () => { moveStarts++; }, ...toggleOpts });
+      stubRect(container);
+
+      dblclickAt(container, 100, 50); // toggle in → remembers { 0, 0, 1 }
+      await settle();
+      expect(zoomOf(container).k).toBeCloseTo(1.5, 5);
+
+      // A wheel zoom is a user gesture: d3 fires 'start' with a truthy sourceEvent,
+      // which is what clears rememberedViewport.
+      container.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, clientX: 100, clientY: 50, bubbles: true, cancelable: true }));
+      await settle(); // let the wheel gesture's debounced 'end' fire
+      expect(moveStarts).toBeGreaterThan(0); // proves a user-sourced 'start' actually ran
+      expect(zoomOf(container).k).toBeGreaterThanOrEqual(1.5); // wheel zoomed further in, still above the level
+
+      // Toggle out: memory was invalidated, so this zooms out to minZoom rather than
+      // restoring the pre-zoom viewport (zoom 1).
+      dblclickAt(container, 100, 50);
+      await settle();
+      expect(zoomOf(container).k).toBeCloseTo(0.5, 5);
+      expect(zoomOf(container).k).not.toBeCloseTo(1, 5);
+    });
+
+    it('with zoomable:false the handler is attached but a double-click does nothing', async () => {
+      let changes = 0;
+      create({ onTransformChange: () => { changes++; }, zoomable: false, ...toggleOpts });
+      stubRect(container);
+
+      const before = { ...zoomOf(container) };
+      dblclickAt(container, 100, 50);
+      await settle(); // if the guard were missing, a transition would have moved __zoom by now
+      expect(changes).toBe(0);
+      expect(zoomOf(container)).toEqual(before);
+    });
+
+    it('update({ zoomable: false }) makes a double-click do nothing (and re-enabling brings it back)', async () => {
+      let changes = 0;
+      create({ onTransformChange: () => { changes++; }, ...toggleOpts });
+      stubRect(container);
+
+      instance!.update({ zoomable: false });
+      const before = { ...zoomOf(container) };
+      dblclickAt(container, 100, 50);
+      await settle(); // the handler must read the live zoomable, not the set-up-time value
+      expect(changes).toBe(0);
+      expect(zoomOf(container)).toEqual(before);
+
+      // Liveness the other way: re-enabling makes the gesture fire again.
+      instance!.update({ zoomable: true });
+      dblclickAt(container, 100, 50);
+      await settle();
+      expect(zoomOf(container).k).toBeCloseTo(1.5, 5);
+    });
+
+    it('destroy() removes the custom toggle dblclick listener', async () => {
+      let changes = 0;
+      create({ onTransformChange: () => { changes++; }, ...toggleOpts });
+      stubRect(container);
+
+      instance!.destroy();
+      instance = null; // already torn down; keep afterEach from destroying twice
+      changes = 0;
+
+      dblclickAt(container, 100, 50); // no listener left → nothing happens
+      await settle();
+      expect(changes).toBe(0);
+      expect(zoomOf(container).k).toBe(1);
+    });
   });
 });
