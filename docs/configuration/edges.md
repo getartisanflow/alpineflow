@@ -18,16 +18,25 @@ order: 4
 
 ## Custom edge types
 
+A generator receives the endpoint `params` and, as an optional second argument, the
+`edge` itself:
+
 ```js
 flowCanvas({
     edgeTypes: {
-        'custom': ({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition }) => ({
+        'custom': ({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition }, edge) => ({
             path: `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`,
             labelPosition: { x: (sourceX + targetX) / 2, y: (sourceY + targetY) / 2 },
         }),
     },
 })
 ```
+
+The `edge` argument lets a single generator read per-edge routing data straight off
+the edge (e.g. precomputed waypoints stashed on `edge.data`) instead of needing a
+separate closure per edge. Because that data lives on the edge, it also survives
+`toObject()` / `fromObject()` serialization — a custom-routed edge reloads correctly.
+The argument is optional, so existing one-parameter generators keep working unchanged.
 
 ## Edge data shape
 

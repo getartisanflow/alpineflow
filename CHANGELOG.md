@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added — custom edge generators receive the `edge`
+
+Custom edge path generators registered via `flowCanvas({ edgeTypes })` are now called with the `edge` as a second argument — `edgeTypes[type](params, edge)` — where before they saw only the endpoint coordinates. That limitation forced any per-edge routing data (waypoints, lane/channel assignments) to be smuggled in through a **separate closure per edge**; because that data lived in a function rather than on the model, it was lost on `toObject()`/`fromObject()`, so a custom-routed edge came back unrouted after a reload or snapshot restore. A generator can now read its route straight off `edge.data`, where it serializes with the edge and survives the round-trip.
+
+Not a breaking change: the `edge` argument is optional and appended after the existing `params`, so every existing single-parameter generator keeps working unchanged. Thanks to [@ronnorthrip](https://github.com/ronnorthrip) for the report and change.
+
 ### Added — schema render hooks: `x-flow-schema` customization without forking the directive
 
 `x-flow-schema` owns the DOM it builds, so consumers previously had to replace the whole directive to customize a node. Four new `flowCanvas({ … })` hooks augment its output per-render instead — read from the canvas config on every render, no-ops when unset, and firing only for `x-flow-schema` nodes:
