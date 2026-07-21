@@ -38,8 +38,13 @@ function mountCanvas() {
   const minimapSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   minimap.appendChild(minimapSvg);
 
-  container.append(viewport, panel, controls, minimap);
-  return { container, viewport, node, panel, paletteItem, controls, controlsButton, minimap, minimapSvg };
+  const overlay = document.createElement('div');
+  overlay.classList.add('flow-devtools', 'canvas-overlay');
+  const overlayChild = document.createElement('button');
+  overlay.appendChild(overlayChild);
+
+  container.append(viewport, panel, controls, minimap, overlay);
+  return { container, viewport, node, panel, paletteItem, controls, controlsButton, minimap, minimapSvg, overlay, overlayChild };
 }
 
 describe('isOverlayDropTarget — overlays are not part of the droppable surface', () => {
@@ -76,5 +81,13 @@ describe('isOverlayDropTarget — overlays are not part of the droppable surface
     const { minimap, minimapSvg } = mountCanvas();
     expect(isOverlayDropTarget(minimap)).toBe(true);
     expect(isOverlayDropTarget(minimapSvg)).toBe(true);
+  });
+
+  it('returns true for a .canvas-overlay (e.g. the devtools panel) and its children', () => {
+    // The devtools panel is a `.canvas-overlay`, not a `.flow-panel`; a drop
+    // released over it must cancel too, not add a node behind it.
+    const { overlay, overlayChild } = mountCanvas();
+    expect(isOverlayDropTarget(overlay)).toBe(true);
+    expect(isOverlayDropTarget(overlayChild)).toBe(true);
   });
 });
