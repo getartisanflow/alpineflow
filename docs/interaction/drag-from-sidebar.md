@@ -144,6 +144,7 @@ Drag items with object data — the label and type are passed through:
 - Sets `draggable="true"` on the element.
 - On `dragstart`, serializes the expression value and attaches it to the drag event using the `application/alpineflow` MIME type.
 - The flow canvas listens for `drop` events with this MIME type and invokes the `onDrop` callback with the deserialized data and the drop position in canvas coordinates.
+- Drops released over a floating overlay — a `.flow-panel` (which is where an in-canvas palette lives), `.flow-controls` or `.flow-minimap` — are **cancelled**, not forwarded to `onDrop`. Those overlays sit above the canvas surface, so releasing an item back onto the palette you dragged it from reads as "never mind" rather than as a drop at the position behind it. The browser shows the "no drop" cursor while over them.
 
 ## Canvas Configuration: onDrop
 

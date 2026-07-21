@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed — a drop released over a panel, the controls or the minimap no longer adds a node
+
+The drop-zone listener is attached to the flow container, and the floating overlays (`.flow-panel`, `.flow-controls`, `.flow-minimap`) live *inside* that container with `pointer-events: auto` and a `z-index` above the canvas surface. Their drag events therefore bubbled to the same listener, and the canvas treated them as a drop on the surface — adding a node at the position **behind** the overlay.
+
+The most common way to hit this is the in-canvas node palette: drag an item out, change your mind, release it back over the palette, and instead of cancelling you got a node hidden underneath the panel. Releasing over the zoom controls or the minimap did the same.
+
+`dragover` and `drop` now both ignore events whose target is inside an overlay, so the browser shows the "no drop" cursor while over one and the release is a cancel. Drops on the canvas surface and onto nodes are unaffected — `targetNode` resolution still works exactly as before.
+
 ### Fixed — canvas shortcuts no longer hijack keys inside `contenteditable` and nested controls
 
 Typing inside a node was destructive. The canvas keydown handler decided whether a keystroke belonged to the user by reading `e.target.tagName` and bailing only on `INPUT`/`TEXTAREA` — but a rich-text editor, a JSON editor, or an inline-editable node label renders a **`contenteditable` `<div>`**, whose `tagName` is `'DIV'`. Every canvas shortcut therefore fired while the user was typing: **Backspace deleted the whole selected node** instead of a character, the arrow keys **moved the node** instead of the caret, and Ctrl/Cmd+Z/C/X/V hit the canvas history and clipboard instead of the text.

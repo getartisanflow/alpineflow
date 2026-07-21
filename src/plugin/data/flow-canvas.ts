@@ -130,6 +130,22 @@ function corridorIntersectsBounds(
   );
 }
 
+/** Selector matching the floating overlays that sit above the canvas surface. */
+const OVERLAY_SELECTOR = '.flow-panel, .flow-controls, .flow-minimap';
+
+/**
+ * True when a drag event landed on one of the floating overlays — the panel (which
+ * hosts node palettes), the controls, or the minimap. They live *inside* the flow
+ * container and take pointer events (`pointer-events: auto`, `z-index` above the
+ * surface), so a drop released on one still bubbles to the container's drop
+ * listener. Without this check the canvas happily adds a node at the position
+ * "behind" the overlay — dragging a palette item out and then changing your mind by
+ * releasing it back over the palette created a node instead of cancelling.
+ */
+export function isOverlayDropTarget(el: Element | null): boolean {
+  return el != null && el.closest(OVERLAY_SELECTOR) != null;
+}
+
 export function registerFlowCanvas(Alpine: Alpine) {
   Alpine.data('flowCanvas', (config: FlowCanvasConfig = {}) => {
     const self: Record<string, any> = {
@@ -2022,6 +2038,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
         this._onDropZoneDragOver = (e: DragEvent) => {
           if (!e.dataTransfer) { return; }
+          // Over a floating overlay, not the canvas surface — leave the event
+          // unhandled so the browser shows the "no drop" cursor.
+          if (isOverlayDropTarget(e.target as Element | null)) { return; }
           // Only signal acceptance if at least one of our MIME types is present.
           const hasMatch = mimeTypes.some((m) => e.dataTransfer!.types.includes(m));
           if (!hasMatch) { return; }
@@ -2042,6 +2061,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
         this._onDropZoneDrop = (e: DragEvent) => {
           e.preventDefault();
           this._container?.classList.remove('flow-canvas-drag-over');
+
+          // Released over a floating overlay rather than the canvas — cancel the
+          // drop instead of adding a node at the position behind it.
+          if (isOverlayDropTarget(e.target as Element | null)) { return; }
 
           if (!e.dataTransfer || !config.onDrop) { return; }
 
