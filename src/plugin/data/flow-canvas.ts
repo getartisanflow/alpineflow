@@ -44,7 +44,7 @@ import { createLasso, type LassoInstance } from '../../core/lasso';
 import { getNodesInPolygon, getNodesFullyInPolygon, pointInPolygon } from '../../core/lasso-hit-test';
 import { clearValidationClasses } from '../directives/flow-handle';
 import { installHandleDelegation } from '../handle-delegation';
-import { resolveShortcuts, matchesKey, matchesModifier, shouldCaptureNudge } from '../../core/keyboard-shortcuts';
+import { resolveShortcuts, matchesKey, matchesModifier, shouldCaptureNudge, isEditableTarget } from '../../core/keyboard-shortcuts';
 import { isDraggable, isSelectable } from '../../core/node-flags';
 import { attachLongPress } from '../../core/long-press';
 import { getNodesInRect, getNodesFullyInRect, SpatialGrid, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
@@ -1601,7 +1601,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
         if (!this._active) return;
         if (this._animationLocked) return;
 
-        const tag = (e.target as HTMLElement).tagName;
+        // True while the user is editing a form field or contenteditable element —
+        // shortcuts must not hijack keys meant for the text being typed.
+        const editable = isEditableTarget(e.target);
         const shortcuts = this._shortcuts;
 
         // Escape → close context menu
@@ -1626,20 +1628,20 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
         // Delete selected
         if (matchesKey(e.key, shortcuts.delete)) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           this._deleteSelected();
         }
 
         // Toggle selection tool (box <-> lasso)
         if (matchesKey(e.key, this._shortcuts.selectionToolToggle) && !e.ctrlKey && !e.metaKey) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           this._selectionTool = this._selectionTool === 'box' ? 'lasso' : 'box';
           return;
         }
 
         // Arrow keys → move selected nodes
         if (matchesKey(e.key, shortcuts.moveNodes)) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           if (this._config?.disableKeyboardA11y) return;
           if (this.selectedNodes.size === 0) return;
 
@@ -1686,21 +1688,21 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
         // Undo: Ctrl/Cmd + undo key (without Shift)
         if ((e.ctrlKey || e.metaKey) && !e.shiftKey && matchesKey(e.key, shortcuts.undo)) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           e.preventDefault();
           this.undo();
         }
 
         // Redo: Ctrl/Cmd + Shift + redo key
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && matchesKey(e.key, shortcuts.redo)) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           e.preventDefault();
           this.redo();
         }
 
         // Copy/Paste/Cut: Ctrl/Cmd + key (without Shift)
         if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           if (matchesKey(e.key, shortcuts.copy)) {
             e.preventDefault();
             this.copy();

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { commitDragHistory, reparentWithoutCapture } from './flow-node';
+import { commitDragHistory, reparentWithoutCapture, isNodeActivationKey } from './flow-node';
 import { FlowHistory } from '../../core/history';
 import { mockCtx } from '../data/__test-utils';
 import type { FlowNode } from '../../core/types';
@@ -95,5 +95,59 @@ describe('reparentWithoutCapture — no double-capture during a reparent drag', 
     expect(() => reparentWithoutCapture(canvas, 'n1', 'p1')).toThrow('boom');
     history.capture({ nodes: [node('x')], edges: [] });
     expect(history.canUndo).toBe(true); // finally released the suspend
+  });
+});
+
+describe('isNodeActivationKey — Enter/Space must not be stolen from children', () => {
+  const wrapper = () => {
+    const el = document.createElement('div');
+    el.setAttribute('x-flow-node', '');
+    return el;
+  };
+
+  it('activates on Enter when the node wrapper itself is focused', () => {
+    const el = wrapper();
+    expect(isNodeActivationKey({ key: 'Enter', target: el }, el)).toBe(true);
+  });
+
+  it('activates on Space when the node wrapper itself is focused', () => {
+    const el = wrapper();
+    expect(isNodeActivationKey({ key: ' ', target: el }, el)).toBe(true);
+  });
+
+  it('ignores keys that are not activation keys', () => {
+    const el = wrapper();
+    expect(isNodeActivationKey({ key: 'a', target: el }, el)).toBe(false);
+    expect(isNodeActivationKey({ key: 'Escape', target: el }, el)).toBe(false);
+  });
+
+  it('does not activate for Space typed into an input inside the node', () => {
+    const el = wrapper();
+    const input = document.createElement('input');
+    el.appendChild(input);
+    // keydown bubbles from the input to the wrapper — the space belongs to the input.
+    expect(isNodeActivationKey({ key: ' ', target: input }, el)).toBe(false);
+  });
+
+  it('does not activate for Enter typed into a textarea inside the node', () => {
+    const el = wrapper();
+    const textarea = document.createElement('textarea');
+    el.appendChild(textarea);
+    expect(isNodeActivationKey({ key: 'Enter', target: textarea }, el)).toBe(false);
+  });
+
+  it('does not activate for Enter on a nested button', () => {
+    const el = wrapper();
+    const button = document.createElement('button');
+    el.appendChild(button);
+    expect(isNodeActivationKey({ key: 'Enter', target: button }, el)).toBe(false);
+  });
+
+  it('does not activate for Space inside a contenteditable label', () => {
+    const el = wrapper();
+    const label = document.createElement('div');
+    label.setAttribute('contenteditable', 'true');
+    el.appendChild(label);
+    expect(isNodeActivationKey({ key: ' ', target: label }, el)).toBe(false);
   });
 });

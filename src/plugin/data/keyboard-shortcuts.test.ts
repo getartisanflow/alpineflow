@@ -5,6 +5,7 @@ import {
   matchesKey,
   matchesModifier,
   shouldCaptureNudge,
+  isEditableTarget,
 } from '../../core/keyboard-shortcuts';
 
 describe('resolveShortcuts', () => {
@@ -141,5 +142,34 @@ describe('shouldCaptureNudge', () => {
 
   it('does not capture when the key produced no movement', () => {
     expect(shouldCaptureNudge(false, 2, 0, 0)).toBe(false);
+  });
+});
+
+describe('isEditableTarget', () => {
+  const elWith = (props: Partial<{ tagName: string; isContentEditable: boolean }>) =>
+    ({ tagName: 'DIV', isContentEditable: false, ...props }) as unknown as EventTarget;
+
+  it('detects INPUT', () => {
+    expect(isEditableTarget(elWith({ tagName: 'INPUT' }))).toBe(true);
+  });
+
+  it('detects TEXTAREA', () => {
+    expect(isEditableTarget(elWith({ tagName: 'TEXTAREA' }))).toBe(true);
+  });
+
+  it('detects SELECT', () => {
+    expect(isEditableTarget(elWith({ tagName: 'SELECT' }))).toBe(true);
+  });
+
+  it('detects a contenteditable div, which a tagName-only check misses', () => {
+    expect(isEditableTarget(elWith({ tagName: 'DIV', isContentEditable: true }))).toBe(true);
+  });
+
+  it('returns false for a plain non-editable div', () => {
+    expect(isEditableTarget(elWith({ tagName: 'DIV' }))).toBe(false);
+  });
+
+  it('returns false for a null target', () => {
+    expect(isEditableTarget(null)).toBe(false);
   });
 });

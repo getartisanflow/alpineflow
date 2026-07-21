@@ -10,6 +10,16 @@ The most common way to hit this is the in-canvas node palette: drag an item out,
 
 `dragover` and `drop` now both ignore events whose target is inside an overlay, so the browser shows the "no drop" cursor while over one and the release is a cancel. Drops on the canvas surface and onto nodes are unaffected — `targetNode` resolution still works exactly as before.
 
+### Fixed — canvas shortcuts no longer hijack keys inside `contenteditable` and nested controls
+
+Typing inside a node was destructive. The canvas keydown handler decided whether a keystroke belonged to the user by reading `e.target.tagName` and bailing only on `INPUT`/`TEXTAREA` — but a rich-text editor, a JSON editor, or an inline-editable node label renders a **`contenteditable` `<div>`**, whose `tagName` is `'DIV'`. Every canvas shortcut therefore fired while the user was typing: **Backspace deleted the whole selected node** instead of a character, the arrow keys **moved the node** instead of the caret, and Ctrl/Cmd+Z/C/X/V hit the canvas history and clipboard instead of the text.
+
+The check now lives in one exported helper, `isEditableTarget(target)`, which returns true for `INPUT`, `TEXTAREA`, `SELECT` **and** any element with `isContentEditable`. All six shortcut guards (delete, selection-tool toggle, arrow-nudge, undo, redo, copy/paste/cut) call it.
+
+A second path had the same shape: `x-flow-node` treats Enter/Space as "select this node", but `keydown` bubbles, so it `preventDefault()`ed those keys for **any** focused descendant — no spaces or newlines in a nested input, and nested `<button>`s could not be activated by keyboard at all. Activation is now gated on the event target being the node wrapper itself, via the exported `isNodeActivationKey(e, el)`.
+
+Not a breaking change: both helpers only *widen* the set of targets the canvas keeps its hands off, so any node that already behaved correctly is unaffected.
+
 ### Added — custom edge generators receive the `edge`
 
 Custom edge path generators registered via `flowCanvas({ edgeTypes })` are now called with the `edge` as a second argument — `edgeTypes[type](params, edge)` — where before they saw only the endpoint coordinates. That limitation forced any per-edge routing data (waypoints, lane/channel assignments) to be smuggled in through a **separate closure per edge**; because that data lived in a function rather than on the model, it was lost on `toObject()`/`fromObject()`, so a custom-routed edge came back unrouted after a reload or snapshot restore. A generator can now read its route straight off `edge.data`, where it serializes with the edge and survives the round-trip.
