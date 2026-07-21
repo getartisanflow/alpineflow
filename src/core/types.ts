@@ -1509,8 +1509,8 @@ export interface FlowCanvasConfig {
    *  on `edge.data`) — which, living on the edge, survives serialization. Returns
    *  { path, labelPosition }. The `edge` arg is optional for backward compatibility. */
   edgeTypes?: Record<string, (params: {
-    sourceX: number; sourceY: number; sourcePosition: string;
-    targetX: number; targetY: number; targetPosition: string;
+    sourceX: number; sourceY: number; sourcePosition: 'top' | 'right' | 'bottom' | 'left';
+    targetX: number; targetY: number; targetPosition: 'top' | 'right' | 'bottom' | 'left';
   }, edge?: FlowEdge) => { path: string; labelPosition: { x: number; y: number } }>;
 
   /**

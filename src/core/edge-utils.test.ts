@@ -48,4 +48,31 @@ describe('getEdgePath — custom edge types', () => {
 
     expect(result.path).toBe('M5 0');
   });
+
+  it('reads route data off edge.data that survived a serialization round-trip', () => {
+    // toObject()/fromObject() serialize edges via JSON.parse(JSON.stringify(...)).
+    // A per-edge closure would not survive that boundary; plain data on edge.data
+    // does — so a custom-routed edge still renders correctly after reload/restore.
+    const edge = {
+      id: 'e3',
+      source: 'a',
+      target: 'b',
+      type: 'gutter',
+      data: { gutter: { srcOffset: 7 } },
+    } as unknown as FlowEdge;
+
+    // Round-trip through the exact serialization toObject()/fromObject() use.
+    const restored = JSON.parse(JSON.stringify(edge)) as FlowEdge;
+
+    const edgeTypes = {
+      gutter: (_params: unknown, e?: FlowEdge) => {
+        const off = (e?.data as { gutter?: { srcOffset?: number } })?.gutter?.srcOffset ?? 0;
+        return { path: `M0 0 L${off} 0`, labelPosition: { x: 0, y: 0 } };
+      },
+    };
+
+    const result = getEdgePath(restored, node('a'), node('b'), 'bottom', 'top', at, at, edgeTypes);
+
+    expect(result.path).toBe('M0 0 L7 0'); // route data survived the round-trip and drove the path
+  });
 });
