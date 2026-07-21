@@ -81,6 +81,22 @@ export function reparentWithoutCapture(
   }
 }
 
+/**
+ * Decide whether a keydown should activate (select) the node. Enter/Space are the
+ * activation keys, but keydown bubbles up from every descendant — so the event is
+ * only an activation when the node wrapper *itself* is the target. Without the
+ * target check the directive would `preventDefault()` Enter/Space typed into an
+ * input, textarea, button or contenteditable inside the node, swallowing newlines
+ * and spaces and leaving nested buttons unactivatable.
+ */
+export function isNodeActivationKey(
+  e: { key: string; target: EventTarget | null },
+  el: EventTarget,
+): boolean {
+  if (e.key !== 'Enter' && e.key !== ' ') return false;
+  return e.target === el;
+}
+
 /** Check if the easy-connect modifier key is held. */
 export function isEasyConnectKey(
   e: PointerEvent | { altKey: boolean; metaKey: boolean; shiftKey: boolean },
@@ -1719,7 +1735,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
 
       // Handle selection via keyboard (Enter/Space)
       const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
+        if (!isNodeActivationKey(e, el)) return;
         e.preventDefault();
 
         const node = evaluate(expression) as FlowNode;
