@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Fixed — a drop released over a panel, the controls or the minimap no longer adds a node
+
+The drop-zone listener is attached to the flow container, and the floating overlays (`.flow-panel`, `.flow-controls`, `.flow-minimap`) live *inside* that container with `pointer-events: auto` and a `z-index` above the canvas surface. Their drag events therefore bubbled to the same listener, and the canvas treated them as a drop on the surface — adding a node at the position **behind** the overlay.
+
+The most common way to hit this is the in-canvas node palette: drag an item out, change your mind, release it back over the palette, and instead of cancelling you got a node hidden underneath the panel. Releasing over the zoom controls or the minimap did the same.
+
+`dragover` and `drop` now both ignore events whose target is inside an overlay, so the browser shows the "no drop" cursor while over one and the release is a cancel. Drops on the canvas surface and onto nodes are unaffected — `targetNode` resolution still works exactly as before.
+
 ### Added — custom edge generators receive the `edge`
 
 Custom edge path generators registered via `flowCanvas({ edgeTypes })` are now called with the `edge` as a second argument — `edgeTypes[type](params, edge)` — where before they saw only the endpoint coordinates. That limitation forced any per-edge routing data (waypoints, lane/channel assignments) to be smuggled in through a **separate closure per edge**; because that data lived in a function rather than on the model, it was lost on `toObject()`/`fromObject()`, so a custom-routed edge came back unrouted after a reload or snapshot restore. A generator can now read its route straight off `edge.data`, where it serializes with the edge and survives the round-trip.
