@@ -156,4 +156,32 @@ describe('resolveDblClickZoom — double-click is a toggle, not zoom-in-only', (
       expect(next.zoom).not.toBe(zoom);
     }
   });
+
+  // The degenerate configuration: a consumer sets minZoom >= the default level, so
+  // clamping pushes `level` up onto `minZoom` and the toggle has no headroom below
+  // to return to. createPanZoom refuses to attach the toggle in this case (see the
+  // 'double-click mode wiring' suite), but the pure function must still be honest
+  // about it rather than handing back a transform that only looks like a move.
+  describe('level === minZoom (no headroom)', () => {
+    const degenerate = (remembered: { x: number; y: number; zoom: number } | null = null) =>
+      ({ level: 2, minZoom: 2, remembered });
+
+    it('returns the current viewport unchanged instead of a disguised no-op', () => {
+      const current = { x: 10, y: 20, zoom: 2 };
+      const { next, remember } = resolveDblClickZoom(current, { x: 100, y: 50 }, degenerate());
+      expect(next).toEqual(current);
+      expect(remember).toBeNull();
+    });
+
+    it('still restores a remembered viewport when there is one', () => {
+      const remembered = { x: 1, y: 2, zoom: 0.5 };
+      const { next } = resolveDblClickZoom({ x: 10, y: 20, zoom: 2 }, { x: 0, y: 0 }, degenerate(remembered));
+      expect(next).toEqual(remembered);
+    });
+
+    it('still zooms in when below the level', () => {
+      const { next } = resolveDblClickZoom({ x: 0, y: 0, zoom: 1 }, { x: 100, y: 50 }, degenerate());
+      expect(next.zoom).toBe(2);
+    });
+  });
 });

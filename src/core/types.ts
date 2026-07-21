@@ -1774,11 +1774,19 @@ export interface FlowCanvasConfig {
   nodeDragThreshold?: number;
 
   // ── Double-Click Zoom ─────────────────────────────────────────────
-  /** Zoom in on double-click. Default: true */
-  zoomOnDoubleClick?: boolean;
+  /** Double-click zoom behaviour. Default: `true` (identical to `'step'`).
+   *
+   *  - `true` / `'step'` — d3-zoom's native handler: ×2 in per double-click,
+   *    `shift`+double-click to step out, repeatable.
+   *  - `'toggle'` — jump to {@link FlowCanvasConfig.dblClickZoomLevel} about the
+   *    cursor; a second double-click restores the exact viewport you came from.
+   *  - `false` — disabled. */
+  zoomOnDoubleClick?: boolean | 'step' | 'toggle';
   /** Zoom level the first double-click animates to (the "readable" level). A second
    *  double-click at or above that level restores the viewport from before the
-   *  zoom-in. Clamped to [minZoom, maxZoom]. Default: 1.5 */
+   *  zoom-in. Clamped to [minZoom, maxZoom]; must exceed `minZoom` for the toggle to
+   *  have room to return to. Only consulted when `zoomOnDoubleClick: 'toggle'`.
+   *  Default: 1.5 */
   dblClickZoomLevel?: number;
 
   // ── Select on Drag ────────────────────────────────────────────────

@@ -19,19 +19,23 @@ The check now lives in one exported helper, `isEditableTarget(target)`, which re
 A second path had the same shape: `x-flow-node` treats Enter/Space as "select this node", but `keydown` bubbles, so it `preventDefault()`ed those keys for **any** focused descendant — no spaces or newlines in a nested input, and nested `<button>`s could not be activated by keyboard at all. Activation is now gated on the event target being the node wrapper itself, via the exported `isNodeActivationKey(e, el)`.
 
 Not a breaking change: both helpers only *widen* the set of targets the canvas keeps its hands off, so any node that already behaved correctly is unaffected.
-### Changed — double-click zoom is a toggle, plus a new `dblClickZoomLevel`
+### Added — opt-in `'toggle'` mode for double-click zoom, plus `dblClickZoomLevel`
 
-Double-click zoom came straight from d3-zoom, which only ever zooms **in** — one step per double-click, capped at `maxZoom`. Once there, the gesture silently did nothing, and there was no double-click way back out: the user had to reach for the wheel or the controls. Worse, each double-click stepped by d3's fixed factor, so "get me to a readable level" took an unpredictable number of clicks depending on where the viewport started.
+Double-click zoom comes from d3-zoom, which only ever zooms **in** — one ×2 step per double-click (`shift` to step out), capped at `maxZoom`. That is the right default, but it makes "get me to a readable level and back" an unpredictable number of clicks, and once at `maxZoom` a plain double-click does nothing.
 
-The handler is now AlpineFlow's own and behaves as a toggle:
+`zoomOnDoubleClick` now accepts a mode as well as a boolean:
 
-- **Below the readable level** — animate to `dblClickZoomLevel` (default `1.5`) about the cursor, keeping the point under the pointer fixed, and remember the viewport you came from.
-- **At or above it, with a remembered viewport** — restore that viewport *exactly*, so double-click-in / double-click-out is a true round trip rather than an approximate zoom-out.
-- **At or above it with nothing remembered** (you got there by wheel or `setViewport`) — zoom out to `minZoom` about the cursor, so the gesture never stalls.
+| Value | Behaviour |
+|---|---|
+| `true` / `'step'` *(default)* | d3-zoom's native handler, unchanged — ×2 in, `shift`+double-click out, repeatable |
+| `'toggle'` | jump to `dblClickZoomLevel` about the cursor; the next double-click restores the previous viewport exactly |
+| `false` | disabled |
 
-New **`dblClickZoomLevel`** option on `flowCanvas({ … })` sets that readable level; it is clamped to `[minZoom, maxZoom]`, so a value outside the configured range degrades to the nearest bound instead of fighting d3's scale extent.
+In `'toggle'` mode the gesture is a true round trip: the first double-click animates to `dblClickZoomLevel` (default `1.5`) keeping the point under the pointer fixed and remembering the viewport it left, and the second puts that viewport back precisely rather than approximating it with a zoom-out. Reach the level some other way — wheel, `setViewport()` — and there is nothing to restore, so the gesture zooms out to `minZoom` about the cursor instead of stalling. Panning or zooming by hand discards the remembered viewport, so a toggle-out never returns to a view the user has since left.
 
-Alpha-breaking only in feel: `zoomOnDoubleClick: false` still disables the gesture entirely, and the default is still "double-click zooms in", but the level reached and the second-click behaviour differ from d3's. Consistent with the previous handler (and with `createPanZoomFilter`, which never filtered `dblclick`), the gesture stays live when `zoomable: false` — that option gates wheel and pinch, not double-click.
+New **`dblClickZoomLevel`** sets that level, clamped to `[minZoom, maxZoom]`. It must clear `minZoom` for the toggle to have anywhere to return to; if clamping pushes it onto `minZoom`, AlpineFlow keeps d3's stepped handler rather than installing a gesture that would stall on the second click.
+
+Not a breaking change: the default is byte-for-byte the previous behaviour — d3's handler stays bound, `shift`+double-click keeps working, and `dblClickZoomLevel` is only consulted in `'toggle'` mode. Unlike `'step'`, `'toggle'` honours `zoomable: false`, since it can animate a zoom-*out* and re-centre.
 
 ### Added — custom edge generators receive the `edge`
 

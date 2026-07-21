@@ -18,11 +18,35 @@ order: 6
 | `panOnScrollSpeed` | `number` | `1` | Scroll pan sensitivity multiplier. |
 | `panActivationKeyCode` | `string \| null` | `'Space'` | Key that temporarily enables panning when held. |
 | `zoomActivationKeyCode` | `string \| null` | `null` | Key that forces zoom-on-wheel, overriding `panOnScroll`. |
-| `zoomOnDoubleClick` | `boolean` | `true` | Toggle zoom on double-click. |
-| `dblClickZoomLevel` | `number` | `1.5` | Zoom level the first double-click animates to. A second double-click at or above it restores the previous viewport. Clamped to `[minZoom, maxZoom]`. |
+| `zoomOnDoubleClick` | `boolean \| 'step' \| 'toggle'` | `true` | `true`/`'step'` = d3's stepped zoom, `'toggle'` = jump-to-level and back, `false` = disabled. See [Double-click zoom](#double-click-zoom). |
+| `dblClickZoomLevel` | `number` | `1.5` | Level `'toggle'` mode animates to. Clamped to `[minZoom, maxZoom]`; ignored in `'step'` mode. |
 | `zoomLevels` | `false \| object` | `{ far: 0.4, medium: 0.75 }` | Contextual zoom thresholds. Sets `data-zoom-level` attribute. See [Contextual zoom](../canvas/contextual-zoom.md). |
 | `autoPanSpeed` | `number` | `15` | Auto-pan speed multiplier. |
 | `autoPanOnConnect` | `boolean` | `true` | Auto-pan when drawing connections near canvas edge. |
+
+## Double-click zoom
+
+`zoomOnDoubleClick` picks between two gestures.
+
+**`true` / `'step'` (default)** — d3-zoom's native handler. Each double-click multiplies the zoom by 2, `shift`+double-click divides it by 2, and both repeat until the scale extent is reached.
+
+**`'toggle'`** — one double-click jumps to `dblClickZoomLevel` centred on the cursor and remembers where you came from; the next one puts that viewport back *exactly*. Useful when the canvas has a natural "reading" zoom and you want a one-gesture round trip to it.
+
+```js
+flowCanvas({
+  zoomOnDoubleClick: 'toggle',
+  dblClickZoomLevel: 1.5,   // the "readable" level
+})
+```
+
+If you reach the level some other way — the wheel, `setViewport()` — there is no remembered viewport to go back to, so a double-click there zooms out to `minZoom` about the cursor instead of doing nothing. Panning or zooming by hand discards the remembered viewport, so a later toggle-out never jumps to a view you have since left.
+
+Two things to know about `'toggle'`:
+
+- `dblClickZoomLevel` must sit above `minZoom`, otherwise there is no room to zoom back out into. If it does not (because clamping pushed it onto `minZoom`), AlpineFlow keeps d3's stepped handler rather than installing a gesture that would stall.
+- Unlike `'step'`, it honours `zoomable: false` — the toggle can animate a zoom-*out* and re-centre, which is a stronger contradiction of "no zoom" than a stepped zoom-in.
+
+**`false`** — no double-click zoom at all.
 
 ## Interaction Escape Hatches
 
