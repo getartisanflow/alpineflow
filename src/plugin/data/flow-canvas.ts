@@ -1273,7 +1273,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
         translateExtent: config.translateExtent,
         isLocked: () => this._animationLocked,
         noPanClassName: config.noPanClassName ?? 'nopan',
-        noWheelClassName: config.noWheelClassName,
+        noWheelClassName: config.noWheelClassName ?? 'nowheel',
         zoomOnDoubleClick: config.zoomOnDoubleClick,
         dblClickZoomLevel: config.dblClickZoomLevel,
         panOnDrag: config.panOnDrag,

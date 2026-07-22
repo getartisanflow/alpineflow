@@ -106,11 +106,15 @@ interface PanZoomFilterOptions {
   panOnDrag?: boolean | number[];
 }
 
-function createPanZoomFilter(opts: PanZoomFilterOptions) {
+export function createPanZoomFilter(opts: PanZoomFilterOptions) {
   const { pannable, zoomable, isLocked, noPanClassName, noWheelClassName, isTouchSelectionMode, isPanKeyHeld, panOnDrag } = opts;
   return (event: any) => {
     if (isLocked?.()) return false;
-    if (noPanClassName && (event.target as HTMLElement)?.closest?.('.' + noPanClassName)) return false;
+    // noPanClassName blocks PAN gestures (mousedown/touch), not wheel zoom — wheel is
+    // gated separately by noWheelClassName below. Without the wheel exemption, nodes
+    // (which carry `nopan` so dragging them doesn't pan the canvas) would also swallow
+    // wheel-zoom whenever the cursor is over one. Matches xyflow's nopan/nowheel split.
+    if (event.type !== 'wheel' && noPanClassName && (event.target as HTMLElement)?.closest?.('.' + noPanClassName)) return false;
     if (event.type === 'wheel' && noWheelClassName && (event.target as HTMLElement)?.closest?.('.' + noWheelClassName)) return false;
     if (!zoomable && event.type === 'wheel') return false;
     if (event.type === 'touchstart') {

@@ -53,8 +53,8 @@ Two things to know about `'toggle'`:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `noDragClassName` | `string` | `'nodrag'` | CSS class that prevents node dragging on that element. |
-| `noPanClassName` | `string` | `'nopan'` | CSS class that prevents canvas pan/zoom on that element. |
-| `noWheelClassName` | `string` | — | CSS class that prevents wheel zoom on that element. |
+| `noPanClassName` | `string` | `'nopan'` | CSS class that prevents canvas panning (drag) on that element. Does not block wheel zoom — use `noWheelClassName` for that. |
+| `noWheelClassName` | `string` | `'nowheel'` | CSS class that prevents wheel zoom on that element. Opt-in — no element carries it by default. |
 
 ## See also
 
