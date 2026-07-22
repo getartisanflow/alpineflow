@@ -1461,10 +1461,12 @@ export interface FlowCanvasConfig {
   /** CSS class that prevents node dragging when on or inside the event target. Default: 'nodrag' */
   noDragClassName?: string;
 
-  /** CSS class that prevents canvas pan/zoom when on or inside the event target. Default: 'nopan' */
+  /** CSS class that prevents canvas panning (drag) when on or inside the event target.
+   *  Does NOT block wheel zoom — use noWheelClassName for that. Default: 'nopan' */
   noPanClassName?: string;
 
-  /** CSS class that prevents wheel zoom when on or inside the event target. Default: undefined (disabled) */
+  /** CSS class that prevents wheel zoom when on or inside the event target. No element carries
+   *  it by default, so this is opt-in: add the class to opt an element out of wheel zoom. Default: 'nowheel' */
   noWheelClassName?: string;
 
   /** Which mouse buttons trigger panning. true = left button (default), false = disabled,

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Fixed — wheel zoom now works while the pointer is over a node
+
+Nodes carry the `noPanClassName` class (default `nopan`) so dragging a node moves the node and doesn't pan the canvas. But the pan/zoom filter blocked **every** gesture whose target was inside a `.nopan` element — including `wheel` — so scroll- and pinch-zoom silently did nothing whenever the cursor was over a node, which for a dense graph is most of the canvas.
+
+The filter now exempts `wheel` from the `noPanClassName` check: `nopan` gates panning (drag) only, and wheel zoom is gated separately by `noWheelClassName` (matching the react-flow/xyflow split this was modelled on). Panning over a node and double-click zoom are unaffected.
+
+### Added — `nowheel` class to opt an element out of wheel zoom
+
+`noWheelClassName` now defaults to `'nowheel'`, the symmetric counterpart to `noPanClassName`'s `'nopan'`. Add `class="nowheel"` to any element on the canvas — a scrollable panel or list, say — and the wheel scrolls its content instead of zooming the canvas. This is purely additive: unlike `nopan` (which nodes carry automatically), no element carries `nowheel` by default, so existing behavior is unchanged until you apply the class. Override `noWheelClassName` in the canvas config to use a different class name, or set it to `undefined` to disable the feature entirely.
+
 ### Fixed — a drop released over a panel, the controls or the minimap no longer adds a node
 
 The drop-zone listener is attached to the flow container, and the floating overlays (`.flow-panel`, `.flow-controls`, `.flow-minimap`, and any `.canvas-overlay` such as the devtools panel) live *inside* that container with `pointer-events: auto` and a `z-index` above the canvas surface. Their drag events therefore bubbled to the same listener, and the canvas treated them as a drop on the surface — adding a node at the position **behind** the overlay.
