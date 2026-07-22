@@ -45,7 +45,7 @@ In `'toggle'` mode the gesture is a true round trip: the first double-click anim
 
 New **`dblClickZoomLevel`** sets that level, clamped to `[minZoom, maxZoom]`. It must clear `minZoom` for the toggle to have anywhere to return to; if clamping pushes it onto `minZoom`, AlpineFlow keeps d3's stepped handler rather than installing a gesture that would stall on the second click.
 
-Not a breaking change: the default is byte-for-byte the previous behaviour — d3's handler stays bound, `shift`+double-click keeps working, and `dblClickZoomLevel` is only consulted in `'toggle'` mode. Unlike `'step'`, `'toggle'` honours `zoomable: false`, since it can animate a zoom-*out* and re-centre.
+Not a breaking change: the default is byte-for-byte the previous behaviour — d3's handler stays bound, `shift`+double-click keeps working, and `dblClickZoomLevel` is only consulted in `'toggle'` mode. Both modes treat `zoomable: false` the same way the pan-zoom filter always has: it gates pointer-gesture zooming (wheel, pinch), never double-click — so a canvas that disables wheel zoom to drive zooming itself (e.g. pinch-only) keeps the double-click gesture, and `zoomOnDoubleClick: false` remains the switch for turning that gesture off.
 
 ### Added — custom edge generators receive the `edge`
 

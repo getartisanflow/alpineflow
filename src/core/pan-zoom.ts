@@ -256,11 +256,10 @@ export function createPanZoom(
   // Declared here so a user-driven gesture can invalidate it (see 'start' below).
   let rememberedViewport: ViewportTransform | null = null;
 
-  // Live `zoomable`, kept in step with runtime update(). The toggle dblclick handler
-  // reads this rather than the set-up-time value so update({ zoomable: false })
-  // disables the gesture too — not just d3's own filter. (minZoom / dblClickZoomLevel
-  // stay set-up-time: they feed the attach/detach headroom decision below, so making
-  // them live would mean re-running that wiring, which is out of scope here.)
+  // Live `zoomable`, kept in step with runtime update() — the baseline for the next
+  // partial update({ pannable }) call, which rebuilds the filter without being told
+  // the current zoomable. (It does not gate the toggle dblclick handler: like d3's
+  // own filter, that gesture ignores `zoomable` — see dblClickHandler.)
   let currentZoomable = zoomable;
 
   const zoomBehavior: ZoomBehavior<HTMLElement, unknown> = zoom<HTMLElement, unknown>()
@@ -323,9 +322,13 @@ export function createPanZoom(
   );
 
   const dblClickHandler = (event: MouseEvent) => {
-    // Unlike the old zoom-in-only handler, toggle can animate a zoom-*out* and
-    // re-centre, so it honours `zoomable: false` rather than staying live.
-    if (!currentZoomable) return;
+    // Deliberately NOT gated on `zoomable`, mirroring createPanZoomFilter, which
+    // blocks wheel and pinch on `zoomable: false` but always lets dblclick through —
+    // so in 'step' mode d3's native handler (shift+dblclick zoom-out included) stays
+    // live under that flag. `zoomable` means "no pointer-gesture zoom", while
+    // `zoomOnDoubleClick` alone owns the double-click gesture; a consumer that
+    // disables wheel zoom to run its own (e.g. pinch-only) still keeps double-click
+    // in either mode, and `zoomOnDoubleClick: false` remains the way to turn it off.
     // Mirror the guards createPanZoomFilter applies to a mouse event.
     if (options.isLocked?.()) return;
     const target = event.target as HTMLElement | null;
