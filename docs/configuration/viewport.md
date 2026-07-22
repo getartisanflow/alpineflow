@@ -44,7 +44,7 @@ If you reach the level some other way — the wheel, `setViewport()` — there i
 Two things to know about `'toggle'`:
 
 - `dblClickZoomLevel` must sit above `minZoom`, otherwise there is no room to zoom back out into. If it does not (because clamping pushed it onto `minZoom`), AlpineFlow keeps d3's stepped handler rather than installing a gesture that would stall.
-- Unlike `'step'`, it honours `zoomable: false` — the toggle can animate a zoom-*out* and re-centre, which is a stronger contradiction of "no zoom" than a stepped zoom-in.
+- Like `'step'`, it stays live under `zoomable: false` — that flag gates pointer-gesture zooming (wheel, pinch), never double-click, so a canvas that disables wheel zoom to run its own (e.g. pinch-only via `ctrl`+wheel) keeps the double-click gesture in either mode. Disable double-click zoom itself with `zoomOnDoubleClick: false`.
 
 **`false`** — no double-click zoom at all.
 

@@ -171,35 +171,32 @@ describe('double-click mode wiring', () => {
       expect(zoomOf(container).k).not.toBeCloseTo(1, 5);
     });
 
-    it('with zoomable:false the handler is attached but a double-click does nothing', async () => {
-      let changes = 0;
-      create({ onTransformChange: () => { changes++; }, zoomable: false, ...toggleOpts });
+    it('stays live under zoomable:false, matching what the filter always let dblclick do in step mode', async () => {
+      // `zoomable: false` gates wheel/pinch in createPanZoomFilter and has never
+      // filtered dblclick — d3's native step handler (shift-out included) stays live
+      // under it. The toggle mirrors that: a consumer that turns off wheel zoom to
+      // drive zooming itself keeps the double-click gesture in either mode.
+      create({ onTransformChange: () => {}, zoomable: false, ...toggleOpts });
       stubRect(container);
 
-      const before = { ...zoomOf(container) };
       dblclickAt(container, 100, 50);
-      await settle(); // if the guard were missing, a transition would have moved __zoom by now
-      expect(changes).toBe(0);
-      expect(zoomOf(container)).toEqual(before);
+      await settle();
+      expect(zoomOf(container).k).toBeCloseTo(1.5, 5); // toggled in despite zoomable:false
     });
 
-    it('update({ zoomable: false }) makes a double-click do nothing (and re-enabling brings it back)', async () => {
-      let changes = 0;
-      create({ onTransformChange: () => { changes++; }, ...toggleOpts });
+    it('update({ zoomable: false }) leaves the toggle live too — zoomOnDoubleClick owns the gesture', async () => {
+      create({ onTransformChange: () => {}, ...toggleOpts });
       stubRect(container);
 
       instance!.update({ zoomable: false });
-      const before = { ...zoomOf(container) };
-      dblclickAt(container, 100, 50);
-      await settle(); // the handler must read the live zoomable, not the set-up-time value
-      expect(changes).toBe(0);
-      expect(zoomOf(container)).toEqual(before);
-
-      // Liveness the other way: re-enabling makes the gesture fire again.
-      instance!.update({ zoomable: true });
       dblclickAt(container, 100, 50);
       await settle();
       expect(zoomOf(container).k).toBeCloseTo(1.5, 5);
+
+      // And the round trip still works under the flag.
+      dblclickAt(container, 100, 50);
+      await settle();
+      expect(zoomOf(container).k).toBeCloseTo(1, 5);
     });
 
     it('destroy() removes the custom toggle dblclick listener', async () => {
