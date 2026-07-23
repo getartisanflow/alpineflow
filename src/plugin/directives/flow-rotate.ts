@@ -12,6 +12,7 @@
 
 import type { Alpine } from 'alpinejs';
 import type { FlowNode } from '../../core/types';
+import { resolveCanvasEl } from './resolve-canvas';
 
 /**
  * Compute the rotation angle (0-360) from a pointer position relative to a center point.
@@ -54,7 +55,7 @@ export function registerFlowRotateDirective(Alpine: Alpine) {
         const nodeEl = el.closest('[x-flow-node]') as HTMLElement | null;
         if (!nodeEl) return;
 
-        const canvasEl = el.closest('[data-flow-canvas]') as HTMLElement | null;
+        const canvasEl = resolveCanvasEl(el) as HTMLElement | null;
         if (!canvasEl) return;
 
         const canvas = Alpine.$data(canvasEl) as any;

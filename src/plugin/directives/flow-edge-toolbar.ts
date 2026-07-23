@@ -12,6 +12,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
+import { resolveCanvasEl } from './resolve-canvas';
 
 export function registerFlowEdgeToolbarDirective(Alpine: Alpine) {
   Alpine.directive(
@@ -27,7 +28,7 @@ export function registerFlowEdgeToolbarDirective(Alpine: Alpine) {
 
       const edgeId = edgeGroupEl.dataset.flowEdgeId!;
 
-      const canvasEl = el.closest('[data-flow-canvas]') as HTMLElement | null;
+      const canvasEl = resolveCanvasEl(el) as HTMLElement | null;
       if (!canvasEl) return;
 
       const canvas = Alpine.$data(canvasEl);

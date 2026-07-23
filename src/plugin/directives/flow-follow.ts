@@ -10,6 +10,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
+import { resolveCanvasEl } from './resolve-canvas';
 
 interface FollowOptions {
   target: string;
@@ -38,7 +39,7 @@ export function registerFlowFollowDirective(Alpine: Alpine) {
     (el, { expression, modifiers }, { evaluate, effect, cleanup }) => {
       const isToggle = modifiers.includes('toggle');
 
-      const canvasEl = el.closest('[data-flow-canvas]') as HTMLElement;
+      const canvasEl = resolveCanvasEl(el) as HTMLElement;
       if (!canvasEl) return;
 
       const canvas = Alpine.$data(canvasEl) as any;

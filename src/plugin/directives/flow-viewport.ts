@@ -96,7 +96,9 @@ export function registerFlowViewportDirective(Alpine: Alpine) {
           Alpine.initTree(g as unknown as HTMLElement);
         }
 
-        // Remove pre-rendered static edges SVG (replaced by reactive edges)
+        // Remove pre-rendered static edges SVG (replaced by reactive edges).
+        // Plain closest() (not resolveCanvasEl): x-flow-viewport is the canvas's
+        // own viewport element, always inside — no out-of-canvas escape hatch.
         const containerEl = el.closest('[data-flow-canvas]') ?? el;
         const staticEdges = containerEl.querySelector('.flow-edges-static');
         if (staticEdges) staticEdges.remove();

@@ -11,6 +11,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
+import { resolveCanvasEl } from './resolve-canvas';
 
 type FilterArg = 'node' | 'row';
 
@@ -40,7 +41,7 @@ export function registerFlowFilterDirective(Alpine: Alpine) {
       const parsed = parseFilterDirective(value, modifiers);
       if (!parsed) return;
 
-      const canvasEl = el.closest('[data-flow-canvas]') as HTMLElement;
+      const canvasEl = resolveCanvasEl(el) as HTMLElement;
       if (!canvasEl) return;
 
       const canvas = Alpine.$data(canvasEl) as any;

@@ -14,6 +14,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
+import { resolveCanvasEl } from './resolve-canvas';
 
 export function registerFlowCollapseDirective(Alpine: Alpine) {
   Alpine.directive(
@@ -25,7 +26,7 @@ export function registerFlowCollapseDirective(Alpine: Alpine) {
       const isInstant = modifiers.includes('instant');
 
       const onClick = () => {
-        const canvasEl = el.closest('[data-flow-canvas]') as HTMLElement;
+        const canvasEl = resolveCanvasEl(el) as HTMLElement;
         if (!canvasEl) return;
         const canvas = Alpine.$data(canvasEl) as any;
         if (!canvas) return;
@@ -74,7 +75,7 @@ export function registerFlowCollapseDirective(Alpine: Alpine) {
           const nodeId = evaluate(expression) as string;
           if (!nodeId) return;
 
-          const canvasEl = el.closest('[data-flow-canvas]') as HTMLElement;
+          const canvasEl = resolveCanvasEl(el) as HTMLElement;
           if (!canvasEl) return;
 
           const canvas = Alpine.$data(canvasEl) as any;
