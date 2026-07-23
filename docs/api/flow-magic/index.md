@@ -96,7 +96,7 @@ All `$flow` methods and properties at a glance:
 | `zoomOut` | `(options?) → void` | [Viewport](viewport.md) |
 | `setCenter` | `(x, y, zoom?, options?) → void` | [Viewport](viewport.md) |
 | `panBy` | `(dx, dy, options?) → void` | [Viewport](viewport.md) |
-| `fitView` | `(options?) → void` | [Viewport](viewport.md) |
+| `fitView` | `(options?) → Promise<boolean>` | [Viewport](viewport.md) |
 | `fitBounds` | `(rect, options?) → void` | [Viewport](viewport.md) |
 | `getViewportForBounds` | `(bounds, padding?) → Viewport` | [Viewport](viewport.md) |
 | `toggleInteractive` | `() → void` | [Viewport](viewport.md) |
@@ -137,11 +137,14 @@ All `$flow` methods and properties at a glance:
 | `redo` | `() → void` | [State](state-management.md) |
 | `toObject` | `() → { nodes, edges, viewport }` | [State](state-management.md) |
 | `fromObject` | `(obj) → void` | [State](state-management.md) |
+| `replaceNodes` | `(nodes, edges?) → Promise<void>` | [State](state-management.md) |
+| `setNodes` | `(nodes) → Promise<void>` | [State](state-management.md) |
 | `$reset` | `() → void` | [State](state-management.md) |
 | `$clear` | `() → void` | [State](state-management.md) |
 | `toImage` | `(options?) → Promise<string>` | [State](state-management.md) |
 | `setLoading` | `(value) → void` | [State](state-management.md) |
 | `patchConfig` | `(changes) → void` | [State](state-management.md) |
+| `setCrossingReduction` | `(value) → void` | [State](state-management.md) |
 | `closeContextMenu` | `() → void` | [State](state-management.md) |
 | `resetPanels` | `() → void` | [State](state-management.md) |
 | `run` | `(options) → RunHandle` | Workflow addon |

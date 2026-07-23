@@ -9,18 +9,18 @@ order: 4
 ### addEdges
 
 ```ts
-$flow.addEdges(edges: FlowEdge | FlowEdge[]): void
+$flow.addEdges(edges: FlowEdge | FlowEdge[], options?: { source?: ChangeOrigin }): void
 ```
 
-Add one or more edges to the canvas. Merges `defaultEdgeOptions` from config onto new edges (edge-specific properties override defaults).
+Add one or more edges to the canvas. Merges `defaultEdgeOptions` from config onto new edges (edge-specific properties override defaults). `options.source` sets the `origin` on the emitted `edges-change` event ([ChangeOrigin](../types.md#changeorigin), default `'api'`).
 
 ### removeEdges
 
 ```ts
-$flow.removeEdges(ids: string | string[]): void
+$flow.removeEdges(ids: string | string[], options?: { source?: ChangeOrigin }): void
 ```
 
-Remove one or more edges by ID.
+Remove one or more edges by ID. `options.source` stamps the `edges-change` origin (default `'api'`).
 
 ### getEdge
 
