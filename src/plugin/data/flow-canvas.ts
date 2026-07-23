@@ -182,8 +182,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
       return !this.ready || this._userLoading;
     },
 
-    /** Whether interactivity (pan/zoom/drag) is enabled */
-    isInteractive: true,
+    /** Whether interactivity (pan/zoom/drag) is enabled. Seeded from
+     *  `config.interactive` (default true) so a canvas can start locked. */
+    isInteractive: config.interactive !== false,
 
     /** Whether the canvas container is currently in fullscreen mode */
     isFullscreen: false,
@@ -1352,8 +1353,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
         },
         minZoom: config.minZoom,
         maxZoom: config.maxZoom,
-        pannable: config.pannable,
-        zoomable: config.zoomable,
+        // `interactive: false` is the master overlay — it forces both axes off
+        // at init regardless of the per-axis pannable/zoomable intent, which
+        // toggleInteractive() restores later.
+        pannable: config.interactive === false ? false : config.pannable,
+        zoomable: config.interactive === false ? false : config.zoomable,
         translateExtent: config.translateExtent,
         isLocked: () => this._animationLocked,
         noPanClassName: config.noPanClassName ?? 'nopan',

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added — canvas-level `interactive` config to start locked
+
+`isInteractive` was hardcoded `true` at init, so "start locked" needed a userland flag plus a post-ready `toggleInteractive()`. The `FlowCanvasConfig` now accepts **`interactive?: boolean`** (default `true`): set it `false` and the canvas initialises locked — pan and zoom off — with no follow-up call. `interactive` is a **master overlay** on the per-axis `pannable`/`zoomable` options: when `false` it forces both axes off at init regardless of those options, and `toggleInteractive()` restores the per-axis intent (an axis you set `false` stays off when unlocking). Additive and non-breaking — the default preserves today's behaviour. Also clarifies the distinction from the per-node `FlowNode.locked` flag (which freezes a single node) in both JSDoc sites.
+
 ### Added — ELK `rectpacking` + `aspectRatio` + raw `layoutOptions` escape hatch
 
 The ELK layout wrapper accepts three additions (thanks to [@ronnorthrip](https://github.com/ronnorthrip)): the **`rectpacking`** algorithm for unconnected boxes (edges are dropped for it — rectpacking ignores them by design), an **`aspectRatio`** option (width / height target, maps to `elk.aspectRatio`, honoured by rectpacking and several other algorithms), and a **`layoutOptions`** escape hatch — raw `elk.*` ids merged last, so any ELK option (e.g. `elk.rectpacking.orderBySize`) is reachable without a wrapper change. All three thread through `canvas.applyElkLayout()`.

@@ -135,7 +135,11 @@ export interface FlowNode<T = Record<string, any>> {
   /** Fully freeze this node — prevents drag, delete, connect, reconnect,
    *  select, and resize. Shows dashed border (.flow-node-locked).
    *  Individual flags (draggable, deletable, etc.) override locked when
-   *  set explicitly. Default: false */
+   *  set explicitly. Default: false.
+   *
+   *  Distinct from the canvas-level `FlowCanvasConfig.interactive` switch:
+   *  `locked` freezes one node, `interactive` governs pan/zoom/drag for the
+   *  whole canvas. */
   locked?: boolean;
 
   /** When reconnectOnDelete is enabled globally, set to false to skip
@@ -1109,6 +1113,22 @@ export interface FlowCanvasConfig {
 
   /** Enable zooming. Default: true */
   zoomable?: boolean;
+
+  /**
+   * Master interactivity switch — set `false` to start the canvas **locked**
+   * (no pan, no zoom, no drag) without a post-ready `toggleInteractive()` call.
+   * Default: `true`.
+   *
+   * Precedence: `interactive` is an overlay on top of the per-axis `pannable`
+   * and `zoomable` options. When `false`, the canvas initialises with panning
+   * and zooming off regardless of `pannable`/`zoomable`; `toggleInteractive()`
+   * then restores the per-axis intent (an axis you set `false` stays off).
+   *
+   * Not to be confused with the **per-node** `locked` flag (`FlowNode.locked`),
+   * which freezes a single node's drag/select/resize — `interactive` governs
+   * the whole canvas's pan/zoom/drag interactivity.
+   */
+  interactive?: boolean;
 
   /**
    * Viewport culling: only render nodes/edges visible in the viewport (CSS `display` toggled on off-screen elements).
