@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Workstream 3 — avoidant crossing reduction (opt-in)
+
+**Added**
+- `avoidantCrossingReduction` config (default **off**) + `setCrossingReduction()` runtime knob, with the matching `flow:setCrossingReduction` wire command. When enabled, a per-canvas plan pass groups avoidant edges that share a corridor (base-route channels), computes barycenter-ordered lane offsets, and fans stacked edges apart via a post-route interior-run shift with obstacle revert — so edges funnelling through the same gap separate into ordered lanes instead of drawing coincident. Accepts `true` or `{ channelGap: px }` (default gap 12). Off === pre-WS-3 baseline routing, byte-identical `d` strings.
+
 ### Changed — avoidant edges use rounded corners, not a Catmull-Rom spline
 
 Avoidant edges smoothed their orthogonal route with a Catmull-Rom spline, whose tangents overshoot: the curve hooked at the handle stub and bulged *past* every sharp corner, so the edges looked exaggerated. Avoidant now keeps the straight runs and rounds each corner with a **bounded cubic-bezier fillet** (`buildRoundedPath`, default radius `AVOIDANT_CORNER_RADIUS = 40`, clamped per-corner to half the shorter adjacent segment). The fillet lives inside the corner, so the curve **hugs the route and can't overshoot** — smooth and bezier-like, but visually distinct from `orthogonal`'s tight bends. This changes the exact `d` string of every avoidant edge. The Catmull-Rom builder is retained for the freeform `editable` edge type, which is unchanged.
