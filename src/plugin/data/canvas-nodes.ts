@@ -9,7 +9,7 @@
 // ============================================================================
 
 import type { CanvasContext } from './canvas-context';
-import type { FlowNode, FlowEdge, FlowNodeRunState, XYPosition } from '../../core/types';
+import type { FlowNode, FlowEdge, FlowNodeRunState, XYPosition, ChangeOrigin } from '../../core/types';
 import { debug } from '../../core/debug';
 import { sortNodesTopological, getDescendantIds } from '../../core/sub-flow';
 import {
@@ -44,7 +44,7 @@ export function createNodesMixin(ctx: CanvasContext) {
      * - Runs child layout for any layout parents that received new children.
      * - Schedules auto-layout after the mutation.
      */
-    addNodes(newNodes: FlowNode | FlowNode[], options?: { center?: boolean }): void {
+    addNodes(newNodes: FlowNode | FlowNode[], options?: { center?: boolean; source?: ChangeOrigin }): void {
       ctx._captureHistory();
       let arr = Array.isArray(newNodes) ? newNodes : [newNodes];
       debug('init', `Adding ${arr.length} node(s)`, arr.map((n) => n.id));
@@ -136,7 +136,7 @@ export function createNodesMixin(ctx: CanvasContext) {
         }
       }
 
-      ctx._emit('nodes-change', { type: 'add', nodes: arr });
+      ctx._emit('nodes-change', { type: 'add', nodes: arr, origin: options?.source ?? 'api' });
 
       const collab = ctx._container ? collabStore.get(ctx._container) : undefined;
       if (collab?.bridge) {
@@ -222,7 +222,7 @@ export function createNodesMixin(ctx: CanvasContext) {
      * - Re-layouts any layout parents that lost children.
      * - Schedules auto-layout after the mutation.
      */
-    removeNodes(ids: string | string[]): void {
+    removeNodes(ids: string | string[], options?: { source?: ChangeOrigin }): void {
       ctx._captureHistory();
       const idSet = new Set(Array.isArray(ids) ? ids : [ids]);
 
@@ -312,8 +312,8 @@ export function createNodesMixin(ctx: CanvasContext) {
         ctx._edgeDirtyTicks?.delete(edgeId);
         ctx._edgeCorridors?.delete(edgeId);
       }
-      if (removed.length) ctx._emit('nodes-change', { type: 'remove', nodes: removed });
-      if (reconnected.length) ctx._emit('edges-change', { type: 'add', edges: reconnected });
+      if (removed.length) ctx._emit('nodes-change', { type: 'remove', nodes: removed, origin: options?.source ?? 'api' });
+      if (reconnected.length) ctx._emit('edges-change', { type: 'add', edges: reconnected, origin: options?.source ?? 'api' });
 
       const collab = ctx._container ? collabStore.get(ctx._container) : undefined;
       if (collab?.bridge) {

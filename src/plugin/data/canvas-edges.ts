@@ -9,7 +9,7 @@
 // ============================================================================
 
 import type { CanvasContext } from './canvas-context';
-import type { FlowEdge } from '../../core/types';
+import type { FlowEdge, ChangeOrigin } from '../../core/types';
 import { debug } from '../../core/debug';
 import { collabStore } from '../../collab/store';
 import { checkConnectionRules } from '../../core/connections';
@@ -25,7 +25,7 @@ export function createEdgesMixin(ctx: CanvasContext) {
      * - Pushes collab updates when a collaboration bridge is active.
      * - Schedules auto-layout after the mutation.
      */
-    addEdges(newEdges: FlowEdge | FlowEdge[]): void {
+    addEdges(newEdges: FlowEdge | FlowEdge[], options?: { source?: ChangeOrigin }): void {
       const defaults = ctx._config.defaultEdgeOptions;
       const connectionRules = ctx._config.connectionRules;
       const arr = (Array.isArray(newEdges) ? newEdges : [newEdges])
@@ -45,7 +45,7 @@ export function createEdgesMixin(ctx: CanvasContext) {
       // (grouping stays empty → empty change set).
       const relaned = ctx._computeEndpointGrouping();
       if (relaned.size > 0) ctx._markEdgesDirtyById(relaned);
-      ctx._emit('edges-change', { type: 'add', edges: arr });
+      ctx._emit('edges-change', { type: 'add', edges: arr, origin: options?.source ?? 'api' });
 
       const collab = ctx._container ? collabStore.get(ctx._container) : undefined;
       if (collab?.bridge) {
@@ -66,7 +66,7 @@ export function createEdgesMixin(ctx: CanvasContext) {
      * - Pushes collab updates when a collaboration bridge is active.
      * - Schedules auto-layout after the mutation.
      */
-    removeEdges(ids: string | string[]): void {
+    removeEdges(ids: string | string[], options?: { source?: ChangeOrigin }): void {
       ctx._captureHistory();
       const idSet = new Set(Array.isArray(ids) ? ids : [ids]);
       debug('edge', `Removing ${idSet.size} edge(s)`, [...idSet]);
@@ -82,7 +82,7 @@ export function createEdgesMixin(ctx: CanvasContext) {
       // surviving group members and dirty exactly those. No-op when spread is off.
       const relaned = ctx._computeEndpointGrouping();
       if (relaned.size > 0) ctx._markEdgesDirtyById(relaned);
-      if (removed.length) ctx._emit('edges-change', { type: 'remove', edges: removed });
+      if (removed.length) ctx._emit('edges-change', { type: 'remove', edges: removed, origin: options?.source ?? 'api' });
 
       const collab = ctx._container ? collabStore.get(ctx._container) : undefined;
       if (collab?.bridge) {

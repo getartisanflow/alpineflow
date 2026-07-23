@@ -36,6 +36,7 @@ import type {
   StopOptions,
   SchemaMetrics,
   EndpointSpreadGrouping,
+  ChangeOrigin,
 } from '../../core/types';
 import type { FlowGroup } from '../../animate/flow-group';
 import type { Transaction } from '../../animate/transaction';
@@ -592,10 +593,10 @@ export interface CanvasContext {
   getEdgeElement(id: string): SVGElement | HTMLElement | null;
 
   /** Add one or more nodes */
-  addNodes(newNodes: FlowNode | FlowNode[], options?: { center?: boolean }): void;
+  addNodes(newNodes: FlowNode | FlowNode[], options?: { center?: boolean; source?: ChangeOrigin }): void;
 
   /** Remove nodes by ID */
-  removeNodes(ids: string | string[]): void;
+  removeNodes(ids: string | string[], options?: { source?: ChangeOrigin }): void;
 
   /** Set runState on one or more nodes by ID. */
   setNodeState(ids: string | string[], state: FlowNodeRunState): void;
@@ -604,10 +605,10 @@ export interface CanvasContext {
   resetStates(): void;
 
   /** Add one or more edges */
-  addEdges(newEdges: FlowEdge | FlowEdge[]): void;
+  addEdges(newEdges: FlowEdge | FlowEdge[], options?: { source?: ChangeOrigin }): void;
 
   /** Remove edges by ID */
-  removeEdges(ids: string | string[]): void;
+  removeEdges(ids: string | string[], options?: { source?: ChangeOrigin }): void;
 
   /** Get outgoing connected nodes */
   getOutgoers(nodeId: string): FlowNode[];
@@ -733,8 +734,11 @@ export interface CanvasContext {
   /** Convert flow coordinates to screen coordinates */
   flowToScreenPosition(x: number, y: number): XYPosition;
 
-  /** Fit all nodes into the viewport */
-  fitView(options?: { padding?: number; duration?: number }, _retries?: number): void;
+  /**
+   * Fit all nodes into the viewport. Resolves `true` once the fit runs, or
+   * `false` if the retry budget is exhausted with nodes still unmeasured.
+   */
+  fitView(options?: { padding?: number; duration?: number }, _retries?: number): Promise<boolean>;
 
   /** Fit a specific rectangle into the viewport */
   fitBounds(rect: { x: number; y: number; width: number; height: number }, options?: { padding?: number; duration?: number }): void;

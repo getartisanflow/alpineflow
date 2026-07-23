@@ -182,8 +182,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
       return !this.ready || this._userLoading;
     },
 
-    /** Whether interactivity (pan/zoom/drag) is enabled */
-    isInteractive: true,
+    /** Whether interactivity (pan/zoom/drag) is enabled. Seeded from
+     *  `config.interactive` (default true) so a canvas can start locked. */
+    isInteractive: config.interactive !== false,
 
     /** Whether the canvas container is currently in fullscreen mode */
     isFullscreen: false,
@@ -503,7 +504,12 @@ export function registerFlowCanvas(Alpine: Alpine) {
       ).join('');
       const callback = (config as any)[callbackName];
       if (typeof callback === 'function') {
-        callback(detail);
+        // Pass the canvas context as a SECOND arg so handlers can reach the
+        // canvas without global hacks. Deliberately NOT added to `detail`: that
+        // object is shared with the dispatched DOM CustomEvent below, and a
+        // context ref there would be circular — breaking structuredClone / JSON
+        // / wireflow serialization.
+        callback(detail, this);
       }
 
       // DOM event: catchable via @flow-node-click, @flow-connect, etc.
@@ -1352,8 +1358,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
         },
         minZoom: config.minZoom,
         maxZoom: config.maxZoom,
-        pannable: config.pannable,
-        zoomable: config.zoomable,
+        // `interactive: false` is the master overlay — it forces both axes off
+        // at init regardless of the per-axis pannable/zoomable intent, which
+        // toggleInteractive() restores later.
+        pannable: config.interactive === false ? false : config.pannable,
+        zoomable: config.interactive === false ? false : config.zoomable,
         translateExtent: config.translateExtent,
         isLocked: () => this._animationLocked,
         noPanClassName: config.noPanClassName ?? 'nopan',
@@ -2181,8 +2190,8 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
           const targetNode = findDeepestNodeAtPoint(e.clientX, e.clientY);
 
-          const node = config.onDrop({ data, position, targetNode, mimeType: matchedMime });
-          if (node) { this.addNodes(node, { center: true }); }
+          const node = config.onDrop({ data, position, targetNode, mimeType: matchedMime }, this as CanvasContext);
+          if (node) { this.addNodes(node, { center: true, source: 'drop' }); }
         };
 
         this._container.addEventListener('dragover', this._onDropZoneDragOver);

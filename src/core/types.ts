@@ -13,6 +13,9 @@ import type { FlowGroup } from '../animate/flow-group';
 import type { Transaction } from '../animate/transaction';
 import type { MotionConfig } from '../animate/motion/types';
 import type { Recording, RecordOptions, ReplayOptions, ReplayHandle } from '../animate/recording';
+// Type-only import (erased at runtime, no dependency cycle): config event
+// callbacks receive the canvas context as an optional second argument (WS4).
+import type { CanvasContext } from '../plugin/data/canvas-context';
 
 /** 2D coordinate */
 export interface XYPosition {
@@ -135,7 +138,11 @@ export interface FlowNode<T = Record<string, any>> {
   /** Fully freeze this node — prevents drag, delete, connect, reconnect,
    *  select, and resize. Shows dashed border (.flow-node-locked).
    *  Individual flags (draggable, deletable, etc.) override locked when
-   *  set explicitly. Default: false */
+   *  set explicitly. Default: false.
+   *
+   *  Distinct from the canvas-level `FlowCanvasConfig.interactive` switch:
+   *  `locked` freezes one node, `interactive` governs pan/zoom/drag for the
+   *  whole canvas. */
   locked?: boolean;
 
   /** When reconnectOnDelete is enabled globally, set to false to skip
@@ -528,6 +535,17 @@ export interface ConnectionLineProps {
 
 // ─── Events ─────────────────────────────────────────────────────────────────
 
+/**
+ * Origin discriminator for change / restore events (WS5).
+ *
+ * `nodes-change` / `edges-change` carry the first four: `'drop'` (drag-drop),
+ * `'paste'` (clipboard), `'load'` (bulk programmatic load) and `'api'` (a direct
+ * `addNodes`/`removeNodes`/… call — the default). Undo/redo never emit change
+ * events. The `restore` event carries the last three: `'undo'` / `'redo'`
+ * (history) and `'load'` (`fromObject`/`$reset`/`$clear`).
+ */
+export type ChangeOrigin = 'drop' | 'paste' | 'api' | 'load' | 'undo' | 'redo';
+
 export interface FlowEvents {
   'node-click': { node: FlowNode; event: MouseEvent };
   'node-drag-start': { node: FlowNode };
@@ -554,8 +572,8 @@ export interface FlowEvents {
   'pane-context-menu': { event: MouseEvent; position: XYPosition };
   'selection-context-menu': { nodes: FlowNode[]; event: MouseEvent };
   'selection-change': { nodes: string[]; edges: string[]; rows: string[] };
-  'nodes-change': { type: 'add' | 'remove'; nodes: FlowNode[] };
-  'edges-change': { type: 'add' | 'remove'; edges: FlowEdge[] };
+  'nodes-change': { type: 'add' | 'remove'; nodes: FlowNode[]; origin: 'drop' | 'paste' | 'api' | 'load' };
+  'edges-change': { type: 'add' | 'remove'; edges: FlowEdge[]; origin: 'drop' | 'paste' | 'api' | 'load' };
   'node-collapse': { node: FlowNode; descendants: string[] };
   'node-expand': { node: FlowNode; descendants: string[] };
   'node-condense': { node: FlowNode };
@@ -567,6 +585,7 @@ export interface FlowEvents {
   'helper-lines-change': { horizontal: number[]; vertical: number[] };
   'nodes-patch': { patches: Record<string, DeepPartial<FlowNode>> };
   'edges-patch': { patches: Record<string, DeepPartial<FlowEdge>> };
+  'restore': { nodes?: FlowNode[]; edges?: FlowEdge[]; viewport?: Partial<Viewport>; origin: 'undo' | 'redo' | 'load' };
   'init': undefined;
   'destroy': undefined;
 }
@@ -1111,6 +1130,22 @@ export interface FlowCanvasConfig {
   zoomable?: boolean;
 
   /**
+   * Master interactivity switch — set `false` to start the canvas **locked**
+   * (no pan, no zoom, no drag) without a post-ready `toggleInteractive()` call.
+   * Default: `true`.
+   *
+   * Precedence: `interactive` is an overlay on top of the per-axis `pannable`
+   * and `zoomable` options. When `false`, the canvas initialises with panning
+   * and zooming off regardless of `pannable`/`zoomable`; `toggleInteractive()`
+   * then restores the per-axis intent (an axis you set `false` stays off).
+   *
+   * Not to be confused with the **per-node** `locked` flag (`FlowNode.locked`),
+   * which freezes a single node's drag/select/resize — `interactive` governs
+   * the whole canvas's pan/zoom/drag interactivity.
+   */
+  interactive?: boolean;
+
+  /**
    * Viewport culling: only render nodes/edges visible in the viewport (CSS `display` toggled on off-screen elements).
    * - `'auto'` (default): culling turns on automatically once the node count reaches `cullingAutoThreshold` (150).
    * - `true`: always on. `false`: always off.
@@ -1601,91 +1636,91 @@ export interface FlowCanvasConfig {
   // ── Event callbacks ────────────────────────────────────────────────
 
   /** Called when a node is clicked */
-  onNodeClick?: (detail: FlowEvents['node-click']) => void;
+  onNodeClick?: (detail: FlowEvents['node-click'], ctx?: CanvasContext) => void;
 
   /** Called when node drag starts */
-  onNodeDragStart?: (detail: FlowEvents['node-drag-start']) => void;
+  onNodeDragStart?: (detail: FlowEvents['node-drag-start'], ctx?: CanvasContext) => void;
 
   /** Called continuously during node drag */
-  onNodeDrag?: (detail: FlowEvents['node-drag']) => void;
+  onNodeDrag?: (detail: FlowEvents['node-drag'], ctx?: CanvasContext) => void;
 
   /** Called when node drag ends */
-  onNodeDragEnd?: (detail: FlowEvents['node-drag-end']) => void;
+  onNodeDragEnd?: (detail: FlowEvents['node-drag-end'], ctx?: CanvasContext) => void;
 
   /** Called when node resize starts */
-  onNodeResizeStart?: (detail: FlowEvents['node-resize-start']) => void;
+  onNodeResizeStart?: (detail: FlowEvents['node-resize-start'], ctx?: CanvasContext) => void;
 
   /** Called continuously during node resize */
-  onNodeResize?: (detail: FlowEvents['node-resize']) => void;
+  onNodeResize?: (detail: FlowEvents['node-resize'], ctx?: CanvasContext) => void;
 
   /** Called when node resize ends */
-  onNodeResizeEnd?: (detail: FlowEvents['node-resize-end']) => void;
+  onNodeResizeEnd?: (detail: FlowEvents['node-resize-end'], ctx?: CanvasContext) => void;
 
   /** Called when an edge is clicked */
-  onEdgeClick?: (detail: FlowEvents['edge-click']) => void;
+  onEdgeClick?: (detail: FlowEvents['edge-click'], ctx?: CanvasContext) => void;
 
   /** Called when an edge reconnection drag starts */
-  onReconnectStart?: (detail: FlowEvents['reconnect-start']) => void;
+  onReconnectStart?: (detail: FlowEvents['reconnect-start'], ctx?: CanvasContext) => void;
 
   /** Called when an edge is successfully reconnected */
-  onReconnect?: (detail: FlowEvents['reconnect']) => void;
+  onReconnect?: (detail: FlowEvents['reconnect'], ctx?: CanvasContext) => void;
 
   /** Called when an edge reconnection drag ends (success or cancel) */
-  onReconnectEnd?: (detail: FlowEvents['reconnect-end']) => void;
+  onReconnectEnd?: (detail: FlowEvents['reconnect-end'], ctx?: CanvasContext) => void;
 
   /** Called when a connection drag starts */
-  onConnectStart?: (detail: FlowEvents['connect-start']) => void;
+  onConnectStart?: (detail: FlowEvents['connect-start'], ctx?: CanvasContext) => void;
 
   /** Called when a connection is successfully created */
-  onConnect?: (detail: FlowEvents['connect']) => void;
+  onConnect?: (detail: FlowEvents['connect'], ctx?: CanvasContext) => void;
 
   /** Called when multiple connections are created in a single multi-connect drag */
-  onMultiConnect?: (detail: FlowEvents['multi-connect']) => void;
+  onMultiConnect?: (detail: FlowEvents['multi-connect'], ctx?: CanvasContext) => void;
 
   /** Called when a connection drag ends (success or cancel) */
-  onConnectEnd?: (detail: FlowEvents['connect-end']) => void;
+  onConnectEnd?: (detail: FlowEvents['connect-end'], ctx?: CanvasContext) => void;
 
   /** Called when the viewport changes (pan/zoom) */
-  onViewportChange?: (detail: FlowEvents['viewport-change']) => void;
+  onViewportChange?: (detail: FlowEvents['viewport-change'], ctx?: CanvasContext) => void;
 
   /** Called when a user gesture (pan/zoom) starts */
-  onViewportMoveStart?: (detail: FlowEvents['viewport-move-start']) => void;
+  onViewportMoveStart?: (detail: FlowEvents['viewport-move-start'], ctx?: CanvasContext) => void;
 
   /** Called each frame during a user gesture (pan/zoom) */
-  onViewportMove?: (detail: FlowEvents['viewport-move']) => void;
+  onViewportMove?: (detail: FlowEvents['viewport-move'], ctx?: CanvasContext) => void;
 
   /** Called when a user gesture (pan/zoom) ends */
-  onViewportMoveEnd?: (detail: FlowEvents['viewport-move-end']) => void;
+  onViewportMoveEnd?: (detail: FlowEvents['viewport-move-end'], ctx?: CanvasContext) => void;
 
   /** Called when the canvas background is clicked */
-  onPaneClick?: (detail: FlowEvents['pane-click']) => void;
+  onPaneClick?: (detail: FlowEvents['pane-click'], ctx?: CanvasContext) => void;
 
   /** Called when a node is right-clicked */
-  onNodeContextMenu?: (detail: FlowEvents['node-context-menu']) => void;
+  onNodeContextMenu?: (detail: FlowEvents['node-context-menu'], ctx?: CanvasContext) => void;
 
   /** Called when an edge is right-clicked */
-  onEdgeContextMenu?: (detail: FlowEvents['edge-context-menu']) => void;
+  onEdgeContextMenu?: (detail: FlowEvents['edge-context-menu'], ctx?: CanvasContext) => void;
 
   /** Called when the pane background is right-clicked */
-  onPaneContextMenu?: (detail: FlowEvents['pane-context-menu']) => void;
+  onPaneContextMenu?: (detail: FlowEvents['pane-context-menu'], ctx?: CanvasContext) => void;
 
   /** Called when right-clicking with multiple nodes selected */
-  onSelectionContextMenu?: (detail: FlowEvents['selection-context-menu']) => void;
+  onSelectionContextMenu?: (detail: FlowEvents['selection-context-menu'], ctx?: CanvasContext) => void;
 
   /** Called when node or edge selection changes */
-  onSelectionChange?: (detail: FlowEvents['selection-change']) => void;
+  onSelectionChange?: (detail: FlowEvents['selection-change'], ctx?: CanvasContext) => void;
 
   /** Called when nodes are added or removed */
-  onNodesChange?: (detail: FlowEvents['nodes-change']) => void;
+  onNodesChange?: (detail: FlowEvents['nodes-change'], ctx?: CanvasContext) => void;
 
   /** Called when edges are added or removed */
-  onEdgesChange?: (detail: FlowEvents['edges-change']) => void;
+  onEdgesChange?: (detail: FlowEvents['edges-change'], ctx?: CanvasContext) => void;
 
   /** Called when nodes are patched */
-  onNodesPatch?: (detail: FlowEvents['nodes-patch']) => void;
+  onNodesPatch?: (detail: FlowEvents['nodes-patch'], ctx?: CanvasContext) => void;
 
   /** Called when edges are patched */
-  onEdgesPatch?: (detail: FlowEvents['edges-patch']) => void;
+  onEdgesPatch?: (detail: FlowEvents['edges-patch'], ctx?: CanvasContext) => void;
 
   /** Called after the canvas is fully initialized */
   onInit?: () => void;
@@ -1694,16 +1729,16 @@ export interface FlowCanvasConfig {
   onDestroy?: () => void;
 
   /** Called when a node is collapsed */
-  onNodeCollapse?: (detail: FlowEvents['node-collapse']) => void;
+  onNodeCollapse?: (detail: FlowEvents['node-collapse'], ctx?: CanvasContext) => void;
 
   /** Called when a node is expanded */
-  onNodeExpand?: (detail: FlowEvents['node-expand']) => void;
+  onNodeExpand?: (detail: FlowEvents['node-expand'], ctx?: CanvasContext) => void;
 
   /** Called when a node is condensed */
-  onNodeCondense?: (detail: FlowEvents['node-condense']) => void;
+  onNodeCondense?: (detail: FlowEvents['node-condense'], ctx?: CanvasContext) => void;
 
   /** Called when a node is uncondensed */
-  onNodeUncondense?: (detail: FlowEvents['node-uncondense']) => void;
+  onNodeUncondense?: (detail: FlowEvents['node-uncondense'], ctx?: CanvasContext) => void;
 
   /** Called before user-initiated deletion (keyboard Delete/Backspace or cut).
    *  Receives the nodes and edges about to be deleted (already filtered by `deletable`).
@@ -1763,7 +1798,7 @@ export interface FlowCanvasConfig {
    *  @param detail.position - Drop coordinates already converted via screenToFlowPosition
    *  @param detail.targetNode - The deepest FlowNode under the cursor at drop time, or null if dropped on empty space.
    *                             Traverse `node.parentId` upward if you need the outermost container. */
-  onDrop?: (detail: { data: any; mimeType: string; position: XYPosition; targetNode: FlowNode | null }) => FlowNode | null | undefined | false;
+  onDrop?: (detail: { data: any; mimeType: string; position: XYPosition; targetNode: FlowNode | null }, ctx?: CanvasContext) => FlowNode | null | undefined | false;
 
   /** Called when a connection is dropped on empty canvas space. Return a FlowNode to auto-create
    *  it and connect it to the source. Return null to cancel. The auto-created edge uses defaults
@@ -1938,17 +1973,17 @@ export interface FlowInstance {
   /** Current viewport state */
   viewport: Viewport;
 
-  /** Add one or more nodes */
-  addNodes(nodes: FlowNode | FlowNode[]): void;
+  /** Add one or more nodes. `source` tags the emitted `nodes-change` origin (default `'api'`). */
+  addNodes(nodes: FlowNode | FlowNode[], options?: { center?: boolean; source?: ChangeOrigin }): void;
 
-  /** Remove nodes by ID */
-  removeNodes(ids: string | string[]): void;
+  /** Remove nodes by ID. `source` tags the emitted `nodes-change` origin (default `'api'`). */
+  removeNodes(ids: string | string[], options?: { source?: ChangeOrigin }): void;
 
-  /** Add one or more edges */
-  addEdges(edges: FlowEdge | FlowEdge[]): void;
+  /** Add one or more edges. `source` tags the emitted `edges-change` origin (default `'api'`). */
+  addEdges(edges: FlowEdge | FlowEdge[], options?: { source?: ChangeOrigin }): void;
 
-  /** Remove edges by ID */
-  removeEdges(ids: string | string[]): void;
+  /** Remove edges by ID. `source` tags the emitted `edges-change` origin (default `'api'`). */
+  removeEdges(ids: string | string[], options?: { source?: ChangeOrigin }): void;
 
   /** Get a node by ID */
   getNode(id: string): FlowNode | undefined;
@@ -1962,8 +1997,11 @@ export interface FlowInstance {
   /** Convert flow coordinates to screen coordinates */
   flowToScreenPosition(x: number, y: number): XYPosition;
 
-  /** Fit all nodes into the viewport */
-  fitView(options?: { padding?: number; duration?: number }): void;
+  /**
+   * Fit all nodes into the viewport. Resolves `true` once the fit runs, or
+   * `false` if the retry budget is exhausted with nodes still unmeasured.
+   */
+  fitView(options?: { padding?: number; duration?: number }): Promise<boolean>;
 
   /** Zoom/pan the viewport to frame a specific rectangle in flow coordinates. */
   fitBounds(rect: Rect, options?: { padding?: number; duration?: number }): void;

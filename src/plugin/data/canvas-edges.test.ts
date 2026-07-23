@@ -128,6 +128,7 @@ describe('createEdgesMixin — addEdges', () => {
     expect(ctx._emit).toHaveBeenCalledWith('edges-change', {
       type: 'add',
       edges: [edge],
+      origin: 'api',
     });
   });
 
@@ -241,6 +242,7 @@ describe('createEdgesMixin — removeEdges', () => {
     expect(ctx._emit).toHaveBeenCalledWith('edges-change', {
       type: 'remove',
       edges: [e1],
+      origin: 'api',
     });
   });
 

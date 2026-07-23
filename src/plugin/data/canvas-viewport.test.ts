@@ -105,6 +105,49 @@ describe('createViewportMixin — fitView', () => {
     rafSpy.mockRestore();
   });
 
+  it('resolves false when nodes never measure within the retry budget', async () => {
+    const ctx = mockCtx({
+      nodes: [makeNode('n1', { dimensions: undefined })],
+    });
+    const mixin = createViewportMixin(ctx);
+    // Fire rAF callbacks synchronously so the 10-retry budget drains at once.
+    const rafSpy = vi
+      .spyOn(globalThis, 'requestAnimationFrame')
+      .mockImplementation((cb: FrameRequestCallback) => {
+        cb(0);
+        return 0;
+      });
+
+    const result = await mixin.fitView();
+    expect(result).toBe(false);
+
+    rafSpy.mockRestore();
+  });
+
+  it('resolves true and transforms the viewport once nodes are measured', async () => {
+    const panZoom = { setViewport: vi.fn(), update: vi.fn() };
+    const container = document.createElement('div');
+    Object.defineProperty(container, 'clientWidth', { value: 800 });
+    Object.defineProperty(container, 'clientHeight', { value: 600 });
+
+    const ctx = mockCtx({
+      _container: container,
+      _panZoom: panZoom as any,
+      _config: { nodeOrigin: [0, 0], minZoom: 0.5, maxZoom: 2 } as any,
+      nodes: [
+        makeNode('n1', { position: { x: 0, y: 0 } }),
+        makeNode('n2', { position: { x: 200, y: 150 } }),
+      ],
+    });
+    for (const n of ctx.nodes) ctx._nodeMap.set(n.id, n);
+
+    const mixin = createViewportMixin(ctx);
+    const result = await mixin.fitView();
+
+    expect(result).toBe(true);
+    expect(panZoom.setViewport).toHaveBeenCalled();
+  });
+
   it('calls fitBounds and announcer when nodes have dimensions', () => {
     const mockAnnouncer = { handleEvent: vi.fn() };
     const panZoom = { setViewport: vi.fn(), update: vi.fn() };
@@ -583,6 +626,25 @@ describe('createViewportMixin — toggleInteractive', () => {
     expect(panZoom.update).toHaveBeenCalledWith({
       pannable: true,
       zoomable: true,
+    });
+  });
+
+  it('restores per-axis intent (pannable/zoomable) when toggling back to interactive', () => {
+    const panZoom = { setViewport: vi.fn(), update: vi.fn() };
+    const ctx = mockCtx({
+      _panZoom: panZoom as any,
+      isInteractive: false,
+      // Config wanted panning but not zooming; interactive is the master overlay.
+      _config: { pannable: true, zoomable: false } as any,
+    });
+    const mixin = createViewportMixin(ctx);
+
+    mixin.toggleInteractive();
+
+    expect(ctx.isInteractive).toBe(true);
+    expect(panZoom.update).toHaveBeenCalledWith({
+      pannable: true,
+      zoomable: false,
     });
   });
 });
