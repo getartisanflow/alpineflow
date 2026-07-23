@@ -619,6 +619,8 @@ export function createLayoutMixin(ctx: CanvasContext) {
       direction?: ElkDirection;
       nodeSpacing?: number;
       layerSpacing?: number;
+      aspectRatio?: number;
+      layoutOptions?: Record<string, string>;
       adjustHandles?: boolean;
       fitView?: boolean;
       duration?: number;
@@ -637,6 +639,8 @@ export function createLayoutMixin(ctx: CanvasContext) {
         direction,
         nodeSpacing: options?.nodeSpacing,
         layerSpacing: options?.layerSpacing,
+        aspectRatio: options?.aspectRatio,
+        layoutOptions: options?.layoutOptions,
       });
 
       if (positions.size === 0) {

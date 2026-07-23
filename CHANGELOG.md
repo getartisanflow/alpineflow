@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added — ELK `rectpacking` + `aspectRatio` + raw `layoutOptions` escape hatch
+
+The ELK layout wrapper accepts three additions (thanks to [@ronnorthrip](https://github.com/ronnorthrip)): the **`rectpacking`** algorithm for unconnected boxes (edges are dropped for it — rectpacking ignores them by design), an **`aspectRatio`** option (width / height target, maps to `elk.aspectRatio`, honoured by rectpacking and several other algorithms), and a **`layoutOptions`** escape hatch — raw `elk.*` ids merged last, so any ELK option (e.g. `elk.rectpacking.orderBySize`) is reachable without a wrapper change. All three thread through `canvas.applyElkLayout()`.
+
 ### Workstream 3 — avoidant crossing reduction (opt-in)
 
 **Added**
