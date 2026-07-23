@@ -493,8 +493,9 @@ interface AnimateOptions {
   easing?: EasingName | ((t: number) => number);
   /** Delay before starting in ms. Default: 0 */
   delay?: number;
-  /** true = loop forever, 'reverse' = ping-pong. Default: false */
-  loop?: boolean | 'reverse';
+  /** true = loop forever; 'ping-pong' bounces target↔start forever.
+   *  'reverse' is a backward-compat alias for 'ping-pong'. Default: false */
+  loop?: boolean | 'ping-pong' | 'reverse';
   /** Called each frame with progress 0-1. */
   onProgress?: (progress: number) => void;
   /** Called when animation completes. */
@@ -705,6 +706,20 @@ The full configuration interface for `flowCanvas()`. Due to its size, it is docu
 
 ---
 
+## Change Events
+
+### ChangeOrigin
+
+Discriminator on the `nodes-change` / `edges-change` and `restore` events, letting you react only to user intent (e.g. persist a user drop but ignore your own API writes). See [Events](events.md#nodes-change).
+
+```ts
+type ChangeOrigin = 'drop' | 'paste' | 'api' | 'load' | 'undo' | 'redo';
+```
+
+`nodes-change` / `edges-change` carry the first four (`'drop'` drag-drop, `'paste'` clipboard, `'load'` bulk `fromObject`/`replaceNodes`, `'api'` a direct call — the default). The `restore` event carries `'undo'` / `'redo'` (history) or `'load'` (`fromObject` / `$reset` / `$clear`). The mutators (`addNodes`, `removeNodes`, `addEdges`, `removeEdges`) accept a `{ source?: ChangeOrigin }` option to override the default `'api'`.
+
+---
+
 ## Export Types
 
 ### ToImageOptions
@@ -780,7 +795,8 @@ All exported types at a glance:
 | `FollowOptions` | Animation | `{ zoom?, padding?, easing? }` |
 | `ParticleOptions` | Animation | `{ color?, size?, duration? }` |
 | `ParticleHandle` | Animation | `{ getCurrentPosition, stop, finished }` |
-| `ChildValidation` | Validation | `{ allowedTypes?, minChildren?, maxChildren?, maxDepth?, ... }` |
+| `ChildValidation` | Validation | `{ allowedChildTypes?, minChildren?, maxChildren?, ... }` |
+| `ChangeOrigin` | Events | `'drop' \| 'paste' \| 'api' \| 'load' \| 'undo' \| 'redo'` |
 | `ChildValidationResult` | Validation | `{ valid, errors }` |
 | `ChildLayout` | Layout | `{ direction, gap, padding, ... }` |
 | `KeyboardShortcuts` | Input | Customizable key bindings map |
