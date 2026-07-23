@@ -155,3 +155,26 @@ describe('getAvoidantPath', () => {
     expect(typeof result.labelOffsetY).toBe('number');
   });
 });
+
+describe('getAvoidantPath buried-endpoint obstacles', () => {
+  it('routes around remaining obstacles when a third-party node covers the target handle', () => {
+    // Mirrors the schema-scramble bug: a node landed on the target handle.
+    // The edge must still get a routed (L-run) path around the mid obstacle,
+    // not the straight bezier fallback.
+    const result = getAvoidantPath({
+      sourceX: 0,
+      sourceY: 30,
+      sourcePosition: 'right',
+      targetX: 300,
+      targetY: 30,
+      targetPosition: 'left',
+      obstacles: [
+        { x: 100, y: 0, width: 80, height: 60 },   // legit mid obstacle
+        { x: 290, y: 10, width: 60, height: 40 },  // covers the target handle
+      ],
+    });
+
+    const lCount = (result.path.match(/L/g) ?? []).length;
+    expect(lCount).toBeGreaterThanOrEqual(1);
+  });
+});
