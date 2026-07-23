@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added — config callbacks receive the canvas context as a second argument
+
+`onDrop({ data, mimeType, position, targetNode })` and the `_emit`-routed callbacks (`onConnect`, `onNodeClick`, `onConnectEnd`, `onNodesChange`, …) received no canvas reference, forcing global-variable hacks to reach the canvas from a handler. Every config callback now receives the live canvas context as a **second argument** — `config.onConnect(detail, ctx)`, `config.onDrop(detail, ctx)` — so a handler can call `ctx.addNodes(…)` / `ctx.fitView()` directly. Existing handlers that ignore the extra parameter are unaffected. The context is deliberately **not** added to the event `detail`: that object is shared with the dispatched DOM `CustomEvent`, and a context reference there would be circular — breaking `structuredClone` / JSON / wireflow serialization. Additive; the callback type signatures gain an optional trailing `ctx?: CanvasContext`.
+
 ### Added — canvas-level `interactive` config to start locked
 
 `isInteractive` was hardcoded `true` at init, so "start locked" needed a userland flag plus a post-ready `toggleInteractive()`. The `FlowCanvasConfig` now accepts **`interactive?: boolean`** (default `true`): set it `false` and the canvas initialises locked — pan and zoom off — with no follow-up call. `interactive` is a **master overlay** on the per-axis `pannable`/`zoomable` options: when `false` it forces both axes off at init regardless of those options, and `toggleInteractive()` restores the per-axis intent (an axis you set `false` stays off when unlocking). Additive and non-breaking — the default preserves today's behaviour. Also clarifies the distinction from the per-node `FlowNode.locked` flag (which freezes a single node) in both JSDoc sites.
