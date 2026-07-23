@@ -81,6 +81,8 @@ $flow.toImage(options?: ToImageOptions): Promise<string>
 
 Export the canvas as a data URL image. `html-to-image` ships as a dependency of AlpineFlow, so this works out of the box. Supports custom width, height, padding, background, scope (`'all'` or `'viewport'`), output `format`, overlay inclusion, resolution multiplier via `scale`, and automatic file download via `filename`.
 
+Edges render in the export with their computed stroke, markers, and dash — their stylesheet-driven paint is inlined into the capture so they no longer rasterize invisible.
+
 #### Formats
 
 `format` selects what you get back. The capture is vector either way, so SVG is the intermediate handed straight back rather than extra work.
