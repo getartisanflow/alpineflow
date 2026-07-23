@@ -740,6 +740,13 @@ export interface CanvasContext {
    */
   fitView(options?: { padding?: number; duration?: number }, _retries?: number): Promise<boolean>;
 
+  /**
+   * Resolve once every node has measured dimensions (rAF-retry, budget 10).
+   * Resolves `true` when measured, `false` when the budget is exhausted. Shared
+   * by `fitView` and `replaceNodes`/`setNodes`. `_retries` is internal.
+   */
+  _whenMeasured(_retries?: number): Promise<boolean>;
+
   /** Fit a specific rectangle into the viewport */
   fitBounds(rect: { x: number; y: number; width: number; height: number }, options?: { padding?: number; duration?: number }): void;
 
@@ -910,6 +917,19 @@ export interface CanvasContext {
 
   /** Clear all nodes and edges */
   $clear(): void;
+
+  /**
+   * Replace the whole graph (nodes + edges) atomically via the identity-
+   * preserving restore path. `edges` defaults to empty. Resolves once the new
+   * nodes are measured, so an immediate `fitView()` fits.
+   */
+  replaceNodes(nodes: FlowNode[], edges?: FlowEdge[]): Promise<void>;
+
+  /**
+   * Replace just the nodes, keeping current edges. Resolves once the new nodes
+   * are measured.
+   */
+  setNodes(nodes: FlowNode[]): Promise<void>;
 
   /** Export as image */
   toImage(options?: ToImageOptions): Promise<string>;

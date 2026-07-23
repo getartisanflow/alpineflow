@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added — `replaceNodes()` / `setNodes()` for first-class whole-graph replace
+
+There was no first-class whole-graph replace. The workaround — `$clear()` + `addNodes()` in one tick, with `x-for` keyed by id — made Alpine reuse the DOM, so the per-node measure hook never re-ran, the new nodes got no `dimensions`, and `fitView()` silently gave up.
+
+- **`replaceNodes(nodes, edges?)`** swaps the whole graph atomically on the identity-preserving `fromObject` path (surviving ids keep their live objects; new ids mount fresh and measure). `edges` defaults to empty, so `replaceNodes(nodes)` is a genuine whole-graph replace.
+- **`setNodes(nodes)`** replaces just the nodes, keeping edges (react-flow-style).
+- Both return a `Promise<void>` that resolves once the new nodes are measured — so an immediate `fitView()` fits, with no manual `await nextFrame()`. Both emit `restore` with `origin: 'load'`, and both are server-callable via new **`flow:replaceNodes`** / **`flow:setNodes`** wire commands.
+- A shared **`_whenMeasured()`** helper, factored out of `fitView`'s rAF-retry, backs the measurement wait for both `fitView` and the replace APIs (no behavior change to `fitView` — the measured case still fits synchronously).
+
+**Correction to the earlier `$clear()` framing:** `$clear()` is **not** a phantom being implemented here. It already clears the canvas for real — implemented in the performance pass via the same identity-preserving `fromObject({ nodes: [], edges: [], viewport })` path — and, since the change-origin work, emits `restore` with `origin: 'load'`. Downstream note: WireFlow's `WithWireFlow::flowClear()` is genuinely destructive once WireFlow resyncs its vendored alpineflow bundle.
+
 ### Added — `data-flow-target` escape hatch for out-of-canvas directives
 
 `x-flow-snapshot`, `x-flow-collapse`, `x-flow-detail`, `x-flow-filter`, `x-flow-rotate`, `x-flow-loading`, `x-flow-follow`, `x-flow-action` and `x-flow-edge-toolbar` resolved their canvas with a bare `el.closest('[data-flow-canvas]')`, so they silently no-op when placed **outside** the canvas element — exactly the toolbar/sidebar layout. A shared `resolveCanvasEl()` now backs all of them: (1) a `data-flow-target="<selector>"` on the host or any ancestor (a toolbar wrapper can set it once) points at the canvas; (2) else `closest('[data-flow-canvas]')` as before; (3) else, if exactly one canvas exists in the document, it's used — otherwise `null` and a one-time `console.warn`. Non-breaking: `closest()` remains the middle fallback, so in-canvas placement is unchanged. The two canvas-internal `closest()` sites (`x-flow-node` shape lookup, `x-flow-viewport` static-edge cleanup) keep plain `closest()` — a node/viewport is never outside its own canvas.
@@ -21,6 +32,9 @@ The added `origin` string union is a **forward contract** once tagged — the do
 ### Added — canvas-level `interactive` config to start locked
 
 `isInteractive` was hardcoded `true` at init, so "start locked" needed a userland flag plus a post-ready `toggleInteractive()`. The `FlowCanvasConfig` now accepts **`interactive?: boolean`** (default `true`): set it `false` and the canvas initialises locked — pan and zoom off — with no follow-up call. `interactive` is a **master overlay** on the per-axis `pannable`/`zoomable` options: when `false` it forces both axes off at init regardless of those options, and `toggleInteractive()` restores the per-axis intent (an axis you set `false` stays off when unlocking). Additive and non-breaking — the default preserves today's behaviour. Also clarifies the distinction from the per-node `FlowNode.locked` flag (which freezes a single node) in both JSDoc sites.
+### Changed — `fitView()` now returns `Promise<boolean>` (observable fit)
+
+`fitView()` previously returned `void` and, when any node still lacked measured `dimensions`, deferred up to 10 animation frames and then **silently gave up** without fitting — so "did it actually fit?" was unobservable. It now returns a promise that resolves **`true`** once the fit runs, or **`false`** when the retry budget is exhausted with nodes still unmeasured. The rAF-retry behaviour is unchanged; only completion became observable. Runtime-non-breaking: callers that ignore the return value (including the internal `fitViewOnInit` path) are unaffected. TypeScript consumers who annotated the call as `: void` will see a compile note.
 
 ### Changed — `fitView()` now returns `Promise<boolean>` (observable fit)
 

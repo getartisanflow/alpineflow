@@ -49,6 +49,27 @@ export function createViewportMixin(ctx: CanvasContext) {
     // ── Fit & Bounds ──────────────────────────────────────────────────────
 
     /**
+     * Resolve once every node has measured `dimensions`, deferring via
+     * `requestAnimationFrame` (up to 10 retries) to give the DOM time to render.
+     * Resolves `true` when all nodes are measured, or `false` when the retry
+     * budget is exhausted with nodes still unmeasured.
+     *
+     * Shared by `fitView` and the whole-graph replace APIs so they await the
+     * same measurement signal. `_retries` is an internal recursion counter.
+     */
+    _whenMeasured(_retries = 0): Promise<boolean> {
+      if (ctx.nodes.some((n: FlowNode) => !n.dimensions)) {
+        if (_retries < 10) {
+          return new Promise<boolean>((resolve) => {
+            requestAnimationFrame(() => resolve(this._whenMeasured(_retries + 1)));
+          });
+        }
+        return Promise.resolve(false);
+      }
+      return Promise.resolve(true);
+    },
+
+    /**
      * Fit all visible nodes into the viewport.
      *
      * Defers via `requestAnimationFrame` if any node lacks measured
@@ -61,22 +82,20 @@ export function createViewportMixin(ctx: CanvasContext) {
      * path does exactly that).
      */
     fitView(options?: { padding?: number; duration?: number }, _retries = 0): Promise<boolean> {
-      // Defer if any node lacks measured dimensions so the DOM has time to render
-      if (ctx.nodes.some((n: FlowNode) => !n.dimensions)) {
-        if (_retries < 10) {
-          return new Promise<boolean>((resolve) => {
-            requestAnimationFrame(() => resolve(this.fitView(options, _retries + 1)));
-          });
-        }
-        // Retry budget exhausted with nodes still unmeasured — fit did not run.
-        return Promise.resolve(false);
+      const fit = (): true => {
+        const visibleNodes = ctx.nodes.filter((n: FlowNode) => !n.hidden);
+        const bounds = getNodesBounds(toAbsoluteNodes(visibleNodes, ctx._nodeMap, ctx._config.nodeOrigin), ctx._config.nodeOrigin);
+        this.fitBounds(bounds, options);
+        ctx._announcer?.handleEvent('fit-view', {});
+        return true;
+      };
+      // Fast path: already measured → fit synchronously so side effects land on
+      // this tick (callers and the internal init path observe the same timing).
+      if (!ctx.nodes.some((n: FlowNode) => !n.dimensions)) {
+        return Promise.resolve(fit());
       }
-
-      const visibleNodes = ctx.nodes.filter((n: FlowNode) => !n.hidden);
-      const bounds = getNodesBounds(toAbsoluteNodes(visibleNodes, ctx._nodeMap, ctx._config.nodeOrigin), ctx._config.nodeOrigin);
-      this.fitBounds(bounds, options);
-      ctx._announcer?.handleEvent('fit-view', {});
-      return Promise.resolve(true);
+      // Otherwise wait for measurement (shared rAF-retry), then fit.
+      return this._whenMeasured(_retries).then((measured) => (measured ? fit() : false));
     },
 
     /**

@@ -161,6 +161,8 @@ describe('WIRE_COMMAND_MAP', () => {
     expect(WIRE_COMMAND_MAP['flow:redo']).toBe('redo');
     expect(WIRE_COMMAND_MAP['flow:layout']).toBe('layout');
     expect(WIRE_COMMAND_MAP['flow:fromObject']).toBe('fromObject');
+    expect(WIRE_COMMAND_MAP['flow:replaceNodes']).toBe('replaceNodes');
+    expect(WIRE_COMMAND_MAP['flow:setNodes']).toBe('setNodes');
     expect(WIRE_COMMAND_MAP['flow:setLoading']).toBe('setLoading');
     expect(WIRE_COMMAND_MAP['flow:clear']).toBe('$clear');
     expect(WIRE_COMMAND_MAP['flow:toggleInteractive']).toBe('toggleInteractive');
