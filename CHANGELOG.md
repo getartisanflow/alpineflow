@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed — `fitView()` now returns `Promise<boolean>` (observable fit)
+
+`fitView()` previously returned `void` and, when any node still lacked measured `dimensions`, deferred up to 10 animation frames and then **silently gave up** without fitting — so "did it actually fit?" was unobservable. It now returns a promise that resolves **`true`** once the fit runs, or **`false`** when the retry budget is exhausted with nodes still unmeasured. The rAF-retry behaviour is unchanged; only completion became observable. Runtime-non-breaking: callers that ignore the return value (including the internal `fitViewOnInit` path) are unaffected. TypeScript consumers who annotated the call as `: void` will see a compile note.
+
 ### Added — ELK `rectpacking` + `aspectRatio` + raw `layoutOptions` escape hatch
 
 The ELK layout wrapper accepts three additions (thanks to [@ronnorthrip](https://github.com/ronnorthrip)): the **`rectpacking`** algorithm for unconnected boxes (edges are dropped for it — rectpacking ignores them by design), an **`aspectRatio`** option (width / height target, maps to `elk.aspectRatio`, honoured by rectpacking and several other algorithms), and a **`layoutOptions`** escape hatch — raw `elk.*` ids merged last, so any ELK option (e.g. `elk.rectpacking.orderBySize`) is reachable without a wrapper change. All three thread through `canvas.applyElkLayout()`.
