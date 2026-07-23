@@ -64,6 +64,9 @@ See [Directives > flow-node](../nodes/basics.md) for template details.
     shape: 'diamond',                     // Optional. Node shape variant.
     rotation: 0,                          // Optional. Rotation angle in degrees.
     nodeOrigin: [0, 0],                   // Optional. Per-node anchor point override.
+    endpointSpread: true,                 // Optional. boolean | { spacing? }. Fan avoidant edges that
+                                          //   share one of this node's handles apart at the endpoint
+                                          //   (per-node override of canvas `avoidantEndpointSpread`).
 }
 ```
 
