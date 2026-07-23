@@ -234,8 +234,8 @@ export function createSelectionMixin(ctx: CanvasContext) {
         ctx.selectedEdges.add(e.id);
       }
       ctx._emitSelectionChange();
-      ctx._emit('nodes-change', { type: 'add', nodes: result.nodes });
-      ctx._emit('edges-change', { type: 'add', edges: result.edges });
+      ctx._emit('nodes-change', { type: 'add', nodes: result.nodes, origin: 'paste' });
+      ctx._emit('edges-change', { type: 'add', edges: result.edges, origin: 'paste' });
       ctx._emit('paste', { nodes: result.nodes, edges: result.edges });
       debug('clipboard', `Pasted ${result.nodes.length} node(s) and ${result.edges.length} edge(s)`);
       // Apply selected CSS class after Alpine renders the new DOM elements
