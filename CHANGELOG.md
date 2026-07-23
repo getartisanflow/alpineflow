@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added — schema-addon methods are now typed on `CanvasContext`
+
+The schema addon attaches `addField` / `renameField` / `removeField` / `reorderFields` / `inferReferences` / `schemaToJSON` / `schemaFromJSON` / `validateSchema` / `diffSchemas` / `toDot` / `schemaLayout` onto the canvas at runtime, but none were declared on the `CanvasContext` type — so consumers had to import the standalone `addField(canvas, …)` helpers and cast. Importing `@getartisanflow/alpineflow/schema` now pulls in a module augmentation that declares all eleven methods (with their real result shapes — e.g. `addField(...)` returns `{ applied: boolean; reason?: string }`), so `canvas.addField('users', { name: 'email', type: 'string' })` type-checks directly. The result interfaces (`AddFieldResult`, `RenameFieldOpResult`, `RemoveFieldOpResult`, `ReorderFieldsOpResult`) are now exported from the schema entry so return values can be named. Purely additive and type-level — the augmentation is scoped to the schema entry's types (a core-only import is unaffected) and the runtime bundle is unchanged.
+
 ### Added — ELK `rectpacking` + `aspectRatio` + raw `layoutOptions` escape hatch
 
 The ELK layout wrapper accepts three additions (thanks to [@ronnorthrip](https://github.com/ronnorthrip)): the **`rectpacking`** algorithm for unconnected boxes (edges are dropped for it — rectpacking ignores them by design), an **`aspectRatio`** option (width / height target, maps to `elk.aspectRatio`, honoured by rectpacking and several other algorithms), and a **`layoutOptions`** escape hatch — raw `elk.*` ids merged last, so any ELK option (e.g. `elk.rectpacking.orderBySize`) is reachable without a wrapper change. All three thread through `canvas.applyElkLayout()`.
