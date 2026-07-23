@@ -895,16 +895,16 @@ export interface CanvasContext {
   replay(recording: Recording, options?: ReplayOptions): ReplayHandle;
 
   /** Dagre layout */
-  layout(options?: { direction?: 'TB' | 'LR' | 'BT' | 'RL'; nodesep?: number; ranksep?: number; adjustHandles?: boolean; fitView?: boolean; duration?: number }): Promise<void>;
+  layout(options?: { direction?: 'TB' | 'LR' | 'BT' | 'RL'; nodesep?: number; ranksep?: number; adjustHandles?: boolean; fitView?: boolean; duration?: number; includeChildren?: boolean }): Promise<void>;
 
   /** Force-directed layout */
-  forceLayout(options?: { strength?: number; distance?: number; charge?: number; iterations?: number; center?: { x: number; y: number }; fitView?: boolean; duration?: number }): Promise<void>;
+  forceLayout(options?: { strength?: number; distance?: number; charge?: number; iterations?: number; center?: { x: number; y: number }; fitView?: boolean; duration?: number; includeChildren?: boolean }): Promise<void>;
 
   /** Hierarchy/tree layout */
-  treeLayout(options?: { layoutType?: string; direction?: string; nodeWidth?: number; nodeHeight?: number; adjustHandles?: boolean; fitView?: boolean; duration?: number }): Promise<void>;
+  treeLayout(options?: { layoutType?: string; direction?: string; nodeWidth?: number; nodeHeight?: number; adjustHandles?: boolean; fitView?: boolean; duration?: number; includeChildren?: boolean }): Promise<void>;
 
   /** ELK layout */
-  elkLayout(options?: { algorithm?: string; direction?: string; nodeSpacing?: number; layerSpacing?: number; adjustHandles?: boolean; fitView?: boolean; duration?: number }): Promise<void>;
+  elkLayout(options?: { algorithm?: string; direction?: string; nodeSpacing?: number; layerSpacing?: number; aspectRatio?: number; layoutOptions?: Record<string, string>; adjustHandles?: boolean; fitView?: boolean; duration?: number; includeChildren?: boolean }): Promise<void>;
 
   /** Serialize flow state */
   toObject(): { nodes: FlowNode[]; edges: FlowEdge[]; viewport: Viewport };
