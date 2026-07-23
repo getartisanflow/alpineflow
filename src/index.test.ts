@@ -12,7 +12,11 @@ describe('AlpineFlow plugin idempotency', () => {
     vi.resetModules();
   });
 
-  it('only registers directives once even if called multiple times', async () => {
+  // Generous timeout: this test dynamically imports the ENTIRE ./index graph
+  // (after vi.resetModules(), so nothing is cached). Under full-suite worker
+  // contention that import alone can exceed vitest's 5s default — it is an
+  // import-cost ceiling, not a logic test, so give it room.
+  it('only registers directives once even if called multiple times', { timeout: 20_000 }, async () => {
     const { default: AlpineFlow } = await import('./index');
 
     const directiveCalls: string[] = [];
