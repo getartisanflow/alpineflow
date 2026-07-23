@@ -153,6 +153,30 @@ export function createHistoryMixin(ctx: CanvasContext) {
       });
     },
 
+    /**
+     * Replace the whole graph atomically — the first-class alternative to the
+     * `$clear()` + `addNodes()` workaround. Built on the identity-preserving
+     * `fromObject` path: surviving ids keep their live objects, new ids mount
+     * fresh and measure, so an immediate `fitView()` actually fits (no manual
+     * `await nextFrame()`). `edges` defaults to empty, so `replaceNodes(nodes)`
+     * is a genuine whole-graph replace. Emits `restore` with `origin: 'load'`.
+     * The returned promise resolves once the new nodes have measured dimensions.
+     */
+    replaceNodes(nodes: FlowNode[], edges?: FlowEdge[]): Promise<void> {
+      this.fromObject({ nodes, edges: edges ?? [] });
+      return ctx._whenMeasured().then(() => undefined);
+    },
+
+    /**
+     * Replace just the nodes, leaving the current edges in place (the
+     * react-flow-style `setNodes`). For a whole-graph swap use `replaceNodes`.
+     * Resolves once the new nodes have measured dimensions.
+     */
+    setNodes(nodes: FlowNode[]): Promise<void> {
+      this.fromObject({ nodes });
+      return ctx._whenMeasured().then(() => undefined);
+    },
+
     // ── Undo / Redo ────────────────────────────────────────────
 
     /**

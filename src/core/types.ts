@@ -2049,6 +2049,21 @@ export interface FlowInstance {
   /** Clear all nodes and edges, reset viewport to origin. */
   $clear(): void;
 
+  /**
+   * Replace the whole graph (nodes + optional edges) atomically via the
+   * identity-preserving restore path — the first-class alternative to
+   * `$clear()` + `addNodes()`. `edges` defaults to empty. The returned promise
+   * resolves once the new nodes are measured, so an immediate `fitView()` fits.
+   * Emits `restore` with `origin: 'load'`.
+   */
+  replaceNodes(nodes: FlowNode[], edges?: FlowEdge[]): Promise<void>;
+
+  /**
+   * Replace just the nodes, keeping current edges (react-flow-style `setNodes`).
+   * Resolves once the new nodes are measured.
+   */
+  setNodes(nodes: FlowNode[]): Promise<void>;
+
   /** Undo the last structural change (requires history: true) */
   undo(): void;
 

@@ -293,6 +293,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     screenToFlowPosition: vi.fn(() => ({ x: 0, y: 0 })),
     flowToScreenPosition: vi.fn(() => ({ x: 0, y: 0 })),
     fitView: vi.fn(async () => true),
+    _whenMeasured: vi.fn(async () => true),
     fitBounds: vi.fn(),
     getNodesBounds: vi.fn(() => ({ x: 0, y: 0, width: 0, height: 0 })),
     getViewportForBounds: vi.fn(() => ({ x: 0, y: 0, zoom: 1 })),
@@ -420,6 +421,8 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     fromObject: vi.fn(),
     $reset: vi.fn(),
     $clear: vi.fn(),
+    replaceNodes: vi.fn(async () => {}),
+    setNodes: vi.fn(async () => {}),
     toImage: vi.fn(async () => ''),
     getNodeAtPoint: vi.fn(() => null),
 

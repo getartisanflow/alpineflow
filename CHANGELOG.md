@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added — `replaceNodes()` / `setNodes()` for first-class whole-graph replace
+
+There was no first-class whole-graph replace. The workaround — `$clear()` + `addNodes()` in one tick, with `x-for` keyed by id — made Alpine reuse the DOM, so the per-node measure hook never re-ran, the new nodes got no `dimensions`, and `fitView()` silently gave up.
+
+- **`replaceNodes(nodes, edges?)`** swaps the whole graph atomically on the identity-preserving `fromObject` path (surviving ids keep their live objects; new ids mount fresh and measure). `edges` defaults to empty, so `replaceNodes(nodes)` is a genuine whole-graph replace.
+- **`setNodes(nodes)`** replaces just the nodes, keeping edges (react-flow-style).
+- Both return a `Promise<void>` that resolves once the new nodes are measured — so an immediate `fitView()` fits, with no manual `await nextFrame()`. Both emit `restore` with `origin: 'load'`, and both are server-callable via new **`flow:replaceNodes`** / **`flow:setNodes`** wire commands.
+- A shared **`_whenMeasured()`** helper, factored out of `fitView`'s rAF-retry, backs the measurement wait for both `fitView` and the replace APIs (no behavior change to `fitView` — the measured case still fits synchronously).
+
+**Correction to the earlier `$clear()` framing:** `$clear()` is **not** a phantom being implemented here. It already clears the canvas for real — implemented in the performance pass via the same identity-preserving `fromObject({ nodes: [], edges: [], viewport })` path — and, since the change-origin work, emits `restore` with `origin: 'load'`. Downstream note: WireFlow's `WithWireFlow::flowClear()` is genuinely destructive once WireFlow resyncs its vendored alpineflow bundle.
+
 ### Changed (behavior) — `origin` discriminator on `nodes-change` / `edges-change`
 
 `nodes-change` / `edges-change` fired with `{ type, nodes | edges }` for a user drop, bulk load, paste, and direct API call alike — no way to react only to user intent (e.g. "user created a model → POST"). Both events now carry an **`origin`** field, one of **`'drop' | 'paste' | 'api' | 'load'`**: the drop handler stamps `'drop'`, `paste()` stamps `'paste'`, and a direct `addNodes`/`removeNodes`/`addEdges`/`removeEdges` call defaults to `'api'`. The mutators accept a `{ source?: ChangeOrigin }` option to override it. A new `ChangeOrigin` type is exported: `'drop' | 'paste' | 'api' | 'load' | 'undo' | 'redo'`.
