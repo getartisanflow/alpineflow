@@ -13,6 +13,10 @@ There was no first-class whole-graph replace. The workaround — `$clear()` + `a
 
 **Correction to the earlier `$clear()` framing:** `$clear()` is **not** a phantom being implemented here. It already clears the canvas for real — implemented in the performance pass via the same identity-preserving `fromObject({ nodes: [], edges: [], viewport })` path — and, since the change-origin work, emits `restore` with `origin: 'load'`. Downstream note: WireFlow's `WithWireFlow::flowClear()` is genuinely destructive once WireFlow resyncs its vendored alpineflow bundle.
 
+### Added — `data-flow-target` escape hatch for out-of-canvas directives
+
+`x-flow-snapshot`, `x-flow-collapse`, `x-flow-detail`, `x-flow-filter`, `x-flow-rotate`, `x-flow-loading`, `x-flow-follow`, `x-flow-action` and `x-flow-edge-toolbar` resolved their canvas with a bare `el.closest('[data-flow-canvas]')`, so they silently no-op when placed **outside** the canvas element — exactly the toolbar/sidebar layout. A shared `resolveCanvasEl()` now backs all of them: (1) a `data-flow-target="<selector>"` on the host or any ancestor (a toolbar wrapper can set it once) points at the canvas; (2) else `closest('[data-flow-canvas]')` as before; (3) else, if exactly one canvas exists in the document, it's used — otherwise `null` and a one-time `console.warn`. Non-breaking: `closest()` remains the middle fallback, so in-canvas placement is unchanged. The two canvas-internal `closest()` sites (`x-flow-node` shape lookup, `x-flow-viewport` static-edge cleanup) keep plain `closest()` — a node/viewport is never outside its own canvas.
+
 ### Changed (behavior) — `origin` discriminator on `nodes-change` / `edges-change`
 
 `nodes-change` / `edges-change` fired with `{ type, nodes | edges }` for a user drop, bulk load, paste, and direct API call alike — no way to react only to user intent (e.g. "user created a model → POST"). Both events now carry an **`origin`** field, one of **`'drop' | 'paste' | 'api' | 'load'`**: the drop handler stamps `'drop'`, `paste()` stamps `'paste'`, and a direct `addNodes`/`removeNodes`/`addEdges`/`removeEdges` call defaults to `'api'`. The mutators accept a `{ source?: ChangeOrigin }` option to override it. A new `ChangeOrigin` type is exported: `'drop' | 'paste' | 'api' | 'load' | 'undo' | 'redo'`.
@@ -31,6 +35,14 @@ The added `origin` string union is a **forward contract** once tagged — the do
 ### Changed — `fitView()` now returns `Promise<boolean>` (observable fit)
 
 `fitView()` previously returned `void` and, when any node still lacked measured `dimensions`, deferred up to 10 animation frames and then **silently gave up** without fitting — so "did it actually fit?" was unobservable. It now returns a promise that resolves **`true`** once the fit runs, or **`false`** when the retry budget is exhausted with nodes still unmeasured. The rAF-retry behaviour is unchanged; only completion became observable. Runtime-non-breaking: callers that ignore the return value (including the internal `fitViewOnInit` path) are unaffected. TypeScript consumers who annotated the call as `: void` will see a compile note.
+
+### Changed — `fitView()` now returns `Promise<boolean>` (observable fit)
+
+`fitView()` previously returned `void` and, when any node still lacked measured `dimensions`, deferred up to 10 animation frames and then **silently gave up** without fitting — so "did it actually fit?" was unobservable. It now returns a promise that resolves **`true`** once the fit runs, or **`false`** when the retry budget is exhausted with nodes still unmeasured. The rAF-retry behaviour is unchanged; only completion became observable. Runtime-non-breaking: callers that ignore the return value (including the internal `fitViewOnInit` path) are unaffected. TypeScript consumers who annotated the call as `: void` will see a compile note.
+
+### Added — schema-addon methods are now typed on `CanvasContext`
+
+The schema addon attaches `addField` / `renameField` / `removeField` / `reorderFields` / `inferReferences` / `schemaToJSON` / `schemaFromJSON` / `validateSchema` / `diffSchemas` / `toDot` / `schemaLayout` onto the canvas at runtime, but none were declared on the `CanvasContext` type — so consumers had to import the standalone `addField(canvas, …)` helpers and cast. Importing `@getartisanflow/alpineflow/schema` now pulls in a module augmentation that declares all eleven methods (with their real result shapes — e.g. `addField(...)` returns `{ applied: boolean; reason?: string }`), so `canvas.addField('users', { name: 'email', type: 'string' })` type-checks directly. The result interfaces (`AddFieldResult`, `RenameFieldOpResult`, `RemoveFieldOpResult`, `ReorderFieldsOpResult`) are now exported from the schema entry so return values can be named. Purely additive and type-level — the augmentation is scoped to the schema entry's types (a core-only import is unaffected) and the runtime bundle is unchanged.
 
 ### Added — ELK `rectpacking` + `aspectRatio` + raw `layoutOptions` escape hatch
 

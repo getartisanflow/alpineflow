@@ -411,6 +411,8 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
         // node is detached (a teardown race), `closest` returns null and
         // `Alpine.$data(null)` throws `_x_dataStack` of null asynchronously —
         // an unhandled error. A detached node simply has no custom shape to apply.
+        // Plain closest() (not resolveCanvasEl): x-flow-node always renders
+        // inside its canvas, so the out-of-canvas escape hatch does not apply here.
         const canvasEl = el.closest('[data-flow-canvas]');
         const canvasData = canvasEl ? Alpine.$data(canvasEl as HTMLElement) : null;
         const customShapeDef = node.shape && canvasData?._shapeRegistry?.[node.shape];

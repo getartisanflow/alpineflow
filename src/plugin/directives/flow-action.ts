@@ -17,6 +17,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
+import { resolveCanvasEl } from './resolve-canvas';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -79,7 +80,7 @@ export function registerFlowActionDirective(Alpine: Alpine) {
         return;
       }
 
-      const canvasEl = el.closest('[data-flow-canvas]') as HTMLElement;
+      const canvasEl = resolveCanvasEl(el) as HTMLElement;
       if (!canvasEl) {
         return;
       }

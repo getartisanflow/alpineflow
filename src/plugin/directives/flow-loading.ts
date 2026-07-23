@@ -12,6 +12,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
+import { resolveCanvasEl } from './resolve-canvas';
 
 function createDefaultIndicator(text?: string): HTMLElement {
   const indicator = document.createElement('div');
@@ -33,7 +34,7 @@ export function registerFlowLoadingDirective(Alpine: Alpine) {
   Alpine.directive(
     'flow-loading',
     (el, { modifiers }, { effect, cleanup }) => {
-      const canvasEl = el.closest('[data-flow-canvas]') as HTMLElement;
+      const canvasEl = resolveCanvasEl(el) as HTMLElement;
       if (!canvasEl) return;
 
       const canvas = Alpine.$data(canvasEl) as any;
