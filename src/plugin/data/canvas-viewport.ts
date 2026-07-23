@@ -53,20 +53,30 @@ export function createViewportMixin(ctx: CanvasContext) {
      *
      * Defers via `requestAnimationFrame` if any node lacks measured
      * dimensions (up to 10 retries) to give the DOM time to render.
+     *
+     * Returns a promise that resolves `true` once the fit runs, or `false`
+     * if the retry budget is exhausted with nodes still unmeasured — so
+     * callers can observe whether the fit actually happened. Callers that
+     * ignore the return value are unaffected (the internal `fitViewOnInit`
+     * path does exactly that).
      */
-    fitView(options?: { padding?: number; duration?: number }, _retries = 0): void {
+    fitView(options?: { padding?: number; duration?: number }, _retries = 0): Promise<boolean> {
       // Defer if any node lacks measured dimensions so the DOM has time to render
       if (ctx.nodes.some((n: FlowNode) => !n.dimensions)) {
         if (_retries < 10) {
-          requestAnimationFrame(() => this.fitView(options, _retries + 1));
+          return new Promise<boolean>((resolve) => {
+            requestAnimationFrame(() => resolve(this.fitView(options, _retries + 1)));
+          });
         }
-        return;
+        // Retry budget exhausted with nodes still unmeasured — fit did not run.
+        return Promise.resolve(false);
       }
 
       const visibleNodes = ctx.nodes.filter((n: FlowNode) => !n.hidden);
       const bounds = getNodesBounds(toAbsoluteNodes(visibleNodes, ctx._nodeMap, ctx._config.nodeOrigin), ctx._config.nodeOrigin);
       this.fitBounds(bounds, options);
       ctx._announcer?.handleEvent('fit-view', {});
+      return Promise.resolve(true);
     },
 
     /**
