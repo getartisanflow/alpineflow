@@ -24,7 +24,7 @@ Click nodes, drag them, create connections — the devtools panel logs every eve
     pannable: false,
     zoomable: false,
     debug: true,
-})" class="flow-container" style="height: 250px;">
+})" class="flow-container" style="height: 500px;">
     <div x-flow-devtools></div>
     <div x-flow-viewport>
         <template x-for="node in nodes" :key="node.id">

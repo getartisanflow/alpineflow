@@ -19,6 +19,33 @@
 
 import type { Alpine } from 'alpinejs';
 
+// ── Event log vocabulary ─────────────────────────────────────────────────────
+
+/** DOM events the devtools event log subscribes to (current emit vocabulary). */
+export const FLOW_EVENTS_LIST = [
+  'flow-init', 'flow-connect', 'flow-connect-start', 'flow-connect-end',
+  'flow-reconnect', 'flow-nodes-change', 'flow-edges-change', 'flow-restore',
+  'flow-selection-change', 'flow-viewport-change',
+  'flow-viewport-move-start', 'flow-viewport-move', 'flow-viewport-move-end',
+  'flow-node-drag-start', 'flow-node-drag', 'flow-node-drag-end',
+  'flow-node-click', 'flow-edge-click',
+  'flow-node-condense', 'flow-node-uncondense',
+  'flow-undo', 'flow-redo',
+];
+
+/** Frame-rate events — logging these while the panel is collapsed is pure waste. */
+const HIGH_FREQUENCY_EVENTS = new Set(['flow-viewport-move', 'flow-viewport-change', 'flow-node-drag']);
+
+/**
+ * Whether an event should be recorded into the log's ring buffer. Low-frequency
+ * events (connect, changes, clicks…) are ALWAYS recorded so nothing is lost
+ * while the panel is collapsed — the rows are rebuilt on expand. Frame-rate
+ * events are only recorded while the panel is visible.
+ */
+export function shouldRecordEvent(type: string, expanded: boolean): boolean {
+  return expanded || !HIGH_FREQUENCY_EVENTS.has(type);
+}
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 interface DevtoolsConfig {
@@ -158,10 +185,14 @@ export function registerFlowDevtoolsDirective(Alpine: Alpine) {
       el.appendChild(panel);
 
       let expanded = false;
+      // Assigned by the event-log section; rebuilds rows from the ring buffer
+      // so events recorded while collapsed appear on expand.
+      let rebuildEventRows: (() => void) | null = null;
       const onToggleClick = () => {
         expanded = !expanded;
         panel.style.display = expanded ? '' : 'none';
         toggleBtn.title = expanded ? 'Collapse' : 'Devtools';
+        if (expanded) rebuildEventRows?.();
         // Start/stop RAF loop based on visibility
         if (expanded) startRaf(); else stopRaf();
       };
@@ -320,24 +351,14 @@ export function registerFlowDevtoolsDirective(Alpine: Alpine) {
       interface EventEntry { name: string; time: number; detail: string }
       const eventEntries: EventEntry[] = [];
 
-      const FLOW_EVENTS_LIST = [
-        'flow-init', 'flow-connect', 'flow-disconnect',
-        'flow-node-add', 'flow-node-remove', 'flow-edge-add', 'flow-edge-remove',
-        'flow-selection-change', 'flow-viewport-change',
-        'flow-viewport-move-start', 'flow-viewport-move', 'flow-viewport-move-end',
-        'flow-node-drag-start', 'flow-node-drag', 'flow-node-drag-end',
-        'flow-node-click', 'flow-edge-click',
-        'flow-node-condense', 'flow-node-uncondense',
-        'flow-undo', 'flow-redo',
-      ];
-
       let flowEventHandler: ((e: Event) => void) | null = null;
 
       if (eventMax > 0 && eventListEl) {
         flowEventHandler = (e: Event) => {
-          // No log work while collapsed — the panel is hidden, and viewport-move/
-          // -change fire at frame rate. Rows are rebuilt from live events on expand.
-          if (!expanded) return;
+          // Low-frequency events are recorded even while collapsed (rows are
+          // rebuilt from the ring buffer on expand); only frame-rate events
+          // (viewport-move/-change, node-drag) are skipped while hidden.
+          if (!shouldRecordEvent(e.type, expanded)) return;
           const ce = e as CustomEvent;
           const name = ce.type.replace('flow-', '');
           let detailStr = '';
@@ -348,6 +369,10 @@ export function registerFlowDevtoolsDirective(Alpine: Alpine) {
           }
 
           eventEntries.unshift({ name, time: Date.now(), detail: detailStr });
+          if (eventEntries.length > eventMax) eventEntries.pop();
+
+          // DOM rows only while visible; on expand they're rebuilt from the buffer.
+          if (!expanded) return;
 
           // Prepend new entry row (avoid full rebuild)
           const listEl = eventListEl!;
@@ -371,15 +396,37 @@ export function registerFlowDevtoolsDirective(Alpine: Alpine) {
           row.appendChild(detailSpan);
           listEl.prepend(row);
 
-          // Trim oldest if over limit
+          // Trim oldest DOM row if over limit (buffer trimmed above)
           while (listEl.children.length > eventMax) {
             listEl.removeChild(listEl.lastChild!);
-            eventEntries.pop();
           }
         };
         for (const evt of FLOW_EVENTS_LIST) {
           container.addEventListener(evt, flowEventHandler);
         }
+
+        rebuildEventRows = () => {
+          const listEl = eventListEl!;
+          listEl.textContent = '';
+          for (const entry of eventEntries) {
+            const row = document.createElement('div');
+            row.className = 'flow-devtools-event-entry';
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'flow-devtools-event-name';
+            nameSpan.textContent = entry.name;
+            const ageSpan = document.createElement('span');
+            ageSpan.className = 'flow-devtools-event-age';
+            const ageS = Math.round((Date.now() - entry.time) / 1000);
+            ageSpan.textContent = ageS < 2 ? 'now' : ageS + 's';
+            const detailSpan = document.createElement('span');
+            detailSpan.className = 'flow-devtools-event-detail';
+            detailSpan.textContent = entry.detail;
+            row.appendChild(nameSpan);
+            row.appendChild(ageSpan);
+            row.appendChild(detailSpan);
+            listEl.appendChild(row);
+          }
+        };
       }
 
       // ── Alpine effects for reactive data ───────────────────────────
