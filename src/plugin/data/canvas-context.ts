@@ -733,8 +733,11 @@ export interface CanvasContext {
   /** Convert flow coordinates to screen coordinates */
   flowToScreenPosition(x: number, y: number): XYPosition;
 
-  /** Fit all nodes into the viewport */
-  fitView(options?: { padding?: number; duration?: number }, _retries?: number): void;
+  /**
+   * Fit all nodes into the viewport. Resolves `true` once the fit runs, or
+   * `false` if the retry budget is exhausted with nodes still unmeasured.
+   */
+  fitView(options?: { padding?: number; duration?: number }, _retries?: number): Promise<boolean>;
 
   /** Fit a specific rectangle into the viewport */
   fitBounds(rect: { x: number; y: number; width: number; height: number }, options?: { padding?: number; duration?: number }): void;
