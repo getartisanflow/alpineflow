@@ -187,7 +187,7 @@ Record a richer multi-subject sequence — moving nodes, firing beams, and chang
 
 ### Known gaps
 
-The recorder hooks canvas API calls — anything that sidesteps those methods isn't captured. These are tracked for v0.2.0-alpha and may be closed before release:
+The recorder hooks canvas API calls — anything that sidesteps those methods isn't captured. These are tracked as known gaps (still open as of v0.2.1-alpha):
 
 - **User drags** — moving a node by mouse/touch writes to `node.position` directly via Alpine reactivity. The drag doesn't flow through `animate`/`update`, so the recorder doesn't see it.
 - **Direct viewport methods** — `$flow.setViewport()`, `$flow.fitView()`, `$flow.zoomIn()` / `zoomOut()`, `$flow.setCenter()`, `$flow.panBy()`, `$flow.follow()`, and user-driven pan/zoom (mouse wheel, middle-drag). These talk to the pan/zoom subsystem directly. Only viewport changes made through `$flow.animate({ viewport: {...} })` or `$flow.update({ viewport: {...} })` are captured today.
