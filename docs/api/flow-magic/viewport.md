@@ -42,10 +42,19 @@ Pan the viewport by a delta `(dx, dy)` in pixels.
 ### fitView
 
 ```ts
-$flow.fitView(options?: { padding?: number; duration?: number }): void
+$flow.fitView(options?: { padding?: number; duration?: number }): Promise<boolean>
 ```
 
 Fit all visible nodes into the viewport. Defers via `requestAnimationFrame` if any node lacks measured dimensions (up to 10 retries).
+
+Returns a promise that resolves **`true`** once the fit runs, or **`false`** if the retry budget is exhausted with nodes still unmeasured — so you can observe whether the fit actually happened:
+
+```js
+const fitted = await $flow.fitView();
+if (!fitted) console.warn('nodes still unmeasured after the retry budget');
+```
+
+Runtime-non-breaking: callers that ignore the return value behave exactly as before.
 
 ### fitBounds
 

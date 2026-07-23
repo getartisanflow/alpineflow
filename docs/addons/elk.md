@@ -106,10 +106,13 @@ $flow.elkLayout({ algorithm: 'layered', direction: 'DOWN' })
 | `algorithm` | `string` | `'layered'` | Layout algorithm (see table below) |
 | `direction` | `string` | `'DOWN'` | Layout direction: `'DOWN'`, `'RIGHT'`, `'UP'`, `'LEFT'` |
 | `nodeSpacing` | `number` | `50` | Minimum spacing between nodes |
-| `layerSpacing` | `number` | `50` | Minimum spacing between layers (for layered/mrtree algorithms) |
+| `layerSpacing` | `number` | `80` | Minimum spacing between layers (for layered/mrtree algorithms) |
+| `aspectRatio` | `number` | — | Target width / height ratio. Maps to `elk.aspectRatio`; honoured by `rectpacking` and several other algorithms. |
+| `layoutOptions` | `Record<string, string>` | — | Raw `elk.*` option ids, merged **last** so they win over every wrapper key — reach any ELK option (e.g. `{ 'elk.rectpacking.orderBySize': 'true' }`) without a wrapper change. |
 | `adjustHandles` | `boolean` | `true` | Automatically set handle positions to match the layout direction |
 | `fitView` | `boolean` | `true` | Fit the viewport to the laid-out graph after layout completes |
 | `duration` | `number` | `0` | Animation duration in milliseconds (0 for instant) |
+| `includeChildren` | `boolean` | `false` | Include nodes with a `parentId` (excluded by default — their positions are managed by `childLayout`). |
 
 ### Algorithms
 
@@ -120,6 +123,7 @@ $flow.elkLayout({ algorithm: 'layered', direction: 'DOWN' })
 | `'mrtree'` | Tree layout optimized for graphs with a tree structure. |
 | `'radial'` | Places nodes in concentric circles radiating outward from a root node. |
 | `'force'` | Force-directed layout similar to d3-force but with ELK's implementation. |
+| `'rectpacking'` | Packs **unconnected** boxes into a compact rectangle honouring `aspectRatio`. Edges are ignored (dropped before layout) — rectpacking is for box-packing, not graph structure. |
 
 Try different algorithms — each produces a distinct arrangement:
 

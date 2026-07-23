@@ -9,22 +9,29 @@ order: 3
 ### addNodes
 
 ```ts
-$flow.addNodes(nodes: FlowNode | FlowNode[], options?: { center?: boolean }): void
+$flow.addNodes(
+  nodes: FlowNode | FlowNode[],
+  options?: { center?: boolean; source?: ChangeOrigin },
+): void
 ```
 
 Add one or more nodes to the canvas. Accepts a single node or an array.
 
 When `options.center` is set, nodes are placed off-screen for measurement, then repositioned centered on their intended position after dimensions are known.
 
+`options.source` sets the `origin` field on the emitted `nodes-change` event ([ChangeOrigin](../types.md#changeorigin) — `'drop' | 'paste' | 'api' | 'load'`, default `'api'`), so listeners can distinguish a programmatic bulk load from a user action.
+
 Validates child constraints before accepting each node. Captures history, sorts topologically, rebuilds the node map, pushes collab updates, runs child layout, and schedules auto-layout.
+
+For a whole-graph swap (rather than an incremental add), see [`replaceNodes` / `setNodes`](state-management.md#replacenodes--setnodes).
 
 ### removeNodes
 
 ```ts
-$flow.removeNodes(ids: string | string[]): void
+$flow.removeNodes(ids: string | string[], options?: { source?: ChangeOrigin }): void
 ```
 
-Remove one or more nodes by ID. Cascades removal to all descendants (via `parentId` hierarchy). Removes connected edges and optionally creates reconnection bridges (when `reconnectOnDelete` is enabled). Validates child constraints before allowing removal.
+Remove one or more nodes by ID. Cascades removal to all descendants (via `parentId` hierarchy). Removes connected edges and optionally creates reconnection bridges (when `reconnectOnDelete` is enabled). Validates child constraints before allowing removal. `options.source` stamps the `nodes-change` origin (default `'api'`).
 
 ### batch
 

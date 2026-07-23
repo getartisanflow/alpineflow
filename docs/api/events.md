@@ -53,6 +53,17 @@ Pass callback functions in the `flowCanvas()` configuration. The callback name f
 })">
 ```
 
+Every config callback also receives the **canvas context** as an optional second argument, so a handler can drive the canvas without reaching for a global reference. It is the same object exposed as `$flow` inside the canvas element:
+
+```js
+flowCanvas({
+  onDrop: (detail, ctx) => ctx.addNodes(makeNodeFrom(detail)),
+  onConnect: (detail, ctx) => ctx.fitView(),
+})
+```
+
+The context is passed as a second argument only — it is **never** added to the event `detail`, which stays a plain, serializable object for the DOM `CustomEvent` dispatch (and WireFlow). Existing handlers that take only `(detail)` are unaffected.
+
 ### 2. Alpine Event Directives
 
 Events are dispatched as DOM `CustomEvent`s on the container with a `flow-` prefix. Use Alpine's `@` directive to listen.
@@ -420,8 +431,10 @@ Config callback: `onSelectionContextMenu`
 Fired when nodes are added or removed.
 
 ```ts
-{ type: 'add' | 'remove'; nodes: FlowNode[] }
+{ type: 'add' | 'remove'; nodes: FlowNode[]; origin: 'drop' | 'paste' | 'api' | 'load' }
 ```
+
+`origin` tells you what caused the change so you can react only to user intent — `'drop'` (drag-drop), `'paste'` (clipboard), `'load'` (bulk `fromObject`/`replaceNodes`), or `'api'` (a direct `addNodes`/`removeNodes` call, the default). The mutators accept a `{ source }` option to override it: `$flow.addNodes(nodes, { source: 'load' })`.
 
 Config callback: `onNodesChange`
 
@@ -430,8 +443,10 @@ Config callback: `onNodesChange`
 Fired when edges are added or removed.
 
 ```ts
-{ type: 'add' | 'remove'; edges: FlowEdge[] }
+{ type: 'add' | 'remove'; edges: FlowEdge[]; origin: 'drop' | 'paste' | 'api' | 'load' }
 ```
+
+Same `origin` discriminator as `nodes-change`. `$flow.addEdges` / `$flow.removeEdges` accept `{ source }` to override the default `'api'`.
 
 Config callback: `onEdgesChange`
 
@@ -524,7 +539,7 @@ These events are emitted internally but do not have dedicated config callbacks. 
 | Event | Payload | When |
 |---|---|---|
 | `save` | `{ nodes, edges, viewport }` | `toObject()` is called |
-| `restore` | `{ nodes?, edges?, viewport? }` | `fromObject()` is called |
+| `restore` | `{ nodes?, edges?, viewport?, origin }` | `fromObject()` / `$clear()` / `$reset()` / `replaceNodes()` / `undo()` / `redo()` |
 | `copy` | `{ nodeCount, edgeCount }` | Clipboard copy |
 | `paste` | `{ nodes, edges }` | Clipboard paste |
 | `cut` | `{ nodeCount, edgeCount }` | Clipboard cut |
@@ -534,6 +549,8 @@ These events are emitted internally but do not have dedicated config callbacks. 
 | `child-reorder` | `{ nodeId, parentId, order }` | Child reordered in layout parent |
 | `panel-reset` | `undefined` | `resetPanels()` called |
 | `helper-lines-change` | `{ horizontal: number[], vertical: number[] }` | Alignment guides update during drag |
+
+The `restore` event's `origin` field is `'undo' | 'redo' | 'load'` — `'undo'`/`'redo'` from history, and `'load'` from `fromObject()` / `$reset()` / `$clear()` / `replaceNodes()`. Listen via the `flow-restore` DOM event: `@flow-restore="syncSidebar($event.detail)"`. See the [v0.2.1-alpha migration guide](../migration/v0.2.1-alpha.md) for the field's history (it superseded an unreleased `source` tag).
 
 ---
 
@@ -572,8 +589,8 @@ All events at a glance:
 | `pane-context-menu` | `{ event, position }` | `onPaneContextMenu` |
 | `selection-change` | `{ nodes, edges, rows }` | `onSelectionChange` |
 | `selection-context-menu` | `{ nodes, event }` | `onSelectionContextMenu` |
-| `nodes-change` | `{ type, nodes }` | `onNodesChange` |
-| `edges-change` | `{ type, edges }` | `onEdgesChange` |
+| `nodes-change` | `{ type, nodes, origin }` | `onNodesChange` |
+| `edges-change` | `{ type, edges, origin }` | `onEdgesChange` |
 | `nodes-patch` | `{ patches }` | `onNodesPatch` |
 | `edges-patch` | `{ patches }` | `onEdgesPatch` |
 | `node-filter-change` | `{ filtered, visible }` | — |
@@ -583,7 +600,7 @@ All events at a glance:
 | `init` | — | `onInit` |
 | `destroy` | — | `onDestroy` |
 | `save` | `{ nodes, edges, viewport }` | — |
-| `restore` | `{ nodes?, edges?, viewport? }` | — |
+| `restore` | `{ nodes?, edges?, viewport?, origin }` | — |
 | `copy` | `{ nodeCount, edgeCount }` | — |
 | `paste` | `{ nodes, edges }` | — |
 | `cut` | `{ nodeCount, edgeCount }` | — |

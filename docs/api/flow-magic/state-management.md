@@ -54,6 +54,25 @@ $flow.$clear(): void
 
 Clear all nodes and edges, resetting the viewport to origin `{ x: 0, y: 0, zoom: 1 }`.
 
+### replaceNodes / setNodes
+
+```ts
+$flow.replaceNodes(nodes: FlowNode[], edges?: FlowEdge[]): Promise<void>
+$flow.setNodes(nodes: FlowNode[]): Promise<void>
+```
+
+First-class whole-graph replace, built on the same identity-preserving `fromObject` path (surviving ids keep their live objects; new ids mount fresh and measure). Both emit `restore` with `origin: 'load'` and return a promise that **resolves once the new nodes are measured** — so an immediate `fitView()` fits, with no manual `await nextFrame()`.
+
+- `replaceNodes(nodes, edges?)` swaps the whole graph. `edges` defaults to empty, so `replaceNodes(nodes)` is a genuine whole-graph replace.
+- `setNodes(nodes)` replaces just the nodes and keeps the current edges (react-flow-style).
+
+```js
+await $flow.replaceNodes(newNodes, newEdges);
+await $flow.fitView();   // the new nodes are measured — this fits
+```
+
+These are the first-class alternative to the old `$clear()` + `addNodes()` workaround. Server-callable via the `flow:replaceNodes` / `flow:setNodes` wire commands.
+
 ### toImage
 
 ```ts
@@ -61,6 +80,8 @@ $flow.toImage(options?: ToImageOptions): Promise<string>
 ```
 
 Export the canvas as a data URL image. `html-to-image` ships as a dependency of AlpineFlow, so this works out of the box. Supports custom width, height, padding, background, scope (`'all'` or `'viewport'`), output `format`, overlay inclusion, resolution multiplier via `scale`, and automatic file download via `filename`.
+
+Edges render in the export with their computed stroke, markers, and dash — their stylesheet-driven paint is inlined into the capture so they no longer rasterize invisible.
 
 #### Formats
 
@@ -122,6 +143,14 @@ $flow.patchConfig(changes: Partial<PatchableConfig>): void
 ```
 
 Update runtime config options (zoom limits, background, snapping, debug mode, color mode, auto-layout, and more). See [Configuration](../../configuration/index.md) for the full list of patchable options.
+
+### setCrossingReduction
+
+```ts
+$flow.setCrossingReduction(value: boolean | { channelGap?: number }): void
+```
+
+Toggle avoidant-edge crossing reduction at runtime and re-route immediately — the runtime equivalent of the [`avoidantCrossingReduction`](../../configuration/edges.md#edge-routing) config. Pass `true` to enable with the default lane gap, `{ channelGap: px }` to tune the separation between lanes, or `false` to return to the non-reduced (byte-identical) routing. Server-callable via the `flow:setCrossingReduction` wire command.
 
 ### closeContextMenu
 

@@ -49,6 +49,8 @@ All event callbacks follow the `on{EventName}` pattern. See [Events](../api/even
 | `onNodeUncondense` | `node-uncondense` | Node uncondensed. |
 | `onBeforeDelete` | — | Before user-initiated deletion. Return subset to delete or `false` to cancel. Async. |
 
+Every callback receives the event `detail` as its first argument and the **canvas context** (the same object exposed as `$flow`) as an optional second — `onConnect(detail, ctx)`, `onDrop(detail, ctx)`, etc. — so a handler can call `ctx.addNodes(...)` / `ctx.fitView()` without a global reference. The context is passed as an argument only, never added to `detail`. Handlers written as `(detail) => …` are unaffected.
+
 ## Error Handling
 
 | Option | Type | Default | Description |
