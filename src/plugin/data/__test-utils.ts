@@ -423,6 +423,19 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     toImage: vi.fn(async () => ''),
     getNodeAtPoint: vi.fn(() => null),
 
+    // === Schema addon methods (typed on CanvasContext via module augmentation) ===
+    addField: vi.fn(),
+    renameField: vi.fn(),
+    removeField: vi.fn(),
+    reorderFields: vi.fn(),
+    inferReferences: vi.fn(() => []),
+    schemaToJSON: vi.fn(),
+    schemaFromJSON: vi.fn(),
+    validateSchema: vi.fn(),
+    diffSchemas: vi.fn(),
+    toDot: vi.fn(() => ''),
+    schemaLayout: vi.fn(async () => {}),
+
     // === Alpine magic properties ===
     $el: null as any,
     $nextTick: vi.fn((cb: () => void) => cb()),
