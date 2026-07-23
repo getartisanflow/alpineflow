@@ -680,6 +680,9 @@ canvas.schemaLayout({
 | Option                 | Type                           | Default | Purpose                                                                                              |
 | ---------------------- | ------------------------------ | ------- | ---------------------------------------------------------------------------------------------------- |
 | `direction`            | `'LR' \| 'TB' \| 'RL' \| 'BT'` | `'LR'`  | Passed to the underlying layout call.                                                                |
+| `nodeSpacing`          | `number`                       | `80`    | Horizontal spacing between nodes at the same rank.                                                   |
+| `rankSpacing`          | `number`                       | `160`   | Distance between ranks (referencing → referenced).                                                  |
+| `algorithm`            | `'dagre' \| 'tree' \| 'grid'`  | —       | Prefer a specific algorithm. Defaults to trying `'dagre'` → `'tree'` → `'grid'` (whichever is registered). |
 | `deriveFromReferences` | `boolean`                      | `false` | Temporarily compute edges from `inferReferences()` and lay out by that FK graph, then restore edges. |
 
 The fallback chain means `schemaLayout` always does something — pick it over a raw `canvas.layout()` call when you want "arrange nicely" without caring which layout is registered.
