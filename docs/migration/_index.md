@@ -8,5 +8,4 @@ section: Reference
 
 | Version | Focus |
 |---------|-------|
-| [v0.2.1-alpha](v0.2.1-alpha.md) | Correctness & performance pass — measurement/layout lifecycle, edge routing, viewport culling, undo/redo history, interaction fixes, observable `fitView`; plus `replaceNodes`/`setNodes`, `data-flow-target`, and a large additive surface |
-| [v0.2.0-alpha](v0.2.0-alpha.md) | Animation subsystem overhaul — transactions, tagged groups, physics, record & replay, beam renderer |
+| [v0.2.1-alpha](v0.2.1-alpha.md) | The v0.1.x → v0.2.1-alpha upgrade — correctness/perf pass (measurement/layout, edge routing, culling, undo/redo history, interaction, observable `fitView`), the **animation subsystem overhaul** (staged as the never-tagged v0.2.0-alpha, folded in), and a large additive surface (`replaceNodes`/`setNodes`, `data-flow-target`, …) |
