@@ -504,7 +504,12 @@ export function registerFlowCanvas(Alpine: Alpine) {
       ).join('');
       const callback = (config as any)[callbackName];
       if (typeof callback === 'function') {
-        callback(detail);
+        // Pass the canvas context as a SECOND arg so handlers can reach the
+        // canvas without global hacks. Deliberately NOT added to `detail`: that
+        // object is shared with the dispatched DOM CustomEvent below, and a
+        // context ref there would be circular — breaking structuredClone / JSON
+        // / wireflow serialization.
+        callback(detail, this);
       }
 
       // DOM event: catchable via @flow-node-click, @flow-connect, etc.
@@ -2185,7 +2190,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
           const targetNode = findDeepestNodeAtPoint(e.clientX, e.clientY);
 
-          const node = config.onDrop({ data, position, targetNode, mimeType: matchedMime });
+          const node = config.onDrop({ data, position, targetNode, mimeType: matchedMime }, this as CanvasContext);
           if (node) { this.addNodes(node, { center: true }); }
         };
 
