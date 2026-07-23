@@ -226,13 +226,16 @@ describe('findRoute (heap + scanline adjacency)', () => {
     expect(routeHitsAny(route!, [{ x: 100, y: 0, width: 80, height: 60 }])).toBe(false);
   });
 
-  it('returns null when the target is fully enclosed', () => {
-    // Target boxed in by a ring the router cannot escape.
+  it('drops an obstacle that fully contains the target and routes anyway', () => {
+    // A rect swallowing the target used to make the route unfindable (null →
+    // bezier fallback). Under the buried-endpoint contract it is excluded from
+    // routing for this edge, so a route exists. The genuinely-impossible case
+    // (ring of non-covering obstacles) is covered in the buried-endpoint suite.
     const route = findRoute(
       -50, -50, 'right', 150, 150, 'left',
       [{ x: -OBSTACLE_PADDING - 1, y: -OBSTACLE_PADDING - 1, width: 400, height: 400 }],
     );
-    expect(route).toBeNull();
+    expect(route).not.toBeNull();
   });
 });
 
@@ -355,5 +358,58 @@ describe('avoidant routing quality — detour/bend cost (WS-1)', () => {
     // No waypoint strays more than a small margin above the endpoint band.
     const maxAbove = Math.max(...r.map((p) => 100 - p.y));
     expect(maxAbove).toBeLessThanOrEqual(OBSTACLE_PADDING + 2);
+  });
+});
+
+// ── findRoute: buried-endpoint obstacle exclusion ────────────────────────────
+// A third-party node overlapping an endpoint handle used to make the route
+// unfindable (endpoint stub born inside a padded obstacle → Dijkstra dead →
+// null → callers fall back to bezier). Obstacles whose padded rect contains an
+// endpoint are dropped for that edge: you cannot route *around* a node that is
+// sitting on your handle, but you can still route around everything else.
+
+describe('findRoute buried-endpoint obstacles', () => {
+  beforeEach(() => routeCacheStatsForTests().clear());
+
+  // Legit obstacle between the endpoints — must still be avoided.
+  const midObstacle: TestRect = { x: 100, y: 0, width: 80, height: 60 };
+
+  it('routes when a third-party obstacle covers the target endpoint', () => {
+    // Coverer's padded rect (270..370, -10..70) contains the target (300,30).
+    const coverer: TestRect = { x: 290, y: 10, width: 60, height: 40 };
+    const route = findRoute(0, 30, 'right', 300, 30, 'left', [midObstacle, coverer]);
+    expect(route).not.toBeNull();
+    expect(routeHitsAny(route!, [midObstacle])).toBe(false);
+  });
+
+  it('routes when a third-party obstacle covers the source endpoint', () => {
+    // Coverer's padded rect (-50..50, -10..70) contains the source (0,30).
+    const coverer: TestRect = { x: -30, y: 10, width: 60, height: 40 };
+    const route = findRoute(0, 30, 'right', 300, 30, 'left', [midObstacle, coverer]);
+    expect(route).not.toBeNull();
+    expect(routeHitsAny(route!, [midObstacle])).toBe(false);
+  });
+
+  it('routes when an obstacle covers only the target stub offset, not the handle', () => {
+    // Padded rect (235..295, 5..55) swallows the stub point (280,30) the router
+    // leaves from, while the handle itself (300,30) stays outside. Same burial,
+    // one step out.
+    const coverer: TestRect = { x: 255, y: 25, width: 20, height: 10 };
+    const route = findRoute(0, 30, 'right', 300, 30, 'left', [midObstacle, coverer]);
+    expect(route).not.toBeNull();
+    expect(routeHitsAny(route!, [midObstacle])).toBe(false);
+  });
+
+  it('still returns null when the target is ringed by non-covering obstacles', () => {
+    // Four walls boxing in the target with no escape gap; none of them
+    // contains the target point, so none is dropped — genuinely unroutable.
+    const walls: TestRect[] = [
+      { x: 100, y: 100, width: 300, height: 20 },  // top
+      { x: 100, y: 380, width: 300, height: 20 },  // bottom
+      { x: 100, y: 100, width: 20, height: 300 },  // left
+      { x: 380, y: 100, width: 20, height: 300 },  // right
+    ];
+    const route = findRoute(-100, 250, 'right', 250, 250, 'left', walls);
+    expect(route).toBeNull();
   });
 });

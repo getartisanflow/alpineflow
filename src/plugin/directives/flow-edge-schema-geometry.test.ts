@@ -890,12 +890,12 @@ describe('schema edge geometry — fallback contract', () => {
     expect(await readsDom({ nodes: schemaFixture(), edges })).toBe(true);
   });
 
-  it('falls back when a handle id does not name a field exactly', async () => {
-    // `-l` / `-r` suffixed ids are the CONDENSED-node convention. On a rendered
-    // schema node no such handle exists, so the DOM path resolves them through
-    // `inferSideFromHandleId` → the node's FIRST right/left handle (row 0) —
-    // which is not the stripped field's row. Stripping in the state path would
-    // therefore disagree with the oracle, so an inexact id is ineligible.
+  it('resolves a `-l`/`-r` suffixed id on the fast path, matching the DOM oracle', async () => {
+    // A trailing `-l`/`-r` pins a SIDE on the named field's row: `team_id-r` is the
+    // `team_id` row's right handle. Both oracles resolve the same row + side — the
+    // DOM path scopes its query to (id + type + position), the state path pins the
+    // side in `resolveSchemaEndpoints` — so the fast path handles it WITHOUT falling
+    // back to DOM, and still produces the identical path.
     const edges: FixtureEdge[] = [
       { id: 'suffixed', source: 'a', target: 'b', sourceHandle: 'team_id-r', targetHandle: 'email-l', type: 'straight' },
     ];
@@ -911,7 +911,7 @@ describe('schema edge geometry — fallback contract', () => {
     const handle = await mountSettled({ nodes, edges });
     handle.spy.mockClear();
     await reroute(handle.data);
-    expect(geometryRectCalls(handle.spy)).toBeGreaterThan(0);
+    expect(geometryRectCalls(handle.spy)).toBe(0);
     expect(handle.pathD(0)).toBe(expected);
   });
 

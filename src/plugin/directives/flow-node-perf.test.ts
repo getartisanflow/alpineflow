@@ -76,9 +76,24 @@ describe('x-flow-node — split position effect (drag perf)', () => {
     expect(nodeEl.style.left).toBe('10px'); // lean position effect ran on mount
     expect(nodeEl.style.top).toBe('20px');
 
-    // Spy AFTER mount so we only observe re-runs, not the initial application.
+    // The heavy effect's initial run is DEFERRED (~2 animation frames after mount in
+    // jsdom) and applies the base classes via a single `classList.add('flow-node',
+    // 'nopan')`. The previous guard waited on `classList.contains('flow-node')` — a
+    // state read — and installed the spy AFTER it, but that state flip and the deferred
+    // add resolve within a sub-millisecond of each other, so under full-suite CPU
+    // contention the spy occasionally installed in the gap just before the add fired
+    // and caught the initial application, misreading it as a heavy-effect re-run.
+    //
+    // Close the race by synchronising on the spy itself instead of a state read:
+    // install it FIRST, wait until it has actually recorded the initial base-class add,
+    // then clear it. Anything the spy sees after that is caused solely by the
+    // position-only change below (the heavy effect applies base classes exactly once —
+    // it has no second settling run).
     const addSpy = vi.spyOn(nodeEl.classList, 'add');
     const removeSpy = vi.spyOn(nodeEl.classList, 'remove');
+    await vi.waitFor(() => expect(addSpy).toHaveBeenCalledWith('flow-node', 'nopan'));
+    addSpy.mockClear();
+    removeSpy.mockClear();
 
     scope().nodes[0].position.x = 250; // the drag case: a position-only change
     scope().nodes[0].position.y = 260;

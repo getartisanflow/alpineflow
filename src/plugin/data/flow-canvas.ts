@@ -45,7 +45,7 @@ import { createLasso, type LassoInstance } from '../../core/lasso';
 import { getNodesInPolygon, getNodesFullyInPolygon, pointInPolygon } from '../../core/lasso-hit-test';
 import { clearValidationClasses } from '../directives/flow-handle';
 import { installHandleDelegation } from '../handle-delegation';
-import { resolveShortcuts, matchesKey, matchesModifier, shouldCaptureNudge } from '../../core/keyboard-shortcuts';
+import { resolveShortcuts, matchesKey, matchesModifier, shouldCaptureNudge, isEditableTarget } from '../../core/keyboard-shortcuts';
 import { isDraggable, isSelectable } from '../../core/node-flags';
 import { attachLongPress } from '../../core/long-press';
 import { getNodesInRect, getNodesFullyInRect, SpatialGrid, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
@@ -130,6 +130,24 @@ function corridorIntersectsBounds(
     corridor.maxY < bounds.minY ||
     corridor.minY > bounds.maxY
   );
+}
+
+/** Selector matching the floating overlays that sit above the canvas surface. */
+const OVERLAY_SELECTOR = '.flow-panel, .flow-controls, .flow-minimap, .canvas-overlay';
+
+/**
+ * True when a drag event landed on one of the floating overlays — the panel (which
+ * hosts node palettes), the controls, the minimap, or a `.canvas-overlay` (e.g. the
+ * devtools panel). They live *inside* the flow container and take pointer events
+ * (`pointer-events: auto`, `z-index` above the surface), so a drop released on one
+ * still bubbles to the container's drop listener. Without this check the canvas
+ * happily adds a node at the position "behind" the overlay — dragging a palette item
+ * out and then changing your mind by releasing it back over the palette created a
+ * node instead of cancelling. `.canvas-overlay` matches the same guard the whiteboard
+ * tools already use, so any overlay carrying that class is covered.
+ */
+export function isOverlayDropTarget(el: Element | null): boolean {
+  return el != null && el.closest(OVERLAY_SELECTOR) != null;
 }
 
 export function registerFlowCanvas(Alpine: Alpine) {
@@ -1339,8 +1357,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
         translateExtent: config.translateExtent,
         isLocked: () => this._animationLocked,
         noPanClassName: config.noPanClassName ?? 'nopan',
-        noWheelClassName: config.noWheelClassName,
+        noWheelClassName: config.noWheelClassName ?? 'nowheel',
         zoomOnDoubleClick: config.zoomOnDoubleClick,
+        dblClickZoomLevel: config.dblClickZoomLevel,
         panOnDrag: config.panOnDrag,
         panActivationKeyCode: config.panActivationKeyCode,
         zoomActivationKeyCode: config.zoomActivationKeyCode,
@@ -1669,7 +1688,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
         if (!this._active) return;
         if (this._animationLocked) return;
 
-        const tag = (e.target as HTMLElement).tagName;
+        // True while the user is editing a form field or contenteditable element —
+        // shortcuts must not hijack keys meant for the text being typed.
+        const editable = isEditableTarget(e.target);
         const shortcuts = this._shortcuts;
 
         // Escape → close context menu
@@ -1694,20 +1715,20 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
         // Delete selected
         if (matchesKey(e.key, shortcuts.delete)) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           this._deleteSelected();
         }
 
         // Toggle selection tool (box <-> lasso)
         if (matchesKey(e.key, this._shortcuts.selectionToolToggle) && !e.ctrlKey && !e.metaKey) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           this._selectionTool = this._selectionTool === 'box' ? 'lasso' : 'box';
           return;
         }
 
         // Arrow keys → move selected nodes
         if (matchesKey(e.key, shortcuts.moveNodes)) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           if (this._config?.disableKeyboardA11y) return;
           if (this.selectedNodes.size === 0) return;
 
@@ -1754,21 +1775,21 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
         // Undo: Ctrl/Cmd + undo key (without Shift)
         if ((e.ctrlKey || e.metaKey) && !e.shiftKey && matchesKey(e.key, shortcuts.undo)) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           e.preventDefault();
           this.undo();
         }
 
         // Redo: Ctrl/Cmd + Shift + redo key
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && matchesKey(e.key, shortcuts.redo)) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           e.preventDefault();
           this.redo();
         }
 
         // Copy/Paste/Cut: Ctrl/Cmd + key (without Shift)
         if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           if (matchesKey(e.key, shortcuts.copy)) {
             e.preventDefault();
             this.copy();
@@ -2104,6 +2125,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
         this._onDropZoneDragOver = (e: DragEvent) => {
           if (!e.dataTransfer) { return; }
+          // Over a floating overlay, not the canvas surface — leave the event
+          // unhandled so the browser shows the "no drop" cursor.
+          if (isOverlayDropTarget(e.target as Element | null)) { return; }
           // Only signal acceptance if at least one of our MIME types is present.
           const hasMatch = mimeTypes.some((m) => e.dataTransfer!.types.includes(m));
           if (!hasMatch) { return; }
@@ -2124,6 +2148,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
         this._onDropZoneDrop = (e: DragEvent) => {
           e.preventDefault();
           this._container?.classList.remove('flow-canvas-drag-over');
+
+          // Released over a floating overlay rather than the canvas — cancel the
+          // drop instead of adding a node at the position behind it.
+          if (isOverlayDropTarget(e.target as Element | null)) { return; }
 
           if (!e.dataTransfer || !config.onDrop) { return; }
 

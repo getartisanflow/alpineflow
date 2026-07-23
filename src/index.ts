@@ -122,6 +122,18 @@ export type {
   HandlePosition,
   HandleType,
   EdgeType,
+  SchemaNodeDecorator,
+  SchemaRowDecorator,
+  SchemaNodeDecoratorContext,
+  SchemaRowDecoratorContext,
+  SchemaRowSlots,
+  SchemaClassValue,
+  SchemaRowClassResolver,
+  SchemaNodeClassResolver,
+  SchemaRowClassContext,
+  SchemaNodeClassContext,
+  SchemaRowClassMap,
+  SchemaNodeClassMap,
 } from './core/types';
 
 export type { MarkerType, MarkerConfig, CustomMarkerRenderer } from './core/markers';

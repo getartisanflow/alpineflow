@@ -604,6 +604,26 @@ export interface ToImageOptions {
   /** Export scope. 'all' fits every non-hidden node; 'viewport' captures current view. Default: 'all' */
   scope?: 'all' | 'viewport';
 
+  /** Resolution multiplier for the output image — `2` renders a 1920x1080 export at
+   *  3840x2160 for crisp/retina output. The layout is unchanged; only the raster
+   *  resolution increases (the capture is vector, so it re-renders sharp rather than
+   *  upscaling). Values are clamped so the canvas stays within browser limits.
+   *  Default: 1 */
+  scale?: number;
+
+  /** Output format. `'svg'` returns the vector capture itself rather than rasterising
+   *  it — sharp at any size, and it ignores `scale` (there is no raster resolution to
+   *  multiply). Note that SVG files are typically MUCH larger than the raster formats,
+   *  not smaller — a shortcoming of html-to-image, which inlines every element's entire
+   *  computed style rather than sharing one stylesheet, so output grows with element
+   *  count. `'jpeg'` is lossy; prefer it only when file size matters more than crisp
+   *  text edges.
+   *  Default: 'png' */
+  format?: 'png' | 'jpeg' | 'svg';
+
+  /** JPEG quality, 0-1. Ignored for other formats. Default: 0.92 */
+  quality?: number;
+
   /** When provided, triggers a browser download with this filename. */
   filename?: string;
 
@@ -888,6 +908,171 @@ export type EndpointSpreadConfig = boolean | { spacing?: number };
  * to its lane index (0-based, order = ascending opposite-endpoint position).
  */
 export type EndpointSpreadGrouping = Map<string, { count: number; lanes: Map<string, number> }>;
+
+// ── Schema render decorators ────────────────────────────────────────────────
+// `x-flow-schema` owns the DOM it builds — header, body, and one row per field
+// with icon/name/type/handle sub-slots — so consumers can't template it. These
+// hooks hand those already-built slot elements back to the consumer to augment
+// (classes, attributes, extra child spans) WITHOUT forking the directive. The
+// primary use case is rendering `FlowSchemaField` metadata the base row omits:
+// `description`, `deprecated`, `tags`, `defaultValue`.
+//
+// CONTRACT — decorators must be IDEMPOTENT. The directive re-runs its render on
+// every tracked change and calls the decorator each time, AFTER writing its own
+// content for the slot (it sets `header.textContent` and the name/type text, which
+// clobbers any child elements a prior decoration wrote there). So a decorator must
+// converge when re-applied: set text/attributes/classes, and add a child only when
+// it isn't already present (e.g. guard on a querySelector) rather than append
+// unconditionally. `isNew` distinguishes a freshly-built slot from a re-decoration.
+//
+// GEOMETRY — changing a row's or the header's HEIGHT breaks the uniform-row
+// assumption behind state-derived edge geometry (see SchemaMetrics); such nodes
+// silently fall back to DOM measurement. Purely additive decoration that preserves
+// height is free. Both hooks no-op unless the schema addon is registered.
+
+/** Node-level slots `x-flow-schema` builds, handed to a {@link SchemaNodeDecorator}. */
+export interface SchemaNodeDecoratorContext {
+  /** The `.flow-schema-node` container (the `x-flow-schema` host element). */
+  host: HTMLElement;
+  /** The `.flow-schema-header` element; its text is `node.data.label`. */
+  header: HTMLElement;
+  /** The `.flow-schema-body` element that holds the rows. */
+  body: HTMLElement;
+  /** The bound node (`data.label`, `data.fields`, `id`, …). */
+  node: FlowNode<SchemaNodeData>;
+  /** True only on the render that first created the header/body scaffold. */
+  isNew: boolean;
+}
+
+/** The rendered sub-slots inside one `.flow-schema-row`. */
+export interface SchemaRowSlots {
+  /** `.flow-schema-row-icon` — present only when `field.icon` is set. */
+  icon: HTMLElement | null;
+  /** `.flow-schema-row-name` — text is `field.name`. */
+  name: HTMLElement;
+  /** `.flow-schema-row-type` — text is `field.type`. */
+  type: HTMLElement;
+  /** The interactive target handle (left edge). */
+  target: HTMLElement;
+  /** The interactive source handle (right edge). */
+  source: HTMLElement;
+  /** The hidden mirror target handle (right edge). */
+  mirrorTarget: HTMLElement;
+  /** The hidden mirror source handle (left edge). */
+  mirrorSource: HTMLElement;
+}
+
+/** Row-level slots `x-flow-schema` builds, handed to a {@link SchemaRowDecorator}. */
+export interface SchemaRowDecoratorContext {
+  /** The `.flow-schema-row` element for this field. */
+  row: HTMLElement;
+  /** The field data driving this row. */
+  field: FlowSchemaField;
+  /** The owning node's id. */
+  nodeId: string;
+  /** The node-render slots within the row. */
+  slots: SchemaRowSlots;
+  /** True when this row was just created this render (vs. updated in place). */
+  isNew: boolean;
+}
+
+/** Augments the node-level slots (`host`/`header`/`body`) of a schema node. */
+export type SchemaNodeDecorator = (ctx: SchemaNodeDecoratorContext) => void;
+
+/** Augments one row and its sub-slots (icon/name/type/handles) of a schema node. */
+export type SchemaRowDecorator = (ctx: SchemaRowDecoratorContext) => void;
+
+// ── Schema class resolvers ──────────────────────────────────────────────────
+// The declarative, styling-only counterpart to the decorators above. Where a
+// decorator gets the DOM to mutate imperatively, a class resolver is a PURE
+// FUNCTION of the field/node data that returns CSS class names — the directive
+// applies them and reconciles: classes the resolver stops returning are removed,
+// and it never touches the directive's own structural classes (`flow-schema-row`,
+// `--pk`/`--fk`/`--required`, `flow-schema-node`) or anything a decorator added.
+// No idempotency burden on the consumer — returning the same value twice is a
+// no-op. Both no-op unless the schema addon is registered.
+
+/**
+ * A class list a resolver returns: a class string (space-separated allowed), an
+ * array of such strings, or a falsy value meaning "no classes for this element".
+ */
+export type SchemaClassValue = string | string[] | null | undefined | false;
+
+/**
+ * Per-slot class map a node resolver may return to target individual node slots
+ * instead of just the host. Each slot reconciles independently. Omit a slot to
+ * leave it alone; return it as falsy to clear the classes previously applied there.
+ */
+export interface SchemaNodeClassMap {
+  /** Classes for the `.flow-schema-node` host (same as returning a bare value). */
+  node?: SchemaClassValue;
+  /** Classes for the `.flow-schema-header`. */
+  header?: SchemaClassValue;
+  /** Classes for the `.flow-schema-body` (the rows container). */
+  body?: SchemaClassValue;
+}
+
+/**
+ * Per-slot class map a row resolver may return to target individual row slots
+ * instead of just the row. Each slot reconciles independently. Omit a slot to
+ * leave it alone; return it as falsy to clear the classes previously applied there.
+ */
+export interface SchemaRowClassMap {
+  /** Classes for the `.flow-schema-row` (same as returning a bare value). */
+  row?: SchemaClassValue;
+  /** Classes for the `.flow-schema-row-icon` (present only when `field.icon` is set). */
+  icon?: SchemaClassValue;
+  /** Classes for the `.flow-schema-row-name`. */
+  name?: SchemaClassValue;
+  /** Classes for the `.flow-schema-row-type`. */
+  type?: SchemaClassValue;
+  /** Classes for the interactive target handle (left edge). */
+  target?: SchemaClassValue;
+  /** Classes for the interactive source handle (right edge). */
+  source?: SchemaClassValue;
+  /** Classes for the hidden mirror target handle (right edge). */
+  mirrorTarget?: SchemaClassValue;
+  /** Classes for the hidden mirror source handle (left edge). */
+  mirrorSource?: SchemaClassValue;
+}
+
+/** Context handed to a {@link SchemaRowClassResolver}. */
+export interface SchemaRowClassContext {
+  /** The field data driving this row. */
+  field: FlowSchemaField;
+  /** The owning node (for cross-field styling decisions). */
+  node: FlowNode<SchemaNodeData>;
+  /** The owning node's id. */
+  nodeId: string;
+  /** True when this row was just created this render (vs. updated in place). */
+  isNew: boolean;
+}
+
+/** Context handed to a {@link SchemaNodeClassResolver}. */
+export interface SchemaNodeClassContext {
+  /** The bound node. */
+  node: FlowNode<SchemaNodeData>;
+  /** True only on the render that first created the header/body scaffold. */
+  isNew: boolean;
+}
+
+/**
+ * Resolves CSS classes for a `.flow-schema-row` from its data. Return a bare class
+ * value to class the row itself, or a {@link SchemaRowClassMap} to target the row
+ * plus any of its sub-slots (icon/name/type/handles) independently.
+ */
+export type SchemaRowClassResolver = (
+  ctx: SchemaRowClassContext,
+) => SchemaClassValue | SchemaRowClassMap;
+
+/**
+ * Resolves CSS classes for a schema node from its data. Return a bare class value
+ * to class the `.flow-schema-node` host, or a {@link SchemaNodeClassMap} to target
+ * the host, header, and body independently.
+ */
+export type SchemaNodeClassResolver = (
+  ctx: SchemaNodeClassContext,
+) => SchemaClassValue | SchemaNodeClassMap;
 
 export interface FlowCanvasConfig {
   nodes?: FlowNode[];
@@ -1285,10 +1470,12 @@ export interface FlowCanvasConfig {
   /** CSS class that prevents node dragging when on or inside the event target. Default: 'nodrag' */
   noDragClassName?: string;
 
-  /** CSS class that prevents canvas pan/zoom when on or inside the event target. Default: 'nopan' */
+  /** CSS class that prevents canvas panning (drag) when on or inside the event target.
+   *  Does NOT block wheel zoom — use noWheelClassName for that. Default: 'nopan' */
   noPanClassName?: string;
 
-  /** CSS class that prevents wheel zoom when on or inside the event target. Default: undefined (disabled) */
+  /** CSS class that prevents wheel zoom when on or inside the event target. No element carries
+   *  it by default, so this is opt-in: add the class to opt an element out of wheel zoom. Default: 'nowheel' */
   noWheelClassName?: string;
 
   /** Which mouse buttons trigger panning. true = left button (default), false = disabled,
@@ -1328,11 +1515,14 @@ export interface FlowCanvasConfig {
   shapeTypes?: Record<string, ShapeDefinition>;
 
   /** Map edge type strings to custom path generator functions.
-   *  Receives the same params as built-in generators, returns { path, labelPosition }. */
+   *  Receives the endpoint params (same as built-in generators) plus the edge itself,
+   *  so a generator can read per-edge routing data off it (e.g. precomputed waypoints
+   *  on `edge.data`) — which, living on the edge, survives serialization. Returns
+   *  { path, labelPosition }. The `edge` arg is optional for backward compatibility. */
   edgeTypes?: Record<string, (params: {
-    sourceX: number; sourceY: number; sourcePosition: string;
-    targetX: number; targetY: number; targetPosition: string;
-  }) => { path: string; labelPosition: { x: number; y: number } }>;
+    sourceX: number; sourceY: number; sourcePosition: 'top' | 'right' | 'bottom' | 'left';
+    targetX: number; targetY: number; targetPosition: 'top' | 'right' | 'bottom' | 'left';
+  }, edge?: FlowEdge) => { path: string; labelPosition: { x: number; y: number } }>;
 
   /**
    * Optional vocabulary of field types for the schema addon's default-UI
@@ -1355,6 +1545,46 @@ export interface FlowCanvasConfig {
    * manually by consumers writing custom node templates. Defaults to false.
    */
   rowsReorderable?: boolean;
+
+  /**
+   * Augment the node-level slots (`.flow-schema-node` host, header, body) that
+   * `x-flow-schema` builds, without forking the directive. Called after the
+   * directive sets its own content, on EVERY render — see
+   * {@link SchemaNodeDecoratorContext} for the idempotency + geometry contract.
+   * No-op unless the schema addon is registered.
+   */
+  schemaNodeDecorator?: SchemaNodeDecorator;
+
+  /**
+   * Augment each rendered row and its sub-slots (icon/name/type/handles) that
+   * `x-flow-schema` builds. Called after the directive builds (new rows) or
+   * updates (surviving rows) each row, on EVERY render — see
+   * {@link SchemaRowDecoratorContext} for the idempotency + geometry contract.
+   * This is the hook for rendering `FlowSchemaField` metadata the base row omits
+   * (`description`, `deprecated`, `tags`, `defaultValue`). No-op unless the
+   * schema addon is registered.
+   */
+  schemaRowDecorator?: SchemaRowDecorator;
+
+  /**
+   * Resolve CSS classes to apply to each `.flow-schema-row`, as a pure function of
+   * the field/node data — the declarative, styling-only counterpart to
+   * `schemaRowDecorator`. Return a class string / array to class the row, or a
+   * {@link SchemaRowClassMap} to target the row's sub-slots (icon/name/type/handles)
+   * individually. The directive reconciles them per slot (classes you stop
+   * returning are removed) and never touches its own structural classes.
+   * See {@link SchemaRowClassResolver}. No-op unless the schema addon is registered.
+   */
+  schemaRowClass?: SchemaRowClassResolver;
+
+  /**
+   * Resolve CSS classes to apply to a schema node, as a pure function of the node
+   * data. Return a class string / array to class the `.flow-schema-node` host, or a
+   * {@link SchemaNodeClassMap} to target the host, header, and body individually.
+   * Same reconcile semantics as `schemaRowClass`. See {@link SchemaNodeClassResolver}.
+   * No-op unless the schema addon is registered.
+   */
+  schemaNodeClass?: SchemaNodeClassResolver;
 
   // ── History (Undo/Redo) ─────────────────────────────────────────
   /** Enable undo/redo history tracking. Default: false */
@@ -1555,8 +1785,20 @@ export interface FlowCanvasConfig {
   nodeDragThreshold?: number;
 
   // ── Double-Click Zoom ─────────────────────────────────────────────
-  /** Zoom in on double-click. Default: true */
-  zoomOnDoubleClick?: boolean;
+  /** Double-click zoom behaviour. Default: `true` (identical to `'step'`).
+   *
+   *  - `true` / `'step'` — d3-zoom's native handler: ×2 in per double-click,
+   *    `shift`+double-click to step out, repeatable.
+   *  - `'toggle'` — jump to {@link FlowCanvasConfig.dblClickZoomLevel} about the
+   *    cursor; a second double-click restores the exact viewport you came from.
+   *  - `false` — disabled. */
+  zoomOnDoubleClick?: boolean | 'step' | 'toggle';
+  /** Zoom level the first double-click animates to (the "readable" level). A second
+   *  double-click at or above that level restores the viewport from before the
+   *  zoom-in. Clamped to [minZoom, maxZoom]; must exceed `minZoom` for the toggle to
+   *  have room to return to. Only consulted when `zoomOnDoubleClick: 'toggle'`.
+   *  Default: 1.5 */
+  dblClickZoomLevel?: number;
 
   // ── Select on Drag ────────────────────────────────────────────────
   /** Automatically select nodes when they start being dragged. Default: true */

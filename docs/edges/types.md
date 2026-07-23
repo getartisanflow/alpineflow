@@ -117,7 +117,7 @@ Register custom edge types via the `edgeTypes` config option. Any `type` string 
 ```js
 flowCanvas({
     edgeTypes: {
-        'custom': ({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition }) => ({
+        'custom': ({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition }, edge) => ({
             path: `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`,
             labelPosition: { x: (sourceX + targetX) / 2, y: (sourceY + targetY) / 2 },
         }),
@@ -125,7 +125,9 @@ flowCanvas({
 })
 ```
 
-The function receives source/target coordinates and positions and must return an object with `path` (an SVG path string) and `labelPosition` (an `{ x, y }` point for label placement).
+The function receives source/target coordinates and positions as its first argument, and the `edge` object itself as an optional second argument. It must return an object with `path` (an SVG path string) and `labelPosition` (an `{ x, y }` point for label placement).
+
+The `edge` argument lets one generator read per-edge routing data off the edge (e.g. waypoints on `edge.data`) rather than needing a closure per edge — and because that data lives on the edge, it survives `toObject()` / `fromObject()`. It is optional, so existing single-argument generators are unaffected.
 
 ## Edge data shape
 

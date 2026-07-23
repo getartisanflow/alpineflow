@@ -7,6 +7,85 @@
 **Added**
 - `avoidantCrossingReduction` config (default **off**) + `setCrossingReduction()` runtime knob, with the matching `flow:setCrossingReduction` wire command. When enabled, a per-canvas plan pass groups avoidant edges that share a corridor (base-route channels), computes barycenter-ordered lane offsets, and fans stacked edges apart via a post-route interior-run shift with obstacle revert — so edges funnelling through the same gap separate into ordered lanes instead of drawing coincident. Accepts `true` or `{ channelGap: px }` (default gap 12). Off === pre-WS-3 baseline routing, byte-identical `d` strings.
 
+### Fixed — edges with a buried endpoint no longer collapse to a straight bezier
+
+When a third-party node sat on top of an edge's endpoint handle (or the stub point the router leaves from) — easy to hit after `scramble()` scatters nodes into overlaps — that node's padded rect swallowed the endpoint, every outgoing path segment was blocked, and `findRoute` returned `null`, so avoidant/orthogonal edges silently fell back to a straight bezier until the connected node was dragged. Obstacles whose padded rect contains a route endpoint or its stub offset are now **excluded from routing for that edge**: a node sitting on your handle can't be routed around anyway, and the route still avoids everything else. Genuinely unroutable layouts (endpoint ringed by non-covering obstacles) still fall back to bezier.
+
+### Fixed — wheel zoom now works while the pointer is over a node
+
+Nodes carry the `noPanClassName` class (default `nopan`) so dragging a node moves the node and doesn't pan the canvas. But the pan/zoom filter blocked **every** gesture whose target was inside a `.nopan` element — including `wheel` — so scroll- and pinch-zoom silently did nothing whenever the cursor was over a node, which for a dense graph is most of the canvas.
+
+The filter now exempts `wheel` from the `noPanClassName` check: `nopan` gates panning (drag) only, and wheel zoom is gated separately by `noWheelClassName` (matching the react-flow/xyflow split this was modelled on). Panning over a node and double-click zoom are unaffected.
+
+### Added — `nowheel` class to opt an element out of wheel zoom
+
+`noWheelClassName` now defaults to `'nowheel'`, the symmetric counterpart to `noPanClassName`'s `'nopan'`. Add `class="nowheel"` to any element on the canvas — a scrollable panel or list, say — and the wheel scrolls its content instead of zooming the canvas. This is purely additive: unlike `nopan` (which nodes carry automatically), no element carries `nowheel` by default, so existing behavior is unchanged until you apply the class. Override `noWheelClassName` in the canvas config to use a different class name, or set it to `undefined` to disable the feature entirely.
+
+### Fixed — a drop released over a panel, the controls or the minimap no longer adds a node
+
+The drop-zone listener is attached to the flow container, and the floating overlays (`.flow-panel`, `.flow-controls`, `.flow-minimap`, and any `.canvas-overlay` such as the devtools panel) live *inside* that container with `pointer-events: auto` and a `z-index` above the canvas surface. Their drag events therefore bubbled to the same listener, and the canvas treated them as a drop on the surface — adding a node at the position **behind** the overlay.
+
+The most common way to hit this is the in-canvas node palette: drag an item out, change your mind, release it back over the palette, and instead of cancelling you got a node hidden underneath the panel. Releasing over the zoom controls or the minimap did the same.
+
+`dragover` and `drop` now both ignore events whose target is inside an overlay, so the browser shows the "no drop" cursor while over one and the release is a cancel. Drops on the canvas surface and onto nodes are unaffected — `targetNode` resolution still works exactly as before.
+
+### Fixed — canvas shortcuts no longer hijack keys inside `contenteditable` and nested controls
+
+Typing inside a node was destructive. The canvas keydown handler decided whether a keystroke belonged to the user by reading `e.target.tagName` and bailing only on `INPUT`/`TEXTAREA` — but a rich-text editor, a JSON editor, or an inline-editable node label renders a **`contenteditable` `<div>`**, whose `tagName` is `'DIV'`. Every canvas shortcut therefore fired while the user was typing: **Backspace deleted the whole selected node** instead of a character, the arrow keys **moved the node** instead of the caret, and Ctrl/Cmd+Z/C/X/V hit the canvas history and clipboard instead of the text.
+
+The check now lives in one exported helper, `isEditableTarget(target)`, which returns true for `INPUT`, `TEXTAREA`, `SELECT` **and** any element with `isContentEditable`. All six shortcut guards (delete, selection-tool toggle, arrow-nudge, undo, redo, copy/paste/cut) call it.
+
+A second path had the same shape: `x-flow-node` treats Enter/Space as "select this node", but `keydown` bubbles, so it `preventDefault()`ed those keys for **any** focused descendant — no spaces or newlines in a nested input, and nested `<button>`s could not be activated by keyboard at all. Activation is now gated on the event target being the node wrapper itself, via the exported `isNodeActivationKey(e, el)`.
+
+Not a breaking change: both helpers only *widen* the set of targets the canvas keeps its hands off, so any node that already behaved correctly is unaffected.
+### Added — opt-in `'toggle'` mode for double-click zoom, plus `dblClickZoomLevel`
+
+Double-click zoom comes from d3-zoom, which only ever zooms **in** — one ×2 step per double-click (`shift` to step out), capped at `maxZoom`. That is the right default, but it makes "get me to a readable level and back" an unpredictable number of clicks, and once at `maxZoom` a plain double-click does nothing.
+
+`zoomOnDoubleClick` now accepts a mode as well as a boolean:
+
+| Value | Behaviour |
+|---|---|
+| `true` / `'step'` *(default)* | d3-zoom's native handler, unchanged — ×2 in, `shift`+double-click out, repeatable |
+| `'toggle'` | jump to `dblClickZoomLevel` about the cursor; the next double-click restores the previous viewport exactly |
+| `false` | disabled |
+
+In `'toggle'` mode the gesture is a true round trip: the first double-click animates to `dblClickZoomLevel` (default `1.5`) keeping the point under the pointer fixed and remembering the viewport it left, and the second puts that viewport back precisely rather than approximating it with a zoom-out. Reach the level some other way — wheel, `setViewport()` — and there is nothing to restore, so the gesture zooms out to `minZoom` about the cursor instead of stalling. Panning or zooming by hand discards the remembered viewport, so a toggle-out never returns to a view the user has since left.
+
+New **`dblClickZoomLevel`** sets that level, clamped to `[minZoom, maxZoom]`. It must clear `minZoom` for the toggle to have anywhere to return to; if clamping pushes it onto `minZoom`, AlpineFlow keeps d3's stepped handler rather than installing a gesture that would stall on the second click.
+
+Not a breaking change: the default is byte-for-byte the previous behaviour — d3's handler stays bound, `shift`+double-click keeps working, and `dblClickZoomLevel` is only consulted in `'toggle'` mode. Both modes treat `zoomable: false` the same way the pan-zoom filter always has: it gates pointer-gesture zooming (wheel, pinch), never double-click — so a canvas that disables wheel zoom to drive zooming itself (e.g. pinch-only) keeps the double-click gesture, and `zoomOnDoubleClick: false` remains the switch for turning that gesture off.
+
+### Added — custom edge generators receive the `edge`
+
+Custom edge path generators registered via `flowCanvas({ edgeTypes })` are now called with the `edge` as a second argument — `edgeTypes[type](params, edge)` — where before they saw only the endpoint coordinates. That limitation forced any per-edge routing data (waypoints, lane/channel assignments) to be smuggled in through a **separate closure per edge**; because that data lived in a function rather than on the model, it was lost on `toObject()`/`fromObject()`, so a custom-routed edge came back unrouted after a reload or snapshot restore. A generator can now read its route straight off `edge.data`, where it serializes with the edge and survives the round-trip.
+
+Not a breaking change: the `edge` argument is optional and appended after the existing `params`, so every existing single-parameter generator keeps working unchanged. Thanks to [@ronnorthrip](https://github.com/ronnorthrip) for the report and change.
+
+### Added — schema render hooks: `x-flow-schema` customization without forking the directive
+
+`x-flow-schema` owns the DOM it builds, so consumers previously had to replace the whole directive to customize a node. Four new `flowCanvas({ … })` hooks augment its output per-render instead — read from the canvas config on every render, no-ops when unset, and firing only for `x-flow-schema` nodes:
+
+- **`schemaRowClass` / `schemaNodeClass`** — declarative styling. Pure functions of the field/node data that return CSS class names; AlpineFlow applies and **reconciles** them (classes you stop returning are removed) and never touches the directive's own structural classes (`flow-schema-row`, `--pk`/`--fk`/`--required`) or anything a decorator added. Return a bare class value to class the row/host, or a per-slot map to target the row's `icon`/`name`/`type`/handle sub-slots (or a node's `header`/`body`) individually.
+- **`schemaRowDecorator` / `schemaNodeDecorator`** — imperative DOM. Handed the already-built slot elements (`{ row, field, nodeId, slots, isNew }` / `{ host, header, body, node, isNew }`) to mutate — render a field's `description`, add a header badge, etc. They run every render (after the directive writes its own content), so must be idempotent; a throwing hook is caught and logged, never aborting the render.
+
+All hook types are exported from the package root. Height-preserving decoration is free; changing a row's or header's height falls the node back to DOM-measured edge geometry (still correct, not the fast path). Thanks to [@ronnorthrip](https://github.com/ronnorthrip) for the feature.
+
+### Fixed — node effect no longer throws on a detached-node teardown race
+
+A node's reactive style/class effect could fire once more after the node was detached (e.g. rapid mount/unmount); its custom-shape lookup called `Alpine.$data(el.closest('[data-flow-canvas]'))`, and on a detached node `closest` returns `null`, so `Alpine.$data(null)` threw `Cannot read properties of null (reading '_x_dataStack')` asynchronously — a stray unhandled error. The lookup is now guarded (a detached node has no custom shape to apply). Pre-existing; surfaced while stabilizing the schema-directive test suite.
+
+### Added — `toImage()` exports edges, plus `scale`, `format` (PNG/JPEG/SVG), and `quality` options
+
+`toImage()` / `$flow.toImage()` now renders **edges** into the exported image. `html-to-image` serializes the DOM into an SVG `foreignObject` and preserves paint expressed as presentation *attributes* but drops paint that comes from a stylesheet — and AlpineFlow's edges are stroked purely by CSS, so every edge used to rasterize invisible while nodes came through fine. The capture now bakes each SVG shape's *computed* paint (stroke, fill, markers, dash, opacity) onto the elements for the duration of the capture (resolving `var(--flow-edge-*)` to concrete colours) and restores them afterward.
+
+New export options:
+- **`scale`** multiplies the raster resolution without changing the layout — `scale: 2` renders a 1920×1080 export at 3840×2160 for crisp/retina output. The capture is vector, so it re-renders sharp rather than upscaling. Clamped to what the browser can actually allocate (an over-large canvas otherwise yields a silently blank PNG) and falls back to `1` for non-finite/non-positive values.
+- **`format`** selects the output — `'png'` (default, honours `scale`), `'jpeg'` (honours `scale` + `quality`), or `'svg'` (vector, ignores `scale`). Background is carried in the SVG markup for vector output and painted behind the raster for PNG/JPEG, so JPEG's missing alpha channel never encodes as black.
+- **`quality`** (0–1, default `0.92`) applies to JPEG only; out-of-range values clamp, invalid ones fall back. Note: SVG export is currently *much* larger than PNG (a `html-to-image` limitation — it inlines each element's full computed style), so it's the wrong choice for saving space on large canvases; see the [`toImage` docs](docs/api/flow-magic/state-management.md#toimage).
+
+Not a breaking change: edges appearing is a fix (they were meant to be there), `scale`/`format`/`quality` are optional and default to the previous behaviour (a 1× PNG), and `html-to-image` remains a regular dependency, so `toImage()` continues to work with no consumer action. Thanks to [@ronnorthrip](https://github.com/ronnorthrip) for the report, fix, and format work.
+
 ### Changed — avoidant edges use rounded corners, not a Catmull-Rom spline
 
 Avoidant edges smoothed their orthogonal route with a Catmull-Rom spline, whose tangents overshoot: the curve hooked at the handle stub and bulged *past* every sharp corner, so the edges looked exaggerated. Avoidant now keeps the straight runs and rounds each corner with a **bounded cubic-bezier fillet** (`buildRoundedPath`, default radius `AVOIDANT_CORNER_RADIUS = 40`, clamped per-corner to half the shorter adjacent segment). The fillet lives inside the corner, so the curve **hugs the route and can't overshoot** — smooth and bezier-like, but visually distinct from `orthogonal`'s tight bends. This changes the exact `d` string of every avoidant edge. The Catmull-Rom builder is retained for the freeform `editable` edge type, which is unchanged.

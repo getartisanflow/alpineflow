@@ -83,6 +83,20 @@ Use scroll events to pan instead of zoom:
 
 `panOnScrollDirection` accepts `'both'`, `'horizontal'`, or `'vertical'`. `panOnScrollSpeed` is a multiplier for scroll-to-pan speed.
 
+### Excluding elements from pan and zoom
+
+Two classes let an element opt out of a canvas gesture, so a drag or wheel over it is handled locally instead of moving the viewport:
+
+- **`nopan`** — a press-drag on the element (or anything inside it) won't pan the canvas. Nodes carry this automatically, which is why dragging a node moves the node rather than the viewport. Add it to a custom on-canvas control — a slider, a draggable widget — that needs its own drag.
+- **`nowheel`** — a wheel over the element scrolls its content instead of zooming the canvas. Add it to a scrollable panel or list you place on the canvas.
+
+```html
+<!-- wheel here scrolls the list; it does not zoom the canvas -->
+<div class="nowheel" style="max-height: 200px; overflow-y: auto"> ... </div>
+```
+
+Neither class blocks the other: `nopan` gates panning only, `nowheel` gates wheel zoom only. Rename them with the `noPanClassName` / `noWheelClassName` config options, or set `noWheelClassName` to `undefined` to disable the wheel opt-out entirely.
+
 ## Keyboard pan
 
 Hold the **Space** key to enter grab-cursor pan mode. While held, click and drag to pan the viewport regardless of other interaction settings.
