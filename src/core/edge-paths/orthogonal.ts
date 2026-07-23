@@ -545,6 +545,22 @@ function computeRoute(
   const tgtOffX = targetX + tgtDir.x * HANDLE_OFFSET;
   const tgtOffY = targetY + tgtDir.y * HANDLE_OFFSET;
 
+  // A node sitting on an endpoint handle (or its stub offset) cannot be routed
+  // around: its padded rect swallows the point the route must leave from, every
+  // outgoing segment is blocked, and the whole route dies (callers then fall
+  // back to bezier — the schema-scramble stuck-edge bug). Such obstacles are
+  // dropped for this edge; everything else is still avoided.
+  const buriesEndpoint = (r: Rect): boolean => {
+    const containsPoint = (x: number, y: number): boolean =>
+      x > r.x - OBSTACLE_PADDING && x < r.x + r.width + OBSTACLE_PADDING &&
+      y > r.y - OBSTACLE_PADDING && y < r.y + r.height + OBSTACLE_PADDING;
+    return (
+      containsPoint(sourceX, sourceY) || containsPoint(srcOffX, srcOffY) ||
+      containsPoint(targetX, targetY) || containsPoint(tgtOffX, tgtOffY)
+    );
+  };
+  const routable = obstacles.filter((r) => !buriesEndpoint(r));
+
   // Route against an arbitrary obstacle subset, returning the graph route
   // (offset → … → offset) computed on its padded scanline grid.
   const routeAgainst = (subset: Rect[]): RoutePoint[] | null => {
@@ -566,8 +582,8 @@ function computeRoute(
     return dijkstra(finalSource, finalTarget, graphPoints, paddedObstacles);
   };
 
-  const pruned = corridorObstacles(sourceX, sourceY, targetX, targetY, obstacles);
-  const prunedRemovedSome = pruned.length < obstacles.length;
+  const pruned = corridorObstacles(sourceX, sourceY, targetX, targetY, routable);
+  const prunedRemovedSome = pruned.length < routable.length;
   routeDebug.usedFullSet = !prunedRemovedSome;
 
   let route = routeAgainst(pruned);
@@ -575,11 +591,11 @@ function computeRoute(
   // Validate against the full padded set: pruning may fail to route (coarser
   // grid) or route through an obstacle it dropped. Retry once with everything.
   if (prunedRemovedSome) {
-    const fullPadded = obstacles.map((r) => padRect(r, OBSTACLE_PADDING));
+    const fullPadded = routable.map((r) => padRect(r, OBSTACLE_PADDING));
     const usable = route !== null && route.length >= 2;
     if (!usable || routeCrossesObstacles(route as RoutePoint[], fullPadded)) {
       routeDebug.usedFullSet = true;
-      route = routeAgainst(obstacles);
+      route = routeAgainst(routable);
     }
   }
 

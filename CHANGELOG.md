@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed — edges with a buried endpoint no longer collapse to a straight bezier
+
+When a third-party node sat on top of an edge's endpoint handle (or the stub point the router leaves from) — easy to hit after `scramble()` scatters nodes into overlaps — that node's padded rect swallowed the endpoint, every outgoing path segment was blocked, and `findRoute` returned `null`, so avoidant/orthogonal edges silently fell back to a straight bezier until the connected node was dragged. Obstacles whose padded rect contains a route endpoint or its stub offset are now **excluded from routing for that edge**: a node sitting on your handle can't be routed around anyway, and the route still avoids everything else. Genuinely unroutable layouts (endpoint ringed by non-covering obstacles) still fall back to bezier.
+
 ### Fixed — wheel zoom now works while the pointer is over a node
 
 Nodes carry the `noPanClassName` class (default `nopan`) so dragging a node moves the node and doesn't pan the canvas. But the pan/zoom filter blocked **every** gesture whose target was inside a `.nopan` element — including `wheel` — so scroll- and pinch-zoom silently did nothing whenever the cursor was over a node, which for a dense graph is most of the canvas.
