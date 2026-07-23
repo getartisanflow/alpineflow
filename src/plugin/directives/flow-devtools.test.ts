@@ -138,3 +138,32 @@ describe('getEventMax', () => {
     expect(getEventMax({ events: false as any })).toBe(0);
   });
 });
+
+// ── Event-log retention & list currency (collapsed-drop bug) ─────────────────
+// Real imports — these fail until the directive exports the helpers.
+import { FLOW_EVENTS_LIST, shouldRecordEvent } from './flow-devtools';
+
+describe('devtools event log', () => {
+  it('records low-frequency events even while the panel is collapsed', () => {
+    // A connect made with the panel collapsed must appear after expanding.
+    expect(shouldRecordEvent('flow-connect', false)).toBe(true);
+    expect(shouldRecordEvent('flow-nodes-change', false)).toBe(true);
+    expect(shouldRecordEvent('flow-edges-change', false)).toBe(true);
+  });
+
+  it('still drops frame-rate events while collapsed, keeps them while expanded', () => {
+    for (const evt of ['flow-viewport-move', 'flow-viewport-change', 'flow-node-drag']) {
+      expect(shouldRecordEvent(evt, false)).toBe(false);
+      expect(shouldRecordEvent(evt, true)).toBe(true);
+    }
+  });
+
+  it('subscribes to the current event vocabulary, not dead names', () => {
+    for (const evt of ['flow-connect', 'flow-connect-start', 'flow-connect-end', 'flow-nodes-change', 'flow-edges-change', 'flow-restore']) {
+      expect(FLOW_EVENTS_LIST).toContain(evt);
+    }
+    for (const dead of ['flow-node-add', 'flow-node-remove', 'flow-edge-add', 'flow-edge-remove', 'flow-disconnect']) {
+      expect(FLOW_EVENTS_LIST).not.toContain(dead);
+    }
+  });
+});

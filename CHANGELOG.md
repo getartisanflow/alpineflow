@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Fixed — devtools event log no longer loses events while collapsed
+
+The `x-flow-devtools` event log dropped **every** event that fired while the panel was collapsed — connect an edge with just the toggle icon showing, expand, and the log was empty. Low-frequency events (connect, node/edge changes, clicks, restore…) are now always recorded into the ring buffer and the rows are rebuilt on expand; only frame-rate events (`viewport-move`, `viewport-change`, `node-drag`) are still skipped while hidden. The subscription list was also brought current: dead names (`flow-node-add`/`flow-edge-add`/`flow-disconnect`…) replaced with `flow-nodes-change`/`flow-edges-change`, and `flow-connect-start`/`flow-connect-end`/`flow-restore`/`flow-reconnect` added. The devtools toggle also now sits flush at the canvas inset when the zoom controls aren't rendered (`controls: false`), instead of floating 44px into empty space.
+
+
 ### Added — `replaceNodes()` / `setNodes()` for first-class whole-graph replace
 
 There was no first-class whole-graph replace. The workaround — `$clear()` + `addNodes()` in one tick, with `x-for` keyed by id — made Alpine reuse the DOM, so the per-node measure hook never re-ran, the new nodes got no `dimensions`, and `fitView()` silently gave up.
