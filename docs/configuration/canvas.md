@@ -48,6 +48,8 @@ Core options that control the canvas appearance and viewport behavior.
 |--------|------|---------|-------------|
 | `pannable` | `boolean` | `true` | Enable viewport panning. |
 | `zoomable` | `boolean` | `true` | Enable viewport zooming. |
+| `interactive` | `boolean` | `true` | Master interactivity switch. Set `false` to start the canvas **locked** (no pan, zoom, or drag) without a post-ready `toggleInteractive()` call. It overrides the per-axis `pannable`/`zoomable` at init (both forced off); `toggleInteractive()` (or the controls toggle) then restores the per-axis intent. Distinct from the per-node `locked` flag, which freezes a single node. |
+| `containerHeight` | `'auto' \| 'fill' \| number \| string` | `'auto'` | Canvas container height. `'auto'` = the 400px fallback, `'fill'` = 100% of the parent, a `number` = pixels, or any CSS length string (`'80vh'`). Overrides the `--flow-container-height` CSS variable. |
 | `minZoom` | `number` | `0.5` | Minimum zoom level. |
 | `maxZoom` | `number` | `2` | Maximum zoom level. |
 | `fitViewOnInit` | `boolean` | `false` | Auto-fit all nodes in view after initialization. |

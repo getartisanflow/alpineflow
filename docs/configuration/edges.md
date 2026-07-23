@@ -15,6 +15,12 @@ order: 4
 | `reconnectSnapRadius` | `number` | `10` | Proximity radius for endpoint snap during reconnection. |
 | `edgesFocusable` | `boolean` | `true` | Allow edges to receive keyboard focus via Tab. |
 | `reconnectOnDelete` | `boolean` | `false` | Auto-bridge predecessors to successors when deleting middle nodes. |
+| `avoidantSimplifyOnDrag` | `boolean` | `true` | While a node is dragged, avoidant/orthogonal edges touching it skip pathfinding and render as a plain bezier for the duration of the gesture, then re-route on drop. Set `false` to keep full pathfinding during drags. |
+| `avoidantCrossingReduction` | `boolean \| { channelGap?: number }` | `false` | Reduce crossings between avoidant edges that share a corridor by fanning them into ordered lanes. `{ channelGap }` tunes the px separation. Off (the default) is byte-identical to the non-reduced route. See [Edge routing](#edge-routing). |
+| `avoidantEndpointSpread` | `boolean \| { spacing?: number }` | — (off) | Fan multiple avoidant edges that share one handle apart at the endpoint. `{ spacing }` tunes the gap; never changes row height. Per-node override via `FlowNode.endpointSpread`. Off is byte-identical to spread-off. |
+| `schemaHandleGeometry` | `'auto' \| 'dom'` | `'auto'` | How schema-edge endpoints are computed. `'auto'` derives them arithmetically from node position/dimensions/fields (2.3–3.8× faster, zero `getBoundingClientRect`); `'dom'` always measures the handle elements — an escape hatch for layouts whose rows aren't uniform or aren't rendered by `x-flow-schema`. Endpoints are identical either way. |
+| `edgeLod` | `false \| { simplifyAt: 'far' \| 'medium' }` | `false` | Level-of-detail: simplify edge rendering when the viewport is zoomed out past the given `zoomLevels` band. |
+| `collapseBidirectionalEdges` | `boolean` | `false` | Render a reciprocal pair (A→B + B→A) as a single path with a marker at each end instead of two overlapping edges. |
 
 ## Custom edge types
 
@@ -37,6 +43,16 @@ the edge (e.g. precomputed waypoints stashed on `edge.data`) instead of needing 
 separate closure per edge. Because that data lives on the edge, it also survives
 `toObject()` / `fromObject()` serialization — a custom-routed edge reloads correctly.
 The argument is optional, so existing one-parameter generators keep working unchanged.
+
+## Edge routing
+
+Avoidant and orthogonal edges route around node obstacles. Three opt-in / defaulted knobs tune that routing:
+
+- **Crossing reduction** — `avoidantCrossingReduction` groups avoidant edges that funnel through the same gap and fans them into barycenter-ordered lanes, so they separate instead of drawing coincident. Enable declaratively (`true` or `{ channelGap }`) or toggle at runtime with [`$flow.setCrossingReduction(value)`](../api/flow-magic/state-management.md#setcrossingreduction). Off is byte-identical to the non-reduced route.
+- **Endpoint spread** — `avoidantEndpointSpread` fans multiple edges sharing one handle apart at the endpoint (per-node override via `FlowNode.endpointSpread`). It never changes row height; at high fan-in the fan condenses within the row.
+- **Drag simplification** — `avoidantSimplifyOnDrag` (default on) renders incident edges as a plain bezier during a node drag and re-routes them on drop, keeping drags smooth on dense graphs.
+
+These are covered in the [v0.2.1-alpha migration guide](../migration/v0.2.1-alpha.md) alongside the other routing behavior shifts.
 
 ## Edge data shape
 
