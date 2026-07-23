@@ -628,6 +628,25 @@ describe('createViewportMixin — toggleInteractive', () => {
       zoomable: true,
     });
   });
+
+  it('restores per-axis intent (pannable/zoomable) when toggling back to interactive', () => {
+    const panZoom = { setViewport: vi.fn(), update: vi.fn() };
+    const ctx = mockCtx({
+      _panZoom: panZoom as any,
+      isInteractive: false,
+      // Config wanted panning but not zooming; interactive is the master overlay.
+      _config: { pannable: true, zoomable: false } as any,
+    });
+    const mixin = createViewportMixin(ctx);
+
+    mixin.toggleInteractive();
+
+    expect(ctx.isInteractive).toBe(true);
+    expect(panZoom.update).toHaveBeenCalledWith({
+      pannable: true,
+      zoomable: false,
+    });
+  });
 });
 
 // ── colorMode ────────────────────────────────────────────────────────────────

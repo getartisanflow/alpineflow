@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added — canvas-level `interactive` config to start locked
+
+`isInteractive` was hardcoded `true` at init, so "start locked" needed a userland flag plus a post-ready `toggleInteractive()`. The `FlowCanvasConfig` now accepts **`interactive?: boolean`** (default `true`): set it `false` and the canvas initialises locked — pan and zoom off — with no follow-up call. `interactive` is a **master overlay** on the per-axis `pannable`/`zoomable` options: when `false` it forces both axes off at init regardless of those options, and `toggleInteractive()` restores the per-axis intent (an axis you set `false` stays off when unlocking). Additive and non-breaking — the default preserves today's behaviour. Also clarifies the distinction from the per-node `FlowNode.locked` flag (which freezes a single node) in both JSDoc sites.
+
 ### Changed — `fitView()` now returns `Promise<boolean>` (observable fit)
 
 `fitView()` previously returned `void` and, when any node still lacked measured `dimensions`, deferred up to 10 animation frames and then **silently gave up** without fitting — so "did it actually fit?" was unobservable. It now returns a promise that resolves **`true`** once the fit runs, or **`false`** when the retry budget is exhausted with nodes still unmeasured. The rAF-retry behaviour is unchanged; only completion became observable. Runtime-non-breaking: callers that ignore the return value (including the internal `fitViewOnInit` path) are unaffected. TypeScript consumers who annotated the call as `: void` will see a compile note.

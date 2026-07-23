@@ -214,9 +214,11 @@ export function createViewportMixin(ctx: CanvasContext) {
     toggleInteractive(): void {
       ctx.isInteractive = !ctx.isInteractive;
       debug('interactive', 'toggleInteractive', { isInteractive: ctx.isInteractive });
+      // Interactive is the master overlay: off => both axes off; on => restore
+      // the per-axis intent from config (an axis explicitly set false stays off).
       ctx._panZoom?.update({
-        pannable: ctx.isInteractive,
-        zoomable: ctx.isInteractive,
+        pannable: ctx.isInteractive && ctx._config?.pannable !== false,
+        zoomable: ctx.isInteractive && ctx._config?.zoomable !== false,
       });
     },
 
