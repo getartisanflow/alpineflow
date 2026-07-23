@@ -156,6 +156,36 @@ describe('getAvoidantPath', () => {
   });
 });
 
+describe('getAvoidantPath channelOffset (WS-3)', () => {
+  // Obstacle straddles the straight source→target line at y=100, forcing a routed
+  // corridor. Verified via findRoute: the route is
+  //   [0,100] [100,100] [100,50] [200,50] [200,100] [300,100]
+  // so the dominant INTERIOR run is the horizontal run at y=50, ABOVE the obstacle.
+  // → a negative offset shifts the run further up (clears, path changes);
+  //   a positive offset drives it down into the padded obstacle (revert to base).
+  const obstacles = [{ x: 120, y: 70, width: 60, height: 60 }];
+  const base = { sourceX: 0, sourceY: 100, sourcePosition: 'right' as const, targetX: 300, targetY: 100, targetPosition: 'left' as const, obstacles };
+
+  it('offset 0 / undefined is byte-identical to no offset', () => {
+    const a = getAvoidantPath({ ...base }).path;
+    const b = getAvoidantPath({ ...base, channelOffset: 0 }).path;
+    expect(b).toBe(a);
+  });
+
+  it('a nonzero offset changes the path (shifts the interior run)', () => {
+    const a = getAvoidantPath({ ...base }).path;
+    const c = getAvoidantPath({ ...base, channelOffset: -14 }).path;
+    expect(c).not.toBe(a);
+  });
+
+  it('reverts to base when the shift would hit an obstacle (no collision)', () => {
+    // +50 drives the interior run down into the padded obstacle → revert to base path.
+    const a = getAvoidantPath({ ...base }).path;
+    const big = getAvoidantPath({ ...base, channelOffset: 50 }).path;
+    expect(big).toBe(a);
+  });
+});
+
 describe('getAvoidantPath buried-endpoint obstacles', () => {
   it('routes around remaining obstacles when a third-party node covers the target handle', () => {
     // Mirrors the schema-scramble bug: a node landed on the target handle.

@@ -1465,10 +1465,17 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           }
         }
 
+        // WS-3: crossing-reduction lane offset for this edge (0 when off/absent).
+        let channelOffset = 0;
+        if (resolvedEdgeType === 'orthogonal' || resolvedEdgeType === 'avoidant') {
+          const plan = Alpine.raw(canvas._crossingPlan) as Map<string, number> | null | undefined;
+          channelOffset = plan?.get(edge.id) ?? 0;
+        }
+
         // Only the path geometry uses the LOD-resolved type; everything else
         // (markers, labels, edge classes) keeps the configured type via `edge`.
         const pathEdge = effectiveEdgeType === resolvedEdgeType ? edge : { ...edge, type: effectiveEdgeType };
-        const { path, labelPosition } = getEdgePath(pathEdge, sourceNode, targetNode, sourcePos, targetPos, adjustedSrc, adjustedTgt, canvas._config?.edgeTypes, obstacleRects, canvas._shapeRegistry, canvas._config?.nodeOrigin, canvas._config?.defaultEdgeType);
+        const { path, labelPosition } = getEdgePath(pathEdge, sourceNode, targetNode, sourcePos, targetPos, adjustedSrc, adjustedTgt, canvas._config?.edgeTypes, obstacleRects, canvas._shapeRegistry, canvas._config?.nodeOrigin, canvas._config?.defaultEdgeType, channelOffset);
         pathEl.setAttribute('d', path);
         interactionPath.setAttribute('d', path);
 

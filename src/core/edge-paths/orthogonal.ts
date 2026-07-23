@@ -9,6 +9,7 @@
 import type { HandlePosition, Rect } from '../types';
 import { getBend, type EdgePathResult } from './utils';
 import { getSmoothStepPath } from './smoothstep';
+import { applyChannelOffset } from '../crossing-reduction';
 
 export const OBSTACLE_PADDING = 20;
 
@@ -21,6 +22,8 @@ export interface OrthogonalPathParams {
   targetPosition?: HandlePosition;
   obstacles?: Rect[];
   borderRadius?: number;
+  /** WS-3: signed px offset applied to the route's dominant interior run after routing. */
+  channelOffset?: number;
 }
 
 /** Offset from the handle before routing begins. Slightly larger than OBSTACLE_PADDING
@@ -699,6 +702,7 @@ export function getOrthogonalPath({
   targetPosition = 'top',
   obstacles,
   borderRadius = 5,
+  channelOffset,
 }: OrthogonalPathParams): EdgePathResult {
   // Fast path: no obstacles → delegate to smoothstep
   if (!obstacles || obstacles.length === 0) {
@@ -728,11 +732,14 @@ export function getOrthogonalPath({
     });
   }
 
+  // WS-3: shift the dominant interior run by the crossing-reduction offset (revert on collision)
+  const finalWaypoints = applyChannelOffset(waypoints, channelOffset, obstacles);
+
   // Build SVG path
-  const path = buildSvgPath(waypoints, borderRadius);
+  const path = buildSvgPath(finalWaypoints, borderRadius);
 
   // Compute label midpoint along polyline
-  const { x, y, offsetX, offsetY } = getPathMidpoint(waypoints);
+  const { x, y, offsetX, offsetY } = getPathMidpoint(finalWaypoints);
 
   return {
     path,

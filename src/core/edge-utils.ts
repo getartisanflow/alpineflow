@@ -157,6 +157,7 @@ export function getEdgePath(
   shapeRegistry?: Record<string, ShapeDefinition>,
   globalOrigin?: [number, number],
   defaultEdgeType?: string,
+  channelOffset?: number,
 ) {
   const source = sourceCoords ?? getHandleCoords(sourceNode, sourcePosition, shapeRegistry, globalOrigin);
   const target = targetCoords ?? getHandleCoords(targetNode, targetPosition, shapeRegistry, globalOrigin);
@@ -187,9 +188,9 @@ export function getEdgePath(
         pathStyle: edge.pathStyle,
       });
     case 'avoidant':
-      return getAvoidantPath({ ...params, obstacles });
+      return getAvoidantPath({ ...params, obstacles, channelOffset });
     case 'orthogonal':
-      return getOrthogonalPath({ ...params, obstacles });
+      return getOrthogonalPath({ ...params, obstacles, channelOffset });
     case 'smoothstep':
       return getSmoothStepPath(params);
     case 'straight':

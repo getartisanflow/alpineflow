@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Workstream 3 — avoidant crossing reduction (opt-in)
+
+**Added**
+- `avoidantCrossingReduction` config (default **off**) + `setCrossingReduction()` runtime knob, with the matching `flow:setCrossingReduction` wire command. When enabled, a per-canvas plan pass groups avoidant edges that share a corridor (base-route channels), computes barycenter-ordered lane offsets, and fans stacked edges apart via a post-route interior-run shift with obstacle revert — so edges funnelling through the same gap separate into ordered lanes instead of drawing coincident. Accepts `true` or `{ channelGap: px }` (default gap 12). Off === pre-WS-3 baseline routing, byte-identical `d` strings.
+
 ### Fixed — edges with a buried endpoint no longer collapse to a straight bezier
 
 When a third-party node sat on top of an edge's endpoint handle (or the stub point the router leaves from) — easy to hit after `scramble()` scatters nodes into overlaps — that node's padded rect swallowed the endpoint, every outgoing path segment was blocked, and `findRoute` returned `null`, so avoidant/orthogonal edges silently fell back to a straight bezier until the connected node was dragged. Obstacles whose padded rect contains a route endpoint or its stub offset are now **excluded from routing for that edge**: a node sitting on your handle can't be routed around anyway, and the route still avoids everything else. Genuinely unroutable layouts (endpoint ringed by non-covering obstacles) still fall back to bezier.

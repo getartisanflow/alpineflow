@@ -15,6 +15,7 @@ import type { HandlePosition, Rect } from '../types';
 import type { EdgePathResult } from './utils';
 import { getBezierPath } from './bezier';
 import { findRoute, type RoutePoint } from './orthogonal';
+import { applyChannelOffset } from '../crossing-reduction';
 
 export interface AvoidantPathParams {
   sourceX: number;
@@ -24,6 +25,8 @@ export interface AvoidantPathParams {
   targetY: number;
   targetPosition?: HandlePosition;
   obstacles?: Rect[];
+  /** WS-3: signed px offset applied to the route's dominant interior run after routing. */
+  channelOffset?: number;
 }
 
 // ── Catmull-Rom to cubic bezier ──────────────────────────────────────────────
@@ -177,6 +180,7 @@ export function getAvoidantPath({
   targetY,
   targetPosition = 'top',
   obstacles,
+  channelOffset,
 }: AvoidantPathParams): EdgePathResult {
   // Fast path: no obstacles → delegate to bezier
   if (!obstacles || obstacles.length === 0) {
@@ -204,11 +208,14 @@ export function getAvoidantPath({
     });
   }
 
+  // WS-3: shift the dominant interior run by the crossing-reduction offset (revert on collision)
+  const finalWaypoints = applyChannelOffset(waypoints, channelOffset, obstacles);
+
   // Build a smooth path that rounds each route corner (hugs the route, no overshoot)
-  const path = buildRoundedPath(waypoints);
+  const path = buildRoundedPath(finalWaypoints);
 
   // Compute label midpoint
-  const { x, y, offsetX, offsetY } = getSplineMidpoint(waypoints);
+  const { x, y, offsetX, offsetY } = getSplineMidpoint(finalWaypoints);
 
   return {
     path,
