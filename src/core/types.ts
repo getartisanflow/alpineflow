@@ -1997,8 +1997,11 @@ export interface FlowInstance {
   /** Convert flow coordinates to screen coordinates */
   flowToScreenPosition(x: number, y: number): XYPosition;
 
-  /** Fit all nodes into the viewport */
-  fitView(options?: { padding?: number; duration?: number }): void;
+  /**
+   * Fit all nodes into the viewport. Resolves `true` once the fit runs, or
+   * `false` if the retry budget is exhausted with nodes still unmeasured.
+   */
+  fitView(options?: { padding?: number; duration?: number }): Promise<boolean>;
 
   /** Zoom/pan the viewport to frame a specific rectangle in flow coordinates. */
   fitBounds(rect: Rect, options?: { padding?: number; duration?: number }): void;
