@@ -292,7 +292,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     deselectAll: vi.fn(),
     screenToFlowPosition: vi.fn(() => ({ x: 0, y: 0 })),
     flowToScreenPosition: vi.fn(() => ({ x: 0, y: 0 })),
-    fitView: vi.fn(),
+    fitView: vi.fn(async () => true),
     fitBounds: vi.fn(),
     getNodesBounds: vi.fn(() => ({ x: 0, y: 0, width: 0, height: 0 })),
     getViewportForBounds: vi.fn(() => ({ x: 0, y: 0, zoom: 1 })),
@@ -422,6 +422,19 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     $clear: vi.fn(),
     toImage: vi.fn(async () => ''),
     getNodeAtPoint: vi.fn(() => null),
+
+    // === Schema addon methods (typed on CanvasContext via module augmentation) ===
+    addField: vi.fn(),
+    renameField: vi.fn(),
+    removeField: vi.fn(),
+    reorderFields: vi.fn(),
+    inferReferences: vi.fn(() => []),
+    schemaToJSON: vi.fn(),
+    schemaFromJSON: vi.fn(),
+    validateSchema: vi.fn(),
+    diffSchemas: vi.fn(),
+    toDot: vi.fn(() => ''),
+    schemaLayout: vi.fn(async () => {}),
 
     // === Alpine magic properties ===
     $el: null as any,
