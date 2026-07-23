@@ -90,6 +90,30 @@ export function matchesKey(eventKey: string, configured: KeyCode | KeyCode[] | n
   return (configured.length === 1 ? configured.toLowerCase() : configured) === key;
 }
 
+/**
+ * Decide whether an arrow-key nudge should capture a history snapshot. Captures
+ * once per physical keypress: skips auto-repeat (`repeat`), skips when nothing is
+ * selected, and skips keys that produced no movement (dx === 0 && dy === 0).
+ */
+export function shouldCaptureNudge(repeat: boolean, selectedCount: number, dx: number, dy: number): boolean {
+  return !repeat && selectedCount > 0 && (dx !== 0 || dy !== 0);
+}
+
+/**
+ * True when the event target is an element the user is editing text in, so canvas
+ * shortcuts (delete, arrow-nudge, copy/paste/cut, undo/redo) must not hijack the
+ * keystroke. Covers native form fields plus any `contenteditable` element — a
+ * rich-text editor or an inline-editable node label renders a `contenteditable`
+ * `<div>`, whose `tagName` is `'DIV'`, so a tagName-only check misses it.
+ */
+export function isEditableTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
 /** Check if a modifier key is held on an event. Maps 'Shift'→shiftKey, 'Control'→ctrlKey, etc. */
 export function matchesModifier(
   event: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean; altKey: boolean },

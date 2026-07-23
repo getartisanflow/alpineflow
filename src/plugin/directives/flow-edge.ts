@@ -9,8 +9,10 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
-import type { FlowEdge, FlowNode, HandlePosition, HandleType, Rect, Connection, XYPosition } from '../../core/types';
+import type { FlowEdge, FlowNode, HandlePosition, HandleType, Rect, Connection, XYPosition, SchemaMetrics, EndpointSpreadGrouping } from '../../core/types';
 import type { MarkerType, MarkerConfig } from '../../core/markers';
+import { computeSchemaHandlePoint, schemaFieldIndex, schemaSidePin, splitHandleSide } from '../../core/schema-geometry';
+import { laneOffset, applyLaneOffset, resolveSpreadSpacing } from '../../core/endpoint-spread';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { normalizeMarker, getMarkerId } from '../../core/markers';
 import { isConnectable } from '../../core/node-flags';
@@ -105,17 +107,6 @@ function resolveAnimationMode(animated: boolean | string | undefined): 'none' | 
   return 'none';
 }
 
-
-/**
- * Infer which side a handle belongs to from its ID suffix.
- * Returns 'left' or 'right' if the ID ends with '-l' or '-r', else null.
- */
-function inferSideFromHandleId(handleId: string): HandlePosition | null {
-  if (handleId.endsWith('-l')) return 'left';
-  if (handleId.endsWith('-r')) return 'right';
-  return null;
-}
-
 /**
  * Rotate a cardinal handle position to account for node rotation.
  * Maps the handle's local outward direction through the node's rotation
@@ -200,8 +191,12 @@ export function resolveHandlePosition(
   handleType: 'source' | 'target',
   node?: FlowNode,
   opposingCenter?: XYPosition,
+  providedNodeEl?: HTMLElement | null,
 ): HandlePosition {
-  const nodeEl = container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`);
+  // Prefer the caller-resolved node element (O(1) via canvas._nodeElements);
+  // fall back to a container-wide query only when it wasn't provided. All
+  // handle lookups below are already scoped to this element.
+  const nodeEl = providedNodeEl ?? container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`);
   if (nodeEl) {
     // Try exact handle ID scoped to the correct type. Schema nodes and other
     // "row-per-field" layouts have a source + target on each row with the same
@@ -223,11 +218,17 @@ export function resolveHandlePosition(
           ?? (handleType === 'source' ? 'bottom' : 'top');
       }
     }
-    // If exact ID not found (e.g. condensed node), try a handle on the same
-    // side inferred from the handle ID suffix ('-l' → left, '-r' → right).
+    // If exact ID not found, a trailing '-l'/'-r' pins a side. Scope to that
+    // field's row (id + type + side) so a schema node lands on the NAMED field's
+    // handle, not the node's first left/right handle. Fall back to any handle on
+    // that side for condensed nodes, which carry no per-field id.
     if (handleId) {
-      const side = inferSideFromHandleId(handleId);
+      const { field, side } = splitHandleSide(handleId);
       if (side) {
+        const pinned = nodeEl.querySelector(
+          `[data-flow-handle-id="${CSS.escape(field)}"][data-flow-handle-type="${handleType}"][data-flow-handle-position="${side}"]`,
+        );
+        if (pinned) return side;
         const sideEl = nodeEl.querySelector(`[data-flow-handle-position="${side}"]`);
         if (sideEl) return side;
       }
@@ -257,6 +258,218 @@ interface HandleMeasurement {
 }
 
 /**
+ * Row index of the field this endpoint's handle names, or `-1` when its handle
+ * center must NOT be derived from state.
+ *
+ * Doubles as the eligibility check: every condition here exists because the DOM
+ * path would pick up something the state path cannot see, and `-1` sends the
+ * caller to `measureHandleCoords` — correctness is never traded for the rect
+ * saving. Returning the index (rather than a boolean) keeps each endpoint to a
+ * SINGLE scan of `fields`: the caller threads it straight into
+ * `computeSchemaHandlePoint`.
+ *
+ *  - no `data.fields` array → not a schema node at all
+ *  - `hidden` / `collapsed` / `condensed` → the node's rows are not laid out the
+ *    way `SchemaMetrics` describes (condensed nodes swap in a summary view via
+ *    consumer `x-show`, so `data.fields` no longer maps to rendered rows)
+ *  - `rotation` → `getBoundingClientRect` folds in the CSS transform for free;
+ *    arithmetic on `node.position` cannot
+ *  - a non-default per-node `nodeOrigin` → the node's painted top-left is not its
+ *    position; see the block below
+ *  - no finite `dimensions` → the right-hand handle x is `position.x + width`
+ *  - not rendered by `x-flow-schema`, or viewport-culled, or non-uniform rows →
+ *    see the three blocks below
+ *  - the handle id must name a field EXACTLY (see `schemaFieldIndex`)
+ *
+ * `nodeEl` is the endpoint's registered node element (`canvas._nodeElements`).
+ * Only its ATTRIBUTES and INLINE STYLE are read here — never a rect — so the fast
+ * path keeps its zero-`getBoundingClientRect` guarantee.
+ */
+function schemaFieldIndexForEndpoint(
+  node: FlowNode | undefined,
+  handleId: string | undefined,
+  nodeEl: HTMLElement | null | undefined,
+  metrics: SchemaMetrics,
+): number {
+  if (!node || !handleId) return -1;
+  if (node.hidden || node.collapsed || node.condensed) return -1;
+  if (node.rotation) return -1;
+
+  // `nodeOrigin` is a PER-NODE property as well as a canvas config, and the node's own
+  // value WINS: `flow-node` places the element at `absPos − dimensions × (node.nodeOrigin
+  // ?? config.nodeOrigin ?? [0,0])`. `toAbsoluteNode` returns a ROOT node unchanged and
+  // `getAbsolutePosition` folds in only the PARENTS' origins — never the node's own — so
+  // under a per-node origin `node.position` is NOT the rendered border-box top-left, and
+  // every state-derived endpoint on this node would land `dimensions × origin` away from
+  // where the browser painted the handle. The canvas-level gate at the call site checks
+  // only `config.nodeOrigin`, which a node carrying its own origin sails straight past.
+  // Checking here covers BOTH endpoints — a node's own geometry AND its role as the
+  // opposing node in `schemaHandleSide` (whose `nodeCenterX` reads the same unshifted
+  // position, so an unguarded origin can flip the side too).
+  const origin = node.nodeOrigin;
+  if (origin && (origin[0] !== 0 || origin[1] !== 0)) return -1;
+
+  // Rendered by `x-flow-schema`? Only then do the cached `SchemaMetrics` describe
+  // this node's rows. A hand-rolled node (skip the directive, write `x-for` +
+  // handles — a pattern flow-schema.ts's own docs invite) carries the SAME
+  // `data.fields` shape and the same field-keyed handle ids with entirely different
+  // row geometry, and state cannot tell the two apart. The directive stamps the
+  // attribute on the NODE element, which works under both plain-directive and
+  // WireFlow slot markup. No registered element ⇒ ineligible ⇒ DOM path ⇒ safe.
+  if (!nodeEl?.hasAttribute('data-flow-schema-node')) return -1;
+
+  // Viewport-culled? `_applyCulling` writes inline `display: none` on off-screen
+  // node elements, and an edge still renders when only ONE endpoint is visible. The
+  // DOM path DEGRADES on a culled endpoint — its handle rect is 0×0, so
+  // `measureHandleCoords` returns null and the endpoint collapses to the node-edge
+  // midpoint (`getHandleCoords`), with the side inferred from DOM order. The state
+  // path cannot see `display: none` and would emit true row geometry instead, so
+  // every edge crossing the culling boundary would render DIFFERENTLY than it does
+  // today. Matching the degradation is DELIBERATE, not an oversight: this workstream
+  // changes how endpoints are computed, never where they land. (Culling is 'auto' at
+  // ≥150 nodes — precisely the scale this fast path exists for.)
+  if (nodeEl.style.display === 'none') return -1;
+
+  const width = node.dimensions?.width;
+  const height = node.dimensions?.height;
+  if (typeof width !== 'number' || !Number.isFinite(width)) return -1;
+  if (typeof height !== 'number' || !Number.isFinite(height)) return -1;
+
+  const fields = (node.data as { fields?: Array<{ name: string }> } | undefined)?.fields;
+  if (!Array.isArray(fields) || fields.length === 0) return -1;
+
+  // Are the rows actually uniform? The metrics are measured ONCE, from the first
+  // schema node to render, and everything downstream assumes every schema node's
+  // rows match them. Nothing enforces that: `.flow-schema-row-name` has no
+  // `white-space: nowrap`, so a consumer who pins `dimensions.width` and writes a
+  // long field name gets a WRAPPED, taller row — and every row below it would have
+  // its endpoint land one row off, silently. `node.dimensions` is the measured
+  // BORDER BOX (flow-canvas reads `borderBoxSize`), so the row model must reproduce
+  // the node's height exactly. Two adds; catches wrapped rows, non-uniform rows and
+  // bespoke markup, all of which fall back to the DOM path — which measures each
+  // handle individually and is immune.
+  //
+  // The last row is `rowHeightLast`, not `rowHeight` — the theme removes its
+  // border-bottom. Modelling it as `rowHeight` overshoots EVERY schema node's real
+  // border box by that border, which used to fail this very check and disqualify the
+  // whole canvas from the fast path (caught by the real-browser parity test; jsdom has
+  // no stylesheet to be wrong about).
+  const expectedHeight =
+    metrics.insetTop
+    + metrics.headerHeight
+    + (fields.length - 1) * metrics.rowHeight
+    + metrics.rowHeightLast
+    + metrics.insetBottom;
+  if (Math.abs(expectedHeight - height) > 0.5) return -1;
+
+  return schemaFieldIndex(fields, handleId);
+}
+
+/**
+ * Which side of a schema node an endpoint's handle sits on — replicating
+ * `pickClosestHandle` without touching the DOM.
+ *
+ * Each schema row stamps a real handle plus an invisible mirror on the opposite
+ * side, sharing one (id, type). The DOM path takes whichever is closer to the
+ * OPPOSING endpoint's node-rect center. Both candidates share the row's center
+ * y, so the y term cancels and the decision collapses to a comparison of the
+ * opposing node's center x against the midpoint of this node's two candidate
+ * handle x's.
+ *
+ * The tie-break is ASYMMETRIC on purpose. `pickClosestHandle` uses a strict
+ * `d2 < bestDist`, so an exact tie leaves the FIRST handle in DOM order winning
+ * — and `renderRow` appends the real target (left) before its right mirror, but
+ * the real source (right) before its left mirror. So a tie sends a source right
+ * and a target left. A vertically stacked pair of equal-width nodes hits this
+ * exactly; symmetric rounding would flip the target to the wrong side.
+ */
+function schemaHandleSide(
+  node: FlowNode,
+  absolutePosition: XYPosition,
+  handleType: 'source' | 'target',
+  opposingCenterX: number,
+  metrics: SchemaMetrics,
+): 'left' | 'right' {
+  const width = node.dimensions?.width ?? DEFAULT_NODE_WIDTH;
+  const midX =
+    absolutePosition.x + (metrics.insetLeft + (width - metrics.insetRight)) / 2;
+
+  return handleType === 'source'
+    ? (opposingCenterX >= midX ? 'right' : 'left')  // tie → right (real source is first in DOM)
+    : (opposingCenterX > midX ? 'right' : 'left');  // tie → left  (real target is first in DOM)
+}
+
+/** Flow-space center x of a node — what `rectCenter(nodeEl.getBoundingClientRect())` yields. */
+function nodeCenterX(node: FlowNode): number {
+  return node.position.x + (node.dimensions?.width ?? DEFAULT_NODE_WIDTH) / 2;
+}
+
+interface ResolvedEndpoints {
+  sourcePos: HandlePosition;
+  targetPos: HandlePosition;
+  srcMeasurement: HandleMeasurement;
+  tgtMeasurement: HandleMeasurement;
+}
+
+/**
+ * Both endpoints of a schema→schema edge, derived from state — the fast path.
+ *
+ * Returns `null` whenever the caller must fall back to DOM measurement: either
+ * endpoint being ineligible (see `schemaFieldIndexForEndpoint`) disqualifies the
+ * whole edge. The handle box size comes from the metrics rather than being zeroed:
+ * `shortenEndpoint` derives its marker offset from
+ * `min(handleWidth, handleHeight) / 2`, so zeros would pull every marker'd endpoint
+ * ~5px off where the DOM path puts it.
+ *
+ * `sourceNode` / `targetNode` are the ABSOLUTE-position wrappers; `rawSource` /
+ * `rawTarget` are the state nodes carrying `data.fields`. `nodeElements` is the
+ * canvas's node-element registry — read for attributes/inline style only, never
+ * for a rect.
+ */
+function resolveSchemaEndpoints(
+  rawSource: FlowNode,
+  rawTarget: FlowNode,
+  sourceNode: FlowNode,
+  targetNode: FlowNode,
+  sourceHandle: string | undefined,
+  targetHandle: string | undefined,
+  nodeElements: Map<string, HTMLElement> | undefined,
+  metrics: SchemaMetrics,
+): ResolvedEndpoints | null {
+  // One scan of `fields` per endpoint: the index resolved by the eligibility check
+  // is the same one the geometry needs. Bail on the source before touching the
+  // target — the common non-schema edge costs a single attribute read.
+  const srcIndex = schemaFieldIndexForEndpoint(rawSource, sourceHandle, nodeElements?.get(rawSource.id), metrics);
+  if (srcIndex < 0) return null;
+  const tgtIndex = schemaFieldIndexForEndpoint(rawTarget, targetHandle, nodeElements?.get(rawTarget.id), metrics);
+  if (tgtIndex < 0) return null;
+
+  // A '-l'/'-r' suffix on the handle id pins the side explicitly; otherwise fall
+  // back to the geometric pick. Keeps the state fast path in lockstep with the DOM
+  // oracle, which resolves the same pinned side in measureHandleCoords.
+  const srcFields = (rawSource.data as { fields?: Array<{ name: string }> } | undefined)?.fields;
+  const tgtFields = (rawTarget.data as { fields?: Array<{ name: string }> } | undefined)?.fields;
+  const srcSide =
+    schemaSidePin(srcFields, sourceHandle)
+    ?? schemaHandleSide(rawSource, sourceNode.position, 'source', nodeCenterX(targetNode), metrics);
+  const tgtSide =
+    schemaSidePin(tgtFields, targetHandle)
+    ?? schemaHandleSide(rawTarget, targetNode.position, 'target', nodeCenterX(sourceNode), metrics);
+
+  const src = computeSchemaHandlePoint(rawSource, sourceNode.position, srcIndex, srcSide, metrics);
+  const tgt = computeSchemaHandlePoint(rawTarget, targetNode.position, tgtIndex, tgtSide, metrics);
+  if (!src || !tgt) return null;
+
+  const size = { handleWidth: metrics.handleWidth, handleHeight: metrics.handleHeight };
+  return {
+    sourcePos: src.position,
+    targetPos: tgt.position,
+    srcMeasurement: { x: src.x, y: src.y, ...size },
+    tgtMeasurement: { x: tgt.x, y: tgt.y, ...size },
+  };
+}
+
+/**
  * Measure a handle element's actual center position in flow coordinates.
  * Converts the handle's screen position directly via the container rect
  * and viewport, so CSS transforms (e.g. rotation) are correctly accounted for.
@@ -276,8 +489,11 @@ function measureHandleCoords(
   zoom: number,
   viewport: { x: number; y: number },
   opposingCenter?: XYPosition,
+  providedNodeEl?: HTMLElement | null,
 ): HandleMeasurement | null {
-  const nodeEl = container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`) as HTMLElement | null;
+  // Prefer the caller-resolved node element (O(1) via canvas._nodeElements);
+  // fall back to a container-wide query only when it wasn't provided.
+  const nodeEl = providedNodeEl ?? (container.querySelector(`[data-flow-node-id="${CSS.escape(nodeId)}"]`) as HTMLElement | null);
   if (!nodeEl) return null;
 
   let handleEl: HTMLElement | null = null;
@@ -298,11 +514,16 @@ function measureHandleCoords(
       );
       handleEl = pickClosestHandle(untyped, opposingCenter) as HTMLElement | null;
     }
-    // 2. If not found, try a handle on the same side (for condensed nodes)
+    // 2. If not found, a trailing '-l'/'-r' pins a side. Scope to the named
+    //    field's row (id + type + side) so a schema node lands on that field's
+    //    handle; fall back to any handle on that side for condensed nodes.
     if (!handleEl) {
-      const side = inferSideFromHandleId(handleId);
+      const { field, side } = splitHandleSide(handleId);
       if (side) {
-        handleEl = nodeEl.querySelector(`[data-flow-handle-position="${side}"]`);
+        handleEl =
+          nodeEl.querySelector(
+            `[data-flow-handle-id="${CSS.escape(field)}"][data-flow-handle-type="${handleType}"][data-flow-handle-position="${side}"]`,
+          ) ?? nodeEl.querySelector(`[data-flow-handle-position="${side}"]`);
       }
     }
   } else {
@@ -332,8 +553,8 @@ function measureHandleCoords(
 }
 
 
-function getPointAtPercent(pathEl: SVGPathElement, t: number): { x: number; y: number } {
-  const len = pathEl.getTotalLength();
+function getPointAtPercent(pathEl: SVGPathElement, t: number, totalLength?: number): { x: number; y: number } {
+  const len = totalLength ?? pathEl.getTotalLength();
   const pt = pathEl.getPointAtLength(len * Math.max(0, Math.min(1, t)));
   return { x: pt.x, y: pt.y };
 }
@@ -396,6 +617,12 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
       let labelEl: HTMLDivElement | null = null;
       let labelStartEl: HTMLDivElement | null = null;
       let labelEndEl: HTMLDivElement | null = null;
+
+      // Cached label-path length, keyed by the path `d` attribute. getTotalLength()
+      // forces SVG geometry, so avoid re-measuring an unchanged path across effect
+      // re-runs (e.g. selection/label-only updates that don't change routing).
+      let cachedPathD: string | null = null;
+      let cachedTotalLength = 0;
 
       // Dot animation state
       let dotCircle: SVGCircleElement | null = null;
@@ -998,9 +1225,30 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         // Resolve edge type using fallback: edge.type ?? canvas.defaultEdgeType ?? 'bezier'
         const resolvedEdgeType = edge.type ?? canvas._config?.defaultEdgeType ?? 'bezier';
 
+        // ── WS-D zoom LOD ────────────────────────────────────────────────
+        // Opt-in: at/under the configured zoom bucket, render as a straight
+        // line (skip pathfinding + curvature). Only read `_zoomLevel` when
+        // `edgeLod` is set, so the default path gains no new reactive dep.
+        // `_zoomLevel` is bucketed, so this fires only on threshold crossings.
+        const edgeLod = canvas._config?.edgeLod;
+        let effectiveEdgeType = resolvedEdgeType;
+        if (edgeLod) {
+          const level = canvas._zoomLevel; // reactive, bucketed
+          const simplify = edgeLod.simplifyAt === 'medium'
+            ? (level === 'medium' || level === 'far')
+            : level === 'far';
+          if (simplify) {
+            effectiveEdgeType = 'straight';
+          }
+        }
+
         // Reactive dependency — bumped each frame during layout animation
         // so edges re-measure DOM handle positions while CSS transitions run.
         void canvas._layoutAnimTick;
+        // Reactive dependency — routing signal. Bumped per-edge by
+        // _markDirtyEdges when a commit affects THIS edge's corridor, so only
+        // the affected edges re-route instead of the whole edge graph.
+        void canvas._edgeDirtyTicks?.get(edge.id);
 
         const rawSource = canvas.getNode(edge.source);
         const rawTarget = canvas.getNode(edge.target);
@@ -1022,6 +1270,42 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         let srcMeasurement: HandleMeasurement | null;
         let tgtMeasurement: HandleMeasurement | null;
 
+        // ── Schema handle geometry (WS-G) ─────────────────────────────────
+        // Schema rows are uniform, so once `_schemaMetrics` is cached every
+        // handle center on a schema node is arithmetic — no rect reads. Resolved
+        // BEFORE the standard branch so the fast path never touches the DOM.
+        //
+        // Reading `_schemaMetrics` here DOES track a dependency on the property's
+        // identity (Alpine.raw() doesn't unwrap the merge-scope proxy — see the
+        // `_obstacleSnapshot` note below). That is intended: metrics go
+        // null → object exactly once, one tick after the first schema node
+        // renders, so each edge re-runs once and upgrades from the DOM path to
+        // this one. A colorMode change nulls the cache and it re-measures. It is
+        // a one-time transition, not a per-frame dependency.
+        //
+        // `nodeOrigin` is a hard disqualifier: `toAbsoluteNode` only applies it
+        // to nodes with a `parentId`, so under a non-default origin a ROOT node's
+        // rendered top-left is `position − dimensions × origin`, not `position`,
+        // and the arithmetic below would desync from what the browser painted.
+        const schemaMetrics = canvas._schemaMetrics as SchemaMetrics | null | undefined;
+        const configOrigin = canvas._config?.nodeOrigin;
+        const schemaEndpoints =
+          resolvedEdgeType !== 'floating'
+          && canvas._config?.schemaHandleGeometry !== 'dom'
+          && !!schemaMetrics
+          && (!configOrigin || (configOrigin[0] === 0 && configOrigin[1] === 0))
+            ? resolveSchemaEndpoints(
+                rawSource,
+                rawTarget,
+                sourceNode,
+                targetNode,
+                edge.sourceHandle,
+                edge.targetHandle,
+                canvas._nodeElements as Map<string, HTMLElement> | undefined,
+                schemaMetrics,
+              )
+            : null;
+
         if (resolvedEdgeType === 'floating') {
           // ── Floating: compute endpoints from node geometry ──
           const floating = getFloatingEdgeParams(sourceNode, targetNode);
@@ -1034,23 +1318,32 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
 
           lastSrcCoords = { x: floating.sx, y: floating.sy };
           lastTgtCoords = { x: floating.tx, y: floating.ty };
+        } else if (schemaEndpoints) {
+          // ── Schema fast path (WS-G): endpoints from state, zero rect reads ──
+          sourcePos = schemaEndpoints.sourcePos;
+          targetPos = schemaEndpoints.targetPos;
+          srcMeasurement = schemaEndpoints.srcMeasurement;
+          tgtMeasurement = schemaEndpoints.tgtMeasurement;
+          lastSrcCoords = { x: srcMeasurement.x, y: srcMeasurement.y };
+          lastTgtCoords = { x: tgtMeasurement.x, y: tgtMeasurement.y };
         } else {
           // ── Standard: resolve from handle elements ──
           // Compute screen-space centers of each endpoint node ONCE so the
           // handle-geometry picker (for nodes with same-(id,type) mirrors,
           // e.g. schema rows) can choose whichever side of the node is
           // physically closer to the OPPOSING endpoint.
-          const sourceNodeEl = container.querySelector(
-            `[data-flow-node-id="${CSS.escape(edge.source)}"]`,
-          ) as HTMLElement | null;
-          const targetNodeEl = container.querySelector(
-            `[data-flow-node-id="${CSS.escape(edge.target)}"]`,
-          ) as HTMLElement | null;
+          // Resolve endpoint elements in O(1) via the canvas node-element
+          // registry, falling back to a container-wide query when an element
+          // isn't registered (test mounts, mid-init edge cases).
+          const sourceNodeEl = (canvas._nodeElements?.get(edge.source)
+            ?? container.querySelector(`[data-flow-node-id="${CSS.escape(edge.source)}"]`)) as HTMLElement | null;
+          const targetNodeEl = (canvas._nodeElements?.get(edge.target)
+            ?? container.querySelector(`[data-flow-node-id="${CSS.escape(edge.target)}"]`)) as HTMLElement | null;
           const sourceCenter = sourceNodeEl ? rectCenter(sourceNodeEl.getBoundingClientRect()) : undefined;
           const targetCenter = targetNodeEl ? rectCenter(targetNodeEl.getBoundingClientRect()) : undefined;
 
-          sourcePos = resolveHandlePosition(container, edge.source, edge.sourceHandle, 'source', rawSource, targetCenter);
-          targetPos = resolveHandlePosition(container, edge.target, edge.targetHandle, 'target', rawTarget, sourceCenter);
+          sourcePos = resolveHandlePosition(container, edge.source, edge.sourceHandle, 'source', rawSource, targetCenter, sourceNodeEl);
+          targetPos = resolveHandlePosition(container, edge.target, edge.targetHandle, 'target', rawTarget, sourceCenter, targetNodeEl);
 
           // Read zoom/viewport from the raw object to avoid creating a reactive
           // dependency on viewport.zoom.  Edge paths are in flow-space and
@@ -1066,8 +1359,8 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           sourcePos = rotateHandlePos(sourcePos, srcRotation);
           targetPos = rotateHandlePos(targetPos, tgtRotation);
 
-          srcMeasurement = measureHandleCoords(container, edge.source, sourceNode, edge.sourceHandle, 'source', zoom, rawViewport, targetCenter);
-          tgtMeasurement = measureHandleCoords(container, edge.target, targetNode, edge.targetHandle, 'target', zoom, rawViewport, sourceCenter);
+          srcMeasurement = measureHandleCoords(container, edge.source, sourceNode, edge.sourceHandle, 'source', zoom, rawViewport, targetCenter, sourceNodeEl);
+          tgtMeasurement = measureHandleCoords(container, edge.target, targetNode, edge.targetHandle, 'target', zoom, rawViewport, sourceCenter, targetNodeEl);
 
           // Cache handle center coords for reconnection hit-detection
           const fallbackSrc = getHandleCoords(sourceNode, sourcePos, canvas._shapeRegistry, canvas._config?.nodeOrigin);
@@ -1077,32 +1370,133 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         }
 
         // Shorten endpoints so markers sit outside the handle boundary
-        const adjustedSrc = shortenEndpoint(srcMeasurement ?? lastSrcCoords!, sourcePos, srcMeasurement, edge.markerStart);
-        const adjustedTgt = shortenEndpoint(tgtMeasurement ?? lastTgtCoords!, targetPos, tgtMeasurement, edge.markerEnd);
+        let adjustedSrc = shortenEndpoint(srcMeasurement ?? lastSrcCoords!, sourcePos, srcMeasurement, edge.markerStart);
+        let adjustedTgt = shortenEndpoint(tgtMeasurement ?? lastTgtCoords!, targetPos, tgtMeasurement, edge.markerEnd);
+
+        // WS-2: fan edges that share an endpoint handle across the row extent.
+        // Gated: no-op unless spread is enabled for the endpoint's node. The lane
+        // index/count come from the canvas grouping pass; the offset shifts the
+        // attach point (and thus the route-cache key) so routing stays correct.
+        if (resolvedEdgeType === 'orthogonal' || resolvedEdgeType === 'avoidant') {
+          const grouping = Alpine.raw(canvas._endpointSpreadGrouping) as EndpointSpreadGrouping | null | undefined;
+          if (grouping) {
+            const srcSpacing = resolveSpreadSpacing(rawSource.endpointSpread ?? canvas._config?.avoidantEndpointSpread);
+            if (srcSpacing !== null) {
+              const g = grouping.get(`${edge.source}|${edge.sourceHandle ?? ''}`);
+              const lane = g?.lanes.get(edge.id);
+              if (g && lane !== undefined && g.count > 1) {
+                const srcExtent = canvas._schemaMetrics?.rowHeight ?? srcMeasurement?.handleHeight ?? 0;
+                adjustedSrc = applyLaneOffset(adjustedSrc, sourcePos, laneOffset(lane, g.count, srcExtent, srcSpacing));
+              }
+            }
+            const tgtSpacing = resolveSpreadSpacing(rawTarget.endpointSpread ?? canvas._config?.avoidantEndpointSpread);
+            if (tgtSpacing !== null) {
+              const g = grouping.get(`${edge.target}|${edge.targetHandle ?? ''}`);
+              const lane = g?.lanes.get(edge.id);
+              if (g && lane !== undefined && g.count > 1) {
+                const tgtExtent = canvas._schemaMetrics?.rowHeight ?? tgtMeasurement?.handleHeight ?? 0;
+                adjustedTgt = applyLaneOffset(adjustedTgt, targetPos, laneOffset(lane, g.count, tgtExtent, tgtSpacing));
+              }
+            }
+          }
+        }
 
         // Cache visible endpoints for reconnection hit-detection
         lastVisibleSrcCoords = adjustedSrc;
         lastVisibleTgtCoords = adjustedTgt;
 
-        // Compute obstacle rects for orthogonal routing (performance-gated)
+        // Compute obstacle rects for orthogonal routing (performance-gated).
+        //
+        // Obstacles now come from the shared `_obstacleSnapshot` (built once
+        // per commit by `_commitNodeGeometry`, Workstream C) rather than each
+        // edge rebuilding its own obstacle array per effect run. Re-routing is
+        // triggered per-edge via `_edgeDirtyTicks` (read at the top of this
+        // effect): `_markDirtyEdges` bumps only the edges whose corridor could
+        // actually be affected by the changed node(s), so unaffected edges
+        // don't re-run at all. `_layoutAnimTick` remains only the MEASUREMENT
+        // signal (re-measure handle DOM during layout animation) — it is not a
+        // routing dependency.
+        //
+        // NB: `canvas` is Alpine's merged-scope proxy, which Alpine.raw() does
+        // not unwrap, so we unwrap the genuine reactive nested properties
+        // instead (`Alpine.raw(canvas._obstacleSnapshot)` / `Alpine.raw(canvas.nodes)`).
         let obstacleRects: Rect[] | undefined;
         if (resolvedEdgeType === 'orthogonal' || resolvedEdgeType === 'avoidant') {
-          obstacleRects = canvas.nodes
-            .filter((n: FlowNode) => n.id !== edge.source && n.id !== edge.target)
-            .map((n: FlowNode) => {
-              const abs = toAbsoluteNode(n, canvas._nodeMap, canvas._config?.nodeOrigin);
-              return {
-                x: abs.position.x,
-                y: abs.position.y,
-                width: abs.dimensions?.width ?? DEFAULT_NODE_WIDTH,
-                height: abs.dimensions?.height ?? DEFAULT_NODE_HEIGHT,
-              };
-            });
+          // WS-D: while an endpoint node is being dragged, skip pathfinding and
+          // let the router fall back to a bezier curve (empty-obstacle fast
+          // path). `Set.has(id)` is key-scoped, so only edges touching the
+          // dragged node re-run when `_draggingNodeIds` changes.
+          const simplifyingOnDrag = canvas._config?.avoidantSimplifyOnDrag !== false
+            && (canvas._draggingNodeIds?.has(edge.source) || canvas._draggingNodeIds?.has(edge.target));
+          if (simplifyingOnDrag) {
+            obstacleRects = undefined;
+          } else {
+            const snapshot = Alpine.raw(canvas._obstacleSnapshot) as
+              | Array<{ id: string; x: number; y: number; width: number; height: number }>
+              | null
+              | undefined;
+            if (snapshot) {
+              // Shared snapshot (built once per commit). Filter out this edge's
+              // own endpoints. Structurally assignable to Rect[] (extra `id` is
+              // ignored by the router). Preserves node order from the snapshot,
+              // which preserves `raw.nodes` order — so the router's VALUE-keyed
+              // route cache still hits (same rects, same order as the legacy
+              // per-edge build) and routes come out unchanged.
+              obstacleRects = snapshot.filter((r) => r.id !== edge.source && r.id !== edge.target);
+            } else {
+              // Fallback for minimal mounts that never triggered a geometry
+              // commit — legacy per-edge build, byte-identical to the prior
+              // behavior so routes are unchanged when no snapshot exists yet.
+              const rawNodes = Alpine.raw(canvas.nodes) as FlowNode[];
+              const rawNodeMap = new Map<string, FlowNode>(rawNodes.map((n): [string, FlowNode] => [n.id, n]));
+              const nodeOrigin = canvas._config?.nodeOrigin;
+              obstacleRects = rawNodes
+                .filter((n: FlowNode) => n.id !== edge.source && n.id !== edge.target)
+                .map((n: FlowNode) => {
+                  const abs = toAbsoluteNode(n, rawNodeMap, nodeOrigin);
+                  return {
+                    x: abs.position.x,
+                    y: abs.position.y,
+                    width: abs.dimensions?.width ?? DEFAULT_NODE_WIDTH,
+                    height: abs.dimensions?.height ?? DEFAULT_NODE_HEIGHT,
+                  };
+                });
+            }
+          }
         }
 
-        const { path, labelPosition } = getEdgePath(edge, sourceNode, targetNode, sourcePos, targetPos, adjustedSrc, adjustedTgt, canvas._config?.edgeTypes, obstacleRects, canvas._shapeRegistry, canvas._config?.nodeOrigin, canvas._config?.defaultEdgeType);
+        // WS-3: crossing-reduction lane offset for this edge (0 when off/absent).
+        let channelOffset = 0;
+        if (resolvedEdgeType === 'orthogonal' || resolvedEdgeType === 'avoidant') {
+          const plan = Alpine.raw(canvas._crossingPlan) as Map<string, number> | null | undefined;
+          channelOffset = plan?.get(edge.id) ?? 0;
+        }
+
+        // Only the path geometry uses the LOD-resolved type; everything else
+        // (markers, labels, edge classes) keeps the configured type via `edge`.
+        const pathEdge = effectiveEdgeType === resolvedEdgeType ? edge : { ...edge, type: effectiveEdgeType };
+        const { path, labelPosition } = getEdgePath(pathEdge, sourceNode, targetNode, sourcePos, targetPos, adjustedSrc, adjustedTgt, canvas._config?.edgeTypes, obstacleRects, canvas._shapeRegistry, canvas._config?.nodeOrigin, canvas._config?.defaultEdgeType, channelOffset);
         pathEl.setAttribute('d', path);
         interactionPath.setAttribute('d', path);
+
+        // Record this edge's endpoint-bbox corridor AFTER routing so
+        // `_markDirtyEdges` can test future changed-node rects against it
+        // (mirrors `corridorObstacles()`'s own CORRIDOR_MARGIN expansion in
+        // orthogonal.ts — an obstacle outside this range is pruned by the
+        // router itself, so it provably cannot change this edge's route).
+        // Non-reactive: written on the raw Map so recording a corridor never
+        // triggers other edges' effects.
+        if (resolvedEdgeType === 'orthogonal' || resolvedEdgeType === 'avoidant') {
+          const rawCorridors = Alpine.raw(canvas._edgeCorridors) as
+            | Map<string, { minX: number; minY: number; maxX: number; maxY: number }>
+            | undefined;
+          rawCorridors?.set(edge.id, {
+            minX: Math.min(adjustedSrc.x, adjustedTgt.x),
+            minY: Math.min(adjustedSrc.y, adjustedTgt.y),
+            maxX: Math.max(adjustedSrc.x, adjustedTgt.x),
+            maxY: Math.max(adjustedSrc.y, adjustedTgt.y),
+          });
+        }
 
         // ── Editable edge control points ──────────────────────────
         const isEditable = resolvedEdgeType === 'editable';
@@ -1312,9 +1706,14 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         }
 
         // ── Row-highlight: highlight edges connected to selected rows ──
-        const rowHighlighted = canvas.selectedRows?.size > 0 && !edge.selected && (
-          (edge.sourceHandle && canvas.selectedRows.has(edge.sourceHandle.replace(/-[lr]$/, ''))) ||
-          (edge.targetHandle && canvas.selectedRows.has(edge.targetHandle.replace(/-[lr]$/, '')))
+        // Track only the specific row keys this edge touches — NOT
+        // selectedRows.size. Reading `.size` is an iterate-level dependency, so
+        // any row select/deselect would re-run EVERY edge effect (re-pathfinding
+        // the whole avoidant graph). `has(key)` tracks that key alone; `clear()`
+        // still notifies previously-present keys, so un-highlighting works.
+        const rowHighlighted = !edge.selected && (
+          (edge.sourceHandle ? canvas.selectedRows?.has(edge.sourceHandle.replace(/-[lr]$/, '')) : false) ||
+          (edge.targetHandle ? canvas.selectedRows?.has(edge.targetHandle.replace(/-[lr]$/, '')) : false)
         );
 
         if (rowHighlighted) {
@@ -1383,12 +1782,25 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         const viewport = el.closest('.flow-viewport');
         const labelVis = edge.labelVisibility ?? 'always';
 
+        // Lazily measure + cache the path length, keyed by the `d` attribute set
+        // above. Only called when a label actually needs it, so edges without
+        // labels still never force SVG geometry.
+        const getCachedTotalLength = (): number => {
+          const currentD = pathEl.getAttribute('d') ?? '';
+          if (currentD !== cachedPathD) {
+            cachedPathD = currentD;
+            cachedTotalLength = typeof pathEl.getTotalLength === 'function' ? (pathEl.getTotalLength() || 0) : 0;
+          }
+          return cachedTotalLength;
+        };
+
         // Center label (uses labelPosition percentage or default midpoint)
         labelEl = ensureLabel(labelEl, edge.label, 'flow-edge-label', viewport, edge.id);
         if (labelEl) {
-          if (pathEl.getTotalLength?.()) {
+          const totalLength = getCachedTotalLength();
+          if (totalLength > 0) {
             const t = edge.labelPosition ?? 0.5;
-            const pt = getPointAtPercent(pathEl, t);
+            const pt = getPointAtPercent(pathEl, t, totalLength);
             labelEl.style.left = `${pt.x}px`;
             labelEl.style.top = `${pt.y}px`;
           } else {
@@ -1400,10 +1812,10 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         // Start label (fixed pixel offset from source end)
         labelStartEl = ensureLabel(labelStartEl, edge.labelStart, 'flow-edge-label flow-edge-label-start', viewport, edge.id);
         if (labelStartEl) {
-          if (pathEl.getTotalLength?.()) {
-            const len = pathEl.getTotalLength();
+          const totalLength = getCachedTotalLength();
+          if (totalLength > 0) {
             const offset = edge.labelStartOffset ?? 30;
-            const pt = pathEl.getPointAtLength(Math.min(offset, len / 2));
+            const pt = pathEl.getPointAtLength(Math.min(offset, totalLength / 2));
             labelStartEl.style.left = `${pt.x}px`;
             labelStartEl.style.top = `${pt.y}px`;
           }
@@ -1412,10 +1824,10 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         // End label (fixed pixel offset from target end)
         labelEndEl = ensureLabel(labelEndEl, edge.labelEnd, 'flow-edge-label flow-edge-label-end', viewport, edge.id);
         if (labelEndEl) {
-          if (pathEl.getTotalLength?.()) {
-            const len = pathEl.getTotalLength();
+          const totalLength = getCachedTotalLength();
+          if (totalLength > 0) {
             const offset = edge.labelEndOffset ?? 30;
-            const pt = pathEl.getPointAtLength(Math.max(len - offset, len / 2));
+            const pt = pathEl.getPointAtLength(Math.max(totalLength - offset, totalLength / 2));
             labelEndEl.style.left = `${pt.x}px`;
             labelEndEl.style.top = `${pt.y}px`;
           }

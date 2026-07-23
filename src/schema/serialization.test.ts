@@ -1,6 +1,65 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import { schemaToJSON, schemaFromJSON } from './serialization';
+import { renameField } from './field-ops';
+
+/**
+ * A canvas with live lookup maps + getNode/getEdge, mirroring the real canvas
+ * enough to prove schemaFromJSON preserves object identity and rebuilds maps.
+ */
+function makeLiveCanvas() {
+    const el = document.createElement('div');
+    el.setAttribute('data-flow-canvas', '');
+    document.body.appendChild(el);
+    const canvas: any = {
+        el,
+        nodes: [
+            {
+                id: 'users',
+                position: { x: 0, y: 0 },
+                data: {
+                    label: 'Users',
+                    fields: [
+                        { name: 'id', type: 'uuid' },
+                        { name: 'email', type: 'text' },
+                    ],
+                },
+            },
+            {
+                id: 'posts',
+                position: { x: 200, y: 0 },
+                data: {
+                    label: 'Posts',
+                    fields: [
+                        { name: 'id', type: 'uuid' },
+                        { name: 'user_id', type: 'uuid' },
+                    ],
+                },
+            },
+        ] as any[],
+        edges: [
+            { id: 'e1', source: 'posts', sourceHandle: 'user_id', target: 'users', targetHandle: 'id' },
+        ] as any[],
+        _nodeMap: new Map<string, any>(),
+        _edgeMap: new Map<string, any>(),
+        _layoutAnimTick: 0,
+        _rebuildNodeMap() {
+            canvas._nodeMap = new Map(canvas.nodes.map((n: any) => [n.id, n]));
+        },
+        _rebuildEdgeMap() {
+            canvas._edgeMap = new Map(canvas.edges.map((e: any) => [e.id, e]));
+        },
+        getNode(id: string) {
+            return canvas._nodeMap.get(id);
+        },
+        getEdge(id: string) {
+            return canvas._edgeMap.get(id);
+        },
+    };
+    canvas._rebuildNodeMap();
+    canvas._rebuildEdgeMap();
+    return canvas;
+}
 
 function makeCanvas() {
     const el = document.createElement('div');
@@ -142,5 +201,27 @@ describe('schemaFromJSON', () => {
         schemaFromJSON(dest, json);
         expect(dest.nodes).toBe(originalNodesRef);
         expect(dest.edges).toBe(originalEdgesRef);
+    });
+
+    it('keeps node identity, preserves non-schema props, and getNode stays live', () => {
+        const canvas = makeLiveCanvas();
+        const ref = canvas.getNode('users');
+        ref.dimensions = { width: 220, height: 180 };
+        const json = schemaToJSON(canvas);
+        renameField(canvas, 'users', 'id', 'uuid'); // mutate the live graph away from json
+        schemaFromJSON(canvas, json);
+        expect(canvas.getNode('users')).toBe(ref); // map rebuilt + identity kept
+        expect(ref.dimensions).toEqual({ width: 220, height: 180 }); // not dropped
+        expect(ref.data.fields.map((f: any) => f.name)).toContain('id');
+    });
+
+    it('rebuilds the edge map so getEdge returns the live merged edge', () => {
+        const canvas = makeLiveCanvas();
+        const edgeRef = canvas.getEdge('e1');
+        const json = schemaToJSON(canvas);
+        edgeRef.targetHandle = 'uuid'; // mutate the live edge away from json
+        schemaFromJSON(canvas, json); // restores targetHandle back to 'id'
+        expect(canvas.getEdge('e1')).toBe(edgeRef); // identity kept + map rebuilt
+        expect(edgeRef.targetHandle).toBe('id');
     });
 });

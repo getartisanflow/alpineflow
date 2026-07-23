@@ -64,6 +64,15 @@ declare module 'alpinejs' {
     mutateDom(callback: () => void): void;
 
     /**
+     * Queue a callback to run after Alpine's next reactive-effect flush, once
+     * `activeEffect` is unset — the standard way to read/write a plain
+     * (non-reactive) field without tracking or retriggering an Alpine effect,
+     * even through `Alpine.raw()` (which does not unwrap the merge-scope
+     * proxy). Returns a promise that resolves after the callback runs.
+     */
+    nextTick(callback?: () => void): Promise<void>;
+
+    /**
      * Low-level reactive watcher — the same primitive $watch delegates to.
      * Accepts a getter function (for deep / computed paths) rather than a
      * string expression. Returns a cleanup function that stops watching.

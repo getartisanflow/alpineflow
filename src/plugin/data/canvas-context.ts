@@ -34,6 +34,8 @@ import type {
   ShapeDefinition,
   ToImageOptions,
   StopOptions,
+  SchemaMetrics,
+  EndpointSpreadGrouping,
 } from '../../core/types';
 import type { FlowGroup } from '../../animate/flow-group';
 import type { Transaction } from '../../animate/transaction';
@@ -52,6 +54,7 @@ import type { FlowAnnouncer } from '../../core/announcer';
 import type { ComputeEngine } from '../../core/compute';
 import type { CollapseState } from '../../core/collapse';
 import type { KeyboardShortcuts } from '../../core/keyboard-shortcuts';
+import type { SpatialGrid } from '../../core/geometry';
 
 // ── Active particle entry (shared loop) ─────────────────────────────────────
 
@@ -152,6 +155,9 @@ export interface CanvasContext {
   /** Node lookup map (id -> node) */
   _nodeMap: Map<string, FlowNode>;
 
+  /** Reactive parent-id → child-ids index (reconciled by `_rebuildNodeMap`) */
+  _childrenIds: Map<string, string[]>;
+
   /** Stores each node's originally configured dimensions (before layout stretch) */
   _initialDimensions: Map<string, Dimensions>;
 
@@ -181,6 +187,13 @@ export interface CanvasContext {
   /** Viewport wrapper element (.flow-viewport) */
   _viewportEl: HTMLElement | null;
 
+  /**
+   * Live viewport written synchronously on every d3-zoom transform. Reactive
+   * `viewport` is frame-coalesced, so synchronous pointer-path math must read
+   * `_viewportLive ?? viewport` to avoid a one-frame-stale coordinate divisor.
+   */
+  _viewportLive: Viewport | null;
+
   /** SVG element holding marker <defs> */
   _markerDefsEl: SVGSVGElement | null;
 
@@ -192,6 +205,20 @@ export interface CanvasContext {
 
   /** Map of edge SVG elements (id -> svg) */
   _edgeSvgElements: Map<string, SVGSVGElement>;
+
+  /**
+   * Cached header/row/handle geometry for `x-flow-schema` nodes, measured
+   * once by the first schema node's `render()`. Plain (non-reactive) field.
+   * `Alpine.raw(canvas)` does NOT unwrap Alpine's merge-scope proxy (it
+   * returns the same proxy back — see flow-canvas.ts:515-517) — a property
+   * GET/SET through it still tracks/triggers the underlying reactive object
+   * when called inside an active effect. This field is safe only because
+   * flow-schema.ts reads and writes it OUTSIDE the directive's `effect()`
+   * (deferred via `Alpine.nextTick`), not because of `Alpine.raw()` itself.
+   * Invalidate (set `null`) on any theme/colorMode change, same as
+   * `_bgGapCache`.
+   */
+  _schemaMetrics: SchemaMetrics | null;
 
   // === Subsystems ===
 
@@ -330,6 +357,12 @@ export interface CanvasContext {
   /** Set of node IDs currently visible in the viewport */
   _visibleNodeIds: Set<string>;
 
+  /** Set of edge IDs currently culled (display:none) — tracks prior-frame state for transition-only writes */
+  _culledEdgeIds: Set<string>;
+
+  /** Whether `_applyCulling` was active on the previous call — used to detect threshold-crossing-down / config-off */
+  _cullingWasActive: boolean;
+
   // === Background ===
 
   /** Background config (variant or layer array) */
@@ -388,6 +421,27 @@ export interface CanvasContext {
   /** rAF handle for layout animation tick */
   _layoutAnimFrame: number;
 
+  // === Shared obstacle cache (Workstream C) ===
+  _spatialGrid: SpatialGrid;
+  _obstacleSnapshot: Array<{ id: string; x: number; y: number; width: number; height: number }> | null;
+  _obstacleEpoch: number;
+  /** REACTIVE Map edge id → tick. Edge effects read key-scoped `.get(edge.id)`; bumped by _markDirtyEdges. */
+  _edgeDirtyTicks: Map<string, number>;
+  /** PLAIN Map edge id → endpoint-bbox corridor {minX,minY,maxX,maxY}. Written by edges post-route; read via Alpine.raw. */
+  _edgeCorridors: Map<string, { minX: number; minY: number; maxX: number; maxY: number }>;
+  _draggingNodeIds: Set<string>;
+  _commitNodeGeometry(changedNodeIds?: string[]): void;
+  _markDirtyEdges(
+    changedNodeIds?: string[],
+    prevSnapshot?: Array<{ id: string; x: number; y: number; width: number; height: number }> | null,
+  ): void;
+  /** WS-2 endpoint-spread lanes; null until first computed. Mutated in place. */
+  _endpointSpreadGrouping: EndpointSpreadGrouping | null;
+  /** WS-2: recompute endpoint-spread lanes; returns the re-laned edge ids. */
+  _computeEndpointGrouping(): Set<string>;
+  /** WS-2: bump the routing dirty tick for a specific set of edge ids. */
+  _markEdgesDirtyById(ids: Set<string>): void;
+
   // === Auto-Layout state ===
 
   /** Debounce timer for auto-layout */
@@ -419,6 +473,12 @@ export interface CanvasContext {
   /** Capture a history snapshot before a mutation */
   _captureHistory(): void;
 
+  /** Serialize the current state without pushing — pair with _commitHistory for deferred capture */
+  _snapshotHistory(): string | null;
+
+  /** Push a snapshot taken earlier via _snapshotHistory (dedups against the stack top; ignores null) */
+  _commitHistory(snapshot: string | null): void;
+
   /** Suspend history capture (e.g. during animation) */
   _suspendHistory(): void;
 
@@ -439,6 +499,9 @@ export interface CanvasContext {
 
   /** Toggle CSS display on off-screen nodes/edges (viewport culling) */
   _applyCulling(): void;
+
+  /** Restore display on every element culling could have hidden and reset the tracking sets */
+  _uncullEverything(): void;
 
   /** Get set of currently visible node IDs */
   _getVisibleNodeIds(): Set<string>;

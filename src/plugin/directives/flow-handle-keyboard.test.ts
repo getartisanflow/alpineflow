@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import Alpine from 'alpinejs';
 import { registerFlowHandleDirective } from './flow-handle';
+import { installHandleDelegation } from '../handle-delegation';
+import * as handleIndexModule from '../handle-index';
 import type { FlowEdge } from '../../core/types';
 
 // jsdom doesn't implement CSS.escape — minimal polyfill for simple IDs
@@ -11,6 +13,11 @@ beforeAll(() => {
   }
   if (typeof CSS.escape !== 'function') {
     CSS.escape = (value: string) => String(value);
+  }
+  // jsdom doesn't implement elementFromPoint; the pointer-drag drop path calls
+  // it when no handle is snapped. Returning null models "dropped on empty space".
+  if (typeof document.elementFromPoint !== 'function') {
+    document.elementFromPoint = () => null;
   }
   registerFlowHandleDirective(Alpine);
 });
@@ -23,7 +30,11 @@ function clearChildren(el: HTMLElement): void {
 }
 
 const mountedHosts: HTMLElement[] = [];
+const delegationCleanups: Array<() => void> = [];
 afterEach(() => {
+  while (delegationCleanups.length > 0) {
+    delegationCleanups.pop()?.();
+  }
   while (mountedHosts.length > 0) {
     const el = mountedHosts.pop();
     el?.remove();
@@ -116,6 +127,13 @@ function mount(opts: MountOptions = {}) {
 
   Alpine.initTree(host);
 
+  // Handles no longer attach their own pointerdown listener — the canvas owns a
+  // single delegated one (flow-canvas `_initHandleDelegation`). This harness has
+  // no `.flow-viewport`, so it goes on the container, which is what flow-canvas
+  // falls back to as well. The pointer connect-drag tests below therefore run
+  // against the delegated path, unchanged.
+  delegationCleanups.push(installHandleDelegation(host, canvas));
+
   return {
     host,
     canvas,
@@ -131,6 +149,35 @@ function keydown(el: Element | Document, key: string) {
   const ev = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
   el.dispatchEvent(ev);
   return ev;
+}
+
+/**
+ * Give a handle a non-zero measured box. buildHandleIndex (used by the
+ * index-backed connect-drag path) skips zero-size handles, and jsdom reports
+ * all-zero rects by default — so the drag would index nothing without this.
+ */
+function stubRect(
+  el: HTMLElement,
+  rect: { left: number; top: number; width: number; height: number },
+): void {
+  el.getBoundingClientRect = () =>
+    ({
+      left: rect.left,
+      top: rect.top,
+      width: rect.width,
+      height: rect.height,
+      right: rect.left + rect.width,
+      bottom: rect.top + rect.height,
+      x: rect.left,
+      y: rect.top,
+      toJSON: () => {},
+    }) as DOMRect;
+}
+
+function pointer(target: Element | Document, type: string, x = 0, y = 0): void {
+  target.dispatchEvent(
+    new PointerEvent(type, { clientX: x, clientY: y, bubbles: true, cancelable: true }),
+  );
 }
 
 describe('keyboard drag-to-connect focusability attributes', () => {
@@ -336,5 +383,88 @@ describe('keyboard drag-to-connect: validator pipeline respected', () => {
     expect(rejected.length).toBe(1);
     expect(rejected[0].source).toBe('a');
     expect(rejected[0].target).toBe('b');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pointer connect-drag: the index lifecycle (build-at-start, clear-on-end).
+//
+// Reuses the same directive-mount harness above (mount() → Alpine.initTree wires
+// the source-handle pointerdown listener). Drives a real pointerdown → pointermove
+// (past DRAG_THRESHOLD) → pointerup/pointercancel so the assertions exercise the
+// directive's own drag lifecycle, not applyValidationClasses in isolation:
+//   • drag START must apply the index-backed validation classes, and
+//   • every drag END/cancel path must clear them (which also releases the
+//     per-gesture closure index for the next gesture).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('pointer connect-drag: index-backed validation-class lifecycle', () => {
+  /**
+   * Prepare a mounted canvas for a deterministic, side-effect-free drag:
+   * measurable handles (so buildHandleIndex includes them), snap radius 0 (no
+   * snap target / no edge created), and autopan off (no rAF loop).
+   */
+  function armDrag(h: ReturnType<typeof mount>): void {
+    for (const el of [h.sourceA, h.targetA, h.sourceB, h.targetB]) {
+      stubRect(el, { left: 100, top: 50, width: 20, height: 10 });
+    }
+    (h.canvas as any)._config.autoPanOnConnect = false;
+    (h.canvas as any)._config.connectionSnapRadius = 0;
+  }
+
+  it('builds the handle index AND applies validation classes when a drag passes the threshold', () => {
+    const h = mount();
+    armDrag(h);
+    // Spy calls through, so a real index is still built and classes still apply.
+    // Asserting the build happened is what distinguishes "index-backed at start"
+    // from a silent fall-through to the legacy path if the build were ever dropped.
+    const buildSpy = vi.spyOn(handleIndexModule, 'buildHandleIndex');
+
+    pointer(h.sourceA, 'pointerdown', 100, 100);
+    pointer(document, 'pointermove', 220, 220); // Δ120 ≫ DRAG_THRESHOLD (5)
+
+    // Drag START built the per-gesture index...
+    expect(buildSpy).toHaveBeenCalledTimes(1);
+    // ...and applied the validation classes: the target on the SOURCE node is a
+    // self-connection (invalid); the other node's target is valid.
+    expect(h.targetB.classList.contains('flow-handle-valid')).toBe(true);
+    expect(h.targetA.classList.contains('flow-handle-invalid')).toBe(true);
+
+    // Cleanup so the document-level move/up listeners don't leak into siblings.
+    pointer(document, 'pointerup', 220, 220);
+    buildSpy.mockRestore();
+  });
+
+  it('clears every validation class on a normal pointerup', () => {
+    const h = mount();
+    armDrag(h);
+
+    pointer(h.sourceA, 'pointerdown', 100, 100);
+    pointer(document, 'pointermove', 220, 220);
+    expect(h.targetB.classList.contains('flow-handle-valid')).toBe(true); // applied
+
+    pointer(document, 'pointerup', 220, 220);
+
+    for (const el of [h.targetA, h.targetB]) {
+      expect(el.classList.contains('flow-handle-valid')).toBe(false);
+      expect(el.classList.contains('flow-handle-invalid')).toBe(false);
+      expect(el.classList.contains('flow-handle-limit-reached')).toBe(false);
+    }
+  });
+
+  it('clears every validation class on a cancelled drag (pointercancel)', () => {
+    const h = mount();
+    armDrag(h);
+
+    pointer(h.sourceA, 'pointerdown', 100, 100);
+    pointer(document, 'pointermove', 220, 220);
+    expect(h.targetA.classList.contains('flow-handle-invalid')).toBe(true); // applied
+
+    pointer(document, 'pointercancel', 220, 220);
+
+    for (const el of [h.targetA, h.targetB]) {
+      expect(el.classList.contains('flow-handle-valid')).toBe(false);
+      expect(el.classList.contains('flow-handle-invalid')).toBe(false);
+      expect(el.classList.contains('flow-handle-limit-reached')).toBe(false);
+    }
   });
 });

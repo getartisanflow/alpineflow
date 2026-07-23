@@ -38,6 +38,65 @@ const BLOCKED_ATTRS = new Set(['x-data', 'x-init', 'x-bind', 'href', 'src', 'act
 
 let proximityEdgeCounter = 0;
 
+/**
+ * Commit a deferred drag-history snapshot (taken on pointerdown) — but only if
+ * the pointer actually moved (`didDrag`). d3-drag fires its `start` handler on
+ * every pointerdown, so a plain click-to-select would otherwise push a no-op
+ * undo entry; gating on `didDrag` keeps clicks out of the history stack.
+ * `pendingSnapshot === null` means history was disabled at drag start.
+ */
+export function commitDragHistory(
+  canvas: { _commitHistory?: (snapshot: string | null) => void },
+  didDrag: boolean,
+  pendingSnapshot: string | null,
+): void {
+  if (didDrag && pendingSnapshot !== null) {
+    canvas._commitHistory?.(pendingSnapshot);
+  }
+}
+
+/**
+ * Reparent a node during a drag with history suspended. `reparentNode` captures
+ * its own snapshot (for programmatic callers), but inside a drag that would push
+ * a second entry on top of the drag's deferred pre-drag snapshot — the exact
+ * no-op/duplicate entry this pass eliminates. Suspending keeps `commitDragHistory`
+ * as the single authoritative undo entry for the whole drag. try/finally mirrors
+ * the suspend/resume convention in canvas-selection.ts so a throw can't leak the
+ * suspend depth.
+ */
+export function reparentWithoutCapture(
+  canvas: {
+    _suspendHistory?: () => void;
+    _resumeHistory?: () => void;
+    reparentNode?: (nodeId: string, parentId: string | null) => boolean;
+  },
+  nodeId: string,
+  parentId: string | null,
+): void {
+  canvas._suspendHistory?.();
+  try {
+    canvas.reparentNode?.(nodeId, parentId);
+  } finally {
+    canvas._resumeHistory?.();
+  }
+}
+
+/**
+ * Decide whether a keydown should activate (select) the node. Enter/Space are the
+ * activation keys, but keydown bubbles up from every descendant — so the event is
+ * only an activation when the node wrapper *itself* is the target. Without the
+ * target check the directive would `preventDefault()` Enter/Space typed into an
+ * input, textarea, button or contenteditable inside the node, swallowing newlines
+ * and spaces and leaving nested buttons unactivatable.
+ */
+export function isNodeActivationKey(
+  e: { key: string; target: EventTarget | null },
+  el: EventTarget,
+): boolean {
+  if (e.key !== 'Enter' && e.key !== ' ') return false;
+  return e.target === el;
+}
+
 /** Check if the easy-connect modifier key is held. */
 export function isEasyConnectKey(
   e: PointerEvent | { altKey: boolean; metaKey: boolean; shiftKey: boolean },
@@ -129,6 +188,8 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
     ) => {
       let dragInstance: DragInstance | null = null;
       let didDrag = false;
+      // Snapshot taken on drag start; committed on drag end only if didDrag.
+      let pendingDragSnapshot: string | null = null;
       let dragStartSelected = false;
       let groupDragStartPositions: Map<string, { x: number; y: number }> | null = null;
       let autoPan: AutoPanInstance | null = null;
@@ -145,6 +206,27 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
       let prevShapeClass = '';
       let prevStyleProps: string[] = [];
       let lastDragNodeId: string | null = null;
+
+      // Lean position effect — split out of the main node effect below so that a
+      // position change (which fires on every pointermove during a drag) re-runs
+      // ONLY this tiny left/top write, not the full class/dimension/style/rotation
+      // effect. Mirrors the lean `_flushNodePositions` fast-path the animation loop
+      // already uses; fixes the drag sluggishness noted at the drag-recreate guard.
+      effect(() => {
+        if (!el.isConnected) return;
+        const node = evaluate(expression) as FlowNode;
+        if (!node || node.hidden) return;
+        const canvas = Alpine.$data(el.closest('[x-data]') as HTMLElement);
+        if (!canvas?.viewport) return;
+        const absPos = node.parentId
+          ? canvas.getAbsolutePosition(node.id)
+          : (node.position ?? { x: 0, y: 0 });
+        const nodeOrig = node.nodeOrigin ?? canvas._config?.nodeOrigin ?? [0, 0];
+        const nw = node.dimensions?.width ?? 150;
+        const nh = node.dimensions?.height ?? 40;
+        el.style.left = (absPos.x - nw * nodeOrig[0]) + 'px';
+        el.style.top = (absPos.y - nh * nodeOrig[1]) + 'px';
+      });
 
       effect(() => {
         // Bail if the node element was detached (e.g. a Livewire morph after a
@@ -251,15 +333,8 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
           el.classList.remove('flow-node-group');
         }
 
-        // Auto-apply position (absolute for child nodes, direct for root)
-        const absPos = node.parentId
-          ? canvas.getAbsolutePosition(node.id)
-          : (node.position ?? { x: 0, y: 0 });
-        const nodeOrig = node.nodeOrigin ?? canvas._config?.nodeOrigin ?? [0, 0];
-        const nw = node.dimensions?.width ?? 150;
-        const nh = node.dimensions?.height ?? 40;
-        el.style.left = (absPos.x - nw * nodeOrig[0]) + 'px';
-        el.style.top = (absPos.y - nh * nodeOrig[1]) + 'px';
+        // Position is written by the dedicated lean effect above (split out so a
+        // drag's per-move position change doesn't re-run this whole effect).
 
         // Auto-apply dimensions when explicitly set.
         // Height is conditional: containers (childLayout), fixed-dim nodes, and
@@ -274,12 +349,12 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
           const _childLayout = node.childLayout;
           const _fixedDimensions = node.fixedDimensions;
           // Treat "has children" as an implicit container signal — group nodes
-          // with positioned children need their dimensions to hold. Alpine
-          // reactivity tracks parentId across the nodes array, so this
-          // re-evaluates when children are added or removed.
-          const _hasChildren = (canvas.nodes as FlowNode[]).some(
-            (n: FlowNode) => n.parentId === node.id,
-          );
+          // with positioned children need their dimensions to hold. Reads the
+          // reactive parent→children index by key, so this effect re-runs only
+          // when THIS node's own child list changes — not on every array-level
+          // change (the previous `nodes.some(...)` scan subscribed every node
+          // effect to the whole array).
+          const _hasChildren = (canvas._childrenIds?.get(node.id)?.length ?? 0) > 0;
           el.style.width = node.dimensions.width + 'px';
           if (_childLayout || _fixedDimensions || _hasChildren) {
             el.style.height = node.dimensions.height + 'px';
@@ -331,8 +406,13 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
           prevShapeClass = newShape;
         }
 
-        // Apply inline clip-path for custom (non-built-in) shapes
-        const canvasData = Alpine.$data(el.closest('[data-flow-canvas]') as HTMLElement);
+        // Apply inline clip-path for custom (non-built-in) shapes.
+        // Guard the canvas lookup: if this effect fires one last time after the
+        // node is detached (a teardown race), `closest` returns null and
+        // `Alpine.$data(null)` throws `_x_dataStack` of null asynchronously —
+        // an unhandled error. A detached node simply has no custom shape to apply.
+        const canvasEl = el.closest('[data-flow-canvas]');
+        const canvasData = canvasEl ? Alpine.$data(canvasEl as HTMLElement) : null;
         const customShapeDef = node.shape && canvasData?._shapeRegistry?.[node.shape];
         if (customShapeDef?.clipPath) {
           el.style.clipPath = customShapeDef.clipPath;
@@ -516,7 +596,9 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                 ?.classList.remove('flow-node-drop-target');
             }
             dropTargetId = null;
-            canvas._captureHistory?.();
+            // Defer history capture: snapshot now, commit on drag end only if
+            // the node actually moved (a plain click must not push an entry).
+            pendingDragSnapshot = canvas._snapshotHistory?.() ?? null;
             debug('drag', `Node "${nodeId}" drag start`, position);
             const n = canvas.getNode(nodeId);
             if (n) {
@@ -548,6 +630,18 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                   }
                 }
               }
+
+              // Mark the dragged node(s) so edges touching them degrade to a
+              // simplified bezier route for the gesture (avoidantSimplifyOnDrag,
+              // WS-D). Mutate the REACTIVE set so key-scoped `.has()` deps on the
+              // touched edges re-run. Group-drag members are included so their
+              // edges degrade too.
+              canvas._draggingNodeIds.add(nodeId);
+              if (groupDragStartPositions) {
+                for (const otherId of groupDragStartPositions.keys()) {
+                  canvas._draggingNodeIds.add(otherId);
+                }
+              }
             }
 
             // Start auto-pan if enabled
@@ -556,21 +650,26 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                   container: containerEl,
                   speed: canvas._config?.autoPanSpeed ?? 15,
                   onPan(dx, dy) {
-                    const zoom = canvas.viewport?.zoom || 1;
+                    // Reactive `viewport` is frame-coalesced, but auto-pan drives
+                    // setViewport synchronously and must measure the delta applied
+                    // this tick. `_viewportLive` is updated synchronously by every
+                    // transform (setViewport fires it immediately), so read that.
+                    const liveVp = () => canvas._viewportLive ?? canvas.viewport;
+                    const zoom = liveVp().zoom || 1;
 
                     // Capture viewport before pan so we can measure actual delta
-                    const vpBefore = { x: canvas.viewport.x, y: canvas.viewport.y };
+                    const vpBefore = { x: liveVp().x, y: liveVp().y };
 
                     // Pan the viewport (negative because CSS translate decreases to scroll right/down)
                     canvas._panZoom?.setViewport({
-                      x: canvas.viewport.x - dx,
-                      y: canvas.viewport.y - dy,
+                      x: liveVp().x - dx,
+                      y: liveVp().y - dy,
                       zoom,
                     });
 
                     // Actual delta applied (may differ from requested if translateExtent clamped it)
-                    const actualDx = vpBefore.x - canvas.viewport.x;
-                    const actualDy = vpBefore.y - canvas.viewport.y;
+                    const actualDx = vpBefore.x - liveVp().x;
+                    const actualDy = vpBefore.y - liveVp().y;
 
                     // If viewport didn't move at all, it's fully clamped by translateExtent
                     const vpHitBoundary = (actualDx === 0 && actualDy === 0);
@@ -1226,8 +1325,10 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
               // listener doesn't fire while d3-drag captures pointer events.
               if (dragCollab.awareness && sourceEvent instanceof MouseEvent && canvas._container) {
                 const rect = canvas._container.getBoundingClientRect();
-                const cx = (sourceEvent.clientX - rect.left - canvas.viewport.x) / canvas.viewport.zoom;
-                const cy = (sourceEvent.clientY - rect.top - canvas.viewport.y) / canvas.viewport.zoom;
+                // Live viewport: reactive `viewport` lags a frame during auto-pan.
+                const liveVp = canvas._viewportLive ?? canvas.viewport;
+                const cx = (sourceEvent.clientX - rect.left - liveVp.x) / liveVp.zoom;
+                const cy = (sourceEvent.clientY - rect.top - liveVp.y) / liveVp.zoom;
                 dragCollab.awareness.updateCursor({ x: cx, y: cy });
               }
             }
@@ -1239,6 +1340,21 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
           },
 
           onDragEnd({ nodeId, position }) {
+            // Capture moved node ids BEFORE groupDragStartPositions is nulled
+            // below (both the reorder/reparent branch and the normal-drag
+            // branch null it), so the obstacle-cache commit at the end of
+            // each branch knows which nodes' geometry actually changed.
+            const movedIds = groupDragStartPositions
+              ? [nodeId, ...groupDragStartPositions.keys()]
+              : [nodeId];
+
+            // Gesture over: clear the dragging set so edges touching these nodes
+            // re-route with real obstacles again. Cleared unconditionally (even a
+            // click fired onDragStart). This mutation and the _commitNodeGeometry
+            // commit later in each branch coalesce into ONE reactive flush, so
+            // affected edges re-run exactly once with the final geometry.
+            canvas._draggingNodeIds.clear();
+
             el.classList.remove('flow-node-dragging');
             debug('drag', `Node "${nodeId}" drag end`, position);
 
@@ -1283,7 +1399,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                   containerEl.querySelector(`[data-flow-node-id="${CSS.escape(dropTargetId)}"]`)
                     ?.classList.remove('flow-node-drop-target');
                 }
-                canvas.reparentNode(nodeId, dropTargetId);
+                reparentWithoutCapture(canvas, nodeId, dropTargetId);
                 dropTargetId = null;
               } else if (wasReorderParent && wasReorderParent !== n.parentId) {
                 // Was previewing in another group but dropped outside all
@@ -1307,6 +1423,16 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
               }
 
               groupDragStartPositions = null;
+              // Reorder/reparent repositions siblings in the layout container.
+              // Obstacle geometry for avoidant/orthogonal edges is non-reactive
+              // (see flow-edge.ts), so bump the layout tick to re-route edges
+              // that treat those siblings as obstacles.
+              canvas._layoutAnimTick++;
+              canvas._commitNodeGeometry(movedIds);
+              // This branch commits a real node-state mutation (reparent/reorder),
+              // so commit the deferred snapshot before returning.
+              commitDragHistory(canvas, didDrag, pendingDragSnapshot);
+              pendingDragSnapshot = null;
               didDrag = false;
               return; // Skip normal onDragEnd logic
             }
@@ -1318,7 +1444,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                 const targetEl = containerEl.querySelector(`[data-flow-node-id="${CSS.escape(dropTargetId)}"]`);
                 targetEl?.classList.remove('flow-node-drop-target');
               }
-              canvas.reparentNode(nodeId, dropTargetId);
+              reparentWithoutCapture(canvas, nodeId, dropTargetId);
               dropTargetId = null;
             } else if (n && n.parentId && !dropTargetId) {
               // Check if child was dragged outside parent bounds (detach)
@@ -1339,7 +1465,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
                     relX > detachParent.dimensions.width ||
                     relY > detachParent.dimensions.height;
                   if (outside) {
-                    canvas.reparentNode(nodeId, null);
+                    reparentWithoutCapture(canvas, nodeId, null);
                   }
                 }
               }
@@ -1421,6 +1547,21 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
             }
 
             groupDragStartPositions = null;
+
+            // Obstacle geometry for avoidant/orthogonal edges is read
+            // non-reactively (see flow-edge.ts), so a dragged node that is an
+            // *obstacle* for other edges does not re-route them through its own
+            // position dependency. Bump the layout tick once the drag settles so
+            // those routes re-measure against the moved obstacle.
+            if (didDrag) {
+              canvas._layoutAnimTick++;
+              canvas._commitNodeGeometry(movedIds);
+            }
+
+            // Commit the deferred history snapshot only if the node actually
+            // moved; a plain click leaves it uncommitted.
+            commitDragHistory(canvas, didDrag, pendingDragSnapshot);
+            pendingDragSnapshot = null;
             // Reset so the next click isn't treated as a drag.
             // d3-drag already suppresses the click event immediately
             // after a real drag, so this is safe.
@@ -1468,10 +1609,12 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
             const containerEl = el.closest('.flow-container') as HTMLElement;
             if (!containerEl) return;
 
-            // Compute source position (handle center or node center)
-            const initZoom = currentCanvas.viewport?.zoom || 1;
-            const initVpX = currentCanvas.viewport?.x || 0;
-            const initVpY = currentCanvas.viewport?.y || 0;
+            // Compute source position (handle center or node center).
+            // Live viewport: reactive `viewport` may lag a frame behind a zoom.
+            const initVp = currentCanvas._viewportLive ?? currentCanvas.viewport;
+            const initZoom = initVp?.zoom || 1;
+            const initVpX = initVp?.x || 0;
+            const initVpY = initVp?.y || 0;
             const initContainerRect = containerEl.getBoundingClientRect();
 
             let sourceX: number, sourceY: number;
@@ -1592,7 +1735,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
 
       // Handle selection via keyboard (Enter/Space)
       const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
+        if (!isNodeActivationKey(e, el)) return;
         e.preventDefault();
 
         const node = evaluate(expression) as FlowNode;
@@ -1758,6 +1901,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
           const canvas = Alpine.$data(el.closest('[x-data]') as HTMLElement);
           canvas?._nodeElements?.delete(nodeId);
           canvas?._resizeObserver?.unobserve(el);
+          canvas?._draggingNodeIds?.delete(nodeId);
         }
       });
     },

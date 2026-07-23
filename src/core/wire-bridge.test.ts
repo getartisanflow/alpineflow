@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { WIRE_PAYLOAD_MAP, WIRE_COMMAND_MAP, registerWireCommands, registerWireEvents, registerCustomWireCommands } from './wire-bridge';
 
 // ── WIRE_PAYLOAD_MAP ──────────────────────────────────────────────────
@@ -167,6 +167,7 @@ describe('WIRE_COMMAND_MAP', () => {
     expect(WIRE_COMMAND_MAP['flow:panBy']).toBe('panBy');
     expect(WIRE_COMMAND_MAP['flow:fitBounds']).toBe('fitBounds');
     expect(WIRE_COMMAND_MAP['flow:patchConfig']).toBe('patchConfig');
+    expect(WIRE_COMMAND_MAP['flow:setCrossingReduction']).toBe('setCrossingReduction');
     expect(WIRE_COMMAND_MAP['flow:deselectAll']).toBe('deselectAll');
     expect(WIRE_COMMAND_MAP['flow:collapseNode']).toBe('collapseNode');
     expect(WIRE_COMMAND_MAP['flow:expandNode']).toBe('expandNode');
@@ -240,6 +241,7 @@ describe('registerWireCommands', () => {
       panBy: vi.fn(),
       fitBounds: vi.fn(),
       patchConfig: vi.fn(),
+      setCrossingReduction: vi.fn(),
       deselectAll: vi.fn(),
       collapseNode: vi.fn(),
       expandNode: vi.fn(),
@@ -264,6 +266,9 @@ describe('registerWireCommands', () => {
 
     listeners['flow:patchConfig']({ changes: { panOnDrag: false } });
     expect(mockCanvas.patchConfig).toHaveBeenCalledWith({ panOnDrag: false });
+
+    listeners['flow:setCrossingReduction']({ value: { channelGap: 10 } });
+    expect(mockCanvas.setCrossingReduction).toHaveBeenCalledWith({ channelGap: 10 });
 
     listeners['flow:deselectAll']({});
     expect(mockCanvas.deselectAll).toHaveBeenCalled();
@@ -477,5 +482,66 @@ describe('registerWireEvents', () => {
     expect(existingOnDrop).toHaveBeenCalled();
     expect(wireMethods.onDrop).toHaveBeenCalledWith('test', { x: 100, y: 200 });
     expect(result).toBe(returnNode);
+  });
+});
+
+// ── registerWireEvents — viewport throttling (WS3) ─────────────────────
+
+describe('registerWireEvents — viewport throttling', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('trailing-throttles viewport-change wire calls (one round-trip per window, final state)', () => {
+    vi.useFakeTimers();
+    const wireMethods: Record<string, any> = { vpChanged: vi.fn() };
+    const $wire = new Proxy(wireMethods, { get: (t, p) => t[p as string] });
+    const config: any = {};
+
+    registerWireEvents(config, $wire, { 'viewport-change': 'vpChanged' });
+
+    config.onViewportChange({ viewport: { x: 1, y: 0, zoom: 1 } });
+    config.onViewportChange({ viewport: { x: 2, y: 0, zoom: 1 } });
+    config.onViewportChange({ viewport: { x: 3, y: 0, zoom: 1 } });
+
+    expect(wireMethods.vpChanged).not.toHaveBeenCalled(); // no per-frame Livewire round-trip
+
+    vi.advanceTimersByTime(160);
+
+    expect(wireMethods.vpChanged).toHaveBeenCalledTimes(1);
+    expect(wireMethods.vpChanged).toHaveBeenCalledWith(expect.objectContaining({ x: 3 })); // trailing = final
+  });
+
+  it('trailing-throttles viewport-move wire calls', () => {
+    vi.useFakeTimers();
+    const wireMethods: Record<string, any> = { vpMoved: vi.fn() };
+    const $wire = new Proxy(wireMethods, { get: (t, p) => t[p as string] });
+    const config: any = {};
+
+    registerWireEvents(config, $wire, { 'viewport-move': 'vpMoved' });
+
+    config.onViewportMove({ viewport: { x: 5 } });
+    config.onViewportMove({ viewport: { x: 9 } });
+
+    expect(wireMethods.vpMoved).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(160);
+
+    expect(wireMethods.vpMoved).toHaveBeenCalledTimes(1);
+    // viewport-move has no payload-map entry → full detail is passed through
+    expect(wireMethods.vpMoved).toHaveBeenCalledWith({ viewport: { x: 9 } });
+  });
+
+  it('does not throttle non-viewport events (they fire synchronously)', () => {
+    vi.useFakeTimers();
+    const wireMethods: Record<string, any> = { onNodeDragEnd: vi.fn() };
+    const $wire = new Proxy(wireMethods, { get: (t, p) => t[p as string] });
+    const config: any = {};
+
+    registerWireEvents(config, $wire, { 'node-drag-end': 'onNodeDragEnd' });
+
+    config.onNodeDragEnd({ node: { id: 'n1' }, position: { x: 1, y: 2 } });
+
+    expect(wireMethods.onNodeDragEnd).toHaveBeenCalledTimes(1); // immediate, no timer
   });
 });

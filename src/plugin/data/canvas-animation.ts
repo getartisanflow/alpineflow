@@ -179,6 +179,26 @@ export function createAnimationMixin(ctx: CanvasContext) {
       const styledNodeIds = new Set<string>();
       const styledEdgeIds = new Set<string>();
 
+      // After a move settles, `_refreshEdgePaths` has drawn a simplified
+      // node-centre/no-obstacle edge path (fast enough to run every animation
+      // frame, but it ignores schema handle geometry and obstacle routing). Left
+      // as-is, schema edges stay detached at the node centre once the animation
+      // ends (the reset-grid / scramble regression). Re-run the full reactive
+      // edge effect (`_layoutAnimTick`) and rebuild the obstacle snapshot
+      // (`_commitNodeGeometry`) so edges snap back to their real handles +
+      // avoidant routes — mirrors the history-restore settle. rAF so it runs
+      // after the node DOM has been repositioned.
+      const settleEdgeGeometry = (ids: Set<string>): void => {
+        if (ids.size === 0) {
+          return;
+        }
+        const settledIds = Array.from(ids);
+        requestAnimationFrame(() => {
+          ctx._layoutAnimTick++;
+          ctx._commitNodeGeometry?.(settledIds);
+        });
+      };
+
       // Debug logging
       const nodeCount = targets.nodes ? Object.keys(targets.nodes).length : 0;
       const edgeCount = targets.edges ? Object.keys(targets.edges).length : 0;
@@ -481,6 +501,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
         if (movedNodeIds.size > 0) {
           ctx._flushNodePositions(movedNodeIds);
           ctx._refreshEdgePaths(movedNodeIds);
+          settleEdgeGeometry(movedNodeIds);
         }
         if (styledNodeIds.size > 0) {
           ctx._flushNodeStyles(styledNodeIds);
@@ -578,6 +599,7 @@ export function createAnimationMixin(ctx: CanvasContext) {
           if (movedNodeIds.size > 0) {
             ctx._flushNodePositions(movedNodeIds);
             ctx._refreshEdgePaths(movedNodeIds);
+            settleEdgeGeometry(movedNodeIds);
             movedNodeIds.clear();
           }
           if (styledNodeIds.size > 0) {
@@ -973,10 +995,15 @@ export function createAnimationMixin(ctx: CanvasContext) {
 
     /**
      * Stop all in-flight animations, particles, and timelines.
-     * Called by the canvas destroy() lifecycle hook when the element is
-     * removed from the DOM.
+     *
+     * Called BY the canvas `destroy()` lifecycle hook when the element is removed
+     * from the DOM — it must not be named `destroy()`. Mixins are applied onto the
+     * canvas with `Object.defineProperties`, so a `destroy` here would OVERWRITE
+     * `flowCanvas`'s own `destroy()` and silently take the entire canvas teardown
+     * (listener removal, panZoom/minimap disposal, store unregistration) out of the
+     * lifecycle. It did exactly that until this rename.
      */
-    destroy(): void {
+    _destroyAnimations(): void {
       if (ctx._animator) {
         ctx._animator.stopAll();
       }

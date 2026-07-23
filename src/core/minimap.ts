@@ -21,8 +21,21 @@ export interface MiniMapState {
   containerHeight: number;
 }
 
+/** Subset of state that `updateViewport` needs — no node mapping. */
+export interface MiniMapViewportState {
+  viewport: Viewport;
+  containerWidth: number;
+  containerHeight: number;
+}
+
 export interface MiniMapOptions {
   getState: () => MiniMapState;
+  /**
+   * Lean getter used by `updateViewport` — resolves only the viewport and
+   * container size, skipping the full `toAbsoluteNodes` remap `getState` does.
+   * Falls back to `getState` when omitted.
+   */
+  getViewportState?: () => MiniMapViewportState;
   setViewport: (vp: Partial<Viewport>) => void;
   config: FlowCanvasConfig;
 }
@@ -139,7 +152,9 @@ export function createMiniMap(
 
   // ── Viewport mask ──────────────────────────────────────────────────
   function updateViewport(): void {
-    const state = getState();
+    // Lean path: only viewport + container size are read below, so skip the
+    // per-frame full-node remap that getState performs.
+    const state = options.getViewportState ? options.getViewportState() : getState();
 
     if (cachedBounds.width === 0 && cachedBounds.height === 0) {
       maskPath.setAttribute('d', '');

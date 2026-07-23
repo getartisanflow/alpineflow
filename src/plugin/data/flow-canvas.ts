@@ -24,9 +24,12 @@ import type {
   PendingReconnection,
   PendingKeyboardConnect,
   PatchableConfig,
+  SchemaMetrics,
+  EndpointSpreadGrouping,
+  HandlePosition,
 } from '../../core/types';
 import { createPanZoom, type PanZoomInstance } from '../../core/pan-zoom';
-import { screenToFlowPosition, getVisibleBounds } from '../../core/geometry';
+import { screenToFlowPosition, getVisibleBounds, type Bounds } from '../../core/geometry';
 import { setDebugEnabled, debug } from '../../core/debug';
 import { DEFAULT_FIT_PADDING } from '../../core/constants';
 import { FlowHistory } from '../../core/history';
@@ -41,13 +44,19 @@ import { createSelectionBox, type SelectionBoxInstance } from '../../core/select
 import { createLasso, type LassoInstance } from '../../core/lasso';
 import { getNodesInPolygon, getNodesFullyInPolygon, pointInPolygon } from '../../core/lasso-hit-test';
 import { clearValidationClasses } from '../directives/flow-handle';
-import { resolveShortcuts, matchesKey, matchesModifier } from '../../core/keyboard-shortcuts';
+import { installHandleDelegation } from '../handle-delegation';
+import { resolveShortcuts, matchesKey, matchesModifier, shouldCaptureNudge, isEditableTarget } from '../../core/keyboard-shortcuts';
 import { isDraggable, isSelectable } from '../../core/node-flags';
 import { attachLongPress } from '../../core/long-press';
-import { getNodesInRect, getNodesFullyInRect } from '../../core/geometry';
+import { getNodesInRect, getNodesFullyInRect, SpatialGrid, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
+import { CORRIDOR_MARGIN, findRoute } from '../../core/edge-paths/orthogonal';
+import { resolveSpreadSpacing } from '../../core/endpoint-spread';
+import { resolveChannelGap, dominantRun, groupChannels, assignOffsets, type ChannelMember } from '../../core/crossing-reduction';
 import {
   buildNodeMap,
+  reconcileChildrenIndex,
   getAbsolutePosition as getAbsolutePositionUtil,
+  toAbsoluteNode,
   toAbsoluteNodes,
   sortNodesTopological,
 } from '../../core/sub-flow';
@@ -101,6 +110,44 @@ function bgLayerGradient(variant: BgVariant, color: string): string {
     default:
       return `radial-gradient(circle, ${color} 1px, transparent 1px)`;
   }
+}
+
+// ── Viewport culling helpers (Workstream E) ────────────────────────────────
+/**
+ * AABB test: does an edge's recorded route corridor intersect the visible
+ * bounds? Corridors can extend beyond their endpoint nodes, so an edge with
+ * both endpoints off-screen may still need to render. When no corridor has
+ * been recorded for the edge, treat it as intersecting — never wrongly hide.
+ */
+function corridorIntersectsBounds(
+  corridor: { minX: number; minY: number; maxX: number; maxY: number } | undefined,
+  bounds: Bounds,
+): boolean {
+  if (!corridor) return true;
+  return !(
+    corridor.maxX < bounds.minX ||
+    corridor.minX > bounds.maxX ||
+    corridor.maxY < bounds.minY ||
+    corridor.minY > bounds.maxY
+  );
+}
+
+/** Selector matching the floating overlays that sit above the canvas surface. */
+const OVERLAY_SELECTOR = '.flow-panel, .flow-controls, .flow-minimap, .canvas-overlay';
+
+/**
+ * True when a drag event landed on one of the floating overlays — the panel (which
+ * hosts node palettes), the controls, the minimap, or a `.canvas-overlay` (e.g. the
+ * devtools panel). They live *inside* the flow container and take pointer events
+ * (`pointer-events: auto`, `z-index` above the surface), so a drop released on one
+ * still bubbles to the container's drop listener. Without this check the canvas
+ * happily adds a node at the position "behind" the overlay — dragging a palette item
+ * out and then changing your mind by releasing it back over the palette created a
+ * node instead of cancelling. `.canvas-overlay` matches the same guard the whiteboard
+ * tools already use, so any overlay carrying that class is covered.
+ */
+export function isOverlayDropTarget(el: Element | null): boolean {
+  return el != null && el.closest(OVERLAY_SELECTOR) != null;
 }
 
 export function registerFlowCanvas(Alpine: Alpine) {
@@ -186,14 +233,44 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _backgroundGap: config.backgroundGap ?? null as number | null,
     _patternColorOverride: config.patternColor ?? null as string | null,
 
+    /**
+     * Cached resolution of the `--flow-bg-pattern-gap` CSS variable. Reading it
+     * requires `getComputedStyle`, a forced style recalc that is prohibitively
+     * expensive to run on every viewport frame at schema scale. Populated on the
+     * first successful read; invalidate (set `null`) on any theme/colorMode
+     * change, since the active theme can redefine the variable.
+     */
+    _bgGapCache: null as number | null,
+
+    /** Last backgroundImage string written to the container — lets `_applyBackground`
+     * skip the (per-frame identical) gradient write. */
+    _lastBgImage: null as string | null,
+
+    /**
+     * Cached header/row/handle geometry for `x-flow-schema` nodes, measured
+     * once by the first schema node's `render()` (see flow-schema.ts). Plain
+     * (non-reactive) field. `Alpine.raw(canvas)` does NOT unwrap Alpine's
+     * merge-scope proxy, so a GET/SET through it still tracks/triggers the
+     * underlying reactive object inside an active effect — this field is
+     * safe only because flow-schema.ts reads and writes it OUTSIDE the
+     * directive's `effect()` (deferred via `Alpine.nextTick`), not because of
+     * `Alpine.raw()` itself. Invalidate (set `null`) on any theme/colorMode
+     * change, same contract as `_bgGapCache` above.
+     */
+    _schemaMetrics: null as SchemaMetrics | null,
+
     _getBackgroundGap(): number {
       if (this._backgroundGap !== null) {
         return this._backgroundGap;
+      }
+      if (this._bgGapCache !== null) {
+        return this._bgGapCache;
       }
       if (this._container) {
         const raw = getComputedStyle(this._container).getPropertyValue('--flow-bg-pattern-gap').trim();
         const parsed = parseFloat(raw);
         if (!isNaN(parsed)) {
+          this._bgGapCache = parsed;
           return parsed;
         }
       }
@@ -284,10 +361,42 @@ export function registerFlowCanvas(Alpine: Alpine) {
     /** Cleanup function for touch selection mode listeners */
     _touchSelectionCleanup: null as (() => void) | null,
     _nodeMap: new Map<string, FlowNode>(),
+    /**
+     * Reactive parent-id → child-ids index, reconciled in `_rebuildNodeMap`.
+     * Lets each node effect ask "do I have children?" via an O(1) keyed lookup
+     * instead of scanning the whole nodes array (which subscribed every node
+     * effect to the entire array — O(N²) on any array change).
+     */
+    _childrenIds: new Map<string, string[]>(),
     /** Stores each node's originally configured dimensions (before layout stretch). */
     _initialDimensions: new Map<string, Dimensions>(),
     _edgeMap: new Map<string, FlowEdge>(),
     _viewportEl: null as HTMLElement | null,
+    _handleDelegationCleanup: null as (() => void) | null,
+    /**
+     * The element the delegated handle listener is CURRENTLY installed on, or null
+     * when nothing is installed. Tracked separately from `_viewportEl` because the
+     * two can diverge: `_viewportEl` is re-pointed the instant a replacement viewport
+     * registers, while the listener stays on whatever node it was attached to until
+     * `_registerViewportEl()` moves it. Comparing the two is what detects the move.
+     */
+    _handleDelegationEl: null as HTMLElement | null,
+    /** Set in destroy(); read by the deferred install so a dead canvas never installs. */
+    _handleDelegationTornDown: false,
+
+    // ── Viewport frame coalescing ─────────────────────────────────────────
+    /**
+     * The most recent viewport from d3-zoom, written synchronously on every
+     * transform (event rate). Reactive `viewport` and all viewport side-effects
+     * are flushed from here once per animation frame; synchronous pointer-path
+     * math (drag, auto-pan, coordinate transforms) must read this, not the
+     * frame-lagged reactive `viewport`.
+     */
+    _viewportLive: null as Viewport | null,
+    /** Pending requestAnimationFrame handle for the coalesced flush, or null. */
+    _vpFrame: null as number | null,
+    /** True when a user-driven move happened since the last flush (gates `viewport-move`). */
+    _vpMoved: false,
     _history: null as FlowHistory | null,
     _announcer: null as FlowAnnouncer | null,
     _computeEngine: new ComputeEngine(),
@@ -328,6 +437,31 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _layoutAnimTick: 0,
     _layoutAnimFrame: 0,
 
+    // ── Shared obstacle cache (Workstream C) ─────────────────────────────
+    /** Spatial index of node id → flow-space rect cells (committed geometry). Non-reactive: operate on it via `Alpine.raw(canvas._spatialGrid)` (raw the NESTED property — `Alpine.raw(canvas)` does NOT unwrap Alpine's merge-scope proxy; see flow-edge.ts). Also maintained for the viewport-culling overhaul (WS E), which will consume it — do not delete as dead code even though only WS C currently reads it. */
+    _spatialGrid: new SpatialGrid(),
+    /** Obstacle rects rebuilt once per commit. In the edge effect read it via `Alpine.raw(canvas._obstacleSnapshot)` (nested-raw) so the edge does NOT subscribe to every node's reactive state. */
+    _obstacleSnapshot: null as Array<{ id: string; x: number; y: number; width: number; height: number }> | null,
+
+    /** WS-2 endpoint-spread lanes; null until first computed. Mutated in place (see _obstacleSnapshot). */
+    _endpointSpreadGrouping: null as EndpointSpreadGrouping | null,
+    /** WS-3 crossing-reduction lane offsets, edgeId → signed px; null until first computed. Mutated in place. */
+    _crossingPlan: null as Map<string, number> | null,
+    /** Reactive epoch bumped by _commitNodeGeometry (internal signal; edges must NOT subscribe to it). Reserved for the interaction-degradation/LOD workstream (WS D), which will consume it — do not delete as dead code even though only WS C currently reads it. */
+    _obstacleEpoch: 0,
+    /** REACTIVE Map edge id → tick. Edge effects read key-scoped `.get(edge.id)`; bumped by _markDirtyEdges. */
+    _edgeDirtyTicks: new Map<string, number>(),
+    /** PLAIN Map edge id → endpoint-bbox corridor {minX,minY,maxX,maxY}. Written by edges post-route; read via Alpine.raw. */
+    _edgeCorridors: new Map<string, { minX: number; minY: number; maxX: number; maxY: number }>(),
+
+    // ── Interaction degradation (Workstream D) ───────────────────────────
+    /** REACTIVE Set of node ids currently being dragged. Edge effects read
+     * key-scoped `.has(edge.source)` / `.has(edge.target)`, so ONLY edges
+     * touching a dragged node re-run when the set changes. Populated in
+     * flow-node `onDragStart` (incl. group-drag members), cleared on drag end.
+     * Drives `avoidantSimplifyOnDrag` bezier degradation. */
+    _draggingNodeIds: new Set<string>(),
+
     // ── Auto-Layout ──────────────────────────────────────────────────
     _autoLayoutTimer: null as ReturnType<typeof setTimeout> | null,
     _autoLayoutReady: false,
@@ -337,6 +471,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _nodeElements: new Map<string, HTMLElement>(),
     _edgeSvgElements: new Map<string, SVGSVGElement>(),
     _visibleNodeIds: new Set<string>(),
+    /** PLAIN Set of edge ids currently culled (display:none). Used to gate display writes to visibility transitions only. */
+    _culledEdgeIds: new Set<string>(),
+    /** Whether `_applyCulling` was active on the previous call — used to detect threshold-crossing-down / config-off so `_uncullEverything` can restore display exactly once. */
+    _cullingWasActive: false,
 
     // ── Context Menu Auto-Populate ─────────────────────────────────────
     _contextMenuListeners: [] as Array<{ event: string; handler: EventListener }>,
@@ -352,7 +490,12 @@ export function registerFlowCanvas(Alpine: Alpine) {
      * dispatch a DOM CustomEvent (flow-xxx) for Alpine @flow-xxx listeners.
      */
     _emit(event: string, detail?: any) {
-      debug('event', event, detail);
+      // viewport-change/-move fire once per animation frame; keep them out of the
+      // debug log so `debug: true` doesn't churn 2-3 lines per frame during zoom.
+      // viewport-move-start/-end still log so gesture bracketing stays debuggable.
+      if (event !== 'viewport-change' && event !== 'viewport-move') {
+        debug('event', event, detail);
+      }
 
       // Config callback: 'node-click' → 'onNodeClick'
       const callbackName = 'on' + event.split('-').map(
@@ -400,10 +543,350 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
     _rebuildNodeMap() {
       this._nodeMap = buildNodeMap(this.nodes);
+      reconcileChildrenIndex(this._childrenIds, this.nodes);
     },
 
     _rebuildEdgeMap() {
       this._edgeMap = new Map(this.edges.map((e: FlowEdge) => [e.id, e]));
+    },
+
+    /**
+     * Rebuild the shared obstacle snapshot + SpatialGrid from committed node
+     * geometry. Called imperatively at discrete geometry commit points (drag
+     * end, resize, add/remove nodes, undo/redo, restore) — never inside a
+     * reactive effect.
+     *
+     * `Alpine.raw(this)` does NOT unwrap Alpine's merge-scope proxy (it returns
+     * the same proxy back), so reads go through the NESTED reactive property
+     * instead — `Alpine.raw(this.nodes)` and `Alpine.raw(this._spatialGrid)` —
+     * mirroring the precedent in flow-edge.ts's obstacle-rect computation.
+     * The parent-lookup map is rebuilt from those raw nodes rather than reusing
+     * `_nodeMap`, whose stored node values would still be reactive proxies even
+     * once the Map container is raw. Rebuilds the grid from scratch each commit
+     * (O(nodes); commit points are discrete user actions, not frames), which
+     * also prunes entries for removed/hidden nodes.
+     */
+    _commitNodeGeometry(changedNodeIds?: string[]): void {
+      // Shallow-copied BEFORE this commit mutates the snapshot array (see
+      // below) so _markDirtyEdges can also test a changed node's OLD rect: a
+      // node moving OUT of an edge's corridor must still dirty that edge, or
+      // its route would go stale. The individual rect objects are always
+      // freshly created below (never mutated after creation), so a shallow
+      // array copy fully captures the "before" values.
+      const existingSnapshot = Alpine.raw(this._obstacleSnapshot) as
+        | Array<{ id: string; x: number; y: number; width: number; height: number }>
+        | null;
+      const prevSnapshot = existingSnapshot ? existingSnapshot.slice() : null;
+      const rawNodes = Alpine.raw(this.nodes) as FlowNode[];
+      const rawNodeMap = new Map<string, FlowNode>(rawNodes.map((n): [string, FlowNode] => [n.id, n]));
+      const nodeOrigin = this._config?.nodeOrigin;
+      const grid = Alpine.raw(this._spatialGrid) as SpatialGrid; // nested-raw unwraps the class instance
+      grid.clear();
+      const rects: Array<{ id: string; x: number; y: number; width: number; height: number }> = [];
+      for (const n of rawNodes) {
+        const abs = toAbsoluteNode(n, rawNodeMap, nodeOrigin);
+        const rect = {
+          id: n.id,
+          x: abs.position.x,
+          y: abs.position.y,
+          width: abs.dimensions?.width ?? DEFAULT_NODE_WIDTH,
+          height: abs.dimensions?.height ?? DEFAULT_NODE_HEIGHT,
+        };
+        // Insert EVERY node (hidden included) into the SpatialGrid: viewport
+        // culling (WS-E) sources candidates from the grid and filters hidden
+        // nodes itself, so a node un-hidden BETWEEN geometry commits
+        // (collapse→expand, wire showNode) must still be present in the grid to
+        // be re-shown. Hidden nodes are still excluded from the OBSTACLE
+        // snapshot below — they are not routing obstacles.
+        grid.insert(n.id, rect.x, rect.y, rect.width, rect.height);
+        if (n.hidden) continue; // not a routing obstacle
+        rects.push(rect);
+      }
+      // Keep the SAME array reference across commits (mutate in place)
+      // instead of reassigning `this._obstacleSnapshot` every time. Edges
+      // read this snapshot via `Alpine.raw(canvas._obstacleSnapshot)` — even
+      // wrapped in Alpine.raw(), the property GET on the reactive scope
+      // (evaluated before raw() can unwrap the result) still tracks a
+      // dependency on `_obstacleSnapshot`'s identity. Reassigning it on every
+      // commit would therefore re-run EVERY orthogonal/avoidant edge's effect
+      // on every commit (Vue's reactive `set` trap always triggers on a
+      // changed reference), silently defeating dirty-corridor invalidation.
+      // Mutating the existing array's contents in place instead means the
+      // `set` trap never re-fires after the first commit (same reference in,
+      // same reference out), leaving `_edgeDirtyTicks` as the only per-edge
+      // routing signal edges subscribe to.
+      if (existingSnapshot) {
+        existingSnapshot.length = 0;
+        existingSnapshot.push(...rects);
+      } else {
+        this._obstacleSnapshot = rects; // first commit only: null → array (real assignment)
+      }
+      this._obstacleEpoch++;
+      this._markDirtyEdges(changedNodeIds, prevSnapshot);
+
+      // WS-2: recompute endpoint-spread lanes (node moves reorder lanes) and
+      // dirty exactly the edges whose lane changed so they re-route.
+      const relaned = this._computeEndpointGrouping();
+      if (relaned.size > 0) this._markEdgesDirtyById(relaned);
+
+      // WS-3: recompute crossing-reduction lane offsets and dirty the changed edges.
+      const rerouted = this._computeCrossingPlan();
+      if (rerouted.size > 0) this._markEdgesDirtyById(rerouted);
+    },
+
+    /**
+     * WS-2: assign each avoidant/orthogonal edge a lane index per shared
+     * `(node, handleId)`, ordered by the opposite endpoint's position so the
+     * fan-in doesn't self-cross. No-op (empty grouping) when spread is disabled
+     * everywhere. Returns the set of edge ids whose lane/group membership
+     * changed since the last run, so the caller can dirty exactly those. The
+     * grouping Map is mutated in place (same reference) so reading it in the
+     * edge effect doesn't re-run every edge — mirrors `_obstacleSnapshot`.
+     */
+    _computeEndpointGrouping(): Set<string> {
+      const changed = new Set<string>();
+      const canvasSpread = resolveSpreadSpacing(this._config?.avoidantEndpointSpread);
+      const rawNodes = Alpine.raw(this.nodes) as FlowNode[];
+      const nodeMap = new Map<string, FlowNode>(rawNodes.map((n): [string, FlowNode] => [n.id, n]));
+      const nodeOrigin = this._config?.nodeOrigin;
+      const center = (id: string): number => {
+        const n = nodeMap.get(id);
+        if (!n) return 0;
+        const abs = toAbsoluteNode(n, nodeMap, nodeOrigin);
+        // sort axis = Y (left/right schema handles fan vertically). T/B handles
+        // are rare for schema; ordering by Y is still deterministic for them.
+        return abs.position.y + (abs.dimensions?.height ?? 0) / 2;
+      };
+      const perNodeEnabled = (id: string): boolean => {
+        const v = nodeMap.get(id)?.endpointSpread;
+        return v !== undefined ? resolveSpreadSpacing(v) !== null : canvasSpread !== null;
+      };
+
+      // Bucket edges per (node, handle), recording the opposite endpoint's sort coord.
+      const buckets = new Map<string, Array<{ edgeId: string; sortKey: number }>>();
+      const add = (nodeId: string, handleId: string | undefined, edgeId: string, oppId: string): void => {
+        if (!perNodeEnabled(nodeId)) return; // only bucket spread-enabled endpoints
+        const key = `${nodeId}|${handleId ?? ''}`;
+        let b = buckets.get(key);
+        if (!b) { b = []; buckets.set(key, b); }
+        b.push({ edgeId, sortKey: center(oppId) });
+      };
+      const rawEdges = Alpine.raw(this.edges) as FlowEdge[];
+      for (const e of rawEdges) {
+        const t = e.type ?? this._config?.defaultEdgeType;
+        if (t !== 'avoidant' && t !== 'orthogonal') continue; // only routed edges spread
+        add(e.source, e.sourceHandle, e.id, e.target);
+        add(e.target, e.targetHandle, e.id, e.source);
+      }
+
+      // Build the new grouping; diff against the old (raw) for the dirty set.
+      const old = Alpine.raw(this._endpointSpreadGrouping) as EndpointSpreadGrouping | null;
+      const next: EndpointSpreadGrouping = new Map();
+      for (const [key, list] of buckets) {
+        list.sort((p, q) => p.sortKey - q.sortKey || (p.edgeId < q.edgeId ? -1 : 1)); // deterministic
+        const lanes = new Map<string, number>();
+        list.forEach((item, i) => lanes.set(item.edgeId, i));
+        next.set(key, { count: list.length, lanes });
+        const oldEntry = old?.get(key);
+        for (const [edgeId, lane] of lanes) {
+          if (!oldEntry || oldEntry.count !== list.length || oldEntry.lanes.get(edgeId) !== lane) {
+            changed.add(edgeId);
+          }
+        }
+      }
+      // Edges that were in a group before but aren't now (group shrank/removed) also changed.
+      if (old) {
+        for (const [key, entry] of old) {
+          if (!next.has(key)) { for (const edgeId of entry.lanes.keys()) changed.add(edgeId); }
+        }
+      }
+
+      // Mutate the raw Map in place to preserve the reference (see _obstacleSnapshot).
+      if (old) {
+        old.clear();
+        for (const [k, v] of next) old.set(k, v);
+      } else {
+        this._endpointSpreadGrouping = next; // first commit only: null → Map (real assignment)
+      }
+      return changed;
+    },
+
+    /**
+     * WS-3: assign each avoidant/orthogonal edge a signed lane offset so edges
+     * sharing a routing corridor separate into ordered lanes. Base-routes each
+     * opted-in edge (cached findRoute) against the shared obstacle snapshot,
+     * extracts its dominant interior run, groups runs into channels, orders each
+     * group by endpoint barycenter, and centres signed offsets by channelGap.
+     * No-op (empty plan) when the flag is off. Returns the edge ids whose offset
+     * changed since the last run. Mutated in place (see _endpointSpreadGrouping).
+     */
+    _computeCrossingPlan(): Set<string> {
+      const changed = new Set<string>();
+      const gap = resolveChannelGap(this._config?.avoidantCrossingReduction);
+      const old = Alpine.raw(this._crossingPlan) as Map<string, number> | null;
+
+      const finish = (next: Map<string, number>): Set<string> => {
+        // diff for the dirty set (offset added/removed/changed)
+        const keys = new Set<string>([...(old?.keys() ?? []), ...next.keys()]);
+        for (const id of keys) {
+          if ((old?.get(id) ?? 0) !== (next.get(id) ?? 0)) changed.add(id);
+        }
+        if (old) { old.clear(); for (const [k, v] of next) old.set(k, v); }
+        else { this._crossingPlan = next; }
+        return changed;
+      };
+
+      if (gap === null) return finish(new Map()); // flag off → empty plan (off === baseline)
+
+      const rawNodes = Alpine.raw(this.nodes) as FlowNode[];
+      const nodeMap = new Map<string, FlowNode>(rawNodes.map((n): [string, FlowNode] => [n.id, n]));
+      const nodeOrigin = this._config?.nodeOrigin;
+      const snapshot = (Alpine.raw(this._obstacleSnapshot) as
+        Array<{ id: string; x: number; y: number; width: number; height: number }> | null) ?? [];
+
+      // Approx handle centre for an edge endpoint (good enough for channel detection;
+      // the edge applies the offset to its own REAL route at render time).
+      const handleCentre = (id: string): { x: number; y: number } => {
+        const n = nodeMap.get(id);
+        if (!n) return { x: 0, y: 0 };
+        const abs = toAbsoluteNode(n, nodeMap, nodeOrigin);
+        return {
+          x: abs.position.x + (abs.dimensions?.width ?? 0) / 2,
+          y: abs.position.y + (abs.dimensions?.height ?? 0) / 2,
+        };
+      };
+
+      const rawEdges = Alpine.raw(this.edges) as FlowEdge[];
+      const members: ChannelMember[] = [];
+      for (const e of rawEdges) {
+        const t = e.type ?? this._config?.defaultEdgeType;
+        if (t !== 'avoidant' && t !== 'orthogonal') continue;
+        const s = handleCentre(e.source), tg = handleCentre(e.target);
+        // side facing the other endpoint (matches the router's expected HandlePosition)
+        const sp: HandlePosition = Math.abs(tg.x - s.x) >= Math.abs(tg.y - s.y) ? (tg.x >= s.x ? 'right' : 'left') : (tg.y >= s.y ? 'bottom' : 'top');
+        const tp: HandlePosition = Math.abs(tg.x - s.x) >= Math.abs(tg.y - s.y) ? (tg.x >= s.x ? 'left' : 'right') : (tg.y >= s.y ? 'top' : 'bottom');
+        const obstacles = snapshot.filter((r) => r.id !== e.source && r.id !== e.target);
+        const route = findRoute(s.x, s.y, sp, tg.x, tg.y, tp, obstacles);
+        if (!route) continue;
+        const run = dominantRun(route);
+        if (!run) continue; // no interior run → not eligible (degrades to no shift)
+        const bary = run.axis === 'h' ? (s.y + tg.y) / 2 : (s.x + tg.x) / 2;
+        members.push({ edgeId: e.id, run, bary });
+      }
+
+      // Stable input order (edgeId) → deterministic grouping.
+      members.sort((p, q) => (p.edgeId < q.edgeId ? -1 : p.edgeId > q.edgeId ? 1 : 0));
+      const BAND_TOL = Math.max(8, gap * 2); // runs within ~2 lanes count as one channel
+      const next = new Map<string, number>();
+      for (const group of groupChannels(members, BAND_TOL)) {
+        if (group.length < 2) continue; // singletons keep offset 0 (absent)
+        for (const [edgeId, offset] of assignOffsets(group, gap)) {
+          if (offset !== 0) next.set(edgeId, offset);
+        }
+      }
+      return finish(next);
+    },
+
+    /**
+     * Dirty exactly the edges whose ROUTE could have changed as a result of
+     * `changedNodeIds` moving/resizing — instead of every avoidant/orthogonal
+     * edge re-routing on every geometry commit.
+     *
+     * An edge is dirtied when either:
+     *  - it directly touches a changed node (source or target), or
+     *  - a changed node's rect (new OR old — see prevSnapshot) intersects
+     *    that edge's last-recorded corridor, expanded by `CORRIDOR_MARGIN`.
+     *    This mirrors `corridorObstacles()` in orthogonal.ts exactly: an
+     *    obstacle outside endpoint-bbox±CORRIDOR_MARGIN is pruned by the
+     *    router itself, so it provably cannot change that edge's route.
+     *
+     * Edges with no recorded corridor yet (never routed, or non-obstacle
+     * edge types that never write one) are dirtied conservatively so routes
+     * never go stale.
+     *
+     * `_edgeDirtyTicks` is bumped via `.set()` on the REACTIVE map (`this`,
+     * not raw) so edge effects reading `_edgeDirtyTicks.get(edge.id)` are
+     * notified; all other reads here go through nested-`Alpine.raw()` so
+     * this method does not itself subscribe to node/edge state.
+     */
+    _markDirtyEdges(
+      changedNodeIds?: string[],
+      prevSnapshot?: Array<{ id: string; x: number; y: number; width: number; height: number }> | null,
+    ): void {
+      const ticks = this._edgeDirtyTicks; // reactive (set() must notify)
+      const rawTicks = Alpine.raw(ticks) as Map<string, number>;
+      const rawEdges = Alpine.raw(this.edges) as FlowEdge[];
+      const corridors = Alpine.raw(this._edgeCorridors) as Map<string, { minX: number; minY: number; maxX: number; maxY: number }>;
+      const newSnap = Alpine.raw(this._obstacleSnapshot) as
+        | Array<{ id: string; x: number; y: number; width: number; height: number }>
+        | null;
+      const bump = (id: string): void => {
+        ticks.set(id, (rawTicks.get(id) ?? 0) + 1);
+      };
+
+      if (!changedNodeIds || changedNodeIds.length === 0) {
+        const liveIds = new Set<string>();
+        for (const e of rawEdges) {
+          liveIds.add(e.id);
+          bump(e.id); // full invalidation (undo/redo/fromObject/init)
+        }
+        // Prune routing state for edges removed outside removeEdges (e.g.
+        // undo/redo/fromObject splice ctx.edges directly, bypassing the
+        // cleanup removeEdges does) — otherwise these Maps leak entries for
+        // churned edge ids over long sessions. Raw deletes: no reactive
+        // trigger needed, the removed edges' effects are already torn down.
+        for (const id of [...rawTicks.keys()]) {
+          if (!liveIds.has(id)) rawTicks.delete(id);
+        }
+        for (const id of [...corridors.keys()]) {
+          if (!liveIds.has(id)) corridors.delete(id);
+        }
+        return;
+      }
+      const changed = new Set(changedNodeIds);
+      // Old-rect correctness: a node moving OUT of a corridor must still
+      // dirty that edge, so test BOTH the node's new rect (post-commit
+      // snapshot) and its old rect (pre-commit prevSnapshot).
+      const changedRects: Array<{ x: number; y: number; width: number; height: number }> = [];
+      for (const id of changed) {
+        const nr = newSnap?.find((o) => o.id === id);
+        if (nr) changedRects.push(nr);
+        const pr = prevSnapshot?.find((o) => o.id === id);
+        if (pr) changedRects.push(pr);
+      }
+      for (const e of rawEdges) {
+        let dirty = changed.has(e.source) || changed.has(e.target);
+        if (!dirty) {
+          const corridor = corridors.get(e.id);
+          if (corridor) {
+            for (const r of changedRects) {
+              if (
+                r.x < corridor.maxX + CORRIDOR_MARGIN && r.x + r.width > corridor.minX - CORRIDOR_MARGIN &&
+                r.y < corridor.maxY + CORRIDOR_MARGIN && r.y + r.height > corridor.minY - CORRIDOR_MARGIN
+              ) {
+                dirty = true;
+                break;
+              }
+            }
+          } else {
+            dirty = true; // never-routed-yet OR non-obstacle edge — conservative; routes never go stale
+          }
+        }
+        if (dirty) bump(e.id);
+      }
+    },
+
+    /**
+     * Bump the routing dirty tick for a specific set of edge ids (WS-2 re-lane).
+     * Reuses the SAME tick-bump `_markDirtyEdges` uses: `.set()` on the REACTIVE
+     * Map so edge effects reading `_edgeDirtyTicks.get(edge.id)` are notified.
+     */
+    _markEdgesDirtyById(ids: Set<string>): void {
+      const ticks = this._edgeDirtyTicks; // reactive (set() must notify)
+      const rawTicks = Alpine.raw(ticks) as Map<string, number>;
+      for (const id of ids) {
+        ticks.set(id, (rawTicks.get(id) ?? 0) + 1);
+      }
     },
 
     /**
@@ -455,6 +938,14 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._history?.capture({ nodes: this.nodes, edges: this.edges });
     },
 
+    _snapshotHistory(): string | null {
+      return this._history ? this._history.snapshot({ nodes: this.nodes, edges: this.edges }) : null;
+    },
+
+    _commitHistory(snapshot: string | null): void {
+      if (snapshot !== null) this._history?.commit(snapshot);
+    },
+
     _suspendHistory() {
       this._history?.suspend();
     },
@@ -467,19 +958,85 @@ export function registerFlowCanvas(Alpine: Alpine) {
       const el = this._container;
       if (!el) return;
       const style = this.backgroundStyle();
-      Object.assign(el.style, {
-        backgroundImage: style.backgroundImage,
-        backgroundSize: style.backgroundSize,
-        backgroundPosition: style.backgroundPosition,
+      // The gradient image is identical frame-to-frame; only size/position track
+      // the viewport. Skip the redundant image write to avoid style churn.
+      if (style.backgroundImage !== this._lastBgImage) {
+        el.style.backgroundImage = style.backgroundImage;
+        this._lastBgImage = style.backgroundImage;
+      }
+      el.style.backgroundSize = style.backgroundSize;
+      el.style.backgroundPosition = style.backgroundPosition;
+    },
+
+    /**
+     * d3-zoom transform handler. Runs on every wheel/pan event (120Hz+ on
+     * trackpads). Only the transform write needs event-rate latency; the reactive
+     * viewport write plus every side-effect (background, culling, zoom-level,
+     * context-menu, events) is coalesced to a single flush per animation frame.
+     */
+    _onViewportTransform(vp: Viewport) {
+      this._viewportLive = vp;
+      if (this._viewportEl) {
+        this._viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`;
+      }
+      if (this._vpFrame !== null) return;
+      this._vpFrame = requestAnimationFrame(() => {
+        this._vpFrame = null;
+        this._flushViewportFrame();
       });
     },
 
     /**
+     * Apply the coalesced viewport state and its side-effects once per frame.
+     * Reactive `viewport` is written here (not per event), so consumers watching
+     * `viewport` re-run at frame rate rather than per wheel event.
+     */
+    _flushViewportFrame() {
+      const vp = this._viewportLive;
+      if (!vp) return;
+      this.viewport.x = vp.x;
+      this.viewport.y = vp.y;
+      this.viewport.zoom = vp.zoom;
+      this._applyBackground();
+      this._applyCulling();
+      this._applyZoomLevel(vp.zoom);
+      if (this.contextMenu.show) { this.closeContextMenu(); }
+      this._emit('viewport-change', { viewport: { ...vp } });
+      if (this._vpMoved) {
+        this._vpMoved = false;
+        this._emit('viewport-move', { viewport: { ...vp } });
+      }
+    },
+
+    /**
+     * Gesture end (user released the wheel/pointer). Commit the end-state
+     * synchronously so it is never a frame late, cancelling any pending frame.
+     */
+    _onViewportMoveEnd(vp: Viewport) {
+      if (this._vpFrame !== null) {
+        cancelAnimationFrame(this._vpFrame);
+        this._vpFrame = null;
+      }
+      this._flushViewportFrame();
+      this._emit('viewport-move-end', { viewport: { ...vp } });
+    },
+
+    /**
      * Toggle CSS display on off-screen nodes and edges.
-     * Called from onTransformChange — entirely outside Alpine's reactive system.
+     * Called from _flushViewportFrame — entirely outside Alpine's reactive system.
+     * Writes are gated to visibility TRANSITIONS only (comparing against the
+     * previous frame's `_visibleNodeIds`/`_culledEdgeIds`) to avoid unconditional
+     * per-frame style writes, which devtools amplifies into mutation-record churn.
      */
     _applyCulling() {
-      if (config.viewportCulling !== true) return;
+      const cfg = config.viewportCulling ?? 'auto';
+      const active =
+        cfg === true || (cfg === 'auto' && this.nodes.length >= (config.cullingAutoThreshold ?? 150));
+      if (!active) {
+        if (this._cullingWasActive) this._uncullEverything(); // restore display on threshold-crossing down or config change
+        return;
+      }
+      this._cullingWasActive = true;
       if (!this._container) return;
 
       const cw = this._container.clientWidth;
@@ -489,10 +1046,23 @@ export function registerFlowCanvas(Alpine: Alpine) {
       const buffer = config.cullingBuffer ?? 100;
       const bounds = getVisibleBounds(this.viewport, cw, ch, buffer);
 
-      const visible = new Set<string>();
+      // Coarse (cell-granularity) superset of node ids whose committed rects
+      // could overlap `bounds`. The grid is maintained by _commitNodeGeometry
+      // at discrete commit points (C1) — culling only QUERIES it here.
+      const grid = Alpine.raw(this._spatialGrid) as SpatialGrid;
+      const candidates = grid.query(bounds);
 
-      for (const node of this.nodes as FlowNode[]) {
-        if (node.hidden) continue;
+      // `_draggingNodeIds` is provided by WS-D (interaction degradation);
+      // read defensively so this branch is correct with or without it. The
+      // grid holds committed geometry, so a node mid-drag has stale cells —
+      // unioning the dragging set prevents culling a node that is being
+      // dragged into view.
+      const dragging = (this as unknown as { _draggingNodeIds?: Set<string> })._draggingNodeIds;
+
+      const visible = new Set<string>();
+      const testCandidate = (id: string) => {
+        const node = this._nodeMap.get(id);
+        if (!node || node.hidden) return;
         const w = node.dimensions?.width ?? 150;
         const h = node.dimensions?.height ?? 50;
         const pos = node.parentId
@@ -504,16 +1074,88 @@ export function registerFlowCanvas(Alpine: Alpine) {
           pos.y + h < bounds.minY ||
           pos.y > bounds.maxY
         );
+        if (isVisible) visible.add(id);
+      };
 
-        if (isVisible) visible.add(node.id);
-
-        const el = this._nodeElements.get(node.id);
-        if (el) {
-          el.style.display = isVisible ? '' : 'none';
+      for (const id of candidates) testCandidate(id);
+      if (dragging) {
+        for (const id of dragging) {
+          if (!candidates.has(id)) testCandidate(id);
         }
       }
 
+      // Sync inline display on every registered node element (mirroring the edge
+      // loop below). Iterating `_nodeElements` — not just `candidates ∪ prev` — is
+      // required for correctness: a node that is off-screen at the FIRST cull pass,
+      // or added off-screen while culling is active, is in neither `visible` nor the
+      // previous frame's set, so a set-difference-only diff would leave it rendered.
+      // The write stays transition-only: `el.style.display` is read (a cheap
+      // inline-style read — no reflow) and written only when it actually changes.
+      // The expensive geometry predicate ran only over grid candidates above.
+      for (const [id, el] of this._nodeElements) {
+        const desired = visible.has(id) ? '' : 'none';
+        if (el.style.display !== desired) el.style.display = desired;
+      }
+
+      // Edge culling: an edge is visible iff either endpoint node is visible,
+      // or its recorded route corridor intersects the visible bounds
+      // (corridors can extend beyond their endpoints). Rebuild the culled set
+      // fresh each frame (mirroring `_visibleNodeIds`) so removed edges — which
+      // `_edgeSvgElements` no longer iterates — never re-enter it: this prevents
+      // unbounded growth of `_culledEdgeIds` under add/remove churn.
+      const prevCulled = this._culledEdgeIds;
+      const culled = new Set<string>();
+      for (const [edgeId, g] of this._edgeSvgElements) {
+        const e = this._edgeMap.get(edgeId);
+        if (!e) continue;
+        // Edges hidden by the hidden/collapse effect are owned by flow-viewport
+        // (flow-viewport.ts sets their inline display). Culling must not fight that
+        // writer, or a culled→visible transition would un-hide them. Mirror
+        // flow-viewport's isHidden predicate exactly. (A future `.flow-edge-hidden`
+        // !important class — symmetric with `.flow-node-hidden` — would remove this
+        // coupling; recommended to the owner in the PR.)
+        const srcHidden = this._nodeMap.get(e.source)?.hidden;
+        const tgtHidden = this._nodeMap.get(e.target)?.hidden;
+        if (e.hidden || e._hiddenByCollapse || srcHidden || tgtHidden) {
+          continue; // flow-viewport owns this edge's display
+        }
+        const vis =
+          visible.has(e.source) ||
+          visible.has(e.target) ||
+          corridorIntersectsBounds(this._edgeCorridors.get(edgeId), bounds);
+        const was = !prevCulled.has(edgeId);
+        if (vis !== was) {
+          g.style.display = vis ? '' : 'none';
+        }
+        if (!vis) culled.add(edgeId);
+      }
+
       this._visibleNodeIds = visible;
+      this._culledEdgeIds = culled;
+    },
+
+    /**
+     * Restore CSS display on every element culling could have hidden and
+     * reset the tracking sets, so a future re-activation of `_applyCulling`
+     * starts clean. Called when the `viewportCulling: 'auto'` gate
+     * deactivates (node count drops back below `cullingAutoThreshold`) after
+     * having been active, or when culling is otherwise turned off.
+     */
+    _uncullEverything() {
+      // Clear culling's inline display override on every tracked element; a
+      // `node.hidden` node stays hidden via its `.flow-node-hidden` class (class,
+      // not inline), so deferring to '' correctly re-hides only truly-hidden nodes.
+      for (const el of this._nodeElements.values()) el.style.display = '';
+      // Restore only edges CULLING hid; edges hidden by the hidden/collapse effect
+      // are not in `_culledEdgeIds` and must stay hidden (they have no !important
+      // class backstop, unlike nodes).
+      for (const edgeId of this._culledEdgeIds) {
+        const g = this._edgeSvgElements.get(edgeId);
+        if (g) g.style.display = '';
+      }
+      this._visibleNodeIds = new Set<string>();
+      this._culledEdgeIds = new Set<string>();
+      this._cullingWasActive = false;
     },
 
     _getVisibleNodeIds(): Set<string> {
@@ -664,8 +1306,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
             if (cursorThrottled) return;
             cursorThrottled = true;
             const rect = container.getBoundingClientRect();
-            const x = (e.clientX - rect.left - this.viewport.x) / this.viewport.zoom;
-            const y = (e.clientY - rect.top - this.viewport.y) / this.viewport.zoom;
+            // Live viewport: reactive `viewport` lags a frame behind during zoom.
+            const liveVp = this._viewportLive ?? this.viewport;
+            const x = (e.clientX - rect.left - liveVp.x) / liveVp.zoom;
+            const y = (e.clientY - rect.top - liveVp.y) / liveVp.zoom;
             collabAwareness.updateCursor({ x, y });
             setTimeout(() => { cursorThrottled = false; }, throttleMs);
           };
@@ -693,26 +1337,18 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
       this._panZoom = createPanZoom(this._container, {
         onTransformChange: (vp: Viewport) => {
-          this.viewport.x = vp.x;
-          this.viewport.y = vp.y;
-          this.viewport.zoom = vp.zoom;
-          if (this._viewportEl) {
-            this._viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`;
-          }
-          this._applyBackground();
-          this._applyCulling();
-          this._applyZoomLevel(vp.zoom);
-          if (this.contextMenu.show) { this.closeContextMenu(); }
-          this._emit('viewport-change', { viewport: { ...vp } });
+          this._onViewportTransform(vp);
         },
         onMoveStart: (vp: Viewport) => {
           this._emit('viewport-move-start', { viewport: { ...vp } });
         },
-        onMove: (vp: Viewport) => {
-          this._emit('viewport-move', { viewport: { ...vp } });
+        onMove: () => {
+          // Coalesced: record that a user move happened; viewport-move is emitted
+          // (at most once) from the per-frame flush.
+          this._vpMoved = true;
         },
         onMoveEnd: (vp: Viewport) => {
-          this._emit('viewport-move-end', { viewport: { ...vp } });
+          this._onViewportMoveEnd(vp);
         },
         minZoom: config.minZoom,
         maxZoom: config.maxZoom,
@@ -721,8 +1357,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
         translateExtent: config.translateExtent,
         isLocked: () => this._animationLocked,
         noPanClassName: config.noPanClassName ?? 'nopan',
-        noWheelClassName: config.noWheelClassName,
+        noWheelClassName: config.noWheelClassName ?? 'nowheel',
         zoomOnDoubleClick: config.zoomOnDoubleClick,
+        dblClickZoomLevel: config.dblClickZoomLevel,
         panOnDrag: config.panOnDrag,
         panActivationKeyCode: config.panActivationKeyCode,
         zoomActivationKeyCode: config.zoomActivationKeyCode,
@@ -761,6 +1398,18 @@ export function registerFlowCanvas(Alpine: Alpine) {
           this._viewportEl.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`;
         }
       });
+      // The container + theme are attached now, so drop any gap resolved before
+      // the active theme was applied and let this first paint re-read it. Any
+      // future theme/colorMode-change path that re-applies the background must
+      // likewise invalidate `_bgGapCache` before calling `_applyBackground()`.
+      this._bgGapCache = null;
+      // Same rationale for schema geometry — border/padding can change with
+      // the active theme, so drop any measurement taken before it was
+      // attached and let the first schema node re-measure. Note: this is the
+      // ONLY invalidation site today (same as `_bgGapCache` above); a runtime
+      // colorMode change via `_applyConfigPatch` (canvas-config.ts) does not
+      // currently invalidate either cache — see Task G1 report.
+      this._schemaMetrics = null;
       this._applyBackground();
 
       // Register with global store so other components can access this instance
@@ -779,6 +1428,87 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
       // Set up SVG <defs> for edge markers (arrowheads etc.)
       this._setupMarkerDefs();
+    },
+
+    /**
+     * Install the ONE delegated `pointerdown` listener that starts the connect /
+     * reconnect gesture for every handle on this canvas — instead of one listener
+     * per handle, of which a large schema graph has thousands.
+     *
+     * Attached on `.flow-viewport` in the CAPTURE phase. That placement is
+     * load-bearing (it is what keeps a handle press from also dragging the node
+     * or reordering a schema row, while still yielding to an active whiteboard
+     * tool) — the reasoning is in `../handle-delegation.ts`.
+     */
+    _initHandleDelegation() {
+      if (this._config?.delegatedHandleEvents === false) return;
+
+      // `_viewportEl` is registered by the x-flow-viewport directive, which has
+      // not run when init() executes — resolve on the same $nextTick the panZoom
+      // fallback uses.
+      this.$nextTick(() => {
+        // Alpine's tickStack is global and is NOT drained on component teardown, so
+        // this callback still fires for a canvas destroyed in the meantime. Without
+        // this check it would install a capture listener that destroy() has already
+        // finished cleaning up: a leaked listener holding the dead canvas (nodes,
+        // edges, _nodeMap, spatial grid) alive, and — if the viewport survives a
+        // morph and a fresh canvas mounts on it — one handle press driving both.
+        if (this._handleDelegationTornDown) return;
+
+        const viewportEl = (this._viewportEl
+          ?? (this._container?.querySelector('.flow-viewport') as HTMLElement | null)) as HTMLElement | null;
+
+        if (!viewportEl && this._container) {
+          // Non-standard markup: handles do not exist without a viewport. Falling back
+          // to the container costs the whiteboard-tool ordering guarantee (their capture
+          // listener would land on the SAME element as ours, so suppression degrades to
+          // registration order and we would win). Diagnosable rather than silent.
+          debug('init', `flowCanvas "${this._id}" has no .flow-viewport — delegating handle pointerdown on the container instead; an active whiteboard tool may not suppress handle presses`);
+        }
+
+        const rootEl = (viewportEl ?? this._container) as HTMLElement | null;
+        if (!rootEl) return;
+        this._handleDelegationCleanup = installHandleDelegation(rootEl, this);
+        this._handleDelegationEl = rootEl;
+      });
+    },
+
+    /**
+     * Register the `.flow-viewport` element with the canvas. Called by the
+     * `x-flow-viewport` directive every time it initialises — which includes a RE-init
+     * on a DIFFERENT element, if the viewport node is ever replaced wholesale rather
+     * than patched in place after the canvas mounted.
+     *
+     * INVARIANT (load-bearing): while the delegated handle listener is installed, it
+     * is bound to exactly one element, and that element MUST be the current viewport.
+     * Break it and the listener is left on a detached node while handles render inside
+     * the new one — so every handle in the canvas goes permanently inert. That failure
+     * is silent and total, and delegation removed the safety net that used to cover it:
+     * pre-delegation each handle re-attached its own listener on every re-stamp, so a
+     * swapped viewport repaired itself. Hence: if delegation is already installed on a
+     * different element, move it to the new one.
+     *
+     * A canvas that never installed (delegation off via `delegatedHandleEvents: false`,
+     * or the deferred install has not run yet) has a null `_handleDelegationEl` and
+     * falls out at the first guard — this only ever MOVES an existing listener, it
+     * never creates one that `_initHandleDelegation` decided against.
+     */
+    _registerViewportEl(el: HTMLElement) {
+      this._viewportEl = el;
+
+      const installedOn = this._handleDelegationEl;
+      if (!installedOn || installedOn === el) return;
+
+      this._handleDelegationCleanup?.();
+      this._handleDelegationCleanup = null;
+      this._handleDelegationEl = null;
+
+      // Destroyed canvas: take the stale listener off, put no new one on.
+      if (this._handleDelegationTornDown) return;
+
+      this._handleDelegationCleanup = installHandleDelegation(el, this);
+      this._handleDelegationEl = el;
+      debug('init', `flowCanvas "${this._id}" re-bound its delegated handle pointerdown listener to a replaced .flow-viewport`);
     },
 
     /** Canvas click handler, context menu handler, long press, touch selection mode, context menu event listeners. */
@@ -958,7 +1688,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
         if (!this._active) return;
         if (this._animationLocked) return;
 
-        const tag = (e.target as HTMLElement).tagName;
+        // True while the user is editing a form field or contenteditable element —
+        // shortcuts must not hijack keys meant for the text being typed.
+        const editable = isEditableTarget(e.target);
         const shortcuts = this._shortcuts;
 
         // Escape → close context menu
@@ -983,20 +1715,20 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
         // Delete selected
         if (matchesKey(e.key, shortcuts.delete)) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           this._deleteSelected();
         }
 
         // Toggle selection tool (box <-> lasso)
         if (matchesKey(e.key, this._shortcuts.selectionToolToggle) && !e.ctrlKey && !e.metaKey) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           this._selectionTool = this._selectionTool === 'box' ? 'lasso' : 'box';
           return;
         }
 
         // Arrow keys → move selected nodes
         if (matchesKey(e.key, shortcuts.moveNodes)) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           if (this._config?.disableKeyboardA11y) return;
           if (this.selectedNodes.size === 0) return;
 
@@ -1022,7 +1754,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
             }
           }
 
-          this._captureHistory();
+          // Capture once per physical keypress: skip auto-repeat, empty
+          // selection, and keys that produced no movement.
+          if (shouldCaptureNudge(e.repeat, this.selectedNodes.size, dx, dy)) {
+            this._captureHistory();
+          }
 
           for (const nodeId of this.selectedNodes) {
             const node = this.getNode(nodeId);
@@ -1039,21 +1775,21 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
         // Undo: Ctrl/Cmd + undo key (without Shift)
         if ((e.ctrlKey || e.metaKey) && !e.shiftKey && matchesKey(e.key, shortcuts.undo)) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           e.preventDefault();
           this.undo();
         }
 
         // Redo: Ctrl/Cmd + Shift + redo key
         if ((e.ctrlKey || e.metaKey) && e.shiftKey && matchesKey(e.key, shortcuts.redo)) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           e.preventDefault();
           this.redo();
         }
 
         // Copy/Paste/Cut: Ctrl/Cmd + key (without Shift)
         if ((e.ctrlKey || e.metaKey) && !e.shiftKey) {
-          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+          if (editable) return;
           if (matchesKey(e.key, shortcuts.copy)) {
             e.preventDefault();
             this.copy();
@@ -1075,6 +1811,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
         this._minimap = createMiniMap(this._container, {
           getState: () => ({
             nodes: toAbsoluteNodes(this.nodes, this._nodeMap, this._config.nodeOrigin),
+            viewport: this.viewport,
+            containerWidth: this._container?.clientWidth ?? 0,
+            containerHeight: this._container?.clientHeight ?? 0,
+          }),
+          getViewportState: () => ({
             viewport: this.viewport,
             containerWidth: this._container?.clientWidth ?? 0,
             containerHeight: this._container?.clientHeight ?? 0,
@@ -1384,6 +2125,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
         this._onDropZoneDragOver = (e: DragEvent) => {
           if (!e.dataTransfer) { return; }
+          // Over a floating overlay, not the canvas surface — leave the event
+          // unhandled so the browser shows the "no drop" cursor.
+          if (isOverlayDropTarget(e.target as Element | null)) { return; }
           // Only signal acceptance if at least one of our MIME types is present.
           const hasMatch = mimeTypes.some((m) => e.dataTransfer!.types.includes(m));
           if (!hasMatch) { return; }
@@ -1404,6 +2148,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
         this._onDropZoneDrop = (e: DragEvent) => {
           e.preventDefault();
           this._container?.classList.remove('flow-canvas-drag-over');
+
+          // Released over a floating overlay rather than the canvas — cancel the
+          // drop instead of adding a node at the position behind it.
+          if (isOverlayDropTarget(e.target as Element | null)) { return; }
 
           if (!e.dataTransfer || !config.onDrop) { return; }
 
@@ -1509,6 +2257,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _resizeObserverInit(): void {
       if (typeof ResizeObserver === 'undefined') return; // SSR / very old browsers
       this._resizeObserver = new ResizeObserver((entries) => {
+        const changedIds = new Set<string>();
         for (const entry of entries) {
           const el = entry.target as HTMLElement;
           const nodeId = el.getAttribute('data-flow-node-id');
@@ -1556,11 +2305,17 @@ export function registerFlowCanvas(Alpine: Alpine) {
             (node as any).maxDimensions,
           );
           node.dimensions = clamped;
+          changedIds.add(nodeId);
 
           // Schedule parent re-layout (deduped per frame).
           if (node.parentId) {
             this._layoutDedup?.safeLayoutChildren(node.parentId);
           }
+        }
+        // Commit once per RO batch (not per entry) so multiple nodes resizing
+        // in the same frame only trigger a single obstacle-grid rebuild.
+        if (changedIds.size > 0) {
+          this._commitNodeGeometry([...changedIds]);
         }
       });
     },
@@ -1619,6 +2374,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
           this.fitView();
         });
       }
+
+      // Populate the shared obstacle snapshot/grid once initial measurement
+      // has settled, so avoidant/orthogonal edges have geometry to read on
+      // their first route.
+      this._commitNodeGeometry();
     },
 
     /** Call setup(canvas) on any addon that provides it. */
@@ -1730,6 +2490,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._initAnnouncer();
       this._initCollab();
       this._initPanZoom();
+      this._initHandleDelegation();
       this._initClickHandlers();
       this._initKeyboard();
       this._initMinimap();
@@ -1797,15 +2558,45 @@ export function registerFlowCanvas(Alpine: Alpine) {
     },
 
     destroy() {
+      // Animations / particles / timelines. Lives in the animation mixin; called
+      // from here because a mixin method named `destroy` would shadow THIS one.
+      (this as any)._destroyAnimations?.();
+
       // Wire bridge cleanup
       (this as any)._wireCleanup?.();
       (this as any)._wireCleanup = null;
 
+      // Alpine's nextTick runs off a global tickStack that component teardown does
+      // NOT cancel. If we were destroyed in the same task init() queued the install
+      // in (x-if flipping false, a Livewire morph, Alpine.destroyTree), the callback
+      // still fires — this flag is what stops it installing a capture listener on
+      // the viewport of a corpse.
+      this._handleDelegationTornDown = true;
+      this._handleDelegationCleanup?.();
+      this._handleDelegationCleanup = null;
+      this._handleDelegationEl = null;
       this._longPressCleanup?.();
       this._longPressCleanup = null;
       this._touchSelectionCleanup?.();
       this._touchSelectionCleanup = null;
-      this._emit('destroy');
+
+      // Alpine invokes destroy() UNWRAPPED, inside cleanupAttributes() — there is no
+      // try/catch around it. A throw escaping this method aborts Alpine's own cleanup
+      // loop mid-way: the remaining directive undo()s never run and `_x_dataStack`
+      // leaks. This `_emit` is the ONLY point in teardown that hands control to USER
+      // code — `config.onDestroy` (invoked by _emit) and `config.formatAnnouncement`
+      // (via the announcer inside _emit) — so it is the one boundary that has to be
+      // sealed. A consumer's throwing callback must not corrupt Alpine's teardown.
+      // (The DOM CustomEvent _emit dispatches is not a concern: dispatchEvent reports
+      // listener exceptions to the global error handler rather than rethrowing.)
+      try {
+        this._emit('destroy');
+      } catch (err) {
+        console.error(
+          `[AlpineFlow] a destroy callback threw while destroying flowCanvas "${this._id}"; teardown continued`,
+          err,
+        );
+      }
       debug('destroy', `flowCanvas "${this._id}" destroying`);
       if (this._onCanvasClick && this._container) {
         this._container.removeEventListener('click', this._onCanvasClick);
@@ -1867,15 +2658,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._followHandle?.stop();
       this._followHandle = null;
 
-      // Stop all active timelines
-      for (const tl of this._activeTimelines) { tl.stop(); }
-      this._activeTimelines.clear();
-
-      // Stop animator
-      if (this._animator) {
-        Alpine.raw(this._animator).stopAll();
-        this._animator = null;
-      }
+      // Animator/timeline/particle teardown already ran at the top of this method,
+      // in `_destroyAnimations()` (stopAll + destroyParticles + stop-and-clear every
+      // active timeline). Only the reference drop is left to do here.
+      this._animator = null;
 
       // Cancel pending layout animation frame
       if (this._layoutAnimFrame) {
@@ -1895,7 +2681,15 @@ export function registerFlowCanvas(Alpine: Alpine) {
         this._colorModeHandle = null;
       }
 
-      // Collab cleanup — objects live in the module-scoped collabStore WeakMap
+      // Collab cleanup — objects live in the module-scoped collabStore WeakMap.
+      //
+      // OWNERSHIP RULE: the canvas disposes only what the canvas CONSTRUCTED —
+      // the bridge, the awareness instance and the cursor layer. It deliberately
+      // does NOT destroy `config.collab.provider`: the app constructed that and
+      // passed it in, and nothing stops it sharing one provider across several
+      // canvases. Destroying it here would kill collaboration on every OTHER
+      // canvas still mounted on the same provider. If a caller wants the provider
+      // torn down with the canvas, it destroys it itself.
       if (this._container) {
         const collabEntry = collabStore.get(this._container);
         if (collabEntry) {
@@ -1905,14 +2699,15 @@ export function registerFlowCanvas(Alpine: Alpine) {
           collabStore.delete(this._container);
         }
       }
-      if (config.collab) {
-        (config.collab as CollabConfig).provider.destroy();
-      }
 
       if (this._container) {
         this._container.removeAttribute('data-flow-canvas');
       }
       (this as any).$store.flow.unregister(this._id);
+      if (this._vpFrame !== null) {
+        cancelAnimationFrame(this._vpFrame);
+        this._vpFrame = null;
+      }
       this._panZoom?.destroy();
       this._panZoom = null;
       this._announcer?.destroy();
@@ -1954,6 +2749,18 @@ export function registerFlowCanvas(Alpine: Alpine) {
     /** Update runtime config options. */
     patchConfig(changes: Partial<PatchableConfig>) {
       this._applyConfigPatch(changes as Record<string, any>);
+    },
+
+    /**
+     * WS-3: toggle/tune crossing reduction at runtime and re-route immediately.
+     * Mutates the live config then forces a geometry recommit so the crossing
+     * plan is recomputed and affected edges re-route without waiting for a node
+     * move. `value`: `boolean | { channelGap?: number }`.
+     */
+    setCrossingReduction(value: boolean | { channelGap?: number }): void {
+      if (!this._config) return;
+      this._config.avoidantCrossingReduction = value;
+      this._commitNodeGeometry();
     },
 
     // ── Context Menu ──────────────────────────────────────────────────

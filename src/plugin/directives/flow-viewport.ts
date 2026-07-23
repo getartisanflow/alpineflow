@@ -26,9 +26,21 @@ export function registerFlowViewportDirective(Alpine: Alpine) {
       const canvas = Alpine.$data(el.closest('[x-data]') as HTMLElement);
       if (!canvas?.edges) return;
 
-      // Register this element with the canvas for CSS transform application.
-      // init() may run before this directive, so _viewportEl could be null there.
-      canvas._viewportEl = el;
+      // Register this element with the canvas: it is the element the viewport CSS
+      // transform is applied to, and the element the canvas's single delegated handle
+      // `pointerdown` listener is bound to. init() may run before this directive, so
+      // `_viewportEl` could be null there.
+      //
+      // Routed through `_registerViewportEl` rather than assigned, because if THIS is
+      // a replacement viewport node (the directive re-initialising on a different
+      // element) the delegated listener is still sitting on the old, now-detached one
+      // and has to be moved — otherwise every handle in the canvas silently goes inert.
+      // See `_registerViewportEl` in flow-canvas.ts for the full invariant.
+      if (typeof canvas._registerViewportEl === 'function') {
+        canvas._registerViewportEl(el);
+      } else {
+        canvas._viewportEl = el;
+      }
       const vp = canvas.viewport;
       if (vp) {
         el.style.transform = `translate(${vp.x}px, ${vp.y}px) scale(${vp.zoom})`;

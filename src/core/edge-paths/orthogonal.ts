@@ -9,6 +9,7 @@
 import type { HandlePosition, Rect } from '../types';
 import { getBend, type EdgePathResult } from './utils';
 import { getSmoothStepPath } from './smoothstep';
+import { applyChannelOffset } from '../crossing-reduction';
 
 export const OBSTACLE_PADDING = 20;
 
@@ -21,11 +22,24 @@ export interface OrthogonalPathParams {
   targetPosition?: HandlePosition;
   obstacles?: Rect[];
   borderRadius?: number;
+  /** WS-3: signed px offset applied to the route's dominant interior run after routing. */
+  channelOffset?: number;
 }
 
 /** Offset from the handle before routing begins. Slightly larger than OBSTACLE_PADDING
  *  so the offset point is guaranteed to land outside the padded source/target rect. */
 const HANDLE_OFFSET = OBSTACLE_PADDING + 1;
+
+/** Secondary-cost weights for route quality. These live ONLY in the lexicographic
+ *  tie-break — they never affect the primary Manhattan length, so a route is never
+ *  made longer to save a bend or reduce deviation. Tunable (see spec §3.3). */
+const BEND_WEIGHT = 1;
+const DEVIATION_WEIGHT = 0.5;
+
+/** Signature of the cost constants, folded into the route cache key so tuning the
+ *  weights (or a future routing config) can't serve routes computed under the old
+ *  cost. See {@link routeKey}. */
+export const ROUTE_COST_VERSION = `b${BEND_WEIGHT}d${DEVIATION_WEIGHT}`;
 
 function getDirection(position: HandlePosition): { x: number; y: number } {
   switch (position) {
@@ -162,6 +176,112 @@ function buildVisibilityGraph(
 
 // ── Dijkstra ─────────────────────────────────────────────────────────────────
 
+/**
+ * Binary min-heap of indices ordered by a caller-supplied `less` comparator.
+ * Decrease-key is emulated with lazy insertion — a node may appear multiple
+ * times; stale entries are skipped via the caller's `visited` set on pop.
+ */
+class MinHeap {
+  private items: number[] = [];
+
+  constructor(private less: (a: number, b: number) => boolean) {}
+
+  get size(): number {
+    return this.items.length;
+  }
+
+  push(i: number): void {
+    this.items.push(i);
+    let c = this.items.length - 1;
+    while (c > 0) {
+      const p = (c - 1) >> 1;
+      if (!this.less(this.items[c], this.items[p])) break;
+      [this.items[p], this.items[c]] = [this.items[c], this.items[p]];
+      c = p;
+    }
+  }
+
+  pop(): number | undefined {
+    const n = this.items.length;
+    if (n === 0) return undefined;
+    const top = this.items[0];
+    const last = this.items.pop()!;
+    if (n > 1) {
+      this.items[0] = last;
+      let p = 0;
+      for (;;) {
+        const l = 2 * p + 1;
+        const r = l + 1;
+        let m = p;
+        if (l < this.items.length && this.less(this.items[l], this.items[m])) m = l;
+        if (r < this.items.length && this.less(this.items[r], this.items[m])) m = r;
+        if (m === p) break;
+        [this.items[p], this.items[m]] = [this.items[m], this.items[p]];
+        p = m;
+      }
+    }
+    return top;
+  }
+}
+
+/**
+ * Build orthogonal adjacency from scanline geometry: along each shared x-line
+ * (and y-line) connect only *consecutive* points whose joining segment is
+ * unobstructed. Because the weight is additive Manhattan distance, chaining
+ * through the intermediate collinear points costs exactly the same as a direct
+ * non-consecutive hop, so shortest-path cost is preserved while the neighbour
+ * scan drops from O(N) per pop to the handful of segments that actually touch
+ * each point. `point.index` equals the array position (see buildVisibilityGraph
+ * and findRoute), so it doubles as the adjacency index.
+ */
+function buildAdjacency(points: RoutePoint[], obstacles: Rect[]): number[][] {
+  const adj: number[][] = points.map(() => []);
+  const byX = new Map<number, RoutePoint[]>();
+  const byY = new Map<number, RoutePoint[]>();
+
+  for (const p of points) {
+    let xs = byX.get(p.x);
+    if (!xs) {
+      xs = [];
+      byX.set(p.x, xs);
+    }
+    xs.push(p);
+
+    let ys = byY.get(p.y);
+    if (!ys) {
+      ys = [];
+      byY.set(p.y, ys);
+    }
+    ys.push(p);
+  }
+
+  for (const line of byX.values()) {
+    line.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1];
+      const b = line[i];
+      if (!isVSegmentBlocked(a.x, a.y, b.y, obstacles)) {
+        adj[a.index].push(b.index);
+        adj[b.index].push(a.index);
+      }
+    }
+  }
+
+  for (const line of byY.values()) {
+    line.sort((a, b) => a.x - b.x);
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1];
+      const b = line[i];
+      if (!isHSegmentBlocked(a.x, b.x, a.y, obstacles)) {
+        adj[a.index].push(b.index);
+        adj[b.index].push(a.index);
+      }
+    }
+  }
+
+  return adj;
+}
+
 function dijkstra(
   source: RoutePoint,
   target: RoutePoint,
@@ -169,74 +289,93 @@ function dijkstra(
   obstacles: Rect[],
 ): RoutePoint[] | null {
   const n = graphPoints.length;
-  const dist = new Float64Array(n).fill(Infinity);
-  const prev = new Int32Array(n).fill(-1);
-  const visited = new Uint8Array(n);
+  // Two arrival-axis states per vertex: state s = axis * n + vertexIndex,
+  // where axis 0 = arrived on a horizontal segment, 1 = arrived on a vertical one.
+  const S = 2 * n;
+  const len = new Float64Array(S).fill(Infinity); // primary cost: Manhattan length
+  const tie = new Float64Array(S).fill(Infinity); // secondary cost: bends + deviation
+  const prev = new Int32Array(S).fill(-1);        // predecessor STATE index
+  const visited = new Uint8Array(S);
 
-  dist[source.index] = 0;
+  const adj = buildAdjacency(graphPoints, obstacles);
 
-  // Simple priority queue via sorted array (adequate for small graphs)
-  // For the typical number of graph points (<200) this outperforms a heap.
-  const queue: number[] = [source.index];
+  // Endpoint bounding box for the corridor-deviation term.
+  const bx0 = Math.min(source.x, target.x);
+  const bx1 = Math.max(source.x, target.x);
+  const by0 = Math.min(source.y, target.y);
+  const by1 = Math.max(source.y, target.y);
+  const outOfBox = (p: RoutePoint): number =>
+    Math.max(0, bx0 - p.x) + Math.max(0, p.x - bx1) +
+    Math.max(0, by0 - p.y) + Math.max(0, p.y - by1);
 
-  while (queue.length > 0) {
-    // Find minimum distance node in queue
-    let minIdx = 0;
-    for (let i = 1; i < queue.length; i++) {
-      if (dist[queue[i]] < dist[queue[minIdx]]) {
-        minIdx = i;
-      }
+  // Lexicographic order: primary Manhattan length, then secondary tie cost.
+  const less = (a: number, b: number): boolean =>
+    len[a] < len[b] || (len[a] === len[b] && tie[a] < tie[b]);
+  const heap = new MinHeap(less);
+
+  // Seed both arrival axes at the source so the first move is bend-free.
+  for (let axis = 0; axis < 2; axis++) {
+    const s = axis * n + source.index;
+    len[s] = 0;
+    tie[s] = 0;
+    heap.push(s);
+  }
+
+  const stateNode = (s: number): number => s % n;
+  const stateAxis = (s: number): number => (s < n ? 0 : 1);
+
+  let bestTarget = -1;
+  while (heap.size > 0) {
+    const s = heap.pop()!;
+    if (visited[s]) continue;
+    visited[s] = 1;
+
+    const uIdx = stateNode(s);
+    if (uIdx === target.index) {
+      bestTarget = s; // first target state popped is lexicographically optimal
+      break;
     }
-    const uIdx = queue[minIdx];
-    queue.splice(minIdx, 1);
 
-    if (visited[uIdx]) continue;
-    visited[uIdx] = 1;
-
-    if (uIdx === target.index) break;
-
+    const axisIn = stateAxis(s);
     const u = graphPoints[uIdx];
 
-    // Check all other points for orthogonal connectivity
-    for (let i = 0; i < n; i++) {
-      if (visited[i]) continue;
+    for (const vIdx of adj[uIdx]) {
+      const v = graphPoints[vIdx];
+      const moveAxis = u.x === v.x ? 1 : 0; // vertical move shares x
+      const t = moveAxis * n + vIdx;
+      if (visited[t]) continue;
 
-      const v = graphPoints[i];
+      const stepLen = Math.abs(v.x - u.x) + Math.abs(v.y - u.y);
+      const bend = axisIn === moveAxis ? 0 : 1;
+      const stepTie = BEND_WEIGHT * bend + DEVIATION_WEIGHT * outOfBox(v);
 
-      // Only connect orthogonally (same x or same y)
-      if (u.x !== v.x && u.y !== v.y) continue;
+      const newLen = len[s] + stepLen;
+      const newTie = tie[s] + stepTie;
 
-      // Check if the segment is blocked by any obstacle
-      let blocked = false;
-      if (u.x === v.x) {
-        blocked = isVSegmentBlocked(u.x, u.y, v.y, obstacles);
-      } else {
-        blocked = isHSegmentBlocked(u.x, v.x, u.y, obstacles);
-      }
-
-      if (blocked) continue;
-
-      const weight = Math.abs(v.x - u.x) + Math.abs(v.y - u.y);
-      const newDist = dist[uIdx] + weight;
-
-      if (newDist < dist[i]) {
-        dist[i] = newDist;
-        prev[i] = uIdx;
-        queue.push(i);
+      if (newLen < len[t] || (newLen === len[t] && newTie < tie[t])) {
+        len[t] = newLen;
+        tie[t] = newTie;
+        prev[t] = s;
+        heap.push(t);
       }
     }
   }
 
-  if (dist[target.index] === Infinity) return null;
-
-  // Reconstruct path
-  const path: RoutePoint[] = [];
-  let current = target.index;
-  while (current !== -1) {
-    path.unshift(graphPoints[current]);
-    current = prev[current];
+  if (bestTarget === -1) {
+    // Target never popped → unreachable in both axis states.
+    const s0 = target.index;
+    const s1 = n + target.index;
+    if (len[s0] === Infinity && len[s1] === Infinity) return null;
+    bestTarget = less(s0, s1) ? s0 : s1;
   }
 
+  // Reconstruct path (state indices → vertices).
+  const path: RoutePoint[] = [];
+  let cur = bestTarget;
+  while (cur !== -1) {
+    path.unshift(graphPoints[stateNode(cur)]);
+    cur = prev[cur];
+  }
   return path;
 }
 
@@ -333,14 +472,66 @@ function getPathMidpoint(
 
 // ── Shared routing pipeline ──────────────────────────────────────────────────
 
+/** Flow units beyond the endpoint bounding box that the corridor retains. */
+export const CORRIDOR_MARGIN = 200;
+
+/** Test-only diagnostics for the most recent findRoute call. */
+const routeDebug = { gridSize: 0, usedFullSet: false };
+
+export function __routeDebugForTests(): { gridSize: number; usedFullSet: boolean } {
+  return { ...routeDebug };
+}
+
+/**
+ * Keep only obstacles whose bounding box intersects the endpoint bounding box
+ * expanded by CORRIDOR_MARGIN. Most routes interact only with nearby obstacles,
+ * so this collapses the scanline grid from every-node to a local neighbourhood.
+ */
+function corridorObstacles(
+  sx: number,
+  sy: number,
+  tx: number,
+  ty: number,
+  obstacles: Rect[],
+): Rect[] {
+  const minX = Math.min(sx, tx) - CORRIDOR_MARGIN;
+  const maxX = Math.max(sx, tx) + CORRIDOR_MARGIN;
+  const minY = Math.min(sy, ty) - CORRIDOR_MARGIN;
+  const maxY = Math.max(sy, ty) + CORRIDOR_MARGIN;
+  return obstacles.filter(
+    (r) => r.x < maxX && r.x + r.width > minX && r.y < maxY && r.y + r.height > minY,
+  );
+}
+
+/** True if any axis-aligned segment of a graph route crosses a padded obstacle. */
+function routeCrossesObstacles(route: RoutePoint[], paddedObstacles: Rect[]): boolean {
+  for (let i = 1; i < route.length; i++) {
+    const a = route[i - 1];
+    const b = route[i];
+    if (a.x === b.x) {
+      if (isVSegmentBlocked(a.x, a.y, b.y, paddedObstacles)) return true;
+    } else if (a.y === b.y) {
+      if (isHSegmentBlocked(a.x, b.x, a.y, paddedObstacles)) return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Find an obstacle-free route from source to target using handle-aware offsets,
  * a visibility graph, and Dijkstra pathfinding.
  *
+ * Obstacles are first pruned to a corridor around the endpoints; the pruned
+ * route is validated against the FULL obstacle set, so pruning that either
+ * fails to find a route (coarser grid) or routes through a dropped obstacle
+ * transparently retries once with the complete set.
+ *
  * Returns simplified waypoints (including actual source/target endpoints) or
  * null if no route can be found.
+ *
+ * Internal — call the memoized {@link findRoute} wrapper instead.
  */
-export function findRoute(
+function computeRoute(
   sourceX: number,
   sourceY: number,
   sourcePosition: HandlePosition,
@@ -357,33 +548,59 @@ export function findRoute(
   const tgtOffX = targetX + tgtDir.x * HANDLE_OFFSET;
   const tgtOffY = targetY + tgtDir.y * HANDLE_OFFSET;
 
-  // Pad obstacles
-  const paddedObstacles = obstacles.map((r) => padRect(r, OBSTACLE_PADDING));
+  // A node sitting on an endpoint handle (or its stub offset) cannot be routed
+  // around: its padded rect swallows the point the route must leave from, every
+  // outgoing segment is blocked, and the whole route dies (callers then fall
+  // back to bezier — the schema-scramble stuck-edge bug). Such obstacles are
+  // dropped for this edge; everything else is still avoided.
+  const buriesEndpoint = (r: Rect): boolean => {
+    const containsPoint = (x: number, y: number): boolean =>
+      x > r.x - OBSTACLE_PADDING && x < r.x + r.width + OBSTACLE_PADDING &&
+      y > r.y - OBSTACLE_PADDING && y < r.y + r.height + OBSTACLE_PADDING;
+    return (
+      containsPoint(sourceX, sourceY) || containsPoint(srcOffX, srcOffY) ||
+      containsPoint(targetX, targetY) || containsPoint(tgtOffX, tgtOffY)
+    );
+  };
+  const routable = obstacles.filter((r) => !buriesEndpoint(r));
 
-  // Build visibility graph between the offset points
-  const graphPoints = buildVisibilityGraph(
-    srcOffX,
-    srcOffY,
-    tgtOffX,
-    tgtOffY,
-    paddedObstacles,
-  );
+  // Route against an arbitrary obstacle subset, returning the graph route
+  // (offset → … → offset) computed on its padded scanline grid.
+  const routeAgainst = (subset: Rect[]): RoutePoint[] | null => {
+    const paddedObstacles = subset.map((r) => padRect(r, OBSTACLE_PADDING));
+    const graphPoints = buildVisibilityGraph(srcOffX, srcOffY, tgtOffX, tgtOffY, paddedObstacles);
+    routeDebug.gridSize = graphPoints.length;
 
-  // Find offset source and target in graph points
-  const sourcePoint = graphPoints.find((p) => p.x === srcOffX && p.y === srcOffY);
-  const targetPoint = graphPoints.find((p) => p.x === tgtOffX && p.y === tgtOffY);
+    const sourcePoint = graphPoints.find((p) => p.x === srcOffX && p.y === srcOffY);
+    const targetPoint = graphPoints.find((p) => p.x === tgtOffX && p.y === tgtOffY);
+    if (!sourcePoint) {
+      graphPoints.push({ x: srcOffX, y: srcOffY, index: graphPoints.length });
+    }
+    if (!targetPoint) {
+      graphPoints.push({ x: tgtOffX, y: tgtOffY, index: graphPoints.length });
+    }
+    const finalSource = sourcePoint ?? graphPoints[graphPoints.length - (targetPoint ? 1 : 2)];
+    const finalTarget = targetPoint ?? graphPoints[graphPoints.length - 1];
 
-  if (!sourcePoint) {
-    graphPoints.push({ x: srcOffX, y: srcOffY, index: graphPoints.length });
+    return dijkstra(finalSource, finalTarget, graphPoints, paddedObstacles);
+  };
+
+  const pruned = corridorObstacles(sourceX, sourceY, targetX, targetY, routable);
+  const prunedRemovedSome = pruned.length < routable.length;
+  routeDebug.usedFullSet = !prunedRemovedSome;
+
+  let route = routeAgainst(pruned);
+
+  // Validate against the full padded set: pruning may fail to route (coarser
+  // grid) or route through an obstacle it dropped. Retry once with everything.
+  if (prunedRemovedSome) {
+    const fullPadded = routable.map((r) => padRect(r, OBSTACLE_PADDING));
+    const usable = route !== null && route.length >= 2;
+    if (!usable || routeCrossesObstacles(route as RoutePoint[], fullPadded)) {
+      routeDebug.usedFullSet = true;
+      route = routeAgainst(routable);
+    }
   }
-  if (!targetPoint) {
-    graphPoints.push({ x: tgtOffX, y: tgtOffY, index: graphPoints.length });
-  }
-  const finalSource = sourcePoint ?? graphPoints[graphPoints.length - (targetPoint ? 1 : 2)];
-  const finalTarget = targetPoint ?? graphPoints[graphPoints.length - 1];
-
-  // Run Dijkstra between offset points
-  const route = dijkstra(finalSource, finalTarget, graphPoints, paddedObstacles);
 
   if (!route || route.length < 2) return null;
 
@@ -397,6 +614,83 @@ export function findRoute(
   return simplifyPath(fullRoute);
 }
 
+// ── Route memo cache ─────────────────────────────────────────────────────────
+
+const ROUTE_CACHE_MAX = 512;
+const routeCache = new Map<string, RoutePoint[] | null>();
+const cacheStats = {
+  hits: 0,
+  misses: 0,
+  clear(): void {
+    routeCache.clear();
+    this.hits = 0;
+    this.misses = 0;
+  },
+};
+
+/**
+ * Cache key from endpoints + obstacle geometry. Coordinates are rounded to
+ * integers so sub-pixel churn (drag jitter, fractional zoom) stays cache-hot.
+ */
+function routeKey(
+  sx: number,
+  sy: number,
+  sp: HandlePosition,
+  tx: number,
+  ty: number,
+  tp: HandlePosition,
+  obstacles: Rect[],
+): string {
+  let key = `${ROUTE_COST_VERSION}|${Math.round(sx)},${Math.round(sy)},${sp}|${Math.round(tx)},${Math.round(ty)},${tp}`;
+  for (const r of obstacles) {
+    key += `|${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)},${Math.round(r.height)}`;
+  }
+  return key;
+}
+
+/**
+ * Memoized {@link computeRoute}. Full-graph passes (undo tick, selection flush)
+ * re-route every edge even when nothing moved; identical (endpoints, obstacles)
+ * inputs return the cached result instead of recomputing.
+ *
+ * The cached array is returned by reference; callers (getOrthogonalPath,
+ * avoidant.ts) only read it. If a future caller mutates the waypoint array,
+ * return a shallow copy on hit.
+ */
+export function findRoute(
+  sourceX: number,
+  sourceY: number,
+  sourcePosition: HandlePosition,
+  targetX: number,
+  targetY: number,
+  targetPosition: HandlePosition,
+  obstacles: Rect[],
+): RoutePoint[] | null {
+  const key = routeKey(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, obstacles);
+
+  if (routeCache.has(key)) {
+    cacheStats.hits++;
+    // LRU touch: re-insert so this key becomes most-recently used.
+    const cached = routeCache.get(key)!;
+    routeCache.delete(key);
+    routeCache.set(key, cached);
+    return cached;
+  }
+
+  cacheStats.misses++;
+  const result = computeRoute(sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, obstacles);
+  routeCache.set(key, result);
+  if (routeCache.size > ROUTE_CACHE_MAX) {
+    // Evict least-recently used (first insertion-ordered key).
+    routeCache.delete(routeCache.keys().next().value!);
+  }
+  return result;
+}
+
+export function routeCacheStatsForTests(): typeof cacheStats {
+  return cacheStats;
+}
+
 // ── Main export ──────────────────────────────────────────────────────────────
 
 export function getOrthogonalPath({
@@ -408,6 +702,7 @@ export function getOrthogonalPath({
   targetPosition = 'top',
   obstacles,
   borderRadius = 5,
+  channelOffset,
 }: OrthogonalPathParams): EdgePathResult {
   // Fast path: no obstacles → delegate to smoothstep
   if (!obstacles || obstacles.length === 0) {
@@ -437,11 +732,14 @@ export function getOrthogonalPath({
     });
   }
 
+  // WS-3: shift the dominant interior run by the crossing-reduction offset (revert on collision)
+  const finalWaypoints = applyChannelOffset(waypoints, channelOffset, obstacles);
+
   // Build SVG path
-  const path = buildSvgPath(waypoints, borderRadius);
+  const path = buildSvgPath(finalWaypoints, borderRadius);
 
   // Compute label midpoint along polyline
-  const { x, y, offsetX, offsetY } = getPathMidpoint(waypoints);
+  const { x, y, offsetX, offsetY } = getPathMidpoint(finalWaypoints);
 
   return {
     path,

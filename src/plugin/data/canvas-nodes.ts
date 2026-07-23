@@ -104,7 +104,22 @@ export function createNodesMixin(ctx: CanvasContext) {
         }
       }
 
-      ctx.nodes = sortNodesTopological(ctx.nodes);
+      // Re-sort only when the batch introduces a parent→child ordering constraint:
+      // either a new node is a child (has parentId), or a new node is the parent of a node
+      // already present (a child added earlier with a then-dangling parentId). Flat,
+      // unrelated batches keep the array identity (no reallocation) so effects reading
+      // `nodes` don't invalidate. The splice re-sorts in place, preserving identity even then.
+      let needsTopologicalSort = arr.some((n) => n.parentId);
+      if (!needsTopologicalSort) {
+        const addedIds = new Set(arr.map((n) => n.id));
+        needsTopologicalSort = (ctx.nodes as FlowNode[]).some(
+          (n) => n.parentId && addedIds.has(n.parentId),
+        );
+      }
+      if (needsTopologicalSort) {
+        const sorted = sortNodesTopological(ctx.nodes);
+        ctx.nodes.splice(0, ctx.nodes.length, ...sorted);
+      }
       ctx._rebuildNodeMap();
 
       // A3: Install childLayout watchers for any newly added container nodes so
@@ -192,6 +207,7 @@ export function createNodesMixin(ctx: CanvasContext) {
       }
 
       ctx._scheduleAutoLayout();
+      ctx._commitNodeGeometry?.(arr.map((n: FlowNode) => n.id));
     },
 
     /**
@@ -288,6 +304,13 @@ export function createNodesMixin(ctx: CanvasContext) {
         ctx.selectedNodes.delete(id);
         ctx._initialDimensions.delete(id);
         ctx._uninstallChildLayoutWatchers(id);
+        ctx._draggingNodeIds?.delete(id);
+      }
+      // Prune routing state for cascade-removed edges — mirrors removeEdges'
+      // cleanup, which this path bypasses since it splices ctx.edges directly.
+      for (const edgeId of removedEdgeIds) {
+        ctx._edgeDirtyTicks?.delete(edgeId);
+        ctx._edgeCorridors?.delete(edgeId);
       }
       if (removed.length) ctx._emit('nodes-change', { type: 'remove', nodes: removed });
       if (reconnected.length) ctx._emit('edges-change', { type: 'add', edges: reconnected });
@@ -331,6 +354,7 @@ export function createNodesMixin(ctx: CanvasContext) {
       for (const rid of removeRoots) ctx.layoutChildren?.(rid);
 
       ctx._scheduleAutoLayout();
+      ctx._commitNodeGeometry?.([...idSet]);
     },
 
     /**

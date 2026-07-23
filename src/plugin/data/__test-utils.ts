@@ -9,6 +9,7 @@ import { vi } from 'vitest';
 import type { CanvasContext, ActiveParticle, ContextMenuState } from './canvas-context';
 import type { FlowNode, FlowEdge, Viewport, Dimensions, XYPosition } from '../../core/types';
 import type { CollapseState } from '../../core/collapse';
+import { SpatialGrid } from '../../core/geometry';
 
 /**
  * Create a mock CanvasContext with sensible defaults for unit tests.
@@ -53,6 +54,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
 
     // === Maps & caches ===
     _nodeMap: new Map<string, FlowNode>(),
+    _childrenIds: new Map<string, string[]>(),
     _initialDimensions: new Map<string, Dimensions>(),
     _edgeMap: new Map<string, FlowEdge>(),
     _validationErrorCache: new Map<string, string[]>(),
@@ -80,10 +82,12 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _shapeRegistry: {},
     _container: null,
     _viewportEl: null,
+    _viewportLive: null,
     _markerDefsEl: null,
     _containerStyles: null,
     _nodeElements: new Map<string, HTMLElement>(),
     _edgeSvgElements: new Map<string, SVGSVGElement>(),
+    _schemaMetrics: null,
 
     // === Subsystems ===
     _panZoom: null,
@@ -147,6 +151,8 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
 
     // === Viewport culling ===
     _visibleNodeIds: new Set<string>(),
+    _culledEdgeIds: new Set<string>(),
+    _cullingWasActive: false,
 
     // === Background ===
     _background: 'dots',
@@ -172,6 +178,19 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _layoutAnimTick: 0,
     _layoutAnimFrame: 0,
 
+    // === Shared obstacle cache (Workstream C) ===
+    _spatialGrid: new SpatialGrid(),
+    _obstacleSnapshot: null,
+    _obstacleEpoch: 0,
+    _edgeDirtyTicks: new Map<string, number>(),
+    _edgeCorridors: new Map(),
+    _draggingNodeIds: new Set<string>(),
+    _commitNodeGeometry: vi.fn(),
+    _markDirtyEdges: vi.fn(),
+    _endpointSpreadGrouping: null,
+    _computeEndpointGrouping: vi.fn(() => new Set<string>()),
+    _markEdgesDirtyById: vi.fn(),
+
     // === Auto-Layout state ===
     _autoLayoutTimer: null,
     _autoLayoutReady: false,
@@ -184,6 +203,12 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _rebuildNodeMap: vi.fn(),
     _rebuildEdgeMap: vi.fn(),
     _captureHistory: vi.fn(),
+    _snapshotHistory(): string | null {
+      return this._history ? this._history.snapshot({ nodes: this.nodes, edges: this.edges }) : null;
+    },
+    _commitHistory(snapshot: string | null): void {
+      if (snapshot !== null) this._history?.commit(snapshot);
+    },
     _suspendHistory: vi.fn(),
     _resumeHistory: vi.fn(),
     _getChildValidation: vi.fn(() => undefined),
@@ -191,6 +216,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _syncAnimationState: vi.fn(),
     _applyBackground: vi.fn(),
     _applyCulling: vi.fn(),
+    _uncullEverything: vi.fn(),
     _getVisibleNodeIds: vi.fn(() => new Set<string>()),
     _applyZoomLevel: vi.fn(),
     getAbsolutePosition: vi.fn((nodeId: string) => ({ x: 0, y: 0 })),

@@ -81,6 +81,7 @@ export const WIRE_COMMAND_MAP: Record<string, string> = {
   'flow:panBy':             'panBy',
   'flow:fitBounds':         'fitBounds',
   'flow:patchConfig':       'patchConfig',
+  'flow:setCrossingReduction': 'setCrossingReduction',
   'flow:deselectAll':       'deselectAll',
   'flow:collapseNode':      'collapseNode',
   'flow:expandNode':        'expandNode',
@@ -129,6 +130,7 @@ const WIRE_COMMAND_ARGS: Record<string, (params: any) => any[]> = {
   'flow:panBy':             (p) => [p.dx, p.dy],
   'flow:fitBounds':         (p) => [p.rect, p.options],
   'flow:patchConfig':       (p) => [p.changes],
+  'flow:setCrossingReduction': (p) => [p.value],
   'flow:deselectAll':       () => [],
   'flow:collapseNode':      (p) => [p.id],
   'flow:expandNode':        (p) => [p.id],
@@ -343,6 +345,33 @@ function toCallbackName(event: string): string {
 }
 
 /**
+ * Viewport events fire at animation-frame rate during zoom/pan; forwarding each
+ * to Livewire is a network round-trip per frame. These are trailing-throttled to
+ * one call per {@link WIRE_VIEWPORT_THROTTLE_MS} window (the final viewport wins).
+ */
+const THROTTLED_WIRE_EVENTS = new Set(['viewport-change', 'viewport-move']);
+const WIRE_VIEWPORT_THROTTLE_MS = 150;
+
+/**
+ * Trailing-edge throttle: the first call schedules a flush `wait` ms later; calls
+ * in between update the pending args so the flush runs once with the latest.
+ */
+function trailingThrottle<T extends (...args: any[]) => void>(fn: T, wait: number): T {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let lastArgs: Parameters<T> | null = null;
+  return ((...args: Parameters<T>) => {
+    lastArgs = args;
+    if (timer !== null) return;
+    timer = setTimeout(() => {
+      timer = null;
+      const a = lastArgs!;
+      lastArgs = null;
+      fn(...a);
+    }, wait);
+  }) as T;
+}
+
+/**
  * Register config callbacks that bridge AlpineFlow events to $wire method calls.
  * Modifies the config object in-place, adding onXxx callbacks.
  *
@@ -359,7 +388,7 @@ export function registerWireEvents(
     const callbackName = toCallbackName(event);
     const existingCallback = config[callbackName];
 
-    config[callbackName] = (detail: any) => {
+    const handler = (detail: any) => {
       // Call existing callback first if present, preserve return value
       let result: any;
       if (typeof existingCallback === 'function') {
@@ -378,6 +407,13 @@ export function registerWireEvents(
 
       return result;
     };
+
+    // Viewport events fire per frame — trailing-throttle the Livewire bridge so
+    // it makes at most one round-trip per window. (Throttled handlers run async,
+    // so their return value is not observable — irrelevant for viewport events.)
+    config[callbackName] = THROTTLED_WIRE_EVENTS.has(event)
+      ? trailingThrottle(handler, WIRE_VIEWPORT_THROTTLE_MS)
+      : handler;
   }
 }
 

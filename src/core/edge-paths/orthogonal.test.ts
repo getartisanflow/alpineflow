@@ -1,5 +1,62 @@
-import { describe, it, expect } from 'vitest';
-import { getOrthogonalPath, OBSTACLE_PADDING } from './orthogonal';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { getOrthogonalPath, OBSTACLE_PADDING, findRoute, __routeDebugForTests, routeCacheStatsForTests, ROUTE_COST_VERSION, type RoutePoint } from './orthogonal';
+
+interface TestRect { x: number; y: number; width: number; height: number }
+
+/** Manhattan length of a polyline — routing cost is invariant to waypoint ties. */
+function manhattanLength(points: RoutePoint[]): number {
+  let len = 0;
+  for (let i = 1; i < points.length; i++) {
+    len += Math.abs(points[i].x - points[i - 1].x) + Math.abs(points[i].y - points[i - 1].y);
+  }
+  return len;
+}
+
+/** True if the axis-aligned segment a→b passes through any obstacle interior. */
+function segmentHitsObstacle(a: RoutePoint, b: RoutePoint, obstacles: TestRect[]): boolean {
+  const minX = Math.min(a.x, b.x), maxX = Math.max(a.x, b.x);
+  const minY = Math.min(a.y, b.y), maxY = Math.max(a.y, b.y);
+  for (const r of obstacles) {
+    if (maxX > r.x && minX < r.x + r.width && maxY > r.y && minY < r.y + r.height) return true;
+  }
+  return false;
+}
+
+function routeHitsAny(route: RoutePoint[], obstacles: TestRect[]): boolean {
+  for (let i = 1; i < route.length; i++) {
+    if (segmentHitsObstacle(route[i - 1], route[i], obstacles)) return true;
+  }
+  return false;
+}
+
+/** Count direction changes (bends) along an orthogonal polyline. */
+function countBends(points: RoutePoint[]): number {
+  if (points.length < 3) return 0;
+  let bends = 0;
+  for (let i = 1; i < points.length - 1; i++) {
+    const dir1 = points[i - 1].x === points[i].x ? 'v' : 'h';
+    const dir2 = points[i].x === points[i + 1].x ? 'v' : 'h';
+    if (dir1 !== dir2) bends++;
+  }
+  return bends;
+}
+
+/** Largest distance any waypoint strays outside the endpoints' bounding box. */
+function maxExcursion(
+  points: RoutePoint[],
+  sx: number, sy: number, tx: number, ty: number,
+): number {
+  const bx0 = Math.min(sx, tx), bx1 = Math.max(sx, tx);
+  const by0 = Math.min(sy, ty), by1 = Math.max(sy, ty);
+  let m = 0;
+  for (const p of points) {
+    const d =
+      Math.max(0, bx0 - p.x) + Math.max(0, p.x - bx1) +
+      Math.max(0, by0 - p.y) + Math.max(0, p.y - by1);
+    if (d > m) m = d;
+  }
+  return m;
+}
 
 // ── getOrthogonalPath ────────────────────────────────────────────────────────
 
@@ -132,5 +189,227 @@ describe('getOrthogonalPath', () => {
 
   it('exports OBSTACLE_PADDING constant', () => {
     expect(OBSTACLE_PADDING).toBe(20);
+  });
+});
+
+// ── findRoute: heap + scanline-adjacency Dijkstra (Task 24) ──────────────────
+
+describe('findRoute (heap + scanline adjacency)', () => {
+  // 8×6 grid of 48 obstacles — thousands of visibility-graph points.
+  const denseObstacles: TestRect[] = Array.from({ length: 48 }, (_, i) => ({
+    x: (i % 8) * 150,
+    y: Math.floor(i / 8) * 120,
+    width: 100,
+    height: 80,
+  }));
+
+  // Recorded from the pre-refactor (linear-PQ + all-pairs) implementation.
+  // Shortest-path COST is invariant; only tie-broken waypoints may differ.
+  const KNOWN_LENGTH = 2100;
+
+  it('finds a route of equal length on a dense obstacle field', () => {
+    const route = findRoute(-50, -50, 'right', 1250, 750, 'left', denseObstacles);
+    expect(route).not.toBeNull();
+    expect(manhattanLength(route!)).toBe(KNOWN_LENGTH);
+  });
+
+  it('every segment of the dense route clears every obstacle', () => {
+    const route = findRoute(-50, -50, 'right', 1250, 750, 'left', denseObstacles);
+    expect(route).not.toBeNull();
+    expect(routeHitsAny(route!, denseObstacles)).toBe(false);
+  });
+
+  it('routes around a single obstacle with the expected cost', () => {
+    const route = findRoute(0, 30, 'right', 300, 30, 'left', [{ x: 100, y: 0, width: 80, height: 60 }]);
+    expect(route).not.toBeNull();
+    expect(manhattanLength(route!)).toBe(400);
+    expect(routeHitsAny(route!, [{ x: 100, y: 0, width: 80, height: 60 }])).toBe(false);
+  });
+
+  it('drops an obstacle that fully contains the target and routes anyway', () => {
+    // A rect swallowing the target used to make the route unfindable (null →
+    // bezier fallback). Under the buried-endpoint contract it is excluded from
+    // routing for this edge, so a route exists. The genuinely-impossible case
+    // (ring of non-covering obstacles) is covered in the buried-endpoint suite.
+    const route = findRoute(
+      -50, -50, 'right', 150, 150, 'left',
+      [{ x: -OBSTACLE_PADDING - 1, y: -OBSTACLE_PADDING - 1, width: 400, height: 400 }],
+    );
+    expect(route).not.toBeNull();
+  });
+});
+
+// ── findRoute: corridor pruning with full-set fallback (Task 25) ─────────────
+
+describe('findRoute corridor pruning', () => {
+  // The route memo cache persists across tests; clear it so each call runs
+  // computeRoute and refreshes the __routeDebugForTests diagnostics.
+  beforeEach(() => routeCacheStatsForTests().clear());
+
+  it('prunes far-away obstacles from the visibility grid', () => {
+    const near: TestRect = { x: 100, y: 0, width: 80, height: 60 };
+    const far: TestRect[] = Array.from({ length: 40 }, (_, i) => ({
+      x: 5000 + i * 200,
+      y: 5000,
+      width: 80,
+      height: 60,
+    }));
+    const all = [near, ...far];
+    const route = findRoute(0, 30, 'right', 300, 30, 'left', all);
+    expect(route).not.toBeNull();
+    // Grid built from the single near obstacle, not all 41.
+    expect(__routeDebugForTests().gridSize).toBeLessThan(50);
+    expect(__routeDebugForTests().usedFullSet).toBe(false);
+    expect(routeHitsAny(route!, all)).toBe(false);
+  });
+
+  it('falls back to the full obstacle set when the corridor route is invalid', () => {
+    // Both endpoints exit left; a wall spanning far beyond the corridor blocks
+    // the direct path, forcing a wide leftward detour through a pruned obstacle.
+    // The pruned route would clip that obstacle, so validation retries in full.
+    const wall: TestRect = { x: -500, y: 100, width: 1200, height: 300 };
+    const prunedObstacle: TestRect = { x: -540, y: 410, width: 60, height: 100 };
+    const all = [wall, prunedObstacle];
+    const route = findRoute(0, 0, 'left', 0, 500, 'left', all);
+    expect(route).not.toBeNull();
+    expect(__routeDebugForTests().usedFullSet).toBe(true); // fallback fired
+    expect(routeHitsAny(route!, all)).toBe(false); // final route avoids everything
+  });
+});
+
+// ── findRoute: LRU route memo cache (Task 26) ────────────────────────────────
+
+describe('findRoute route cache', () => {
+  beforeEach(() => routeCacheStatsForTests().clear());
+
+  it('identical route queries hit the cache', () => {
+    const obstacles = [{ x: 100, y: 0, width: 80, height: 60 }];
+    findRoute(0, 30, 'right', 300, 30, 'left', obstacles);
+    findRoute(0, 30, 'right', 300, 30, 'left', obstacles);
+    expect(routeCacheStatsForTests().hits).toBe(1);
+  });
+
+  it('a moved obstacle misses the cache', () => {
+    findRoute(0, 30, 'right', 300, 30, 'left', [{ x: 100, y: 0, width: 80, height: 60 }]);
+    findRoute(0, 30, 'right', 300, 30, 'left', [{ x: 120, y: 0, width: 80, height: 60 }]);
+    expect(routeCacheStatsForTests().hits).toBe(0);
+  });
+
+  it('a full pass of identical queries is one miss then all hits', () => {
+    const obstacles = [{ x: 100, y: 0, width: 80, height: 60 }];
+    for (let i = 0; i < 100; i++) {
+      findRoute(0, 30, 'right', 300, 30, 'left', obstacles);
+    }
+    expect(routeCacheStatsForTests().misses).toBe(1);
+    expect(routeCacheStatsForTests().hits).toBe(99);
+  });
+
+  it('a cache hit returns the identical waypoints as the miss', () => {
+    const obstacles = [{ x: 100, y: 0, width: 80, height: 60 }];
+    const first = findRoute(0, 30, 'right', 300, 30, 'left', obstacles);
+    const second = findRoute(0, 30, 'right', 300, 30, 'left', obstacles);
+    expect(second).toBe(first); // same cached reference
+  });
+
+  it('exposes a non-empty cost version for cache keying', () => {
+    expect(typeof ROUTE_COST_VERSION).toBe('string');
+    expect(ROUTE_COST_VERSION.length).toBeGreaterThan(0);
+  });
+});
+
+// ── avoidant routing quality — detour/bend cost (WS-1) ───────────────────────
+describe('avoidant routing quality — detour/bend cost (WS-1)', () => {
+  beforeEach(() => routeCacheStatsForTests().clear());
+
+  const dense: TestRect[] = Array.from({ length: 48 }, (_, i) => ({
+    x: (i % 8) * 150, y: Math.floor(i / 8) * 120, width: 100, height: 80,
+  }));
+  const route = () => findRoute(-50, -50, 'right', 1250, 750, 'left', dense)!;
+
+  // Recorded from the pre-WS-1 router (Task 1 characterization run).
+  const BASELINE_BENDS = 2;
+  const BASELINE_EXCURSION = 0;
+
+  it('preserves Manhattan length on the dense field (never trades length)', () => {
+    expect(manhattanLength(route())).toBe(2100);
+  });
+
+  it('is deterministic — identical waypoints across recomputes', () => {
+    const a = JSON.stringify(route());
+    routeCacheStatsForTests().clear();
+    const b = JSON.stringify(route());
+    expect(b).toBe(a);
+  });
+
+  it('does not increase bends versus the pre-WS-1 baseline', () => {
+    expect(countBends(route())).toBeLessThanOrEqual(BASELINE_BENDS);
+  });
+
+  it('does not increase corridor excursion versus the pre-WS-1 baseline', () => {
+    expect(maxExcursion(route(), -50, -50, 1250, 750)).toBeLessThanOrEqual(BASELINE_EXCURSION);
+  });
+
+  it('prefers the in-corridor route over an equal-length excursion', () => {
+    // Endpoints level on y=100; one obstacle sits ABOVE the line. The shortest
+    // routes hug just under it; the router must not arc far above the endpoints.
+    const obs: TestRect[] = [{ x: 150, y: 40, width: 100, height: 40 }];
+    const r = findRoute(0, 100, 'right', 400, 100, 'left', obs)!;
+    expect(r).not.toBeNull();
+    // No waypoint strays more than a small margin above the endpoint band.
+    const maxAbove = Math.max(...r.map((p) => 100 - p.y));
+    expect(maxAbove).toBeLessThanOrEqual(OBSTACLE_PADDING + 2);
+  });
+});
+
+// ── findRoute: buried-endpoint obstacle exclusion ────────────────────────────
+// A third-party node overlapping an endpoint handle used to make the route
+// unfindable (endpoint stub born inside a padded obstacle → Dijkstra dead →
+// null → callers fall back to bezier). Obstacles whose padded rect contains an
+// endpoint are dropped for that edge: you cannot route *around* a node that is
+// sitting on your handle, but you can still route around everything else.
+
+describe('findRoute buried-endpoint obstacles', () => {
+  beforeEach(() => routeCacheStatsForTests().clear());
+
+  // Legit obstacle between the endpoints — must still be avoided.
+  const midObstacle: TestRect = { x: 100, y: 0, width: 80, height: 60 };
+
+  it('routes when a third-party obstacle covers the target endpoint', () => {
+    // Coverer's padded rect (270..370, -10..70) contains the target (300,30).
+    const coverer: TestRect = { x: 290, y: 10, width: 60, height: 40 };
+    const route = findRoute(0, 30, 'right', 300, 30, 'left', [midObstacle, coverer]);
+    expect(route).not.toBeNull();
+    expect(routeHitsAny(route!, [midObstacle])).toBe(false);
+  });
+
+  it('routes when a third-party obstacle covers the source endpoint', () => {
+    // Coverer's padded rect (-50..50, -10..70) contains the source (0,30).
+    const coverer: TestRect = { x: -30, y: 10, width: 60, height: 40 };
+    const route = findRoute(0, 30, 'right', 300, 30, 'left', [midObstacle, coverer]);
+    expect(route).not.toBeNull();
+    expect(routeHitsAny(route!, [midObstacle])).toBe(false);
+  });
+
+  it('routes when an obstacle covers only the target stub offset, not the handle', () => {
+    // Padded rect (235..295, 5..55) swallows the stub point (280,30) the router
+    // leaves from, while the handle itself (300,30) stays outside. Same burial,
+    // one step out.
+    const coverer: TestRect = { x: 255, y: 25, width: 20, height: 10 };
+    const route = findRoute(0, 30, 'right', 300, 30, 'left', [midObstacle, coverer]);
+    expect(route).not.toBeNull();
+    expect(routeHitsAny(route!, [midObstacle])).toBe(false);
+  });
+
+  it('still returns null when the target is ringed by non-covering obstacles', () => {
+    // Four walls boxing in the target with no escape gap; none of them
+    // contains the target point, so none is dropped — genuinely unroutable.
+    const walls: TestRect[] = [
+      { x: 100, y: 100, width: 300, height: 20 },  // top
+      { x: 100, y: 380, width: 300, height: 20 },  // bottom
+      { x: 100, y: 100, width: 20, height: 300 },  // left
+      { x: 380, y: 100, width: 20, height: 300 },  // right
+    ];
+    const route = findRoute(-100, 250, 'right', 250, 250, 'left', walls);
+    expect(route).toBeNull();
   });
 });

@@ -144,11 +144,21 @@ export function renameField(canvas: any, nodeId: string, oldName: string, newNam
     // Rename in place — mutating the reactive object keeps any bindings alive.
     target.name = newName;
 
-    // Cascade: replace canvas.edges contents in place so Alpine reactivity fires.
+    // Cascade: mutate the affected edge objects IN PLACE so their live Alpine
+    // scopes stay attached. cascadeEdgesOnRename returns NEW objects for
+    // cascaded edges; splicing those into the array would orphan every cascaded
+    // edge's scope and touch every reactive index. Copy just the changed handles
+    // onto the existing objects instead.
     const currentEdges = canvas.edges ?? [];
     const { edges: updatedEdges, cascadedIds } = cascadeEdgesOnRename(currentEdges, nodeId, oldName, newName);
     if (cascadedIds.length > 0) {
-        canvas.edges.splice(0, canvas.edges.length, ...updatedEdges);
+        const updatedById = new Map(updatedEdges.map((e: any) => [e.id, e]));
+        for (const edge of canvas.edges) {
+            const upd = updatedById.get(edge.id);
+            if (!upd || upd === edge) continue;
+            if (edge.sourceHandle !== upd.sourceHandle) edge.sourceHandle = upd.sourceHandle;
+            if (edge.targetHandle !== upd.targetHandle) edge.targetHandle = upd.targetHandle;
+        }
     }
 
     dispatchSchema(canvas, 'schema:field-renamed', {
@@ -188,10 +198,17 @@ export function removeField(canvas: any, nodeId: string, fieldName: string): Rem
     // Splice the reactive fields array in place.
     node.data.fields.splice(idx, 1);
 
+    // Drop only the affected edges in place (rather than replacing the whole
+    // array), and rebuild the edge map so getEdge no longer returns the dropped
+    // edges — the previous full-array splice left _edgeMap stale.
     const currentEdges = canvas.edges ?? [];
-    const { edges: keptEdges, droppedIds } = cascadeEdgesOnRemove(currentEdges, nodeId, fieldName);
+    const { droppedIds } = cascadeEdgesOnRemove(currentEdges, nodeId, fieldName);
     if (droppedIds.length > 0) {
-        canvas.edges.splice(0, canvas.edges.length, ...keptEdges);
+        const dropSet = new Set(droppedIds);
+        for (let i = canvas.edges.length - 1; i >= 0; i--) {
+            if (dropSet.has(canvas.edges[i].id)) canvas.edges.splice(i, 1);
+        }
+        canvas._rebuildEdgeMap?.();
     }
 
     dispatchSchema(canvas, 'schema:field-removed', {

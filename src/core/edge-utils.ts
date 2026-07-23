@@ -152,11 +152,12 @@ export function getEdgePath(
   targetPosition: HandlePosition = 'top',
   sourceCoords?: { x: number; y: number },
   targetCoords?: { x: number; y: number },
-  edgeTypes?: Record<string, (params: { sourceX: number; sourceY: number; sourcePosition: 'top' | 'right' | 'bottom' | 'left'; targetX: number; targetY: number; targetPosition: 'top' | 'right' | 'bottom' | 'left' }) => EdgePathResult>,
+  edgeTypes?: Record<string, (params: { sourceX: number; sourceY: number; sourcePosition: 'top' | 'right' | 'bottom' | 'left'; targetX: number; targetY: number; targetPosition: 'top' | 'right' | 'bottom' | 'left' }, edge?: FlowEdge) => EdgePathResult>,
   obstacles?: Rect[],
   shapeRegistry?: Record<string, ShapeDefinition>,
   globalOrigin?: [number, number],
   defaultEdgeType?: string,
+  channelOffset?: number,
 ) {
   const source = sourceCoords ?? getHandleCoords(sourceNode, sourcePosition, shapeRegistry, globalOrigin);
   const target = targetCoords ?? getHandleCoords(targetNode, targetPosition, shapeRegistry, globalOrigin);
@@ -168,9 +169,12 @@ export function getEdgePath(
 
   const edgeType = edge.type ?? defaultEdgeType ?? 'bezier';
 
-  // Check custom edge types first
+  // Check custom edge types first. The edge is passed as a second arg so a custom
+  // generator can read per-edge routing data off it (e.g. precomputed waypoints on
+  // edge.data) rather than needing a separate closure per edge — and that data,
+  // living on the edge, survives toObject()/fromObject() serialization.
   if (edgeTypes?.[edgeType]) {
-    return edgeTypes[edgeType](params);
+    return edgeTypes[edgeType](params, edge);
   }
 
   // For floating edges, use pathType to pick the path generator; otherwise use edge.type
@@ -184,9 +188,9 @@ export function getEdgePath(
         pathStyle: edge.pathStyle,
       });
     case 'avoidant':
-      return getAvoidantPath({ ...params, obstacles });
+      return getAvoidantPath({ ...params, obstacles, channelOffset });
     case 'orthogonal':
-      return getOrthogonalPath({ ...params, obstacles });
+      return getOrthogonalPath({ ...params, obstacles, channelOffset });
     case 'smoothstep':
       return getSmoothStepPath(params);
     case 'straight':

@@ -93,6 +93,151 @@ Use the core [`x-flow-schema`](../nodes/schema.md) primitive to render the nodes
 
 `addField`, `renameField`, `removeField`, `reorderFields`, `inferReferences`, `schemaToJSON`, and `schemaFromJSON` are bound onto the canvas scope when the addon is registered.
 
+## Customizing rendering
+
+The `x-flow-schema` directive owns the node's DOM, but you rarely have to fork it to customize it. Three tiers, cheapest first:
+
+1. **Field metadata + CSS** — flags on each field toggle classes you style (see [the field flags](../nodes/schema.md#field-shape) and [Field metadata (extended)](#field-metadata-extended)). Zero JavaScript.
+2. **Hooks** — augment the directive's output per-render *without* replacing it: **class resolvers** (declarative styling) and **decorators** (imperative DOM).
+3. **Roll your own** — skip the directive entirely for total control.
+
+### Hooks
+
+All four hooks are `flowCanvas({ … })` config options, read from the canvas config on **every render**. They fire only for nodes rendered by `x-flow-schema`, and are no-ops when unset.
+
+The directive builds these slots, and the hooks reach them:
+
+- **node-level** — the node container, the header, the body
+- **row-level** (per field) — the row, the icon, the name, the type, and the four handles (target, source, and their two opposite-side mirrors)
+
+#### Class resolvers — declarative styling
+
+`schemaRowClass` and `schemaNodeClass` are **pure functions of the data** that return CSS class names. AlpineFlow applies them and reconciles: classes you stop returning are removed, and it never touches the directive's own structural classes (`flow-schema-row`, `--pk`, `--fk`, `--required`) or anything a decorator added. No `toggle`/cleanup logic on your side — return the same value twice and nothing changes.
+
+```js
+flowCanvas({
+  // Tint email rows.
+  schemaRowClass: ({ field }) => (field.name === 'email' ? 'bg-red-500/10' : null),
+  // Class the whole node by its kind.
+  schemaNodeClass: ({ node }) => `kind-${node.data.kind}`,
+})
+```
+
+::demo
+```html
+<div x-data="flowCanvas({
+    nodes: [
+        {
+            id: 'user',
+            position: { x: 0, y: 0 },
+            data: {
+                label: 'User',
+                fields: [
+                    { name: 'id',         type: 'uuid',      key: 'primary' },
+                    { name: 'email',      type: 'text',      required: true },
+                    { name: 'team_id',    type: 'uuid',      key: 'foreign' },
+                    { name: 'created_at', type: 'timestamp' },
+                ],
+            },
+        }
+    ],
+    edges: [],
+    schemaRowClass: ({ field }) => (field.name === 'email' ? 'bg-red-500/10' : null),
+    background: 'dots',
+    fitViewOnInit: true,
+    controls: false,
+    pannable: false,
+    zoomable: false,
+})" class="flow-container" style="height: 340px;">
+    <div x-flow-viewport>
+        <template x-for="node in nodes" :key="node.id">
+            <div x-flow-node="node" x-flow-schema></div>
+        </template>
+    </div>
+</div>
+```
+::enddemo
+
+Return a **bare** class value (a string, or an array of strings) to class the row itself (or, for `schemaNodeClass`, the node host). Return a **per-slot map** to target the sub-slots individually:
+
+```js
+flowCanvas({
+  schemaRowClass: ({ field }) => ({
+    row:  field.required && 'font-medium',
+    name: field.key === 'primary' && 'text-amber-500',
+    type: 'font-mono opacity-70',
+  }),
+  schemaNodeClass: ({ node }) => ({ header: 'bg-slate-800', body: 'divide-y divide-white/5' }),
+})
+```
+
+| Resolver          | Bare value classes… | Map keys                                                                 |
+| ----------------- | ------------------- | ------------------------------------------------------------------------ |
+| `schemaRowClass`  | the row             | `row`, `icon`, `name`, `type`, `target`, `source`, `mirrorTarget`, `mirrorSource` |
+| `schemaNodeClass` | the node host       | `node`, `header`, `body`                                                  |
+
+Each slot reconciles independently: omit a key to leave that slot alone, return it falsy to clear the classes you set there before. The context is `{ field, node, nodeId, isNew }` for rows and `{ node, isNew }` for nodes.
+
+> **Styling a child from the row is often enough.** A class on the row (or host) plus a descendant CSS rule — `.my-row .flow-schema-row-type { … }` — reaches every sub-slot without the map. Reach for the per-slot map specifically when you want a *utility class directly on a child* (Tailwind utilities don't compose through descendants).
+
+#### Decorators — imperative DOM
+
+When you need to add or change DOM — render a field's `description`, add a badge, wire in an extra element — use `schemaRowDecorator` / `schemaNodeDecorator`. They hand you the already-built slot **elements** to mutate.
+
+```js
+flowCanvas({
+  schemaRowDecorator: ({ row, field, slots }) => {
+    // Render a description the base row omits, after the type pill.
+    let desc = row.querySelector('.row-desc');
+    if (field.description) {
+      if (!desc) {
+        desc = document.createElement('span');
+        desc.className = 'row-desc';
+        slots.type.after(desc);
+      }
+      desc.textContent = field.description;
+    } else {
+      desc?.remove();
+    }
+  },
+  schemaNodeDecorator: ({ header, node }) => {
+    // A field-count badge in the header.
+    let badge = header.querySelector('.count');
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'count';
+      header.appendChild(badge);
+    }
+    badge.textContent = String(node.data.fields.length);
+  },
+})
+```
+
+The row context is `{ row, field, nodeId, slots, isNew }`, where `slots` is `{ icon, name, type, target, source, mirrorTarget, mirrorSource }` (`icon` is `null` when the field has none). The node context is `{ host, header, body, node, isNew }`.
+
+> **Decorators run every render and must be idempotent.** The directive re-runs on any data change and calls your decorator *after* writing its own content — it sets the header text and the name/type text, which clobbers child elements you added there. So **reuse-or-create** (guard with `querySelector`) rather than appending unconditionally; the every-render call then keeps your additions in sync. `isNew` distinguishes a freshly-built slot from a reused one.
+
+A throwing hook is caught and logged — it never aborts the render.
+
+> **Geometry note.** Changing a row's or the header's *height* breaks the uniform-row assumption behind state-derived edge geometry; such nodes fall back to DOM measurement (still correct, just not the fast path). Purely additive, height-preserving decoration is free.
+
+### Roll your own
+
+The directive fully owns the node element's contents. To take over completely, skip the directive and write your own template:
+
+```html
+<div x-flow-node="node" class="w-96">
+  <div class="my-header text-center text-2xl" x-text="node.data.label"></div>
+  <div class="flex w-full">
+    <template x-for="field in node.data.fields" :key="field.name">
+      <div class="p-2 flex-1 text-center" x-text="field.name"></div>
+    </template>
+  </div>
+</div>
+```
+
+The handle ids + positions + per-row structure are the only things edge wiring cares about — everything else is yours.
+
 ## Field CRUD API
 
 All mutation helpers fail silently with a `reason` instead of throwing. They mutate the live reactive `canvas.nodes` / `canvas.edges` arrays, so the DOM updates automatically, and dispatch `schema:*` events on the canvas element for consumers that want to react without wrapping the calls.
@@ -382,7 +527,7 @@ Use `inspector.renameField(newName)` when changing the name so edges cascade. `i
 
 ## Field metadata (extended)
 
-Every field carries `name` + `type` plus four optional decoration flags (`key`, `required`, `icon`, and the metadata fields below). These are type-only — the default `x-flow-schema` row renders just the icon / name / type. Consumer templates (or the WireFlow [`<x-schema-field>`](https://artisanflow.dev/docs/wireflow/components/schema-field) primitive with a slot override) can read any of them.
+Every field carries `name` + `type` plus four optional decoration flags (`key`, `required`, `icon`, and the metadata fields below). These are type-only — the default `x-flow-schema` row renders just the icon / name / type. Consumer templates (or the WireFlow [`<x-schema-field>`](https://artisanflow.dev/docs/wireflow/components/schema-field) primitive with a slot override) can read any of them — as can the schema render [hooks](#hooks), the simplest way to surface these fields without leaving the default row: a `schemaRowDecorator` to render the value, or a `schemaRowClass` to style by it.
 
 | Key           | Type       | Purpose                                                               |
 | ------------- | ---------- | --------------------------------------------------------------------- |
