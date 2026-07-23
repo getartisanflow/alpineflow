@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added — `data-flow-target` escape hatch for out-of-canvas directives
+
+`x-flow-snapshot`, `x-flow-collapse`, `x-flow-detail`, `x-flow-filter`, `x-flow-rotate`, `x-flow-loading`, `x-flow-follow`, `x-flow-action` and `x-flow-edge-toolbar` resolved their canvas with a bare `el.closest('[data-flow-canvas]')`, so they silently no-op when placed **outside** the canvas element — exactly the toolbar/sidebar layout. A shared `resolveCanvasEl()` now backs all of them: (1) a `data-flow-target="<selector>"` on the host or any ancestor (a toolbar wrapper can set it once) points at the canvas; (2) else `closest('[data-flow-canvas]')` as before; (3) else, if exactly one canvas exists in the document, it's used — otherwise `null` and a one-time `console.warn`. Non-breaking: `closest()` remains the middle fallback, so in-canvas placement is unchanged. The two canvas-internal `closest()` sites (`x-flow-node` shape lookup, `x-flow-viewport` static-edge cleanup) keep plain `closest()` — a node/viewport is never outside its own canvas.
+
 ### Added — ELK `rectpacking` + `aspectRatio` + raw `layoutOptions` escape hatch
 
 The ELK layout wrapper accepts three additions (thanks to [@ronnorthrip](https://github.com/ronnorthrip)): the **`rectpacking`** algorithm for unconnected boxes (edges are dropped for it — rectpacking ignores them by design), an **`aspectRatio`** option (width / height target, maps to `elk.aspectRatio`, honoured by rectpacking and several other algorithms), and a **`layoutOptions`** escape hatch — raw `elk.*` ids merged last, so any ELK option (e.g. `elk.rectpacking.orderBySize`) is reachable without a wrapper change. All three thread through `canvas.applyElkLayout()`.

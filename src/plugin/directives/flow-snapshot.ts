@@ -11,6 +11,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
+import { resolveCanvasEl } from './resolve-canvas';
 
 type SnapshotAction = 'save' | 'restore';
 
@@ -57,7 +58,7 @@ export function registerFlowSnapshotDirective(Alpine: Alpine) {
       const parsed = parseSnapshotDirective(value, modifiers);
       if (!parsed) return;
 
-      const canvasEl = el.closest('[data-flow-canvas]') as HTMLElement;
+      const canvasEl = resolveCanvasEl(el) as HTMLElement;
       if (!canvasEl) return;
 
       const canvas = Alpine.$data(canvasEl) as any;

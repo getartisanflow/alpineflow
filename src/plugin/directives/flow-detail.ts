@@ -15,6 +15,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
+import { resolveCanvasEl } from './resolve-canvas';
 
 export function registerFlowDetailDirective(Alpine: Alpine) {
   Alpine.directive(
@@ -22,7 +23,7 @@ export function registerFlowDetailDirective(Alpine: Alpine) {
     (el, { expression, modifiers }, { evaluate, effect, cleanup }) => {
       // Custom zoom thresholds via expression: { min?: number, max?: number }
       if (expression) {
-        const canvasEl = el.closest('[data-flow-canvas]') as HTMLElement;
+        const canvasEl = resolveCanvasEl(el) as HTMLElement;
         if (!canvasEl) return;
 
         const canvas = Alpine.$data(canvasEl) as any;
@@ -49,7 +50,7 @@ export function registerFlowDetailDirective(Alpine: Alpine) {
       const levels: Set<string> = new Set(modifiers.filter(m => m === 'far' || m === 'medium' || m === 'close'));
       if (levels.size === 0) return;
 
-      const canvasEl = el.closest('[data-flow-canvas]') as HTMLElement;
+      const canvasEl = resolveCanvasEl(el) as HTMLElement;
       if (!canvasEl) return;
 
       const canvas = Alpine.$data(canvasEl) as any;
