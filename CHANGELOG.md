@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Changed (behavior) — `origin` discriminator on `nodes-change` / `edges-change`
+
+`nodes-change` / `edges-change` fired with `{ type, nodes | edges }` for a user drop, bulk load, paste, and direct API call alike — no way to react only to user intent (e.g. "user created a model → POST"). Both events now carry an **`origin`** field, one of **`'drop' | 'paste' | 'api' | 'load'`**: the drop handler stamps `'drop'`, `paste()` stamps `'paste'`, and a direct `addNodes`/`removeNodes`/`addEdges`/`removeEdges` call defaults to `'api'`. The mutators accept a `{ source?: ChangeOrigin }` option to override it. A new `ChangeOrigin` type is exported: `'drop' | 'paste' | 'api' | 'load' | 'undo' | 'redo'`.
+
+Undo/redo do **not** emit change events. Instead the `restore` event's (previously unreleased) `source: 'undo' | 'redo'` field is **renamed to `origin`**, and `fromObject()` / `$reset()` / `$clear()` now tag their `restore` emit with `origin: 'load'` — final shape `restore.origin: 'undo' | 'redo' | 'load'`. Since `source` never shipped in a release, this is the field's first public appearance under the name `origin`.
+
+The added `origin` string union is a **forward contract** once tagged — the documented values are the two unions above. Additive at runtime: existing listeners that ignore `origin` are unaffected.
+
 ### Added — config callbacks receive the canvas context as a second argument
 
 `onDrop({ data, mimeType, position, targetNode })` and the `_emit`-routed callbacks (`onConnect`, `onNodeClick`, `onConnectEnd`, `onNodesChange`, …) received no canvas reference, forcing global-variable hacks to reach the canvas from a handler. Every config callback now receives the live canvas context as a **second argument** — `config.onConnect(detail, ctx)`, `config.onDrop(detail, ctx)` — so a handler can call `ctx.addNodes(…)` / `ctx.fitView()` directly. Existing handlers that ignore the extra parameter are unaffected. The context is deliberately **not** added to the event `detail`: that object is shared with the dispatched DOM `CustomEvent`, and a context reference there would be circular — breaking `structuredClone` / JSON / wireflow serialization. Additive; the callback type signatures gain an optional trailing `ctx?: CanvasContext`.

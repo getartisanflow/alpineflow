@@ -535,6 +535,17 @@ export interface ConnectionLineProps {
 
 // ─── Events ─────────────────────────────────────────────────────────────────
 
+/**
+ * Origin discriminator for change / restore events (WS5).
+ *
+ * `nodes-change` / `edges-change` carry the first four: `'drop'` (drag-drop),
+ * `'paste'` (clipboard), `'load'` (bulk programmatic load) and `'api'` (a direct
+ * `addNodes`/`removeNodes`/… call — the default). Undo/redo never emit change
+ * events. The `restore` event carries the last three: `'undo'` / `'redo'`
+ * (history) and `'load'` (`fromObject`/`$reset`/`$clear`).
+ */
+export type ChangeOrigin = 'drop' | 'paste' | 'api' | 'load' | 'undo' | 'redo';
+
 export interface FlowEvents {
   'node-click': { node: FlowNode; event: MouseEvent };
   'node-drag-start': { node: FlowNode };
@@ -561,8 +572,8 @@ export interface FlowEvents {
   'pane-context-menu': { event: MouseEvent; position: XYPosition };
   'selection-context-menu': { nodes: FlowNode[]; event: MouseEvent };
   'selection-change': { nodes: string[]; edges: string[]; rows: string[] };
-  'nodes-change': { type: 'add' | 'remove'; nodes: FlowNode[] };
-  'edges-change': { type: 'add' | 'remove'; edges: FlowEdge[] };
+  'nodes-change': { type: 'add' | 'remove'; nodes: FlowNode[]; origin: 'drop' | 'paste' | 'api' | 'load' };
+  'edges-change': { type: 'add' | 'remove'; edges: FlowEdge[]; origin: 'drop' | 'paste' | 'api' | 'load' };
   'node-collapse': { node: FlowNode; descendants: string[] };
   'node-expand': { node: FlowNode; descendants: string[] };
   'node-condense': { node: FlowNode };
@@ -574,6 +585,7 @@ export interface FlowEvents {
   'helper-lines-change': { horizontal: number[]; vertical: number[] };
   'nodes-patch': { patches: Record<string, DeepPartial<FlowNode>> };
   'edges-patch': { patches: Record<string, DeepPartial<FlowEdge>> };
+  'restore': { nodes?: FlowNode[]; edges?: FlowEdge[]; viewport?: Partial<Viewport>; origin: 'undo' | 'redo' | 'load' };
   'init': undefined;
   'destroy': undefined;
 }
@@ -1961,17 +1973,17 @@ export interface FlowInstance {
   /** Current viewport state */
   viewport: Viewport;
 
-  /** Add one or more nodes */
-  addNodes(nodes: FlowNode | FlowNode[]): void;
+  /** Add one or more nodes. `source` tags the emitted `nodes-change` origin (default `'api'`). */
+  addNodes(nodes: FlowNode | FlowNode[], options?: { center?: boolean; source?: ChangeOrigin }): void;
 
-  /** Remove nodes by ID */
-  removeNodes(ids: string | string[]): void;
+  /** Remove nodes by ID. `source` tags the emitted `nodes-change` origin (default `'api'`). */
+  removeNodes(ids: string | string[], options?: { source?: ChangeOrigin }): void;
 
-  /** Add one or more edges */
-  addEdges(edges: FlowEdge | FlowEdge[]): void;
+  /** Add one or more edges. `source` tags the emitted `edges-change` origin (default `'api'`). */
+  addEdges(edges: FlowEdge | FlowEdge[], options?: { source?: ChangeOrigin }): void;
 
-  /** Remove edges by ID */
-  removeEdges(ids: string | string[]): void;
+  /** Remove edges by ID. `source` tags the emitted `edges-change` origin (default `'api'`). */
+  removeEdges(ids: string | string[], options?: { source?: ChangeOrigin }): void;
 
   /** Get a node by ID */
   getNode(id: string): FlowNode | undefined;

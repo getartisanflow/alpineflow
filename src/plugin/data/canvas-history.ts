@@ -28,7 +28,7 @@ import { debug } from '../../core/debug';
 function applyHistorySnapshot(
   ctx: CanvasContext,
   snapshot: HistorySnapshot,
-  source: 'undo' | 'redo',
+  origin: 'undo' | 'redo',
 ): void {
   const mergedNodes = mergeEntitiesById(ctx.nodes, sortNodesTopological(snapshot.nodes));
   ctx.nodes.splice(0, ctx.nodes.length, ...mergedNodes);
@@ -47,9 +47,9 @@ function applyHistorySnapshot(
     if (e.selected) e.selected = false;
   }
   // Carry the restored nodes/edges (parity with fromObject's `restore` payload)
-  // plus a `source` tag, so wire-bridge / collaboration observers can react to
+  // plus an `origin` tag, so wire-bridge / collaboration observers can react to
   // undo/redo the same way they react to fromObject.
-  ctx._emit('restore', { nodes: ctx.nodes, edges: ctx.edges, source });
+  ctx._emit('restore', { nodes: ctx.nodes, edges: ctx.edges, origin });
   // Bump _layoutAnimTick in a rAF so edge effects re-run after node effects
   // have repositioned DOM elements (edges measure handle positions from the
   // DOM via getBoundingClientRect).
@@ -57,7 +57,7 @@ function applyHistorySnapshot(
     ctx._layoutAnimTick++;
     ctx._commitNodeGeometry?.();
   });
-  debug('history', `${source} applied`, { nodes: snapshot.nodes.length, edges: snapshot.edges.length });
+  debug('history', `${origin} applied`, { nodes: snapshot.nodes.length, edges: snapshot.edges.length });
 }
 
 export function createHistoryMixin(ctx: CanvasContext) {
@@ -119,7 +119,7 @@ export function createHistoryMixin(ctx: CanvasContext) {
         ctx._panZoom?.setViewport(vp);
       }
       ctx.deselectAll();
-      ctx._emit('restore', obj);
+      ctx._emit('restore', { ...obj, origin: 'load' });
       ctx._scheduleAutoLayout();
       // Ensure edges re-measure DOM handle positions after node effects
       // have repositioned elements (edges use getBoundingClientRect).

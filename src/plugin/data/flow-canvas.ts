@@ -2191,7 +2191,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
           const targetNode = findDeepestNodeAtPoint(e.clientX, e.clientY);
 
           const node = config.onDrop({ data, position, targetNode, mimeType: matchedMime }, this as CanvasContext);
-          if (node) { this.addNodes(node, { center: true }); }
+          if (node) { this.addNodes(node, { center: true, source: 'drop' }); }
         };
 
         this._container.addEventListener('dragover', this._onDropZoneDragOver);
