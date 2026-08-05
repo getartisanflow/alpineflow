@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.2-alpha — 2026-08-05
+
+### Fixed — right-click no longer dismisses the context menu it opens
+
+`createPanZoomFilter` let **any** mouse button start a canvas pan when `panOnDrag` was the default, so a right-click with any drag panned the canvas — and the pan dismissed the context menu the same right-click had just opened. The bug only became visible in v0.2.1, when the pan's "close the context menu" side-effect became deferred to the next animation frame (`6fbda5f`): it now lands just *after* the menu opens instead of harmlessly *before*. The default now pans on the **primary (left) button only** (`!event.button`, matching d3-zoom). Explicit `panOnDrag` button lists, `panOnDrag: false`, and the pan-activation key are unchanged — set `panOnDrag: [0, 1, 2]` to restore multi-button pan.
+
 ## v0.2.1-alpha — 2026-08-04
 
 > Companion release: [WireFlow v0.2.1-alpha](https://github.com/getartisanflow/wireflow/blob/main/CHANGELOG.md#v021-alpha--2026-08-04) ships the matching server-side surface (`<x-schema-designer>`, `WithSchemaDesigner`, validator rules, `@connect-validate` bridge) plus the post-Phase-5 `<x-flow>` / `<x-schema-designer>` polish that pairs with the fullscreen + row-select + cascade fixes below.
