@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## v0.2.1-alpha — 2026-04-14
+
+> Companion release: [WireFlow v0.2.1-alpha](https://github.com/getartisanflow/wireflow/blob/main/CHANGELOG.md#v021-alpha--2026-04-14) ships the matching server-side surface (`<x-schema-designer>`, `WithSchemaDesigner`, validator rules, `@connect-validate` bridge) plus the post-Phase-5 `<x-flow>` / `<x-schema-designer>` polish that pairs with the fullscreen + row-select + cascade fixes below.
 
 ### Fixed — devtools event log no longer loses events while collapsed
 
@@ -372,10 +374,6 @@ changes** — a fan wider than the row condenses to fit. Off (the default) is by
 WS-1; a single-edge handle is untouched even when on. Lanes are computed once per commit
 (`_computeEndpointGrouping`, mirroring the obstacle snapshot) and only the re-laned edges
 re-route.
-
-## v0.2.1-alpha — 2026-04-14
-
-> Companion release: [WireFlow v0.2.1-alpha](https://github.com/getartisanflow/wireflow/blob/main/CHANGELOG.md#v021-alpha--2026-04-14) ships the matching server-side surface (`<x-schema-designer>`, `WithSchemaDesigner`, validator rules, `@connect-validate` bridge) plus the post-Phase-5 `<x-flow>` / `<x-schema-designer>` polish that pairs with the fullscreen + row-select + cascade fixes below.
 
 Tier A — measurement & layout lifecycle. Builder-focused improvements that eliminate the root cause of stale-measurement workarounds and make AlpineFlow reactive to real dimensional changes.
 
