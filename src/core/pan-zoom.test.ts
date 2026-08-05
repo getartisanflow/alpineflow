@@ -35,6 +35,28 @@ function mockTarget(classes: string[], ancestorClasses: string[][] = []) {
   };
 }
 
+describe('pan-zoom filter mouse button (panOnDrag default)', () => {
+  it('pans on the primary (left) button', () => {
+    expect(shouldAllowPanZoom({ type: 'mousedown', button: 0 }, {})).toBe(true);
+  });
+
+  it('pans when button is absent (treated as primary)', () => {
+    expect(shouldAllowPanZoom({ type: 'mousedown' }, {})).toBe(true);
+  });
+
+  it('does NOT pan on the right button — a right-click must not dismiss the context menu it opened', () => {
+    expect(shouldAllowPanZoom({ type: 'mousedown', button: 2 }, {})).toBe(false);
+  });
+
+  it('does NOT pan on the middle button by default', () => {
+    expect(shouldAllowPanZoom({ type: 'mousedown', button: 1 }, {})).toBe(false);
+  });
+
+  it('still honors an explicit panOnDrag button list', () => {
+    expect(shouldAllowPanZoom({ type: 'mousedown', button: 2 }, { panOnDrag: [0, 2] })).toBe(true);
+  });
+});
+
 describe('pan-zoom filter noPanClassName', () => {
   it('blocks mousedown pan on .nopan target', () => {
     const target = mockTarget(['nopan']);

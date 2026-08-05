@@ -132,6 +132,12 @@ export function createPanZoomFilter(opts: PanZoomFilterOptions) {
         return panOnDrag.includes(event.button);
       }
       if (panOnDrag === false) return false;
+      // panOnDrag === true / undefined (the default): pan on the PRIMARY (left)
+      // button only, matching d3-zoom's own `!event.button` default. Without this, a
+      // right- or middle-click drag starts a pan — and a right-click that starts a
+      // pan dismisses the context menu it just opened (the pan's deferred close lands
+      // a frame later). `!event.button` treats button 0 (and absent) as primary.
+      return !event.button;
     }
     return true;
   };
