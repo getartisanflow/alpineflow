@@ -27,17 +27,25 @@ export default function AlpineFlowWire(_Alpine: any): void {
 
       // Target the LIVE closure config, not the stripped `_config` copy:
       // registerWireEvents overrides the on<Event> callbacks that core's _emit
-      // reads, and _emit reads them from the closure config. Writing to the
-      // copy would leave the client→server forwarding silently dead.
+      // reads, and _emit reads them from the closure config. Writing to the copy
+      // leaves client→server forwarding silently dead — so if the core is too old
+      // to expose _liveConfig(), skip forwarding and warn LOUDLY rather than
+      // silently mutating the wrong object. This matters across the
+      // alpineflow↔wireflow version boundary: WireFlow vendors AlpineFlow's
+      // bundle as a separate artifact, so this addon can meet an older core.
       //
       // Known limitation: core emits 'init' from _initChildLayout() BEFORE
       // _initAddons() runs this setup, so a wireEvents mapping for 'init' does
       // not forward. All other lifecycle/interaction events fire after setup and
       // forward normally. (Reordering core init to fix this is deliberately not
       // done — other addons rely on _container/ResizeObserver being ready first.)
-      const config = canvas._liveConfig?.() ?? canvas._config ?? {};
-      if (config.wireEvents) {
-        registerWireEvents(config, $wire, config.wireEvents);
+      const liveConfig = canvas._liveConfig?.();
+      if (!liveConfig) {
+        console.warn(
+          '[wire] canvas._liveConfig() is unavailable — this AlpineFlow core is older than the /wire addon, so wireEvents client→server forwarding is disabled. Upgrade @getartisanflow/alpineflow to match the wire addon.',
+        );
+      } else if (liveConfig.wireEvents) {
+        registerWireEvents(liveConfig, $wire, liveConfig.wireEvents);
       }
       const cleanupCommands = registerWireCommands(canvas, $wire);
       const cleanupCustom = registerCustomWireCommands(canvas, $wire);
