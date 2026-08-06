@@ -18,6 +18,64 @@ import { sortNodesTopological } from '../../core/sub-flow';
 import { debug } from '../../core/debug';
 
 export function createSelectionMixin(ctx: CanvasContext) {
+  const setsEqual = (a: Set<string>, b: Set<string>): boolean => {
+    if (a.size !== b.size) {
+      return false;
+    }
+    for (const v of a) {
+      if (!b.has(v)) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  /** Clear all node/edge/row selection state + DOM classes WITHOUT emitting. */
+  const clearSelectionSilently = (): void => {
+    for (const id of ctx.selectedNodes) {
+      const n = ctx.getNode(id);
+      if (n) {
+        n.selected = false;
+      }
+    }
+    for (const id of ctx.selectedEdges) {
+      const e = ctx.getEdge(id);
+      if (e) {
+        e.selected = false;
+      }
+    }
+    ctx.selectedNodes.clear();
+    ctx.selectedEdges.clear();
+    ctx.selectedRows.clear();
+    ctx._container?.querySelectorAll('.flow-node-selected, .flow-edge-selected, .flow-row-selected').forEach((el: Element) => {
+      el.classList.remove('flow-node-selected', 'flow-edge-selected', 'flow-row-selected');
+    });
+  };
+
+  /**
+   * Replace the whole selection via `apply` (run after a silent clear) and emit
+   * `selection-change` at most once — and only when the resulting selection
+   * actually differs from the current one. Suppressing both the intermediate
+   * clear emit and the no-op emit keeps a single selection call to one event,
+   * and stops a server-driven `flow:selectNodes`/`flow:selectEdges` from echoing
+   * a `selection-change` back to $wire when the ids are unchanged (the /wire
+   * addon's selection round-trip note).
+   */
+  const replaceSelection = (apply: () => void): void => {
+    const beforeNodes = new Set(ctx.selectedNodes);
+    const beforeEdges = new Set(ctx.selectedEdges);
+    const beforeRows = new Set(ctx.selectedRows);
+    clearSelectionSilently();
+    apply();
+    if (
+      !setsEqual(beforeNodes, ctx.selectedNodes) ||
+      !setsEqual(beforeEdges, ctx.selectedEdges) ||
+      !setsEqual(beforeRows, ctx.selectedRows)
+    ) {
+      ctx._emitSelectionChange();
+    }
+  };
+
   return {
     // ── Deselect ─────────────────────────────────────────────────────────
 
@@ -33,46 +91,39 @@ export function createSelectionMixin(ctx: CanvasContext) {
     deselectAll(): void {
       if (ctx.selectedNodes.size === 0 && ctx.selectedEdges.size === 0 && ctx.selectedRows.size === 0) return;
       debug('selection', 'Deselecting all');
-      for (const id of ctx.selectedNodes) {
-        const n = ctx.getNode(id);
-        if (n) n.selected = false;
-      }
-      for (const id of ctx.selectedEdges) {
-        const e = ctx.getEdge(id);
-        if (e) e.selected = false;
-      }
-      ctx.selectedNodes.clear();
-      ctx.selectedEdges.clear();
-      ctx.selectedRows.clear();
-      // Remove selection class from all node/edge/row elements
-      ctx._container?.querySelectorAll('.flow-node-selected, .flow-edge-selected, .flow-row-selected').forEach((el: Element) => {
-        el.classList.remove('flow-node-selected', 'flow-edge-selected', 'flow-row-selected');
-      });
+      clearSelectionSilently();
       ctx._emitSelectionChange();
     },
 
-    /** Replace the current selection with the given nodes. */
+    /**
+     * Replace the current selection with the given nodes. Unknown ids are
+     * skipped. Emits `selection-change` only when the selection actually changes
+     * (see replaceSelection).
+     */
     selectNodes(ids: string[]): void {
-      ctx.deselectAll();
-      for (const id of ids) {
-        const n = ctx.getNode(id);
-        if (!n) continue;
-        ctx.selectedNodes.add(id);
-        n.selected = true;
-      }
-      ctx._emitSelectionChange();
+      replaceSelection(() => {
+        for (const id of ids) {
+          const n = ctx.getNode(id);
+          if (!n) continue;
+          ctx.selectedNodes.add(id);
+          n.selected = true;
+        }
+      });
     },
 
-    /** Replace the current selection with the given edges. */
+    /**
+     * Replace the current selection with the given edges. Unknown ids are
+     * skipped. Emits `selection-change` only when the selection actually changes.
+     */
     selectEdges(ids: string[]): void {
-      ctx.deselectAll();
-      for (const id of ids) {
-        const e = ctx.getEdge(id);
-        if (!e) continue;
-        ctx.selectedEdges.add(id);
-        e.selected = true;
-      }
-      ctx._emitSelectionChange();
+      replaceSelection(() => {
+        for (const id of ids) {
+          const e = ctx.getEdge(id);
+          if (!e) continue;
+          ctx.selectedEdges.add(id);
+          e.selected = true;
+        }
+      });
     },
 
     /** Set a node's locked flag (freezes interactions). No-op if the id is unknown. */

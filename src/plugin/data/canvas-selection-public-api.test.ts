@@ -51,6 +51,42 @@ describe('public selection / node-flag API', () => {
     expect(c.getEdge('e1').selected).toBe(true);
   });
 
+  it('selectNodes emits selection-change once on change, and not at all when unchanged', () => {
+    const onSelectionChange = vi.fn();
+    const c = mount({ ...CFG, onSelectionChange });
+    onSelectionChange.mockClear(); // ignore any init-time emits
+
+    c.selectNodes(['a']); // {} -> {a}
+    expect(onSelectionChange).toHaveBeenCalledTimes(1);
+
+    onSelectionChange.mockClear();
+    c.selectNodes(['b']); // {a} -> {b}: one net change, not two (clear + set)
+    expect(onSelectionChange).toHaveBeenCalledTimes(1);
+
+    onSelectionChange.mockClear();
+    c.selectNodes(['b']); // {b} -> {b}: no change, no emit — this is what breaks the round-trip
+    expect(onSelectionChange).toHaveBeenCalledTimes(0);
+  });
+
+  it('selectNodes([]) on an empty selection emits nothing', () => {
+    const onSelectionChange = vi.fn();
+    const c = mount({ ...CFG, onSelectionChange });
+    onSelectionChange.mockClear();
+    c.selectNodes([]);
+    expect(onSelectionChange).toHaveBeenCalledTimes(0);
+  });
+
+  it('selectEdges emits selection-change once on change, and not when unchanged', () => {
+    const onSelectionChange = vi.fn();
+    const c = mount({ ...CFG, onSelectionChange });
+    onSelectionChange.mockClear();
+    c.selectEdges(['e1']); // {} -> {e1}
+    expect(onSelectionChange).toHaveBeenCalledTimes(1);
+    onSelectionChange.mockClear();
+    c.selectEdges(['e1']); // unchanged
+    expect(onSelectionChange).toHaveBeenCalledTimes(0);
+  });
+
   it('setNodeLocked / setNodeHidden set the node flags', () => {
     const c = mount(CFG);
     c.setNodeLocked('a', true);

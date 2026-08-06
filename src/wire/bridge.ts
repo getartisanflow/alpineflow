@@ -286,10 +286,11 @@ export function registerCustomWireCommands(canvas: any, $wire: any): () => void 
   cleanups.push($wire.on('flow:showNode', (p: any) => { canvas.setNodeHidden(p.id, false); }));
 
   // flow:selectNodes — select specific nodes.
-  // Note: canvas.selectNodes emits 'selection-change'. If the app also maps
-  // 'selection-change' in wireEvents, a server-driven selection round-trips
-  // back to $wire. That is intended (the server learns the resulting state);
-  // guard against feedback loops in the Livewire handler if undesired.
+  // canvas.selectNodes emits 'selection-change' only when the selection actually
+  // changes, so if the app maps 'selection-change' in wireEvents a server-driven
+  // selection forwards the resulting state back to $wire once (intended: the
+  // server learns the result). Re-issuing the same ids is a no-op that does NOT
+  // re-emit, so an idempotent server→client→server round-trip cannot loop.
   cleanups.push($wire.on('flow:selectNodes', (p: any) => { canvas.selectNodes(p.ids); }));
 
   // flow:run — invoke $flow.run() with server-provided startId + options.
