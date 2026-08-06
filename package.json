@@ -73,8 +73,7 @@
         },
         "./wire": {
             "types": "./dist/types/lib/wire.d.ts",
-            "import": "./dist/alpineflow-wire.esm.js",
-            "default": "./dist/alpineflow-wire.js"
+            "import": "./dist/alpineflow-wire.esm.js"
         },
         "./schema": {
             "types": "./dist/types/lib/schema.d.ts",
