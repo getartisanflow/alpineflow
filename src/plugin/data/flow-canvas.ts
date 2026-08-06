@@ -332,6 +332,18 @@ export function registerFlowCanvas(Alpine: Alpine) {
     // circular references (e.g. InMemoryProvider.peer) that crash
     // Alpine's deep-reactive proxy walker.
     _config: (() => { const { collab: _, ...rest } = config; return rest; })() as FlowCanvasConfig,
+    /**
+     * Return the live closure config — the SAME object `_emit` reads callbacks
+     * from. `_config` above is a one-time stripped *copy* (kept collab-free so
+     * Alpine's reactive walker never touches provider cycles), so writing to it
+     * would not be visible to `_emit`. Addons that need to install/override
+     * event callbacks (e.g. the /wire bridge's registerWireEvents) must target
+     * this object, not `_config`. Not stored as reactive data — a function's
+     * return value is not deep-walked, so this stays collab-safe.
+     */
+    _liveConfig(): FlowCanvasConfig {
+      return config;
+    },
     _shortcuts: resolveShortcuts(config.keyboardShortcuts),
     _container: null as HTMLElement | null,
     _panZoom: null as PanZoomInstance | null,

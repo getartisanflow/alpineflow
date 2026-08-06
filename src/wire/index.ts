@@ -25,7 +25,17 @@ export default function AlpineFlowWire(_Alpine: any): void {
       const $wire = canvas?.$wire;
       if (!$wire) return;
 
-      const config = canvas._config ?? {};
+      // Target the LIVE closure config, not the stripped `_config` copy:
+      // registerWireEvents overrides the on<Event> callbacks that core's _emit
+      // reads, and _emit reads them from the closure config. Writing to the
+      // copy would leave the client→server forwarding silently dead.
+      //
+      // Known limitation: core emits 'init' from _initChildLayout() BEFORE
+      // _initAddons() runs this setup, so a wireEvents mapping for 'init' does
+      // not forward. All other lifecycle/interaction events fire after setup and
+      // forward normally. (Reordering core init to fix this is deliberately not
+      // done — other addons rely on _container/ResizeObserver being ready first.)
+      const config = canvas._liveConfig?.() ?? canvas._config ?? {};
       if (config.wireEvents) {
         registerWireEvents(config, $wire, config.wireEvents);
       }

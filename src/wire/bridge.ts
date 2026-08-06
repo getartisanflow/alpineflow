@@ -285,7 +285,11 @@ export function registerCustomWireCommands(canvas: any, $wire: any): () => void 
   cleanups.push($wire.on('flow:hideNode', (p: any) => { canvas.setNodeHidden(p.id, true); }));
   cleanups.push($wire.on('flow:showNode', (p: any) => { canvas.setNodeHidden(p.id, false); }));
 
-  // flow:selectNodes — select specific nodes
+  // flow:selectNodes — select specific nodes.
+  // Note: canvas.selectNodes emits 'selection-change'. If the app also maps
+  // 'selection-change' in wireEvents, a server-driven selection round-trips
+  // back to $wire. That is intended (the server learns the resulting state);
+  // guard against feedback loops in the Livewire handler if undesired.
   cleanups.push($wire.on('flow:selectNodes', (p: any) => { canvas.selectNodes(p.ids); }));
 
   // flow:run — invoke $flow.run() with server-provided startId + options.
@@ -295,7 +299,7 @@ export function registerCustomWireCommands(canvas: any, $wire: any): () => void 
   // defaultDurationMs, particleOnEdges, particleOptions, muteUntakenBranches, etc.).
   cleanups.push($wire.on('flow:run', (p: any) => {
     if (typeof canvas.run !== 'function') {
-      console.warn('[wire-bridge] flow:run: canvas.run not available — is the workflow addon registered?');
+      console.warn('[wire] flow:run: canvas.run not available — is the workflow addon registered?');
       return;
     }
     const handlers = canvas._workflowHandlers ?? {};
