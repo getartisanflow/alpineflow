@@ -1777,12 +1777,6 @@ export interface FlowCanvasConfig {
   /** Enable real-time collaboration. Requires yjs peer dependency. */
   collab?: CollabConfig;
 
-  // ── Wire Bridge (Livewire) ──────────────────────────────────────────
-  /** Map of AlpineFlow event names to Livewire method names.
-   *  When $wire is available, these events auto-call $wire.methodName()
-   *  with extracted payload arguments. Set by WireFlow Blade component. */
-  wireEvents?: Record<string, string>;
-
   // ── Drop Zone ───────────────────────────────────────────────────────
   /** MIME types accepted by the drop zone. Defaults to `['application/alpineflow']`.
    *  Builder applications can pass custom types (e.g. `'application/alpineform-field'`).

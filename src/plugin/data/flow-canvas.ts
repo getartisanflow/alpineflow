@@ -68,7 +68,6 @@ import { collabStore } from '../../collab/store';
 import { getAddon, getRegistry } from '../../core/registry';
 import { FlowAnnouncer } from '../../core/announcer';
 import { ComputeEngine } from '../../core/compute';
-import { registerWireEvents, registerWireCommands, registerCustomWireCommands } from '../../core/wire-bridge';
 import { createLayoutDedup, type LayoutDedup } from './canvas-layout-dedup';
 import { createBatch } from './canvas-batch';
 import { clampDimensions } from '../../animate/clamp-dimensions';
@@ -2225,7 +2224,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
      * Install per-property Alpine watchers on a container node's childLayout.
      *
      * Watches the six layout-affecting properties explicitly so that any
-     * mutation — direct assignment or via wire-bridge — triggers a re-layout
+     * mutation — direct assignment or via the wire addon — triggers a re-layout
      * through the existing safeLayoutChildren dedup (at most one call per
      * parent per frame). Unwatched props (e.g. custom user data on childLayout)
      * never cause spurious layouts.
@@ -2338,18 +2337,6 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
       // A1: Create the shared ResizeObserver now that Alpine + _nodeMap are ready.
       this._resizeObserverInit();
-
-      // Wire bridge: detect $wire (Livewire) and activate bidirectional bridge
-      if ((this as any).$wire) {
-        const $wire = (this as any).$wire;
-        if (config.wireEvents) {
-          registerWireEvents(config, $wire, config.wireEvents);
-        }
-        const cleanupCommands = registerWireCommands(this, $wire);
-        const cleanupCustom = registerCustomWireCommands(this, $wire);
-        (this as any)._wireCleanup = () => { cleanupCommands(); cleanupCustom(); };
-        debug('init', `wire bridge activated for "${this._id}"`);
-      }
 
       debug('init', `flowCanvas "${this._id}" ready`);
       this._emit('init');
@@ -2573,10 +2560,6 @@ export function registerFlowCanvas(Alpine: Alpine) {
       // Animations / particles / timelines. Lives in the animation mixin; called
       // from here because a mixin method named `destroy` would shadow THIS one.
       (this as any)._destroyAnimations?.();
-
-      // Wire bridge cleanup
-      (this as any)._wireCleanup?.();
-      (this as any)._wireCleanup = null;
 
       // Addon cleanups returned from addon.setup(canvas)
       for (const cleanup of ((this as any)._addonCleanups ?? [])) {

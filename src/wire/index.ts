@@ -8,7 +8,7 @@
 // ============================================================================
 
 import { registerAddon } from '../core/registry';
-import { registerWireEvents, registerWireCommands, registerCustomWireCommands } from '../core/wire-bridge';
+import { registerWireEvents, registerWireCommands, registerCustomWireCommands } from './bridge';
 
 // Re-declare the Livewire config field that used to live in core types.ts, so
 // TypeScript consumers of this addon keep `wireEvents` on their canvas config.

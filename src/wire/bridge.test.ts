@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { WIRE_PAYLOAD_MAP, WIRE_COMMAND_MAP, registerWireCommands, registerWireEvents, registerCustomWireCommands } from './wire-bridge';
+import { WIRE_PAYLOAD_MAP, WIRE_COMMAND_MAP, registerWireCommands, registerWireEvents, registerCustomWireCommands } from './bridge';
 
 // ── WIRE_PAYLOAD_MAP ──────────────────────────────────────────────────
 

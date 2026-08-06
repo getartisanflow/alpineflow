@@ -22,7 +22,7 @@ import { debug } from '../../core/debug';
  * their original object identity, so live Alpine edge/node scopes (and the
  * child-layout watchers bound to node proxies) stay attached — a wholesale
  * `ctx.edges = snapshot.edges` would orphan every edge scope. Array identity is
- * preserved via `splice`, and a `restore` event is emitted so wire-bridge and
+ * preserved via `splice`, and a `restore` event is emitted so the wire addon and
  * collaboration observers are notified of the change.
  */
 function applyHistorySnapshot(
@@ -47,7 +47,7 @@ function applyHistorySnapshot(
     if (e.selected) e.selected = false;
   }
   // Carry the restored nodes/edges (parity with fromObject's `restore` payload)
-  // plus an `origin` tag, so wire-bridge / collaboration observers can react to
+  // plus an `origin` tag, so the wire addon / collaboration observers can react to
   // undo/redo the same way they react to fromObject.
   ctx._emit('restore', { nodes: ctx.nodes, edges: ctx.edges, origin });
   // Bump _layoutAnimTick in a rAF so edge effects re-run after node effects
