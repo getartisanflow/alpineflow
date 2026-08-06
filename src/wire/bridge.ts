@@ -278,34 +278,20 @@ export function registerCustomWireCommands(canvas: any, $wire: any): () => void 
   }));
 
   // flow:lockNode / flow:unlockNode — set locked state (freezes all interactions)
-  cleanups.push($wire.on('flow:lockNode', (p: any) => {
-    const node = canvas.getNode(p.id);
-    if (node) node.locked = true;
-  }));
-  cleanups.push($wire.on('flow:unlockNode', (p: any) => {
-    const node = canvas.getNode(p.id);
-    if (node) node.locked = false;
-  }));
+  cleanups.push($wire.on('flow:lockNode',   (p: any) => { canvas.setNodeLocked(p.id, true); }));
+  cleanups.push($wire.on('flow:unlockNode', (p: any) => { canvas.setNodeLocked(p.id, false); }));
 
   // flow:hideNode / flow:showNode — set hidden state
-  cleanups.push($wire.on('flow:hideNode', (p: any) => {
-    const node = canvas.getNode(p.id);
-    if (node) node.hidden = true;
-  }));
-  cleanups.push($wire.on('flow:showNode', (p: any) => {
-    const node = canvas.getNode(p.id);
-    if (node) node.hidden = false;
-  }));
+  cleanups.push($wire.on('flow:hideNode', (p: any) => { canvas.setNodeHidden(p.id, true); }));
+  cleanups.push($wire.on('flow:showNode', (p: any) => { canvas.setNodeHidden(p.id, false); }));
 
-  // flow:selectNodes — select specific nodes
-  cleanups.push($wire.on('flow:selectNodes', (p: any) => {
-    canvas.deselectAll();
-    for (const id of p.ids) {
-      canvas.selectedNodes.add(id);
-      const node = canvas.getNode(id);
-      if (node) node.selected = true;
-    }
-  }));
+  // flow:selectNodes — select specific nodes.
+  // canvas.selectNodes emits 'selection-change' only when the selection actually
+  // changes, so if the app maps 'selection-change' in wireEvents a server-driven
+  // selection forwards the resulting state back to $wire once (intended: the
+  // server learns the result). Re-issuing the same ids is a no-op that does NOT
+  // re-emit, so an idempotent server→client→server round-trip cannot loop.
+  cleanups.push($wire.on('flow:selectNodes', (p: any) => { canvas.selectNodes(p.ids); }));
 
   // flow:run — invoke $flow.run() with server-provided startId + options.
   // Handlers (onEnter, pickBranch, etc.) must be pre-registered on the canvas
@@ -314,7 +300,7 @@ export function registerCustomWireCommands(canvas: any, $wire: any): () => void 
   // defaultDurationMs, particleOnEdges, particleOptions, muteUntakenBranches, etc.).
   cleanups.push($wire.on('flow:run', (p: any) => {
     if (typeof canvas.run !== 'function') {
-      console.warn('[wire-bridge] flow:run: canvas.run not available — is the workflow addon registered?');
+      console.warn('[wire] flow:run: canvas.run not available — is the workflow addon registered?');
       return;
     }
     const handlers = canvas._workflowHandlers ?? {};
@@ -322,14 +308,7 @@ export function registerCustomWireCommands(canvas: any, $wire: any): () => void 
   }));
 
   // flow:selectEdges — select specific edges
-  cleanups.push($wire.on('flow:selectEdges', (p: any) => {
-    canvas.deselectAll();
-    for (const id of p.ids) {
-      canvas.selectedEdges.add(id);
-      const edge = canvas.getEdge(id);
-      if (edge) edge.selected = true;
-    }
-  }));
+  cleanups.push($wire.on('flow:selectEdges', (p: any) => { canvas.selectEdges(p.ids); }));
 
   return () => {
     for (const cleanup of cleanups) {
