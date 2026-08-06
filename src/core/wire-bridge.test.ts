@@ -420,6 +420,66 @@ describe('flow:highlightPath — option pass-through (v0.2.0-alpha fix)', () => 
   });
 });
 
+// ── registerCustomWireCommands — lock/hide/select composites ───────────
+
+describe('registerCustomWireCommands — lock/hide/select composites (public API delegation)', () => {
+  function setup() {
+    const listeners: Record<string, Function> = {};
+    const mockWire = { on: (event: string, cb: Function) => { listeners[event] = cb; } };
+    const mockCanvas = {
+      edges: [],
+      getNode: vi.fn(),
+      getEdge: vi.fn(),
+      deselectAll: vi.fn(),
+      selectedNodes: new Set<string>(),
+      selectedEdges: new Set<string>(),
+      sendParticle: vi.fn(),
+      selectNodes: vi.fn(),
+      selectEdges: vi.fn(),
+      setNodeLocked: vi.fn(),
+      setNodeHidden: vi.fn(),
+    };
+    registerCustomWireCommands(mockCanvas as any, mockWire);
+    return { listeners, mockCanvas };
+  }
+
+  it('flow:lockNode delegates to canvas.setNodeLocked(id, true)', () => {
+    const { listeners, mockCanvas } = setup();
+    listeners['flow:lockNode']({ id: 'a' });
+    expect(mockCanvas.setNodeLocked).toHaveBeenCalledWith('a', true);
+  });
+
+  it('flow:unlockNode delegates to canvas.setNodeLocked(id, false)', () => {
+    const { listeners, mockCanvas } = setup();
+    listeners['flow:unlockNode']({ id: 'a' });
+    expect(mockCanvas.setNodeLocked).toHaveBeenCalledWith('a', false);
+  });
+
+  it('flow:hideNode delegates to canvas.setNodeHidden(id, true)', () => {
+    const { listeners, mockCanvas } = setup();
+    listeners['flow:hideNode']({ id: 'b' });
+    expect(mockCanvas.setNodeHidden).toHaveBeenCalledWith('b', true);
+  });
+
+  it('flow:showNode delegates to canvas.setNodeHidden(id, false)', () => {
+    const { listeners, mockCanvas } = setup();
+    listeners['flow:showNode']({ id: 'b' });
+    expect(mockCanvas.setNodeHidden).toHaveBeenCalledWith('b', false);
+  });
+
+  it('flow:selectNodes delegates to canvas.selectNodes(ids)', () => {
+    const { listeners, mockCanvas } = setup();
+    listeners['flow:selectNodes']({ ids: ['a', 'b'] });
+    expect(mockCanvas.selectNodes).toHaveBeenCalledWith(['a', 'b']);
+  });
+
+  it('flow:selectEdges delegates to canvas.selectEdges(ids)', () => {
+    const { listeners, mockCanvas } = setup();
+    listeners['flow:selectEdges']({ ids: ['e1'] });
+    expect(mockCanvas.selectEdges).toHaveBeenCalledWith(['e1']);
+  });
+});
+
 // ── registerWireEvents ────────────────────────────────────────────────
 
 describe('registerWireEvents', () => {

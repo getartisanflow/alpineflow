@@ -278,34 +278,15 @@ export function registerCustomWireCommands(canvas: any, $wire: any): () => void 
   }));
 
   // flow:lockNode / flow:unlockNode — set locked state (freezes all interactions)
-  cleanups.push($wire.on('flow:lockNode', (p: any) => {
-    const node = canvas.getNode(p.id);
-    if (node) node.locked = true;
-  }));
-  cleanups.push($wire.on('flow:unlockNode', (p: any) => {
-    const node = canvas.getNode(p.id);
-    if (node) node.locked = false;
-  }));
+  cleanups.push($wire.on('flow:lockNode',   (p: any) => { canvas.setNodeLocked(p.id, true); }));
+  cleanups.push($wire.on('flow:unlockNode', (p: any) => { canvas.setNodeLocked(p.id, false); }));
 
   // flow:hideNode / flow:showNode — set hidden state
-  cleanups.push($wire.on('flow:hideNode', (p: any) => {
-    const node = canvas.getNode(p.id);
-    if (node) node.hidden = true;
-  }));
-  cleanups.push($wire.on('flow:showNode', (p: any) => {
-    const node = canvas.getNode(p.id);
-    if (node) node.hidden = false;
-  }));
+  cleanups.push($wire.on('flow:hideNode', (p: any) => { canvas.setNodeHidden(p.id, true); }));
+  cleanups.push($wire.on('flow:showNode', (p: any) => { canvas.setNodeHidden(p.id, false); }));
 
   // flow:selectNodes — select specific nodes
-  cleanups.push($wire.on('flow:selectNodes', (p: any) => {
-    canvas.deselectAll();
-    for (const id of p.ids) {
-      canvas.selectedNodes.add(id);
-      const node = canvas.getNode(id);
-      if (node) node.selected = true;
-    }
-  }));
+  cleanups.push($wire.on('flow:selectNodes', (p: any) => { canvas.selectNodes(p.ids); }));
 
   // flow:run — invoke $flow.run() with server-provided startId + options.
   // Handlers (onEnter, pickBranch, etc.) must be pre-registered on the canvas
@@ -322,14 +303,7 @@ export function registerCustomWireCommands(canvas: any, $wire: any): () => void 
   }));
 
   // flow:selectEdges — select specific edges
-  cleanups.push($wire.on('flow:selectEdges', (p: any) => {
-    canvas.deselectAll();
-    for (const id of p.ids) {
-      canvas.selectedEdges.add(id);
-      const edge = canvas.getEdge(id);
-      if (edge) edge.selected = true;
-    }
-  }));
+  cleanups.push($wire.on('flow:selectEdges', (p: any) => { canvas.selectEdges(p.ids); }));
 
   return () => {
     for (const cleanup of cleanups) {
