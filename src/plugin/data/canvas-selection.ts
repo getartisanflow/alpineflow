@@ -51,6 +51,42 @@ export function createSelectionMixin(ctx: CanvasContext) {
       ctx._emitSelectionChange();
     },
 
+    /** Replace the current selection with the given nodes. */
+    selectNodes(ids: string[]): void {
+      ctx.deselectAll();
+      for (const id of ids) {
+        const n = ctx.getNode(id);
+        if (!n) continue;
+        ctx.selectedNodes.add(id);
+        n.selected = true;
+      }
+      ctx._emitSelectionChange();
+    },
+
+    /** Replace the current selection with the given edges. */
+    selectEdges(ids: string[]): void {
+      ctx.deselectAll();
+      for (const id of ids) {
+        const e = ctx.getEdge(id);
+        if (!e) continue;
+        ctx.selectedEdges.add(id);
+        e.selected = true;
+      }
+      ctx._emitSelectionChange();
+    },
+
+    /** Set a node's locked flag (freezes interactions). No-op if the id is unknown. */
+    setNodeLocked(id: string, locked: boolean): void {
+      const n = ctx.getNode(id);
+      if (n) n.locked = locked;
+    },
+
+    /** Set a node's hidden flag. No-op if the id is unknown. */
+    setNodeHidden(id: string, hidden: boolean): void {
+      const n = ctx.getNode(id);
+      if (n) n.hidden = hidden;
+    },
+
     // ── Deletion ─────────────────────────────────────────────────────────
 
     /**
