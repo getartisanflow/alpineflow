@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.3.0-alpha — unreleased
+
+### Changed (breaking) — the Livewire bridge is now the `/wire` addon, not part of core
+
+The Livewire integration — the bridge that turns server `flow:*` dispatches into canvas calls and forwards AlpineFlow events to `$wire` methods — used to live in core and rode into the vendored single-file bundle for free. It now ships as a standalone addon at **`@getartisanflow/alpineflow/wire`**, keeping the core engine framework-agnostic.
+
+- Register it after core, only where you have Livewire: `import AlpineFlowWire from '@getartisanflow/alpineflow/wire'; Alpine.plugin(AlpineFlowWire)`. It activates only when a canvas exposes a `$wire` proxy.
+- **Breaking:** because the bridge left core, it is no longer inside `alpineflow.bundle.esm.js`. A `<x-flow>` canvas will not talk to `$wire` until the wire addon is registered — anything relying on the in-core bridge (including WireFlow, until it resyncs and loads the addon) must add it.
+- **`wireEvents`** moved off the core `FlowCanvasConfig` type into the addon (a TypeScript module augmentation). Importing the addon restores `wireEvents` on the config type; nothing changed at runtime.
+- The `./wire` subpath is ESM-only (`import`); there is no CDN/`require` build (tracked as a follow-up).
+
+### Added — public `selectNodes` / `selectEdges` / `setNodeLocked` / `setNodeHidden`
+
+Selecting, locking, and hiding nodes/edges from the server used to reach into canvas internals inside the bridge. These are now first-class public canvas methods (also declared on `CanvasContext`), and the `flow:*` wire commands route through them. `selectNodes` / `selectEdges` replace the current selection and skip ids that don't exist (previously unknown ids polluted the selection set).
+
+They emit `selection-change` **only when the selection actually changes**, and at most once per call — so client listeners (and the server, if you map `selection-change` in `wireEvents`) observe server-driven selections, while re-issuing the same ids is a no-op that does not re-emit. This also collapses the old clear-then-set double emit into a single event.
+
 ## v0.2.2-alpha — 2026-08-05
 
 ### Fixed — right-click no longer dismisses the context menu it opens
