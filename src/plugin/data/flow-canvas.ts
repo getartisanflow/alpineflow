@@ -2390,11 +2390,14 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._commitNodeGeometry();
     },
 
-    /** Call setup(canvas) on any addon that provides it. */
+    /** Call setup(canvas) on any addon that provides it, capturing any cleanup it returns. */
     _initAddons() {
       for (const [, addon] of getRegistry().entries()) {
         if (addon && typeof addon === 'object' && typeof addon.setup === 'function') {
-          addon.setup(this);
+          const cleanup = addon.setup(this);
+          if (typeof cleanup === 'function') {
+            ((this as any)._addonCleanups ??= []).push(cleanup);
+          }
         }
       }
     },
@@ -2574,6 +2577,12 @@ export function registerFlowCanvas(Alpine: Alpine) {
       // Wire bridge cleanup
       (this as any)._wireCleanup?.();
       (this as any)._wireCleanup = null;
+
+      // Addon cleanups returned from addon.setup(canvas)
+      for (const cleanup of ((this as any)._addonCleanups ?? [])) {
+        try { cleanup(); } catch { /* one addon's teardown error must not abort the rest */ }
+      }
+      (this as any)._addonCleanups = [];
 
       // Alpine's nextTick runs off a global tickStack that component teardown does
       // NOT cancel. If we were destroyed in the same task init() queued the install
