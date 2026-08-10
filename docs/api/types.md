@@ -229,6 +229,9 @@ interface FlowEdge<T = Record<string, any>> {
   /** Center label text. */
   label?: string;
 
+  /** Render label, labelStart and labelEnd as HTML rather than text. Default: false */
+  labelHtml?: boolean;
+
   /** Center label position along path (0 = source, 1 = target). Default: 0.5 */
   labelPosition?: number;
 

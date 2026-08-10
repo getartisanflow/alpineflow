@@ -655,3 +655,56 @@ describe('x-flow-edge label path-length caching (Task B1)', () => {
     expect(getTotalLengthSpy).toHaveBeenCalled(); // re-measured on new d
   });
 });
+
+describe('x-flow-edge label markup (labelHtml)', () => {
+  // The harness builds host > .flow-container > svg > g and no viewport, so labels are created
+  // but never appended. Marking the container as the viewport gives `ensureLabel` somewhere to
+  // put them, and the label block re-runs on the next mutation.
+  const withViewport = (host: HTMLElement): void => {
+    host.querySelector('.flow-container')!.classList.add('flow-viewport');
+  };
+
+  it('writes a label as text by default, so markup shows as the tags it is', async () => {
+    const { host, data } = mountEdges(flatNodes(), [{ id: 'e1', source: 'a', target: 'b' }]);
+    await flush();
+    withViewport(host);
+
+    data.getEdge('e1')!.label = '<b>bold</b>';
+    await flush();
+
+    const label = host.querySelector('.flow-edge-label') as HTMLElement;
+    expect(label.textContent).toBe('<b>bold</b>');
+    expect(label.querySelector('b')).toBeNull();
+  });
+
+  it('renders a label as HTML when the edge asks for it', async () => {
+    const { host, data } = mountEdges(flatNodes(), [
+      { id: 'e1', source: 'a', target: 'b', labelHtml: true },
+    ]);
+    await flush();
+    withViewport(host);
+
+    data.getEdge('e1')!.label = 'over the limit<br>and no manager';
+    await flush();
+
+    const label = host.querySelector('.flow-edge-label') as HTMLElement;
+    expect(label.querySelector('br')).not.toBeNull();
+    expect(label.textContent).toBe('over the limitand no manager');
+  });
+
+  it('applies to the start and end labels too', async () => {
+    const { host, data } = mountEdges(flatNodes(), [
+      { id: 'e1', source: 'a', target: 'b', labelHtml: true },
+    ]);
+    await flush();
+    withViewport(host);
+
+    const edge = data.getEdge('e1')!;
+    edge.labelStart = '<em>from</em>';
+    edge.labelEnd = '<em>to</em>';
+    await flush();
+
+    expect(host.querySelector('.flow-edge-label-start')!.querySelector('em')).not.toBeNull();
+    expect(host.querySelector('.flow-edge-label-end')!.querySelector('em')).not.toBeNull();
+  });
+});
