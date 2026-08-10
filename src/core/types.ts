@@ -1834,6 +1834,17 @@ export interface FlowCanvasConfig {
    *  have room to return to. Only consulted when `zoomOnDoubleClick: 'toggle'`.
    *  Default: 1.5 */
   dblClickZoomLevel?: number;
+  /** Where a toggle double-click zooms out to when it has no remembered viewport to
+   *  restore — the user reached this zoom by wheel or `setViewport`, or panned after
+   *  zooming in, which drops the memory.
+   *
+   *  - `'min'` (default) — `minZoom`, about the cursor.
+   *  - `'fit'` — the whole graph back on screen, the viewport `fitView()` computes.
+   *  - `number` — a fixed level, about the cursor. Clamped to [minZoom, maxZoom].
+   *
+   *  A remembered viewport always wins over this. Only consulted when
+   *  `zoomOnDoubleClick: 'toggle'`. Default: `'min'` */
+  dblClickZoomOutLevel?: number | 'fit' | 'min';
 
   // ── Select on Drag ────────────────────────────────────────────────
   /** Automatically select nodes when they start being dragged. Default: true */

@@ -1369,6 +1369,14 @@ export function registerFlowCanvas(Alpine: Alpine) {
         noWheelClassName: config.noWheelClassName ?? 'nowheel',
         zoomOnDoubleClick: config.zoomOnDoubleClick,
         dblClickZoomLevel: config.dblClickZoomLevel,
+        dblClickZoomOutLevel: config.dblClickZoomOutLevel,
+        // Only called when a toggle double-click zooms out under
+        // `dblClickZoomOutLevel: 'fit'`, so the bounds pass costs nothing otherwise.
+        getFitViewport: (): Viewport | null => {
+          const bounds = this.getNodesBounds();
+          if (bounds.width <= 0 && bounds.height <= 0) return null;
+          return this.getViewportForBounds(bounds, DEFAULT_FIT_PADDING);
+        },
         panOnDrag: config.panOnDrag,
         panActivationKeyCode: config.panActivationKeyCode,
         zoomActivationKeyCode: config.zoomActivationKeyCode,

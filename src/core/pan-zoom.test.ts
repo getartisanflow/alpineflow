@@ -204,4 +204,99 @@ describe('resolveDblClickZoom — double-click is a toggle, not zoom-in-only', (
       expect(next.zoom).toBe(2);
     });
   });
+
+  // Only the zoom-out fallback is configurable: it is the branch with no viewport to
+  // go back to. `minZoom` is a floor, which is the right answer for a canvas people
+  // survey and the wrong one for a canvas they read — there, "show me all of it"
+  // is the graph's own extent, not an arbitrary level.
+  describe('zoom-out fallback (dblClickZoomOutLevel)', () => {
+    const zoomedIn = { x: 40, y: 20, zoom: 2 };
+    const fitViewport = { x: 15, y: -8, zoom: 0.72 };
+
+    it("goes to the fitted viewport under 'fit', pan and all", () => {
+      const { next, remember } = resolveDblClickZoom(zoomedIn, { x: 100, y: 50 }, {
+        level: 1.5, minZoom: 0.5, remembered: null, zoomOut: 'fit', fit: () => fitViewport,
+      });
+
+      // The whole transform, not just the zoom: fitting is a pan as much as a scale,
+      // and zooming out about the cursor would leave the graph off-centre.
+      expect(next).toEqual(fitViewport);
+      expect(remember).toBeNull();
+    });
+
+    it('falls back to minZoom when there is nothing to fit', () => {
+      // An empty canvas, or one whose nodes have not been measured yet. minZoom is
+      // still a move, and a dead gesture is worse than a blunt one.
+      const { next } = resolveDblClickZoom(zoomedIn, { x: 100, y: 50 }, {
+        level: 1.5, minZoom: 0.5, remembered: null, zoomOut: 'fit', fit: () => null,
+      });
+
+      expect(next.zoom).toBe(0.5);
+    });
+
+    it('does not measure the graph on the double-click that zooms in', () => {
+      // The fit is a thunk for this reason: most double-clicks zoom in, and walking
+      // every node's bounds for a branch that will not run is work nobody asked for.
+      let measured = 0;
+      resolveDblClickZoom({ x: 0, y: 0, zoom: 1 }, { x: 100, y: 50 }, {
+        level: 1.5, minZoom: 0.5, remembered: null, zoomOut: 'fit', fit: () => { measured++; return fitViewport; },
+      });
+
+      expect(measured).toBe(0);
+    });
+
+    it('a remembered viewport still wins over the fallback', () => {
+      const remembered = { x: 1, y: 2, zoom: 0.9 };
+      const { next } = resolveDblClickZoom(zoomedIn, { x: 100, y: 50 }, {
+        level: 1.5, minZoom: 0.5, remembered, zoomOut: 'fit', fit: () => fitViewport,
+      });
+
+      expect(next).toEqual(remembered);
+    });
+
+    it('zooms out to a fixed number about the cursor', () => {
+      const pointer = { x: 100, y: 50 };
+      const { next } = resolveDblClickZoom(zoomedIn, pointer, {
+        level: 1.5, minZoom: 0.5, remembered: null, zoomOut: 0.8,
+      });
+
+      expect(next.zoom).toBe(0.8);
+      const before = { x: (pointer.x - zoomedIn.x) / zoomedIn.zoom, y: (pointer.y - zoomedIn.y) / zoomedIn.zoom };
+      const after = { x: (pointer.x - next.x) / next.zoom, y: (pointer.y - next.y) / next.zoom };
+      expect(after.x).toBeCloseTo(before.x, 10);
+      expect(after.y).toBeCloseTo(before.y, 10);
+    });
+
+    it('never zooms out below minZoom', () => {
+      const { next } = resolveDblClickZoom(zoomedIn, { x: 0, y: 0 }, {
+        level: 1.5, minZoom: 0.5, remembered: null, zoomOut: 0.1,
+      });
+
+      expect(next.zoom).toBe(0.5);
+    });
+
+    it('is honest when the fixed level leaves no room below the current zoom', () => {
+      // Same contract as the level === minZoom case above: hand back the very object,
+      // so a caller can tell "no move" from a transition.
+      const current = { x: 10, y: 20, zoom: 1.5 };
+      const { next, remember } = resolveDblClickZoom(current, { x: 100, y: 50 }, {
+        level: 1.5, minZoom: 0.5, remembered: null, zoomOut: 1.5,
+      });
+
+      expect(next).toBe(current);
+      expect(remember).toBeNull();
+    });
+
+    it("defaults to 'min', matching the behaviour before the option existed", () => {
+      const withOption = resolveDblClickZoom(zoomedIn, { x: 100, y: 50 }, {
+        level: 1.5, minZoom: 0.5, remembered: null, zoomOut: 'min',
+      });
+      const without = resolveDblClickZoom(zoomedIn, { x: 100, y: 50 }, {
+        level: 1.5, minZoom: 0.5, remembered: null,
+      });
+
+      expect(withOption.next).toEqual(without.next);
+      expect(without.next.zoom).toBe(0.5);
+    });
+  });
 });

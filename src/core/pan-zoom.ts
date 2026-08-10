@@ -59,6 +59,24 @@ export interface PanZoomOptions {
    *  zoom-in. Clamped to [minZoom, maxZoom]. Only consulted when
    *  `zoomOnDoubleClick: 'toggle'`. Default: 1.5 */
   dblClickZoomLevel?: number;
+  /** Where a toggle double-click zooms out to when there is no remembered viewport
+   *  to restore — the user reached this zoom by wheel or `setViewport`, or panned
+   *  after zooming in and so dropped the memory.
+   *
+   *  - `'min'` (default) — `minZoom`, about the cursor.
+   *  - `'fit'` — the viewport that frames the whole graph, as `fitView()` computes
+   *    it. Needs {@link PanZoomOptions.getFitViewport}; falls back to `'min'` when
+   *    there is nothing to fit.
+   *  - `number` — a fixed level, about the cursor. Clamped to [minZoom, maxZoom].
+   *
+   *  Only consulted when `zoomOnDoubleClick: 'toggle'`; a remembered viewport always
+   *  wins over it. Default: `'min'` */
+  dblClickZoomOutLevel?: number | 'fit' | 'min';
+  /** Viewport that frames the whole graph, or `null` when there is nothing to frame.
+   *  Called only when a toggle double-click zooms out under
+   *  `dblClickZoomOutLevel: 'fit'` — pan/zoom does not know about nodes, so the
+   *  consumer supplies this. */
+  getFitViewport?: () => Viewport | null;
   /** Key code that temporarily enables panning when held. Default: 'Space' */
   panActivationKeyCode?: string | null;
   /** Key code that forces zoom (overrides panOnScroll) when held with wheel. Default: 'Control'.
@@ -181,23 +199,38 @@ function scaleAbout(current: ViewportTransform, px: number, py: number, k: numbe
  *   so the next double-click can put it back exactly;
  * - at or above `level` with a remembered viewport → restore it;
  * - at or above `level` with nothing remembered (the user got here by wheel or
- *   `setViewport`) → zoom out to `minZoom` about the cursor, so the gesture always
- *   does something rather than stalling.
+ *   `setViewport`, or panned after zooming in and so dropped the memory) → zoom out
+ *   to `zoomOut`, so the gesture always does something rather than stalling.
+ *
+ * `zoomOut` is `'min'` by default — `minZoom` about the cursor. `'fit'` puts the
+ * whole graph back on screen instead, which is what the second double-click means
+ * on a canvas people read rather than survey; a number is a fixed level, again about
+ * the cursor. Only this fallback is configurable: with a remembered viewport, going
+ * back exactly where you came from beats any level anybody could name.
+ *
+ * `fit` is a thunk rather than a viewport because measuring every node's bounds is
+ * only worth doing on the branch that uses it, and most double-clicks zoom in.
  *
  * Pure so the decision can be tested without driving d3-zoom through a real DOM.
  *
- * Precondition: `level` must sit strictly above `minZoom`. A toggle needs somewhere
- * to go — when the two coincide, "at or above the level" is also "already at the
- * floor", so the zoom-out branch has no room and the gesture cannot move the
- * viewport. That configuration is rejected at wiring time (createPanZoom keeps
- * d3's native stepped handler instead of installing a toggle that would stall);
- * should it reach here anyway, the current viewport is returned unchanged rather
- * than a transform that merely looks new.
+ * Precondition: `level` must sit strictly above the level zooming out lands on. A
+ * toggle needs somewhere to go — when the two coincide, "at or above the level" is
+ * also "already at the floor", so the zoom-out branch has no room and the gesture
+ * cannot move the viewport. That configuration is rejected at wiring time
+ * (createPanZoom keeps d3's native stepped handler instead of installing a toggle
+ * that would stall); should it reach here anyway, the current viewport is returned
+ * unchanged rather than a transform that merely looks new.
  */
 export function resolveDblClickZoom(
   current: ViewportTransform,
   pointer: { x: number; y: number },
-  opts: { level: number; minZoom: number; remembered: ViewportTransform | null },
+  opts: {
+    level: number;
+    minZoom: number;
+    remembered: ViewportTransform | null;
+    zoomOut?: number | 'fit' | 'min';
+    fit?: (() => ViewportTransform | null) | null;
+  },
 ): { next: ViewportTransform; remember: ViewportTransform | null } {
   // Tolerance so floating-point drift at exactly `level` still counts as "at" it.
   const atOrAboveLevel = current.zoom >= opts.level - 1e-3;
@@ -208,13 +241,28 @@ export function resolveDblClickZoom(
   if (opts.remembered) {
     return { next: opts.remembered, remember: null };
   }
-  // Degenerate `level <= minZoom`: no headroom below, so zooming out would resolve
+
+  const zoomOut = opts.zoomOut ?? 'min';
+
+  if (zoomOut === 'fit') {
+    // A canvas with no measured nodes has no fit to go to; `minZoom` is still a
+    // move, so fall through to it rather than making the gesture dead on an empty
+    // canvas.
+    const fitted = opts.fit?.();
+    if (fitted) {
+      return { next: fitted, remember: null };
+    }
+  }
+
+  const outZoom = Math.max(opts.minZoom, zoomOut === 'fit' || zoomOut === 'min' ? opts.minZoom : zoomOut);
+
+  // Degenerate `level <= outZoom`: no headroom below, so zooming out would resolve
   // to the identity of `current`. Say so explicitly instead of returning a no-op
   // dressed up as a transition.
-  if (current.zoom <= opts.minZoom + 1e-3) {
+  if (current.zoom <= outZoom + 1e-3) {
     return { next: current, remember: null };
   }
-  return { next: scaleAbout(current, pointer.x, pointer.y, opts.minZoom), remember: null };
+  return { next: scaleAbout(current, pointer.x, pointer.y, outZoom), remember: null };
 }
 
 export function createPanZoom(
@@ -327,6 +375,11 @@ export function createPanZoom(
     Math.min(maxZoom, options.dblClickZoomLevel ?? DEFAULT_DBLCLICK_ZOOM_LEVEL),
   );
 
+  const dblClickZoomOutLevel: number | 'fit' | 'min' =
+    typeof options.dblClickZoomOutLevel === 'number'
+      ? Math.max(minZoom, Math.min(maxZoom, options.dblClickZoomOutLevel))
+      : options.dblClickZoomOutLevel ?? 'min';
+
   const dblClickHandler = (event: MouseEvent) => {
     // Deliberately NOT gated on `zoomable`, mirroring createPanZoomFilter, which
     // blocks wheel and pinch on `zoomable: false` but always lets dblclick through —
@@ -347,7 +400,13 @@ export function createPanZoom(
     const { next, remember } = resolveDblClickZoom(
       { x: t.x, y: t.y, zoom: t.k },
       { x: event.clientX - rect.left, y: event.clientY - rect.top },
-      { level: dblClickZoomLevel, minZoom, remembered: rememberedViewport },
+      {
+        level: dblClickZoomLevel,
+        minZoom,
+        remembered: rememberedViewport,
+        zoomOut: dblClickZoomOutLevel,
+        fit: options.getFitViewport ?? null,
+      },
     );
     rememberedViewport = remember;
 
@@ -355,10 +414,14 @@ export function createPanZoom(
       .call(zoomBehavior.transform, zoomIdentity.translate(next.x, next.y).scale(next.zoom));
   };
 
-  // A toggle with `level <= minZoom` has no headroom to zoom back out into, so it
-  // would stall on the second double-click. Keep d3's stepped handler instead —
-  // it still zooms in and out — rather than installing a dead gesture.
-  const toggleAttached = dblClickMode === 'toggle' && dblClickZoomLevel > minZoom + 1e-3;
+  // A toggle whose level sits at or below the level it zooms back out to has no
+  // headroom, so it would stall on the second double-click. Keep d3's stepped
+  // handler instead — it still zooms in and out — rather than installing a dead
+  // gesture. `'fit'` is measured at gesture time and cannot be checked here, so it
+  // is held to the same floor as `'min'`; if the graph happens to fit above the
+  // level, the fallback inside resolveDblClickZoom keeps the gesture honest.
+  const dblClickZoomOutFloor = typeof dblClickZoomOutLevel === 'number' ? dblClickZoomOutLevel : minZoom;
+  const toggleAttached = dblClickMode === 'toggle' && dblClickZoomLevel > dblClickZoomOutFloor + 1e-3;
 
   if (toggleAttached) {
     sel.on('dblclick.zoom', null);
