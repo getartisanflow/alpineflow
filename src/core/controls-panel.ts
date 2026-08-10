@@ -121,6 +121,10 @@ export function createControlsPanel(
   wrapper.addEventListener('mousedown', (e) => e.stopPropagation());
   wrapper.addEventListener('pointerdown', (e) => e.stopPropagation());
   wrapper.addEventListener('wheel', (e) => e.stopPropagation(), { passive: false });
+  // Double-click too: the zoom handler sits on the container, and two quick presses of
+  // zoom-in are a double-click as far as it is concerned — so the canvas jumped to the
+  // double-click level instead of taking the second step under the cursor.
+  wrapper.addEventListener('dblclick', (e) => e.stopPropagation());
 
   container.appendChild(wrapper);
 

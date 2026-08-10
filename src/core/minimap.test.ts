@@ -68,3 +68,51 @@ describe('minimap lean viewport getter', () => {
     expect(stateCalls).toBe(before + 1); // fallback path preserves old behaviour
   });
 });
+
+describe('minimap and the canvas double-click gesture', () => {
+  // Double-click zoom is bound to the container, and the minimap sits inside it. Two clicks on
+  // the minimap are two pans — the canvas jumping to another scale on top of them is the
+  // container answering a gesture that was never aimed at it.
+  const mounted = () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const mm = createMiniMap(container, {
+      getState: () => fullState(),
+      setViewport: () => {},
+      config: { minimapPannable: true },
+    });
+    mm.render();
+
+    return { container, mm };
+  };
+
+  it('does not let a double-click reach the canvas', () => {
+    const { container, mm } = mounted();
+    let reachedCanvas = 0;
+    container.addEventListener('dblclick', () => { reachedCanvas++; });
+
+    container.querySelector('.flow-minimap svg')!
+      .dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+
+    expect(reachedCanvas).toBe(0);
+
+    mm.destroy();
+    container.remove();
+  });
+
+  it('still lets a double-click anywhere else through', () => {
+    const { container, mm } = mounted();
+    const elsewhere = document.createElement('div');
+    container.appendChild(elsewhere);
+    let reachedCanvas = 0;
+    container.addEventListener('dblclick', () => { reachedCanvas++; });
+
+    elsewhere.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+
+    expect(reachedCanvas).toBe(1);
+
+    mm.destroy();
+    container.remove();
+  });
+});
+

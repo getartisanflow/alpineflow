@@ -41,6 +41,8 @@ flowCanvas({
 
 If you reach the level some other way — the wheel, `setViewport()` — there is no remembered viewport to go back to, so a double-click there zooms out to `minZoom` about the cursor instead of doing nothing. Panning or zooming by hand discards the remembered viewport, so a later toggle-out never jumps to a view you have since left.
 
+The canvas's own chrome is not part of the gesture: a double-click on the minimap or the controls panel does what that panel does and nothing else. Two quick presses of zoom-in are two zoom steps, not a jump to the double-click level.
+
 Two things to know about `'toggle'`:
 
 - `dblClickZoomLevel` must sit above `minZoom`, otherwise there is no room to zoom back out into. If it does not (because clamping pushed it onto `minZoom`), AlpineFlow keeps d3's stepped handler rather than installing a gesture that would stall.

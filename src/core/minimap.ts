@@ -232,6 +232,15 @@ export function createMiniMap(
   svg.addEventListener('pointermove', onPointerMove);
   svg.addEventListener('pointerup', onPointerUp);
 
+  // The minimap owns a double-click on itself: two clicks in it are two pans, and the canvas's
+  // double-click zoom sits on the container, so without this the second one also toggled the
+  // zoom — a click meant to move the view jumped it to another scale as well.
+  function onDblClick(e: MouseEvent): void {
+    e.stopPropagation();
+  }
+
+  wrapper.addEventListener('dblclick', onDblClick);
+
   // ── Zoom interaction ───────────────────────────────────────────────
   function onWheel(e: WheelEvent): void {
     if (!config.minimapZoomable) {
@@ -256,6 +265,7 @@ export function createMiniMap(
     svg.removeEventListener('pointermove', onPointerMove);
     svg.removeEventListener('pointerup', onPointerUp);
     svg.removeEventListener('wheel', onWheel);
+    wrapper.removeEventListener('dblclick', onDblClick);
     wrapper.remove();
   }
 
