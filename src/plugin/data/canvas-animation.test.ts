@@ -413,6 +413,36 @@ describe('createAnimationMixin — animate (instant)', () => {
     expect(e1.class).toBe('special');
   });
 
+  it('switches an edge to another path type, whatever the duration', () => {
+    // The path effect resolves `edge.type ?? defaultEdgeType` on every run, so writing the type
+    // through the reactive edge is all a redraw needs. Instant even when a duration is given: a
+    // type is a choice of generator, and a curve has no midpoint with a right angle.
+    const e1 = makeEdge('e1');
+    const ctx = mockCtx();
+    ctx._edgeMap.set('e1', e1);
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate({ edges: { e1: { type: 'smoothstep' } } }, { duration: 300 });
+
+    expect(e1.type).toBe('smoothstep');
+
+    mixin.update({ edges: { e1: { type: 'bezier' } } });
+
+    expect(e1.type).toBe('bezier');
+  });
+
+  it('leaves the type alone when the target does not mention it', () => {
+    const e1 = makeEdge('e1');
+    e1.type = 'straight';
+    const ctx = mockCtx();
+    ctx._edgeMap.set('e1', e1);
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.update({ edges: { e1: { label: 'untouched' } } });
+
+    expect(e1.type).toBe('straight');
+  });
+
   it('instantly applies viewport pan and zoom', () => {
     const ctx = mockCtx();
     ctx.viewport = { x: 0, y: 0, zoom: 1 };

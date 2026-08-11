@@ -25,6 +25,15 @@ $flow.update(
 );
 ```
 
+Edge `type` switches the path generator — `'bezier'`, `'smoothstep'`, `'step'`, `'straight'`, or a
+registered custom type — and is applied instantly whatever the duration, because a type is a choice
+of generator rather than a value with a midpoint:
+
+```js
+// Square connections, without rebuilding the graph
+$flow.update({ edges: { 'e1': { type: 'smoothstep' } } });
+```
+
 ### animate
 
 ```ts

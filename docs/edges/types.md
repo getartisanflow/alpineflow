@@ -47,6 +47,10 @@ Edges are the connections between [nodes](../nodes/basics.md). AlpineFlow provid
 ```
 ::enddemo
 
+Switch one at runtime with [`update()`](../api/flow-magic/animation.md): `$flow.update({ edges: { e1:
+{ type: 'smoothstep' } } })`. Removing and re-adding the edge is not needed, and would cost its
+selection and its place in the history.
+
 ## Built-in types
 
 | Type | Description | When to use |

@@ -1871,6 +1871,15 @@ export type AnimateEdgeTarget = {
   strokeWidth?: number;
   animated?: boolean;
   class?: string;
+  /**
+   * Which path generator draws this edge — `'bezier'`, `'smoothstep'`, `'step'`,
+   * `'straight'`, `'orthogonal'`, `'avoidant'`, or a registered custom type.
+   *
+   * Applied instantly whatever the duration: a path type is a choice of generator,
+   * not a value with a midpoint, so there is nothing to interpolate between a curve
+   * and a set of right angles.
+   */
+  type?: string;
 } & ElementTimingOverrides;
 
 /** Viewport animation target. */
