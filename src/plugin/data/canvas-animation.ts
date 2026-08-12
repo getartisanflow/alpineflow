@@ -397,8 +397,17 @@ export function createAnimationMixin(ctx: CanvasContext) {
           // Color (string or gradient object)
           if (target.color !== undefined) {
             if (typeof target.color === 'object') {
-              // Gradient: apply directly (CSS handles transitions)
+              // Gradient: applied directly — there is nothing to interpolate between two
+              // gradients, so this is instant whatever the duration says.
               (edge as any).color = target.color;
+              styledEdgeIds.add(edgeId);
+              // A gradient does not live in an inline stroke: its stops are an SVG
+              // <linearGradient> def, rebuilt from the edge's endpoint COORDINATES, which only
+              // the path refresh works out. So the edge's own ends go in with the moved nodes —
+              // nothing moves, and the refresh that follows rebuilds the def from the new
+              // colour. Without this the value changed and the line kept its old paint.
+              movedNodeIds.add(edge.source);
+              movedNodeIds.add(edge.target);
             } else if (isInstant) {
               edge.color = target.color;
               styledEdgeIds.add(edgeId);

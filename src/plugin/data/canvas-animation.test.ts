@@ -610,6 +610,44 @@ describe('createAnimationMixin — animate (animated)', () => {
 
     expect((e1 as any).color).toEqual({ from: '#000', to: '#fff' });
   });
+
+  it('repaints an edge given a gradient, not merely the value', () => {
+    // The value was assigned and nothing was told to redraw: the edge never reached
+    // _flushEdgeStyles, and a gradient's stops live in a <linearGradient> def that only the path
+    // refresh rebuilds. So the colour changed and the line kept its old paint until something
+    // else — a node drag, a reload — happened to redraw it.
+    const e1 = makeEdge('e1', { color: '#000', source: 'n1', target: 'n2' });
+    const ctx = mockCtx();
+    ctx._edgeMap.set('e1', e1);
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { edges: { e1: { color: { from: '#000', to: '#fff' } as any } } },
+      { duration: 0 },
+    );
+
+    expect(ctx._flushEdgeStyles).toHaveBeenCalledWith(new Set(['e1']));
+
+    // Both ends, because the def is rebuilt from the endpoint coordinates and the refresh is
+    // driven by which NODES moved. Nothing moves; the refresh is the point.
+    expect(ctx._refreshEdgePaths).toHaveBeenCalledWith(new Set(['n1', 'n2']));
+  });
+
+  it('repaints a gradient whatever duration was asked for', () => {
+    // There is nothing to interpolate between two gradients, so this path is instant either way —
+    // and it has to redraw either way too.
+    const e1 = makeEdge('e1', { color: '#000', source: 'n1', target: 'n2' });
+    const ctx = mockCtx();
+    ctx._edgeMap.set('e1', e1);
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { edges: { e1: { color: { from: '#000', to: '#fff' } as any } } },
+      { duration: 300 },
+    );
+
+    expect(ctx._flushEdgeStyles).toHaveBeenCalledWith(new Set(['e1']));
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════════

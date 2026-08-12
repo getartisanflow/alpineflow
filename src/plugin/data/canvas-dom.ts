@@ -64,7 +64,12 @@ export function createDomMixin(ctx: CanvasContext, Alpine: any) {
         const pathEl = ctx.getEdgePathElement(edgeId);
         if (!pathEl) continue;
 
-        if (typeof rawEdge.color === 'string') {
+        if (isGradient(rawEdge.color)) {
+          // The stops are in a <linearGradient> def (kept up to date by _refreshEdgePaths); what
+          // the path needs is to point at it. Without this an edge going from a plain colour to a
+          // gradient keeps the inline stroke it already had, and the new def is never drawn.
+          pathEl.style.stroke = `url(#${getGradientId(ctx._id, edgeId)})`;
+        } else if (typeof rawEdge.color === 'string') {
           pathEl.style.stroke = rawEdge.color;
         }
 
