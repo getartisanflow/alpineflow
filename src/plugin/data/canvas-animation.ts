@@ -610,6 +610,14 @@ export function createAnimationMixin(ctx: CanvasContext) {
             ctx._flushEdgeStyles(styledEdgeIds);
             styledEdgeIds.clear();
           }
+          // Final frame: hand the viewport back to the pan/zoom controller, which keeps a
+          // transform of its own and was never told about any of this. Without it the next pan or
+          // zoom resumes from wherever the canvas stood BEFORE the animation, and the whole graph
+          // jumps — the instant path has always called setViewport, and only the animated one
+          // went round it.
+          if (targets.viewport) {
+            ctx._panZoom?.setViewport({ ...ctx.viewport });
+          }
           options.onComplete?.();
         },
       });
