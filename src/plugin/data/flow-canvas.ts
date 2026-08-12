@@ -1558,7 +1558,8 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
           if (this.selectedNodes.size > 1) {
             const nodes = this.nodes.filter((n: FlowNode) => this.selectedNodes.has(n.id));
-            this._emit('selection-context-menu', { nodes, event: e });
+            const edges = this.edges.filter((edge: FlowEdge) => this.selectedEdges.has(edge.id));
+            this._emit('selection-context-menu', { nodes, edges, event: e });
           } else {
             const position = this.screenToFlowPosition(e.clientX, e.clientY);
             this._emit('pane-context-menu', { event: e, position });
