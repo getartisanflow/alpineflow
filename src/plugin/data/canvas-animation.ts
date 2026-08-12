@@ -570,15 +570,23 @@ export function createAnimationMixin(ctx: CanvasContext) {
           options.onProgress?.(progress);
         },
         onComplete() {
-          // Final frame: sync Alpine reactive state from the raw values
-          // that the animator already applied (respects reverse direction).
+          // Final frame: publish the raw values the animator applied to the reactive state,
+          // so anything watching nodes hears about the move exactly once, at the end.
+          //
+          // The position is REPLACED rather than written field by field. `Alpine.raw(node)`
+          // returns the object the proxy wraps, so the animator's per-frame writes have already
+          // put the final coordinates there — and `node.position.x = raw.position.x` then assigns
+          // a value that is already equal, which reactivity skips. Nothing was notified, and
+          // anything drawing from `nodes` alone — the minimap, most obviously — kept showing the
+          // graph as it stood before the animation until something else happened to touch it.
           if (targets.nodes) {
             for (const [nodeId, target] of Object.entries(targets.nodes)) {
               const node = ctx._nodeMap.get(nodeId);
               if (!node) continue;
               const raw = getAlpine().raw(node);
-              if (target.followPath || target.position?.x !== undefined) node.position.x = raw.position.x;
-              if (target.followPath || target.position?.y !== undefined) node.position.y = raw.position.y;
+              if (target.followPath || target.position?.x !== undefined || target.position?.y !== undefined) {
+                node.position = { ...raw.position };
+              }
               if (target.style !== undefined) node.style = raw.style;
             }
           }
