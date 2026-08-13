@@ -543,12 +543,20 @@ These events are emitted internally but do not have dedicated config callbacks. 
 | `copy` | `{ nodeCount, edgeCount }` | Clipboard copy |
 | `paste` | `{ nodes, edges }` | Clipboard paste |
 | `cut` | `{ nodeCount, edgeCount }` | Clipboard cut |
-| `layout` | `{ type, direction?, ... }` | Layout algorithm applied |
+| `layout` | `{ type, positions, ... }` | Layout algorithm applied — see below |
 | `compute-complete` | `{ results: Map }` | Compute engine finishes |
 | `node-reparent` | `{ node, oldParentId, newParentId }` | Node reparented |
 | `child-reorder` | `{ nodeId, parentId, order }` | Child reordered in layout parent |
 | `panel-reset` | `undefined` | `resetPanels()` called |
 | `helper-lines-change` | `{ horizontal: number[], vertical: number[] }` | Alignment guides update during drag |
+
+The `layout` event fires when a layout has been **computed**, not when it has been applied: with the default `duration` the nodes are still animating towards the new coordinates while your listener runs, so reading positions off the model there gives you the layout that was there *before* the call. `positions` carries what the layout decided — `Record<string, { x, y }>`, keyed by node id, a plain object so it survives `JSON.stringify` and structured clone — which is what a consumer persisting a tidy-up should save:
+
+```html
+<div @flow-layout="$wire.saveLayout($event.detail.positions)">
+```
+
+The rest of the payload is per engine: `{ type: 'dagre', direction }`, `{ type: 'force', charge, distance }`, `{ type: 'tree', layoutType, direction }`, `{ type: 'elk', algorithm, direction }`.
 
 The `restore` event's `origin` field is `'undo' | 'redo' | 'load'` — `'undo'`/`'redo'` from history, and `'load'` from `fromObject()` / `$reset()` / `$clear()` / `replaceNodes()`. Listen via the `flow-restore` DOM event: `@flow-restore="syncSidebar($event.detail)"`. See the [v0.2.1-alpha migration guide](../migration/v0.2.1-alpha.md) for the field's history (it superseded an unreleased `source` tag).
 
@@ -604,7 +612,7 @@ All events at a glance:
 | `copy` | `{ nodeCount, edgeCount }` | — |
 | `paste` | `{ nodes, edges }` | — |
 | `cut` | `{ nodeCount, edgeCount }` | — |
-| `layout` | `{ type, direction?, ... }` | — |
+| `layout` | `{ type, positions, ... }` | — |
 | `compute-complete` | `{ results: Map }` | — |
 | `node-reparent` | `{ node, oldParentId, newParentId }` | — |
 | `child-reorder` | `{ nodeId, parentId, order }` | — |

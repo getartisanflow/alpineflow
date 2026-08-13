@@ -21,6 +21,15 @@ $flow.layout(options?: {
 
 Apply Dagre (directed acyclic graph) layout. Requires the dagre addon: `Alpine.plugin(AlpineFlowDagre)`.
 
+All four emit a [`layout` event](../events.md#additional-events) carrying `positions` — what the
+layout decided, keyed by node id. Read it there rather than off the nodes: with a `duration` the
+event fires while they are still animating towards those coordinates, so the model is one layout
+behind until the motion finishes.
+
+```html
+<div @flow-layout="$wire.saveLayout($event.detail.positions)">
+```
+
 ### forceLayout
 
 ```ts
