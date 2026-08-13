@@ -224,6 +224,44 @@ describe('resolveDblClickZoom — double-click is a toggle, not zoom-in-only', (
       expect(remember).toBeNull();
     });
 
+    it('declines a fit that would zoom the reader IN, and zooms out instead', () => {
+      // The case the option exists for, on a small graph: `dblClickZoomLevel: 1`, the
+      // reader wheels in past it, double-clicks meaning "show me all of it" — and the
+      // whole graph frames at 1.4, above where they already are. Returning that would
+      // zoom them further in; and with nothing remembered, the next double-click would
+      // do it again, so the way out would never come.
+      const { next, remember } = resolveDblClickZoom({ x: 0, y: 0, zoom: 1.2 }, { x: 100, y: 50 }, {
+        level: 1, minZoom: 0.5, remembered: null, zoomOut: 'fit', fit: () => ({ x: 5, y: 5, zoom: 1.4 }),
+      });
+
+      expect(next.zoom).toBe(0.5);
+      expect(remember).toBeNull();
+    });
+
+    it('takes a fit that frames the graph below the current zoom', () => {
+      // The other side of the same rule: a fit that IS a way out is taken whole,
+      // rather than being second-guessed into `minZoom`.
+      const { next } = resolveDblClickZoom({ x: 0, y: 0, zoom: 1.2 }, { x: 100, y: 50 }, {
+        level: 1, minZoom: 0.5, remembered: null, zoomOut: 'fit', fit: () => ({ x: 5, y: 5, zoom: 0.9 }),
+      });
+
+      expect(next).toEqual({ x: 5, y: 5, zoom: 0.9 });
+    });
+
+    it("reads an out-level it does not recognise as 'min'", () => {
+      // AlpineFlow is configured from Blade and plain JS as often as from TypeScript,
+      // where a typo is not caught by anything. Passed through, `'fitt'` would reach
+      // `Math.max(minZoom, 'fitt')` — NaN — and a NaN scale is a canvas that cannot be
+      // zoomed or panned back.
+      const { next } = resolveDblClickZoom(zoomedIn, { x: 100, y: 50 }, {
+        level: 1.5, minZoom: 0.5, remembered: null, zoomOut: 'fitt' as unknown as 'fit',
+      });
+
+      expect(next.zoom).toBe(0.5);
+      expect(Number.isNaN(next.x)).toBe(false);
+      expect(Number.isNaN(next.y)).toBe(false);
+    });
+
     it('falls back to minZoom when there is nothing to fit', () => {
       // An empty canvas, or one whose nodes have not been measured yet. minZoom is
       // still a move, and a dead gesture is worse than a blunt one.

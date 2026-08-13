@@ -242,14 +242,26 @@ export function resolveDblClickZoom(
     return { next: opts.remembered, remember: null };
   }
 
-  const zoomOut = opts.zoomOut ?? 'min';
+  // Anything that is not a level this function knows is `'min'`. A misspelled
+  // `'fitt'` from a Blade template would otherwise reach `Math.max(minZoom, 'fitt')`,
+  // which is NaN — and a NaN zoom is a canvas nobody can pan back.
+  const asked = opts.zoomOut ?? 'min';
+  const zoomOut: number | 'fit' | 'min' =
+    asked === 'fit' || (typeof asked === 'number' && Number.isFinite(asked)) ? asked : 'min';
 
   if (zoomOut === 'fit') {
-    // A canvas with no measured nodes has no fit to go to; `minZoom` is still a
-    // move, so fall through to it rather than making the gesture dead on an empty
-    // canvas.
     const fitted = opts.fit?.();
-    if (fitted) {
+
+    // Only when the fit is genuinely a way OUT. A small graph frames above where
+    // the reader already is, and returning that would zoom them further IN on a
+    // gesture that means "show me all of it" — and, since nothing is remembered
+    // either way, the next double-click would do it again and the zoom-out would
+    // never arrive. When it does not go down, fall through to the ordinary
+    // zoom-out below, which is the same answer `'min'` would have given.
+    //
+    // Null is the other way out of here: a canvas with nothing measured has no fit
+    // to go to, and `minZoom` is still a move.
+    if (fitted && fitted.zoom < current.zoom - 1e-3) {
       return { next: fitted, remember: null };
     }
   }
@@ -375,10 +387,14 @@ export function createPanZoom(
     Math.min(maxZoom, options.dblClickZoomLevel ?? DEFAULT_DBLCLICK_ZOOM_LEVEL),
   );
 
+  // A number is clamped; `'fit'` is left to gesture time; anything else — a typo, a
+  // value from a template that never saw a type — is `'min'`, the documented default.
+  // Passing it through would put a string into the arithmetic below and hand d3 a NaN
+  // scale, which is a canvas that cannot be zoomed or panned back.
   const dblClickZoomOutLevel: number | 'fit' | 'min' =
-    typeof options.dblClickZoomOutLevel === 'number'
+    typeof options.dblClickZoomOutLevel === 'number' && Number.isFinite(options.dblClickZoomOutLevel)
       ? Math.max(minZoom, Math.min(maxZoom, options.dblClickZoomOutLevel))
-      : options.dblClickZoomOutLevel ?? 'min';
+      : options.dblClickZoomOutLevel === 'fit' ? 'fit' : 'min';
 
   const dblClickHandler = (event: MouseEvent) => {
     // Deliberately NOT gated on `zoomable`, mirroring createPanZoomFilter, which
@@ -418,8 +434,8 @@ export function createPanZoom(
   // headroom, so it would stall on the second double-click. Keep d3's stepped
   // handler instead — it still zooms in and out — rather than installing a dead
   // gesture. `'fit'` is measured at gesture time and cannot be checked here, so it
-  // is held to the same floor as `'min'`; if the graph happens to fit above the
-  // level, the fallback inside resolveDblClickZoom keeps the gesture honest.
+  // is held to the same floor as `'min'`; a graph that frames above where the reader
+  // is, is declined by resolveDblClickZoom, which then zooms out the ordinary way.
   const dblClickZoomOutFloor = typeof dblClickZoomOutLevel === 'number' ? dblClickZoomOutLevel : minZoom;
   const toggleAttached = dblClickMode === 'toggle' && dblClickZoomLevel > dblClickZoomOutFloor + 1e-3;
 

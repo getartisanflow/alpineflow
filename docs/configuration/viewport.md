@@ -57,7 +57,7 @@ flowCanvas({
 | Value | Second double-click goes to |
 |-------|-----------------------------|
 | `'min'` (default) | `minZoom`, about the cursor. |
-| `'fit'` | The viewport that frames every visible node — what `fitView()` computes. On a canvas with nothing to fit (no nodes, or none measured yet), falls back to `'min'` rather than going dead. |
+| `'fit'` | The viewport that frames every visible node — what `fitView()` computes. Falls back to `'min'` rather than going dead when there is nothing to fit (no visible nodes, or any of them still unmeasured), and when the graph would frame at a zoom *above* the current one — a small graph fits closer than the reader already is, and a gesture that means "show me all of it" must not zoom them further in. |
 | `number` | That level, about the cursor. Clamped to `[minZoom, maxZoom]`. |
 
 `'fit'` suits a canvas people read rather than survey — a workflow, a schema — where the gesture reads as "closer" and then "show me all of it", and where `minZoom` is an arbitrary floor that frames nothing in particular.
@@ -65,6 +65,7 @@ flowCanvas({
 Two things to know about `'toggle'`:
 
 - `dblClickZoomLevel` must sit above the level it zooms back out to (`minZoom`, or a numeric `dblClickZoomOutLevel`), otherwise there is no room to zoom back out into. If it does not, AlpineFlow keeps d3's stepped handler rather than installing a gesture that would stall.
+- An out-level that is neither `'fit'` nor a finite number is read as `'min'`. AlpineFlow is configured from Blade and plain JS as often as from TypeScript, where a typo is caught by nothing, and a string in the zoom arithmetic would hand the canvas a `NaN` scale it cannot be panned back from.
 - Like `'step'`, it stays live under `zoomable: false` — that flag gates pointer-gesture zooming (wheel, pinch), never double-click, so a canvas that disables wheel zoom to run its own (e.g. pinch-only via `ctrl`+wheel) keeps the double-click gesture in either mode. Disable double-click zoom itself with `zoomOnDoubleClick: false`.
 
 **`false`** — no double-click zoom at all.

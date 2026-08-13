@@ -203,6 +203,60 @@ describe('createViewportMixin — fitView', () => {
 
 // ── fitBounds ────────────────────────────────────────────────────────────────
 
+describe('createViewportMixin — _fitViewport (the double-click fallback)', () => {
+  const container = () => {
+    const el = document.createElement('div');
+    Object.defineProperty(el, 'clientWidth', { value: 800 });
+    Object.defineProperty(el, 'clientHeight', { value: 600 });
+    return el;
+  };
+
+  it('frames the graph once every visible node has been measured', () => {
+    const mixin = createViewportMixin(mockCtx({
+      _container: container(),
+      nodes: [makeNode('n1'), makeNode('n2', { position: { x: 400, y: 300 } })],
+    }));
+
+    const viewport = mixin._fitViewport();
+
+    expect(viewport).not.toBeNull();
+    expect(viewport!.zoom).toBeGreaterThan(0);
+  });
+
+  it('declines while a visible node is still unmeasured', () => {
+    // The difference from `fitView()`, which waits for measurement: a double-click
+    // cannot wait. An unmeasured node is not sizeless — `getNodesBounds` gives it the
+    // 150×50 default — so without this the gesture would frame placeholder boxes at
+    // the positions they were declared with and call it the graph.
+    const mixin = createViewportMixin(mockCtx({
+      _container: container(),
+      nodes: [makeNode('n1'), makeNode('n2', { dimensions: undefined })],
+    }));
+
+    expect(mixin._fitViewport()).toBeNull();
+  });
+
+  it('is not held up by a hidden node that was never measured', () => {
+    // Hidden nodes are not framed, so whether they have been measured is not this
+    // question — and a canvas holding one would never fit again.
+    const mixin = createViewportMixin(mockCtx({
+      _container: container(),
+      nodes: [makeNode('n1'), makeNode('hidden', { hidden: true, dimensions: undefined })],
+    }));
+
+    expect(mixin._fitViewport()).not.toBeNull();
+  });
+
+  it('declines when there is nothing visible to frame', () => {
+    const mixin = createViewportMixin(mockCtx({
+      _container: container(),
+      nodes: [makeNode('hidden', { hidden: true })],
+    }));
+
+    expect(mixin._fitViewport()).toBeNull();
+  });
+});
+
 describe('createViewportMixin — fitBounds', () => {
   it('sets viewport directly when no duration', () => {
     const panZoom = { setViewport: vi.fn(), update: vi.fn() };
