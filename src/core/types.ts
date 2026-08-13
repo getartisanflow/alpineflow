@@ -360,6 +360,18 @@ export interface FlowEdge<T = Record<string, any>> {
   /** Optional label displayed on the edge */
   label?: string;
 
+  /**
+   * Render the labels as HTML instead of text.
+   *
+   * Labels are written with `textContent` by default, so markup in them shows as the tags
+   * themselves. Set this to render `label`, `labelStart` and `labelEnd` as HTML — for a label that
+   * needs a line break, an icon or a piece of emphasis.
+   *
+   * The value goes to `innerHTML` unchanged. Like any HTML you hand a framework, it is trusted:
+   * pass user input through your own escaping or sanitiser first.
+   */
+  labelHtml?: boolean;
+
   /** Position of the center label along the path (0 = source, 1 = target). Default: 0.5 */
   labelPosition?: number;
 

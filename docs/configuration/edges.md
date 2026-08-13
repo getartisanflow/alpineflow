@@ -67,6 +67,7 @@ These are covered in the [v0.2.1-alpha migration guide](../migration/v0.2.1-alph
     label: 'connects to',                 // Optional. Center label text.
     labelStart: 'from',                   // Optional. Label near source.
     labelEnd: 'to',                       // Optional. Label near target.
+    labelHtml: false,                     // Optional. Render the labels as HTML rather than text.
     color: '#ff0000',                     // Optional. Stroke color string or gradient object.
     strokeWidth: 2,                       // Optional. Stroke width.
     animated: true,                       // Optional. true/'dash', 'pulse', or 'dot'.
