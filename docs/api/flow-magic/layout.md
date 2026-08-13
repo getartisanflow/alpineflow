@@ -21,6 +21,15 @@ $flow.layout(options?: {
 
 Apply Dagre (directed acyclic graph) layout. Requires the dagre addon: `Alpine.plugin(AlpineFlowDagre)`.
 
+All four emit `layout` when the layout has been computed and
+[`layout-end`](../events.md#additional-events) when the nodes are where it put them — with a
+`duration` those are different moments, since the canvas animates towards the new coordinates.
+`layout-end` carries `positions`, keyed by node id:
+
+```html
+<div @flow-layout-end="$wire.saveLayout($event.detail.positions)">
+```
+
 ### forceLayout
 
 ```ts

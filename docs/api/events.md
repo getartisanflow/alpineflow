@@ -544,11 +544,22 @@ These events are emitted internally but do not have dedicated config callbacks. 
 | `paste` | `{ nodes, edges }` | Clipboard paste |
 | `cut` | `{ nodeCount, edgeCount }` | Clipboard cut |
 | `layout` | `{ type, direction?, ... }` | Layout algorithm applied |
+| `layout-end` | `{ type, positions, ... }` | The nodes are where the layout put them — see below |
 | `compute-complete` | `{ results: Map }` | Compute engine finishes |
 | `node-reparent` | `{ node, oldParentId, newParentId }` | Node reparented |
 | `child-reorder` | `{ nodeId, parentId, order }` | Child reordered in layout parent |
 | `panel-reset` | `undefined` | `resetPanels()` called |
 | `helper-lines-change` | `{ horizontal: number[], vertical: number[] }` | Alignment guides update during drag |
+
+`layout` fires when a layout has been **computed**; `layout-end` fires when the nodes are where it put them. The two are different moments: with the default `duration` the canvas animates towards the new coordinates, so at `layout` time the model still holds the old ones. With `duration: 0` there is nothing to wait for and the pair arrives together — in that order either way.
+
+`layout-end` carries `positions`, keyed by node id, as a plain object so it survives `JSON.stringify` and structured clone:
+
+```html
+<div @flow-layout-end="$wire.saveLayout($event.detail.positions)">
+```
+
+It does not fire for a layout that never settled — an animation interrupted by the next one announces nothing. Note that `fitView` runs on the same completion, so the nodes have stopped but the viewport may still be moving; hang off `viewport-move-end` if it is the view you are waiting for.
 
 The `restore` event's `origin` field is `'undo' | 'redo' | 'load'` — `'undo'`/`'redo'` from history, and `'load'` from `fromObject()` / `$reset()` / `$clear()` / `replaceNodes()`. Listen via the `flow-restore` DOM event: `@flow-restore="syncSidebar($event.detail)"`. See the [v0.2.1-alpha migration guide](../migration/v0.2.1-alpha.md) for the field's history (it superseded an unreleased `source` tag).
 
@@ -605,6 +616,7 @@ All events at a glance:
 | `paste` | `{ nodes, edges }` | — |
 | `cut` | `{ nodeCount, edgeCount }` | — |
 | `layout` | `{ type, direction?, ... }` | — |
+| `layout-end` | `{ type, positions, ... }` | — |
 | `compute-complete` | `{ results: Map }` | — |
 | `node-reparent` | `{ node, oldParentId, newParentId }` | — |
 | `child-reorder` | `{ nodeId, parentId, order }` | — |
