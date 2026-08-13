@@ -57,6 +57,27 @@ Control placement with `minimapPosition`:
 
 Supported positions: `'top-left'`, `'top-right'`, `'bottom-left'`, `'bottom-right'` (default).
 
+### Size
+
+The minimap is 200 by 150 unless it is told otherwise:
+
+```html
+<div x-data="flowCanvas({ minimap: true, minimapWidth: 160, minimapHeight: 60 })">
+```
+
+This is not only how big the picture is. The scale that fits the graph into it and the rectangle
+that marks the viewport are both computed against the box, so a minimap whose ratio does not match
+the canvas draws a viewport marker that is not the shape of the viewport.
+
+A canvas that changes shape with the window wants a minimap that follows it. Nothing here watches —
+what counts as "too big" is the page's business — so a consumer watching its own container calls:
+
+```js
+$flow.resizeMinimap(160, 60);
+```
+
+which redraws at the new size. A width or height that is not positive is ignored.
+
 ## Interaction
 
 The minimap supports two interaction modes:

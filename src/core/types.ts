@@ -1349,6 +1349,18 @@ export interface FlowCanvasConfig {
   controlsContainer?: string;
 
   /**
+   * How big the minimap is drawn, in pixels. Defaults: 200 by 150.
+   *
+   * Not only how big the picture is — the scale that fits the graph into it and the rectangle that
+   * marks the viewport are both computed against these, so a minimap whose ratio does not match the
+   * canvas draws a viewport marker that is not the shape of the viewport. A consumer that wants it
+   * to follow the container watches for a resize and calls `resize()` on the instance.
+   */
+  minimapWidth?: number;
+
+  minimapHeight?: number;
+
+  /**
    * Element to enter fullscreen mode, instead of the canvas container.
    * Useful when the page wraps the canvas + ancillary UI (inspectors,
    * toolbars) that should stay visible in fullscreen. Accepts a CSS

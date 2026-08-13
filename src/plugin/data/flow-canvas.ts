@@ -1838,6 +1838,19 @@ export function registerFlowCanvas(Alpine: Alpine) {
       }
     },
 
+    /**
+     * Give the minimap another box.
+     *
+     * Public because the reason to want it is outside the library: a canvas that changes shape with
+     * the window wants a minimap that changes shape with it, and the scale that fits the graph in —
+     * along with the rectangle marking the viewport — is computed against the box. A consumer
+     * watching its container calls this; nothing here watches, because what counts as "too big" is
+     * the page's business rather than the canvas's.
+     */
+    resizeMinimap(width: number, height: number) {
+      this._minimap?.resize(width, height);
+    },
+
     /** Create controls panel if configured. */
     _initControls() {
       if (config.controls) {

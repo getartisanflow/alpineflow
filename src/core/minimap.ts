@@ -9,6 +9,10 @@
 import type { FlowNode, Viewport, FlowCanvasConfig } from './types';
 import { getNodesBounds, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from './geometry';
 
+/* The box a minimap gets when nobody says otherwise. A consumer that wants another shape passes
+ * `minimapWidth`/`minimapHeight`, or calls `resize()` when the window changes under it — the
+ * numbers are per instance rather than per module for exactly that reason: a minimap whose ratio
+ * does not match the canvas draws a viewport rectangle that is not the shape of the viewport. */
 const MINIMAP_WIDTH = 200;
 const MINIMAP_HEIGHT = 150;
 const BOUNDS_PADDING = 1.2;
@@ -43,6 +47,8 @@ export interface MiniMapOptions {
 export interface MiniMapInstance {
   render(): void;
   updateViewport(): void;
+  /** Give it another box. Redraws at the new size; ignores a width or height that is not positive. */
+  resize(width: number, height: number): void;
   destroy(): void;
 }
 
@@ -55,18 +61,21 @@ export function createMiniMap(
   const maskColor = config.minimapMaskColor;
   const nodeColor = config.minimapNodeColor;
 
+  let width = config.minimapWidth ?? MINIMAP_WIDTH;
+  let height = config.minimapHeight ?? MINIMAP_HEIGHT;
+
   // ── Build DOM ──────────────────────────────────────────────────────
   const wrapper = document.createElement('div');
   wrapper.className = `flow-minimap flow-minimap-${position}`;
 
   const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('width', String(MINIMAP_WIDTH));
-  svg.setAttribute('height', String(MINIMAP_HEIGHT));
+  svg.setAttribute('width', String(width));
+  svg.setAttribute('height', String(height));
 
   const bg = document.createElementNS(SVG_NS, 'rect');
   bg.classList.add('flow-minimap-bg');
-  bg.setAttribute('width', String(MINIMAP_WIDTH));
-  bg.setAttribute('height', String(MINIMAP_HEIGHT));
+  bg.setAttribute('width', String(width));
+  bg.setAttribute('height', String(height));
   // Fill controlled via CSS --flow-minimap-bg; no inline attribute needed
 
   const nodesGroup = document.createElementNS(SVG_NS, 'g');
@@ -100,8 +109,8 @@ export function createMiniMap(
     }
 
     cachedScale = Math.max(
-      cachedBounds.width / MINIMAP_WIDTH,
-      cachedBounds.height / MINIMAP_HEIGHT,
+      cachedBounds.width / width,
+      cachedBounds.height / height,
     ) * BOUNDS_PADDING;
   }
 
@@ -122,8 +131,8 @@ export function createMiniMap(
     nodesGroup.innerHTML = '';
 
     // Offset to center the bounds in the minimap
-    const offsetX = (MINIMAP_WIDTH - cachedBounds.width / cachedScale) / 2;
-    const offsetY = (MINIMAP_HEIGHT - cachedBounds.height / cachedScale) / 2;
+    const offsetX = (width - cachedBounds.width / cachedScale) / 2;
+    const offsetY = (height - cachedBounds.height / cachedScale) / 2;
 
     for (const node of state.nodes) {
       if (node.hidden) continue;
@@ -161,8 +170,8 @@ export function createMiniMap(
       return;
     }
 
-    const offsetX = (MINIMAP_WIDTH - cachedBounds.width / cachedScale) / 2;
-    const offsetY = (MINIMAP_HEIGHT - cachedBounds.height / cachedScale) / 2;
+    const offsetX = (width - cachedBounds.width / cachedScale) / 2;
+    const offsetY = (height - cachedBounds.height / cachedScale) / 2;
 
     // Viewport rect in flow coordinates → minimap coordinates
     const vpX = (-state.viewport.x / state.viewport.zoom - cachedBounds.x) / cachedScale + offsetX;
@@ -171,7 +180,7 @@ export function createMiniMap(
     const vpH = (state.containerHeight / state.viewport.zoom) / cachedScale;
 
     // Evenodd path: outer rect minus inner viewport rect
-    const outer = `M0,0 H${MINIMAP_WIDTH} V${MINIMAP_HEIGHT} H0 Z`;
+    const outer = `M0,0 H${width} V${height} H0 Z`;
     const inner = `M${vpX},${vpY} h${vpW} v${vpH} h${-vpW} Z`;
     maskPath.setAttribute('d', `${outer} ${inner}`);
   }
@@ -180,8 +189,8 @@ export function createMiniMap(
   let isPanning = false;
 
   function minimapToFlowPosition(mmX: number, mmY: number): { x: number; y: number } {
-    const offsetX = (MINIMAP_WIDTH - cachedBounds.width / cachedScale) / 2;
-    const offsetY = (MINIMAP_HEIGHT - cachedBounds.height / cachedScale) / 2;
+    const offsetX = (width - cachedBounds.width / cachedScale) / 2;
+    const offsetY = (height - cachedBounds.height / cachedScale) / 2;
 
     const flowX = (mmX - offsetX) * cachedScale + cachedBounds.x;
     const flowY = (mmY - offsetY) * cachedScale + cachedBounds.y;
@@ -259,5 +268,29 @@ export function createMiniMap(
     wrapper.remove();
   }
 
-  return { render, updateViewport, destroy };
+  /**
+   * Another box, without rebuilding anything.
+   *
+   * The size is not only how big the picture is: the scale that fits the graph into it and the
+   * rectangle that marks the viewport are both computed against it, so a minimap that keeps its
+   * shape while the canvas changes shape draws a viewport marker that is not the shape of the
+   * viewport. A consumer watching its container calls this and everything follows.
+   */
+  function resize(nextWidth: number, nextHeight: number): void {
+    if (! (nextWidth > 0) || ! (nextHeight > 0) || (nextWidth === width && nextHeight === height)) {
+      return;
+    }
+
+    width = nextWidth;
+    height = nextHeight;
+
+    svg.setAttribute('width', String(width));
+    svg.setAttribute('height', String(height));
+    bg.setAttribute('width', String(width));
+    bg.setAttribute('height', String(height));
+
+    render();
+  }
+
+  return { render, updateViewport, resize, destroy };
 }
