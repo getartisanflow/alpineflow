@@ -79,6 +79,7 @@ The directive argument sets the initial anchor position within the flow containe
 - **Draggable** by default -- click and drag the panel to reposition it.
 - **Resizable** by default -- a resize handle is rendered in the appropriate corner.
 - Emits `panel-drag` and `panel-resize` events on the flow container when the user interacts with the panel.
+- **Isolated from the canvas** -- `mousedown`, `pointerdown`, `wheel` and `dblclick` stop at the panel, so a gesture aimed at what is in it does not also pan or zoom the canvas underneath. Only on the way out: the controls inside the panel still receive everything.
 
 ## Usage
 
