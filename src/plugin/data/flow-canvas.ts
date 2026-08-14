@@ -2351,6 +2351,21 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._resizeObserverInit();
 
       debug('init', `flowCanvas "${this._id}" ready`);
+
+      // A Livewire canvas with no bridge to Livewire.
+      //
+      // The bridge is an addon now, and a consumer who assembles their own
+      // bundle registers the plugins by hand — miss `Alpine.plugin(AlpineFlowWire)`
+      // and NOTHING says so: the Blade component still sets `wireEvents`, nothing
+      // reads it, `flow:*` commands land nowhere, and the symptom is "dragging a
+      // node stopped saving". The mirror of the addon's own version-skew warning,
+      // for the direction that is likelier and quieter.
+      if (this.$wire && !getAddon('wire')) {
+        console.warn(
+          `[alpineflow] flowCanvas "${this._id}" has a Livewire $wire proxy but the /wire addon is not registered — wireEvents forwarding and flow:* commands are inert. Register it with Alpine.plugin(AlpineFlowWire) from '@getartisanflow/alpineflow/wire'.`,
+        );
+      }
+
       this._emit('init');
       this._recomputeChildValidation();
 
