@@ -11,12 +11,12 @@
 // ============================================================================
 
 import type { CanvasContext } from './canvas-context';
-import type { FlowNode, FlowEdge } from '../../core/types';
+import type { FlowNode, FlowEdge, EdgeGradient } from '../../core/types';
 import { parseStyle } from '../../animate/interpolators';
 import { getHandleCoords, shortenEndpoint, getEdgePath } from '../../core/edge-utils';
 import { getFloatingEdgeParams } from '../../core/floating-edge';
 import { toAbsoluteNode } from '../../core/sub-flow';
-import { isGradient, getGradientId, upsertGradientDef } from '../../core/gradients';
+import { isGradient, getGradientId, upsertGradientDef, restyleGradientDef } from '../../core/gradients';
 import { resolveHandlePosition } from '../directives/flow-edge';
 
 export function createDomMixin(ctx: CanvasContext, Alpine: any) {
@@ -87,6 +87,35 @@ export function createDomMixin(ctx: CanvasContext, Alpine: any) {
       }
       ctx._applyBackground();
       ctx._applyCulling();
+    },
+
+    /**
+     * Repaint one edge's gradient, for a colour change that moved nothing.
+     *
+     * Answers false where the edge has no def yet — an edge given a gradient for the first time —
+     * and the caller falls back to the path refresh, which is what works the coordinates out.
+     *
+     * Its own entry point because the refresh is driven by which NODES moved: routing a colour
+     * change through it re-paths every sibling edge on both endpoints, and re-paths them the way a
+     * drag does, without obstacle avoidance, until the layout settles. On a plain graph that is
+     * invisible; on an obstacle-routed one it straightens neighbours through the nodes they were
+     * drawn around.
+     */
+    _restyleEdgeGradient(edgeId: string, gradient: EdgeGradient): boolean {
+      const defsEl = ctx._markerDefsEl?.querySelector('defs');
+
+      if (!defsEl) {
+        return false;
+      }
+
+      const edge = ctx._edgeMap.get(edgeId);
+      const reversed = edge?.gradientDirection === 'target-source';
+
+      return restyleGradientDef(
+        defsEl,
+        getGradientId(ctx._id, edgeId),
+        reversed ? { from: gradient.to, to: gradient.from } : gradient,
+      );
     },
 
     /** Recompute SVG paths, label positions, and gradients for edges connected to the given node IDs. */

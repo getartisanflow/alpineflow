@@ -633,6 +633,59 @@ describe('createAnimationMixin — animate (animated)', () => {
     expect(ctx._refreshEdgePaths).toHaveBeenCalledWith(new Set(['n1', 'n2']));
   });
 
+  it('repaints only the edge where its gradient def already exists', () => {
+    // The def's coordinates came from the endpoints the last time they moved, and nothing has
+    // moved — so re-deriving them would mean re-pathing this edge and, through the refresh, every
+    // sibling edge on both of its nodes. Without obstacle avoidance, for a colour change.
+    const e1 = makeEdge('e1', { color: { from: '#000', to: '#fff' }, source: 'n1', target: 'n2' });
+    const ctx = mockCtx();
+    ctx._edgeMap.set('e1', e1);
+    (ctx._restyleEdgeGradient as any).mockReturnValue(true);
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { edges: { e1: { color: { from: '#111', to: '#eee' } as any } } },
+      { duration: 0 },
+    );
+
+    expect(ctx._restyleEdgeGradient).toHaveBeenCalledWith('e1', { from: '#111', to: '#eee' });
+    expect(ctx._flushEdgeStyles).toHaveBeenCalledWith(new Set(['e1']));
+    // Not merely called with an empty set: the neighbours are never walked at all.
+    expect(ctx._refreshEdgePaths).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the endpoints where the edge has no def to repaint', () => {
+    // An edge given a gradient for the first time: there are no coordinates to keep, and the path
+    // refresh is what works them out.
+    const e1 = makeEdge('e1', { color: '#000', source: 'n1', target: 'n2' });
+    const ctx = mockCtx();
+    ctx._edgeMap.set('e1', e1);
+    (ctx._restyleEdgeGradient as any).mockReturnValue(false);
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { edges: { e1: { color: { from: '#000', to: '#fff' } as any } } },
+      { duration: 0 },
+    );
+
+    expect(ctx._refreshEdgePaths).toHaveBeenCalledWith(new Set(['n1', 'n2']));
+  });
+
+  it('leaves a null colour alone rather than setting it and repainting nothing', () => {
+    // typeof null is 'object', so a stray `color: null` through flow:update took the gradient
+    // branch: the model went to null, the repaint was paid for, and nothing was painted —
+    // isGradient(null) is false and the string branch never runs.
+    const e1 = makeEdge('e1', { color: '#000', source: 'n1', target: 'n2' });
+    const ctx = mockCtx();
+    ctx._edgeMap.set('e1', e1);
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate({ edges: { e1: { color: null as any } } }, { duration: 0 });
+
+    expect((e1 as any).color).toBe('#000');
+    expect(ctx._restyleEdgeGradient).not.toHaveBeenCalled();
+  });
+
   it('repaints a gradient whatever duration was asked for', () => {
     // There is nothing to interpolate between two gradients, so this path is instant either way —
     // and it has to redraw either way too.
