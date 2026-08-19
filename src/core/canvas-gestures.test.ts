@@ -98,3 +98,11 @@ describe('isolateCanvasGestures', () => {
     expect(spy).toHaveBeenCalledWith('wheel', expect.any(Function), { passive: false });
   });
 });
+
+it('names touchstart, because d3 binds touch directly and pointerdown does not reach it', () => {
+  // Not a detail of the list: d3-zoom registers `touchstart.zoom` itself rather than going
+  // through pointer events, so an overlay that stops `pointerdown` still lets a tap or a drag
+  // pan and pinch the canvas underneath it on a phone. The eraser blocks touch by hand for the
+  // same reason. Iterating the list cannot catch its removal — this says it out loud.
+  expect(CANVAS_GESTURES).toContain('touchstart');
+});

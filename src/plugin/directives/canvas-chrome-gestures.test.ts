@@ -16,11 +16,15 @@ import { describe, it, expect, beforeAll, afterEach, vi } from 'vitest';
 import Alpine from 'alpinejs';
 import { registerFlowPanelDirective } from './flow-panel';
 import { registerFlowDevtoolsDirective } from './flow-devtools';
+import { registerFlowNodeToolbarDirective } from './flow-node-toolbar';
+import { registerFlowEdgeToolbarDirective } from './flow-edge-toolbar';
 import { CANVAS_GESTURES } from '../../core/canvas-gestures';
 
 beforeAll(() => {
   registerFlowPanelDirective(Alpine);
   registerFlowDevtoolsDirective(Alpine);
+  registerFlowNodeToolbarDirective(Alpine);
+  registerFlowEdgeToolbarDirective(Alpine);
 });
 
 const mounted: HTMLElement[] = [];
@@ -151,5 +155,100 @@ describe('x-flow-devtools — the canvas gestures underneath', () => {
 
     toggle.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     expect(panel.style.display).toBe('none');
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// The toolbars
+//
+// The two overlays the first sweep missed. Each stopped `pointerdown` and `click`
+// and nothing else, so a double-click on a toolbar button zoomed the canvas
+// underneath it and a drag from one panned the canvas — d3 starts a pan on
+// `mousedown`, which was never stopped.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+let toolbarMounts = 0;
+
+/** A toolbar inside a container, with the canvas scope both directives read. */
+function mountToolbar(directive: 'x-flow-node-toolbar' | 'x-flow-edge-toolbar'): {
+  container: HTMLElement;
+  inside: HTMLElement;
+} {
+  const container = document.createElement('div');
+  container.className = 'flow-container';
+  // How the toolbars find their canvas — see resolveCanvasEl.
+  container.setAttribute('data-flow-canvas', '');
+
+  const name = `toolbarCanvas${++toolbarMounts}`;
+  Alpine.data(name, () => ({
+    nodes: [] as any[],
+    edges: [{ id: 'e1', source: 'n1', target: 'n2' }] as any[],
+    viewport: { x: 0, y: 0, zoom: 1 },
+    getNode: () => undefined,
+    getEdge: () => ({ id: 'e1', source: 'n1', target: 'n2' }),
+    // In real markup the edge toolbar sits inside an x-for over the edges, so `edge` is in
+    // scope and the directive carries it across when it relocates itself into the viewport.
+    edge: { id: 'e1', source: 'n1', target: 'n2' },
+  }));
+  container.setAttribute('x-data', name);
+
+  // The edge toolbar relocates itself into the viewport, and gives up if there is none — so the
+  // canvas it is mounted in has to look like one.
+  const viewport = document.createElement('div');
+  viewport.className = 'flow-viewport';
+  container.appendChild(viewport);
+
+  const toolbar = document.createElement('div');
+  toolbar.setAttribute(directive, '');
+  toolbar.setAttribute('data-flow-edge-id', 'e1');
+
+  const inside = document.createElement('button');
+  inside.textContent = 'Delete';
+  toolbar.appendChild(inside);
+
+  container.appendChild(toolbar);
+  document.body.appendChild(container);
+  mounted.push(container);
+
+  Alpine.initTree(container);
+
+  return { container, inside };
+}
+
+describe.each([
+  ['x-flow-node-toolbar'] as const,
+  ['x-flow-edge-toolbar'] as const,
+])('%s — the canvas gestures underneath', (directive) => {
+  it.each([...CANVAS_GESTURES])('keeps %s inside the toolbar', (gesture) => {
+    const { container, inside } = mountToolbar(directive);
+    const reachedCanvas = vi.fn();
+    container.addEventListener(gesture, reachedCanvas);
+
+    fire(inside, gesture);
+
+    expect(reachedCanvas).not.toHaveBeenCalled();
+  });
+
+  it('still keeps a click off the node or edge it belongs to', () => {
+    // `click` is not a canvas gesture and is stopped for its own reason: a press on the toolbar
+    // must not select the thing the toolbar is attached to.
+    const { container, inside } = mountToolbar(directive);
+    const reachedCanvas = vi.fn();
+    container.addEventListener('click', reachedCanvas);
+
+    fire(inside, 'click');
+
+    expect(reachedCanvas).not.toHaveBeenCalled();
+  });
+
+  it('still lets the buttons inside it work', () => {
+    const { inside } = mountToolbar(directive);
+    const pressed = vi.fn();
+    inside.addEventListener('dblclick', pressed);
+
+    fire(inside, 'dblclick');
+
+    expect(pressed).toHaveBeenCalled();
   });
 });

@@ -123,7 +123,7 @@ export function createControlsPanel(
   // list because two quick presses of zoom-in are a double-click as far as the container
   // is concerned — so the canvas jumped to the double-click level instead of taking the
   // second step under the cursor.
-  isolateCanvasGestures(wrapper);
+  const releaseGestures = isolateCanvasGestures(wrapper);
 
   container.appendChild(wrapper);
 
@@ -145,6 +145,10 @@ export function createControlsPanel(
   }
 
   function destroy(): void {
+    // Held rather than left to the wrapper's removal, so this call site matches the
+    // minimap, the devtools and the panels — one of four doing it differently is the one
+    // that drifts.
+    releaseGestures();
     wrapper.remove();
   }
 

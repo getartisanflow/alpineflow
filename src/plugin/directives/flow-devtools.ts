@@ -179,11 +179,9 @@ export function registerFlowDevtoolsDirective(Alpine: Alpine) {
       toggleBtn.appendChild(svg);
       el.appendChild(toggleBtn);
 
-      // Panel — user-select: none so dragging to pan doesn't select text
       const panel = document.createElement('div');
       panel.className = 'flow-devtools-panel';
       panel.style.display = 'none';
-      panel.style.userSelect = 'none';
       el.appendChild(panel);
 
       let expanded = false;

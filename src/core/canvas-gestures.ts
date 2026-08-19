@@ -18,8 +18,14 @@
  * reaches the double-click zoom, which is bound separately (d3's stepped handler
  * in the default mode, AlpineFlow's own in `'toggle'`) and is the one that used
  * to be left out.
+ *
+ * `touchstart` is here because d3-zoom binds `touchstart.zoom` DIRECTLY rather
+ * than going through pointer events, so stopping `pointerdown` does not reach
+ * it: without this, a tap or a drag on any overlay still pans or pinches the
+ * canvas underneath it on a phone. The eraser already blocks touch by hand for
+ * the same reason.
  */
-export const CANVAS_GESTURES = ['mousedown', 'pointerdown', 'wheel', 'dblclick'] as const;
+export const CANVAS_GESTURES = ['mousedown', 'pointerdown', 'touchstart', 'wheel', 'dblclick'] as const;
 
 export type CanvasGesture = (typeof CANVAS_GESTURES)[number];
 

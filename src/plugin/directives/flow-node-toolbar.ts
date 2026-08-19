@@ -13,6 +13,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
+import { isolateCanvasGestures } from '../../core/canvas-gestures';
 
 type ToolbarPosition = 'top' | 'bottom' | 'left' | 'right';
 type ToolbarAlign = 'start' | 'center' | 'end';
@@ -34,9 +35,18 @@ export function registerFlowNodeToolbarDirective(Alpine: Alpine) {
       el.style.position = 'absolute';
 
       // ── Prevent toolbar interactions from triggering node drag/select ─
-      const stopPointerDown = (e: PointerEvent) => { e.stopPropagation(); };
+      //
+      // A toolbar is chrome drawn INSIDE the flow container, so every gesture
+      // aimed at one of its buttons reaches the canvas underneath as well —
+      // the same leak the controls and the minimap had. The shared list is
+      // what closes it: this used to stop `pointerdown` only, so a
+      // double-click on a button zoomed the canvas and a drag from one panned
+      // it (d3 starts a pan on `mousedown`, which was never stopped).
+      const releaseGestures = isolateCanvasGestures(el);
+
+      // `click` is not a canvas gesture — it is what selects a NODE, and a
+      // click on the toolbar is not a click on the node it belongs to.
       const stopClick = (e: MouseEvent) => { e.stopPropagation(); };
-      el.addEventListener('pointerdown', stopPointerDown);
       el.addEventListener('click', stopClick);
 
       // ── Reactive positioning and inverse-scale ───────────────────────
@@ -109,7 +119,7 @@ export function registerFlowNodeToolbarDirective(Alpine: Alpine) {
 
       // ── Cleanup ──────────────────────────────────────────────────────
       cleanup(() => {
-        el.removeEventListener('pointerdown', stopPointerDown);
+        releaseGestures();
         el.removeEventListener('click', stopClick);
         el.classList.remove('flow-node-toolbar');
       });
