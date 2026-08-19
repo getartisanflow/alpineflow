@@ -414,11 +414,15 @@ Config callback: `onSelectionChange`
 
 ### selection-context-menu
 
-Fired when right-clicking with multiple nodes selected.
+Fired when opening a context menu with multiple nodes selected — a right-click on the pane, a
+right-click on one of the selected nodes, or a long press on a touch device.
 
 ```ts
-{ nodes: FlowNode[]; event: MouseEvent }
+{ nodes: FlowNode[]; edges: FlowEdge[]; event: MouseEvent }
 ```
+
+`edges` carries the selected edges, which is what lets a menu item act on the whole selection
+rather than on its nodes alone. It is an empty array when only nodes are selected.
 
 Config callback: `onSelectionContextMenu`
 
@@ -588,7 +592,7 @@ All events at a glance:
 | `pane-click` | `{ event, position }` | `onPaneClick` |
 | `pane-context-menu` | `{ event, position }` | `onPaneContextMenu` |
 | `selection-change` | `{ nodes, edges, rows }` | `onSelectionChange` |
-| `selection-context-menu` | `{ nodes, event }` | `onSelectionContextMenu` |
+| `selection-context-menu` | `{ nodes, edges, event }` | `onSelectionContextMenu` |
 | `nodes-change` | `{ type, nodes, origin }` | `onNodesChange` |
 | `edges-change` | `{ type, edges, origin }` | `onEdgesChange` |
 | `nodes-patch` | `{ patches }` | `onNodesPatch` |

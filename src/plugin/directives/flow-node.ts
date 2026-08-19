@@ -1850,10 +1850,10 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
 
         // When the node is part of a multi-selection, show selection menu instead
         if (canvas.selectedNodes.size > 1 && canvas.selectedNodes.has(node.id)) {
-          const nodes = canvas.nodes.filter((n: FlowNode) => canvas.selectedNodes.has(n.id));
-          // Selected edges travel with them: a selection is what the author gathered, and a menu
-          // acting on it cannot act on the half it was never told about.
-          const edges = canvas.edges.filter((edge: FlowEdge) => canvas.selectedEdges.has(edge.id));
+          // Selected edges travel with the nodes: a selection is what the author gathered, and a
+          // menu acting on it cannot act on the half it was never told about. Gathered by the
+          // canvas rather than here, so the three ways of opening this menu cannot disagree.
+          const { nodes, edges } = canvas.getSelectedNodesAndEdges();
           canvas._emit('selection-context-menu', { nodes, edges, event: e });
         } else {
           canvas._emit('node-context-menu', { node, event: e });

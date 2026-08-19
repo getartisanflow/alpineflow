@@ -2,12 +2,17 @@
 // ============================================================================
 // selection-context-menu — what a right-click on a selection is told about
 //
-// Mounts a REAL flowCanvas (mirroring flow-canvas-crossing.test.ts) and
-// right-clicks the pane with a selection made, because the payload is assembled
-// in the DOM handler and nowhere else.
+// Mounts a REAL flowCanvas (mirroring flow-canvas-crossing.test.ts), because the
+// payload is assembled in the DOM handlers and nowhere else.
+//
+// THREE ways open this menu — a right-click on the pane, a right-click on one of
+// the selected nodes, a long press on a touch device — and each gathered the
+// selection by hand, which is how the touch path came to send the nodes and
+// forget the edges. Every one of them is exercised here, and so is the built-in
+// menu state they fill, which dropped the edges again on its way in.
 // ============================================================================
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import Alpine from 'alpinejs';
 import AlpineFlow from '../../index';
 import type { FlowCanvasConfig } from '../../core/types';
@@ -43,7 +48,13 @@ function mountCanvas(config: FlowCanvasConfig = {}): { el: HTMLElement; canvas: 
   return { el, canvas: Alpine.$data(el) };
 }
 
+beforeEach(() => {
+  // The long press is a timer, and the point of the test is what happens when it fires.
+  vi.useFakeTimers();
+});
+
 afterEach(() => {
+  vi.useRealTimers();
   while (mounted.length) mounted.pop()?.remove();
 });
 
@@ -93,5 +104,79 @@ describe('selection-context-menu', () => {
     el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
 
     expect(detail.edges).toEqual([]);
+  });
+
+  it('gathers the same selection whichever way the menu is opened', () => {
+    // One helper behind all three sites. Reading it directly is what makes the other tests here
+    // about the WIRING rather than about the filtering.
+    const { canvas } = mountCanvas(graph);
+
+    canvas.selectedNodes.add('n1');
+    canvas.selectedNodes.add('n2');
+    canvas.selectedEdges.add('e2');
+
+    const { nodes, edges } = canvas.getSelectedNodesAndEdges();
+
+    expect(nodes.map((n: any) => n.id)).toEqual(['n1', 'n2']);
+    expect(edges.map((edge: any) => edge.id)).toEqual(['e2']);
+  });
+
+  it('carries the edges when the menu is opened by a long press', () => {
+    // The site the first pass missed. A long press is the default touch gesture, so on a phone
+    // this WAS the bug the rest of the change fixes — just reached by a different finger.
+    const { el, canvas } = mountCanvas(graph);
+
+    canvas.selectedNodes.add('n1');
+    canvas.selectedNodes.add('n2');
+    canvas.selectedEdges.add('e1');
+
+    let detail: any = null;
+    el.addEventListener('flow-selection-context-menu', (e: any) => { detail = e.detail; });
+
+    // The long press is watched on POINTER events, so this is the gesture as the helper sees it:
+    // a touch pointer down, held, with nothing moving it far enough to cancel.
+    el.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true, cancelable: true, pointerType: 'touch', clientX: 10, clientY: 10,
+    }));
+
+    vi.advanceTimersByTime(1000);
+
+    expect(detail, 'no menu opened — the long press never fired').not.toBeNull();
+    expect(detail.edges.map((edge: any) => edge.id)).toEqual(['e1']);
+  });
+
+  it('tells the built-in menu about the edges too', () => {
+    // A plain-AlpineFlow menu binds to `contextMenu`, which is filled by a handler of the canvas's
+    // own. It copied `nodes` and dropped `edges`, so the payload arrived whole and the menu still
+    // could not act on the selection it was opened for.
+    const { el, canvas } = mountCanvas(graph);
+
+    canvas.selectedNodes.add('n1');
+    canvas.selectedNodes.add('n2');
+    canvas.selectedEdges.add('e1');
+
+    el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+
+    expect(canvas.contextMenu.type).toBe('selection');
+    expect(canvas.contextMenu.nodes.map((n: any) => n.id)).toEqual(['n1', 'n2']);
+    expect(canvas.contextMenu.edges.map((edge: any) => edge.id)).toEqual(['e1']);
+  });
+
+  it('leaves the edges empty on the menus that are not about a selection', () => {
+    // The state object is assigned whole by every handler, so a field one of them forgets keeps
+    // the LAST menu's value — a right-click on one node would show the previous selection's edges.
+    const { el, canvas } = mountCanvas(graph);
+
+    canvas.selectedNodes.add('n1');
+    canvas.selectedNodes.add('n2');
+    canvas.selectedEdges.add('e1');
+    el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+
+    canvas.selectedNodes.clear();
+    canvas.selectedEdges.clear();
+    el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+
+    expect(canvas.contextMenu.type).toBe('pane');
+    expect(canvas.contextMenu.edges).toBeNull();
   });
 });
