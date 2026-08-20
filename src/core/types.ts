@@ -341,6 +341,9 @@ export interface FlowEdge<T = Record<string, any>> {
   /** Can this edge receive keyboard focus? Default: follows `edgesFocusable` config (true). */
   focusable?: boolean;
 
+  /** Can this edge be selected? Default: follows `edgesSelectable` config (true). */
+  selectable?: boolean;
+
   /** Override the ARIA role for this edge. Default: 'group' */
   ariaRole?: string;
 
@@ -1373,6 +1376,15 @@ export interface FlowCanvasConfig {
 
   /** Allow edges to receive keyboard focus via Tab. Default: true */
   edgesFocusable?: boolean;
+
+  /** Allow nodes to be selected by clicking, dragging or a selection box. Default: true.
+   *  A node's own `selectable` overrides this. Programmatic selection is unaffected —
+   *  this governs what a POINTER may do, not what the host may ask for. */
+  nodesSelectable?: boolean;
+
+  /** Allow edges to be selected by clicking or a selection box. Default: true.
+   *  An edge's own `selectable` overrides this. Programmatic selection is unaffected. */
+  edgesSelectable?: boolean;
 
   /** Disable arrow-key movement for selected nodes (Tab/Enter still work). Default: false */
   disableKeyboardA11y?: boolean;

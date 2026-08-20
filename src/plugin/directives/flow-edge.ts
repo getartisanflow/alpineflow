@@ -16,6 +16,7 @@ import { laneOffset, applyLaneOffset, resolveSpreadSpacing } from '../../core/en
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { normalizeMarker, getMarkerId } from '../../core/markers';
 import { isConnectable } from '../../core/node-flags';
+import { isEdgeSelectable } from '../../core/edge-flags';
 import { applyValidationClasses, clearValidationClasses, applyReconnectValidation, setDragLineValidating } from './flow-handle';
 import {
   createConnectionLine,
@@ -687,6 +688,9 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
 
         canvas._emit('edge-click', { edge, event: e });
 
+        // The click happened and was announced; whether it SELECTS is a separate question.
+        if (!isEdgeSelectable(edge, canvas._config?.edgesSelectable !== false)) return;
+
         if (matchesModifier(e, canvas._shortcuts?.multiSelect)) {
           if (canvas.selectedEdges.has(edge.id)) {
             canvas.selectedEdges.delete(edge.id);
@@ -1163,6 +1167,9 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         if (!canvas) return;
 
         canvas._emit('edge-click', { edge, event: e });
+
+        // As above: announced, then gated.
+        if (!isEdgeSelectable(edge, canvas._config?.edgesSelectable !== false)) return;
 
         if (matchesModifier(e, canvas._shortcuts?.multiSelect)) {
           if (canvas.selectedEdges.has(edge.id)) {

@@ -17,6 +17,7 @@ order: 3
 | `selectNodesOnDrag` | `boolean` | `true` | Automatically select nodes when drag starts. |
 | `nodeDragThreshold` | `number` | `0` | Minimum pixel distance before a drag starts. |
 | `nodesFocusable` | `boolean` | `true` | Allow nodes to receive keyboard focus via Tab. |
+| `nodesSelectable` | `boolean` | `true` | Allow nodes to be selected by clicking, dragging or a selection box. Overridden per-node by `node.selectable`. Programmatic selection is unaffected. |
 | `autoPanOnNodeDrag` | `boolean` | `true` | Auto-pan when dragging nodes near canvas edge. |
 | `autoPanOnNodeFocus` | `boolean` | `false` | Auto-pan viewport when a node receives keyboard focus. |
 

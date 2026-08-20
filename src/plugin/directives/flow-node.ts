@@ -605,7 +605,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
             const n = canvas.getNode(nodeId);
             if (n) {
               // Auto-select dragged node if selectNodesOnDrag is enabled (default: true)
-              if (canvas._config?.selectNodesOnDrag !== false && n.selectable !== false && !canvas.selectedNodes.has(nodeId)) {
+              if (canvas._config?.selectNodesOnDrag !== false && isSelectable(n, canvas._config?.nodesSelectable !== false) && !canvas.selectedNodes.has(nodeId)) {
                 if (!matchesModifier(sourceEvent, canvas._shortcuts?.multiSelect)) {
                   canvas.deselectAll();
                 }
@@ -1745,7 +1745,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
         const canvas = Alpine.$data(el.closest('[x-data]') as HTMLElement);
         if (!canvas) return;
         if (canvas._animationLocked) return;
-        if (!isSelectable(node)) return;
+        if (!isSelectable(node, canvas._config?.nodesSelectable !== false)) return;
 
         canvas._emit('node-click', { node, event: e });
         e.stopPropagation();
@@ -1799,7 +1799,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
         canvas._emit('node-click', { node, event: e });
 
         // ── Selectable flag ────────────────────────────────────────
-        if (!isSelectable(node)) return;
+        if (!isSelectable(node, canvas._config?.nodesSelectable !== false)) return;
 
         // Stop the click from reaching the canvas background deselect handler
         e.stopPropagation();
