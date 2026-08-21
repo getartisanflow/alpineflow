@@ -146,6 +146,18 @@ export function checkHandleLimits(
  * in the container based on the validation chain for a hypothetical connection
  * from the given source.
  *
+ * Also raises `.flow-connecting` on the container, because that is the selector
+ * the stylesheet reveals those classes through:
+ *
+ *   .flow-connecting .flow-handle-target { outline: 2px solid … }
+ *   .flow-connecting .flow-handle-target.flow-handle-invalid { outline-color: … }
+ *
+ * The flag used to be set by the click-to-connect branch alone, so the three
+ * DRAG gestures computed a full valid/invalid verdict for every target handle
+ * and then painted none of it. Setting it here — and clearing it in
+ * `clearValidationClasses` — is what keeps the two halves of one statement from
+ * being raised in different places.
+ *
  * When `index` is provided (connect-drag / reconnect gestures build one on
  * pointerdown), validation runs O(1) per handle off a precomputed context with
  * ZERO further DOM queries or measurements. Without an index (one-shot callers:
@@ -161,6 +173,8 @@ export function applyValidationClasses(
   excludeEdgeId?: string,
   index?: HandleIndex,
 ): void {
+  containerEl.classList.add('flow-connecting');
+
   if (!index) {
     legacyApplyValidationClasses(containerEl, sourceNodeId, sourceHandleId, canvas, excludeEdgeId);
     return;
@@ -304,9 +318,14 @@ export function legacyApplyValidationClasses(
 }
 
 /**
- * Remove .flow-handle-valid / .flow-handle-invalid from all target handles.
+ * Remove .flow-handle-valid / .flow-handle-invalid from all target handles, and
+ * `.flow-connecting` from the container that revealed them. Every path that ends
+ * a connect gesture already calls this, which is what makes it the one place the
+ * flag can be dropped from.
  */
 export function clearValidationClasses(containerEl: HTMLElement): void {
+  containerEl.classList.remove('flow-connecting');
+
   const targetHandles = containerEl.querySelectorAll('[data-flow-handle-type="target"]');
   for (const targetEl of targetHandles) {
     (targetEl as HTMLElement).classList.remove('flow-handle-valid', 'flow-handle-invalid', 'flow-handle-limit-reached');
@@ -1150,7 +1169,9 @@ export function startSourceHandlePointerInteraction(
           sourceHandle: handleId,
           position: { x: 0, y: 0 },
         };
-        canvas._container?.classList.add('flow-connecting');
+        // `.flow-connecting` is raised by applyValidationClasses, together with
+        // the handle classes it is the selector for.
+        //
         // Click-to-connect is a one-shot, not a drag gesture:
         // dragHandleIndex is null here, so this uses the legacy path.
         applyValidationClasses(containerEl, sourceNodeId, handleId, canvas, undefined, dragHandleIndex ?? undefined);
