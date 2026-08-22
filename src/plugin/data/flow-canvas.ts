@@ -1872,9 +1872,12 @@ export function registerFlowCanvas(Alpine: Alpine) {
           showFitView: config.controlsShowFitView ?? true,
           showInteractive: config.controlsShowInteractive ?? true,
           showResetPanels: config.controlsShowResetPanels ?? false,
-          onZoomIn: () => this.zoomIn(),
-          onZoomOut: () => this.zoomOut(),
-          onFitView: () => this.fitView({ padding: DEFAULT_FIT_PADDING }),
+          // Read per press, and from `_config` — the copy the rest of the canvas answers to, so a
+          // duration changed at runtime reaches the buttons like every other live setting does.
+          // Zero by default, which is exactly the call these three made before.
+          onZoomIn: () => this.zoomIn({ duration: this._config.controlsDuration ?? 0 }),
+          onZoomOut: () => this.zoomOut({ duration: this._config.controlsDuration ?? 0 }),
+          onFitView: () => this.fitView({ padding: DEFAULT_FIT_PADDING, duration: this._config.controlsDuration ?? 0 }),
           onToggleInteractive: () => this.toggleInteractive(),
           onResetPanels: () => this.resetPanels(),
           onToggleFullscreen: () => this.toggleFullscreen(),

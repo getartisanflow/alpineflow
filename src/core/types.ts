@@ -1361,6 +1361,15 @@ export interface FlowCanvasConfig {
   controlsContainer?: string;
 
   /**
+   * How long the viewport takes to answer a control, in ms. Default: 0 (instant).
+   *
+   * Zoom in, zoom out and fit view all take a `duration` and animate when given one — the panel
+   * simply never passed one, so its buttons jumped while a double-click zoom (300ms) and a layout
+   * glided. Set this and the three buttons move the same way everything else on the canvas does.
+   */
+  controlsDuration?: number;
+
+  /**
    * Element to enter fullscreen mode, instead of the canvas container.
    * Useful when the page wraps the canvas + ancillary UI (inspectors,
    * toolbars) that should stay visible in fullscreen. Accepts a CSS
