@@ -46,6 +46,30 @@ import type { ParticleRenderer } from '../../core/types';
 import { Recorder, ReplayHandle, type RecordOptions, type ReplayOptions } from '../../animate/recording';
 import type { Recording } from '../../animate/recording';
 
+// ── Publishing what the animator settled on ─────────────────────────────────
+
+/**
+ * Publish a value the animator has already written to the raw object.
+ *
+ * Per-frame writes deliberately go through `Alpine.raw(node)` — the object the reactive proxy
+ * wraps — because flushing the DOM by hand is what keeps a move smooth. By the time the animation
+ * ends the final value is already sitting in that object, so assigning it back through the proxy
+ * compares equal to what is there: reactivity skips a write that changes nothing, and nobody hears
+ * about the animation at all.
+ *
+ * Clearing the raw slot first makes the assignment a genuine change. The cleared state is never
+ * observable — writes straight to the raw object notify nothing, and nothing reads the property
+ * between the two statements.
+ *
+ * Replacing the object would do for `position`, but does not generalise: `style` may be a string
+ * rather than a record, and `color` and `strokeWidth` are primitives. One mechanism for all four.
+ */
+function publishSettled<T extends object, K extends keyof T>(proxy: T, raw: T, key: K): void {
+  const settled = raw[key];
+  (raw as Record<PropertyKey, unknown>)[key as PropertyKey] = undefined;
+  proxy[key] = settled;
+}
+
 // ── Mixin factory ───────────────────────────────────────────────────────────
 
 export function createAnimationMixin(ctx: CanvasContext) {
@@ -570,24 +594,22 @@ export function createAnimationMixin(ctx: CanvasContext) {
           options.onProgress?.(progress);
         },
         onComplete() {
-          // Final frame: publish the raw values the animator applied to the reactive state,
-          // so anything watching nodes hears about the move exactly once, at the end.
+          // Final frame: publish the raw values the animator applied to the reactive state, so
+          // anything watching nodes or edges hears about the animation exactly once, at the end.
           //
-          // The position is REPLACED rather than written field by field. `Alpine.raw(node)`
-          // returns the object the proxy wraps, so the animator's per-frame writes have already
-          // put the final coordinates there — and `node.position.x = raw.position.x` then assigns
-          // a value that is already equal, which reactivity skips. Nothing was notified, and
-          // anything drawing from `nodes` alone — the minimap, most obviously — kept showing the
-          // graph as it stood before the animation until something else happened to touch it.
+          // Every one of these went through `publishSettled` rather than a plain assignment,
+          // because a plain assignment here writes a value that is already there — see its
+          // comment. Anything drawing from `nodes` alone — the minimap, most obviously — kept
+          // showing the graph as it stood before the animation until something else touched it.
           if (targets.nodes) {
             for (const [nodeId, target] of Object.entries(targets.nodes)) {
               const node = ctx._nodeMap.get(nodeId);
               if (!node) continue;
               const raw = getAlpine().raw(node);
               if (target.followPath || target.position?.x !== undefined || target.position?.y !== undefined) {
-                node.position = { ...raw.position };
+                publishSettled(node, raw, 'position');
               }
-              if (target.style !== undefined) node.style = raw.style;
+              if (target.style !== undefined) publishSettled(node, raw, 'style');
             }
           }
           // Final frame: sync Alpine reactive state for edges
@@ -596,8 +618,10 @@ export function createAnimationMixin(ctx: CanvasContext) {
               const edge = ctx._edgeMap.get(edgeId);
               if (!edge) continue;
               const raw = getAlpine().raw(edge);
-              if (target.color !== undefined && typeof target.color === 'string') edge.color = raw.color;
-              if (target.strokeWidth !== undefined) edge.strokeWidth = raw.strokeWidth;
+              if (target.color !== undefined && typeof target.color === 'string') {
+                publishSettled(edge, raw, 'color');
+              }
+              if (target.strokeWidth !== undefined) publishSettled(edge, raw, 'strokeWidth');
             }
           }
           // Flush any moved/styled IDs left over from entry.apply() writes that

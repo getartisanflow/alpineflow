@@ -8,10 +8,21 @@
 // sync at the end.
 // ============================================================================
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll } from 'vitest';
 import Alpine from 'alpinejs';
 import AlpineFlow from '../../index';
 import type { FlowCanvasConfig } from '../../core/types';
+
+// jsdom doesn't implement CSS.escape — the edge-style flush at the end of an edge animation looks
+// its path element up by id and would throw without it.
+beforeAll(() => {
+  if (typeof globalThis.CSS === 'undefined') {
+    (globalThis as any).CSS = {};
+  }
+  if (typeof CSS.escape !== 'function') {
+    CSS.escape = (value: string) => String(value);
+  }
+});
 
 let pluginRegistered = false;
 const mounted: HTMLElement[] = [];
@@ -79,6 +90,101 @@ describe('animate — the reactive sync at the end', () => {
 
     expect(seen).toBeGreaterThan(before);
     expect(canvas.nodes[0].position).toEqual({ x: 400, y: 120 });
+  });
+
+  it('tells a watcher that a node style animation finished', async () => {
+    // The same hole, one property over: the per-frame writes go to `Alpine.raw(n).style`, so the
+    // sync's `node.style = raw.style` assigned the object that was already there.
+    const canvas = mountCanvas({
+      nodes: [{ id: 'n1', position: { x: 0, y: 0 }, data: {}, style: { opacity: '0' } }],
+    });
+
+    let seen = 0;
+    Alpine.effect(() => {
+      JSON.stringify(canvas.nodes);
+      seen++;
+    });
+
+    const before = seen;
+
+    canvas.animate({ nodes: { n1: { style: { opacity: '1' } } } }, { duration: 20 });
+
+    await settle();
+
+    expect(seen).toBeGreaterThan(before);
+    expect(canvas.nodes[0].style).toMatchObject({ opacity: '1' });
+  });
+
+  it('tells a watcher that an edge colour animation finished', async () => {
+    // `color` is a primitive, so replacing the object — which is what fixes `position` — has
+    // nothing to replace. It still has to be published.
+    const canvas = mountCanvas({
+      nodes: [
+        { id: 'n1', position: { x: 0, y: 0 }, data: {} },
+        { id: 'n2', position: { x: 200, y: 0 }, data: {} },
+      ],
+      edges: [{ id: 'e1', source: 'n1', target: 'n2', color: 'rgb(0, 0, 0)' }],
+    });
+
+    let seen = 0;
+    Alpine.effect(() => {
+      JSON.stringify(canvas.edges);
+      seen++;
+    });
+
+    const before = seen;
+
+    canvas.animate({ edges: { e1: { color: 'rgb(255, 0, 0)' } } }, { duration: 20 });
+
+    await settle();
+
+    expect(seen).toBeGreaterThan(before);
+    expect(canvas.edges[0].color).toBe('rgb(255, 0, 0)');
+  });
+
+  it('tells a watcher that an edge stroke-width animation finished', async () => {
+    const canvas = mountCanvas({
+      nodes: [
+        { id: 'n1', position: { x: 0, y: 0 }, data: {} },
+        { id: 'n2', position: { x: 200, y: 0 }, data: {} },
+      ],
+      edges: [{ id: 'e1', source: 'n1', target: 'n2', strokeWidth: 1 }],
+    });
+
+    let seen = 0;
+    Alpine.effect(() => {
+      JSON.stringify(canvas.edges);
+      seen++;
+    });
+
+    const before = seen;
+
+    canvas.animate({ edges: { e1: { strokeWidth: 6 } } }, { duration: 20 });
+
+    await settle();
+
+    expect(seen).toBeGreaterThan(before);
+    expect(canvas.edges[0].strokeWidth).toBe(6);
+  });
+
+  it('leaves an edge nobody animated alone', async () => {
+    const canvas = mountCanvas({
+      nodes: [
+        { id: 'n1', position: { x: 0, y: 0 }, data: {} },
+        { id: 'n2', position: { x: 200, y: 0 }, data: {} },
+      ],
+      edges: [
+        { id: 'e1', source: 'n1', target: 'n2', color: 'rgb(0, 0, 0)', strokeWidth: 1 },
+        { id: 'e2', source: 'n2', target: 'n1', color: 'rgb(0, 0, 255)', strokeWidth: 2 },
+      ],
+    });
+
+    canvas.animate({ edges: { e1: { color: 'rgb(255, 0, 0)' } } }, { duration: 20 });
+
+    await settle();
+
+    expect(canvas.edges[1].color).toBe('rgb(0, 0, 255)');
+    expect(canvas.edges[1].strokeWidth).toBe(2);
   });
 
   it('leaves a node nobody animated alone', async () => {
