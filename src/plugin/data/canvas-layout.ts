@@ -513,7 +513,12 @@ export function createLayoutMixin(ctx: CanvasContext) {
       });
 
       debug('layout', 'Applied dagre layout', { direction });
-      ctx._emit('layout', { type: 'dagre', direction });
+      // The positions travel with it. This fires when the layout has been COMPUTED, not when it
+      // has been applied: `_applyLayout` hands them to `animate()` and returns, so a listener
+      // reading the model reads the coordinates that were there before the call — and a consumer
+      // persisting a tidy-up saved the old layout back. A plain object, not the `Map`, because
+      // persisting means JSON.
+      ctx._emit('layout', { type: 'dagre', direction, positions: Object.fromEntries(positions) });
     },
 
     /**
@@ -556,7 +561,12 @@ export function createLayoutMixin(ctx: CanvasContext) {
       });
 
       debug('layout', 'Applied force layout', { charge: options?.charge ?? -300, distance: options?.distance ?? 150 });
-      ctx._emit('layout', { type: 'force', charge: options?.charge ?? -300, distance: options?.distance ?? 150 });
+      ctx._emit('layout', {
+        type: 'force',
+        charge: options?.charge ?? -300,
+        distance: options?.distance ?? 150,
+        positions: Object.fromEntries(positions),
+      });
     },
 
     /**
@@ -601,7 +611,12 @@ export function createLayoutMixin(ctx: CanvasContext) {
       });
 
       debug('layout', 'Applied tree layout', { layoutType: options?.layoutType ?? 'tree', direction });
-      ctx._emit('layout', { type: 'tree', layoutType: options?.layoutType ?? 'tree', direction });
+      ctx._emit('layout', {
+        type: 'tree',
+        layoutType: options?.layoutType ?? 'tree',
+        direction,
+        positions: Object.fromEntries(positions),
+      });
     },
 
     /**
@@ -656,7 +671,12 @@ export function createLayoutMixin(ctx: CanvasContext) {
       });
 
       debug('layout', 'Applied ELK layout', { algorithm: options?.algorithm ?? 'layered', direction });
-      ctx._emit('layout', { type: 'elk', algorithm: options?.algorithm ?? 'layered', direction });
+      ctx._emit('layout', {
+        type: 'elk',
+        algorithm: options?.algorithm ?? 'layered',
+        direction,
+        positions: Object.fromEntries(positions),
+      });
     },
   };
 }

@@ -484,7 +484,7 @@ describe('createLayoutMixin — layout (dagre)', () => {
     });
     // Node should have been repositioned by _applyLayout (instant, duration=0)
     expect(n1.position).toEqual({ x: 100, y: 50 });
-    expect(ctx._emit).toHaveBeenCalledWith('layout', { type: 'dagre', direction: 'LR' });
+    expect(ctx._emit).toHaveBeenCalledWith('layout', { type: 'dagre', direction: 'LR', positions: { n1: { x: 100, y: 50 } } });
   });
 });
 
@@ -507,7 +507,7 @@ describe('createLayoutMixin — forceLayout', () => {
       center: undefined,
     });
     expect(n1.position).toEqual({ x: 80, y: 60 });
-    expect(ctx._emit).toHaveBeenCalledWith('layout', { type: 'force', charge: -500, distance: 150 });
+    expect(ctx._emit).toHaveBeenCalledWith('layout', { type: 'force', charge: -500, distance: 150, positions: { n1: { x: 80, y: 60 } } });
   });
 });
 
@@ -529,7 +529,7 @@ describe('createLayoutMixin — treeLayout', () => {
       nodeHeight: undefined,
     });
     expect(n1.position).toEqual({ x: 120, y: 40 });
-    expect(ctx._emit).toHaveBeenCalledWith('layout', { type: 'tree', layoutType: 'tree', direction: 'TB' });
+    expect(ctx._emit).toHaveBeenCalledWith('layout', { type: 'tree', layoutType: 'tree', direction: 'TB', positions: { n1: { x: 120, y: 40 } } });
   });
 });
 
@@ -551,6 +551,76 @@ describe('createLayoutMixin — elkLayout', () => {
       layerSpacing: undefined,
     });
     expect(n1.position).toEqual({ x: 90, y: 70 });
-    expect(ctx._emit).toHaveBeenCalledWith('layout', { type: 'elk', algorithm: 'layered', direction: 'DOWN' });
+    expect(ctx._emit).toHaveBeenCalledWith('layout', { type: 'elk', algorithm: 'layered', direction: 'DOWN', positions: { n1: { x: 90, y: 70 } } });
+  });
+});
+
+// ── What the layout event carries ───────────────────────────────────────────
+
+describe('createLayoutMixin — the layout event carries what the layout decided', () => {
+  // The event fires when the layout has been COMPUTED, not when it has been applied: with the
+  // default duration `_applyLayout` hands the positions to `animate()` and returns, so at the
+  // moment a listener runs the nodes still hold their old coordinates. A consumer persisting a
+  // tidy-up therefore saved the layout that was there before the call, and the graph sprang back
+  // on the next load. The positions travel in the payload so nothing has to race the animation.
+  it('carries them while the nodes are still animating towards them', async () => {
+    const n1 = makeNode('n1', { position: { x: 0, y: 0 } });
+    const ctx = mockCtx({ nodes: [n1] });
+    const mixin = createLayoutMixin(ctx);
+
+    await mixin.layout({ direction: 'TB', fitView: false });   // default duration: animated
+
+    // The model still holds the old position — this is the race the payload settles.
+    expect(n1.position).toEqual({ x: 0, y: 0 });
+
+    const payload = vi.mocked(ctx._emit).mock.calls.find(([event]) => event === 'layout')?.[1] as any;
+
+    expect(payload.positions).toEqual({ n1: { x: 100, y: 50 } });
+  });
+
+  it('carries a plain object, because this is going somewhere that speaks JSON', async () => {
+    // `Map` survives neither JSON.stringify nor structured clone, and persisting a layout means
+    // sending it to a backend.
+    const ctx = mockCtx({ nodes: [makeNode('n1', { position: { x: 0, y: 0 } })] });
+    const mixin = createLayoutMixin(ctx);
+
+    await mixin.layout({ fitView: false, duration: 0 });
+
+    const payload = vi.mocked(ctx._emit).mock.calls.find(([event]) => event === 'layout')?.[1] as any;
+
+    expect(payload.positions).not.toBeInstanceOf(Map);
+    expect(JSON.parse(JSON.stringify(payload.positions))).toEqual({ n1: { x: 100, y: 50 } });
+  });
+
+  it('gives every engine the same treatment', async () => {
+    const ctx = mockCtx({ nodes: [makeNode('n1', { position: { x: 0, y: 0 } })] });
+    const mixin = createLayoutMixin(ctx);
+
+    await mixin.forceLayout({ fitView: false, duration: 0 });
+    await mixin.treeLayout({ fitView: false, duration: 0 });
+    await mixin.elkLayout({ fitView: false, duration: 0 });
+
+    const payloads = vi.mocked(ctx._emit).mock.calls
+      .filter(([event]) => event === 'layout')
+      .map(([, detail]) => detail as any);
+
+    expect(payloads.map((p) => p.type)).toEqual(['force', 'tree', 'elk']);
+    expect(payloads.map((p) => p.positions)).toEqual([
+      { n1: { x: 80, y: 60 } },
+      { n1: { x: 120, y: 40 } },
+      { n1: { x: 90, y: 70 } },
+    ]);
+  });
+
+  it('says nothing when ELK had nothing to say', async () => {
+    // The one early return: no positions, no apply, and so no event either.
+    vi.mocked(computeElkLayout).mockResolvedValueOnce(new Map());
+
+    const ctx = mockCtx({ nodes: [makeNode('n1', { position: { x: 0, y: 0 } })] });
+    const mixin = createLayoutMixin(ctx);
+
+    await mixin.elkLayout({ fitView: false, duration: 0 });
+
+    expect(vi.mocked(ctx._emit).mock.calls.filter(([event]) => event === 'layout')).toEqual([]);
   });
 });
