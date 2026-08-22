@@ -358,24 +358,38 @@ function trailingThrottle<T extends (...args: any[]) => void>(fn: T, wait: numbe
  * Register config callbacks that bridge AlpineFlow events to $wire method calls.
  * Modifies the config object in-place, adding onXxx callbacks.
  *
+ * Returns a function that puts the config back as it was. Without it, a canvas
+ * that is set up twice against the same config object — a Livewire morph that
+ * re-inits the component, an x-if flipping back true — wraps the wrapper, and
+ * every event from then on calls $wire twice.
+ *
  * @param config - The flowCanvas config object (mutated)
  * @param $wire - Livewire's $wire proxy
  * @param wireEvents - Map of event names to Livewire method names
+ * @returns restore - undoes every callback this installed
  */
 export function registerWireEvents(
   config: any,
   $wire: any,
   wireEvents: Record<string, string>,
-): void {
+): () => void {
+  const restores: Array<() => void> = [];
+
   for (const [event, method] of Object.entries(wireEvents)) {
     const callbackName = toCallbackName(event);
     const existingCallback = config[callbackName];
+    const hadCallback = callbackName in config;
 
-    const handler = (detail: any) => {
-      // Call existing callback first if present, preserve return value
+    const handler = (detail: any, canvas?: any) => {
+      // Call existing callback first if present, preserve return value.
+      //
+      // With the canvas, which core's `_emit` passes as a second argument for
+      // exactly this reason: a consumer's own `onNodeClick` should not start
+      // receiving one argument the moment a `wireEvents` mapping is added for
+      // the same event.
       let result: any;
       if (typeof existingCallback === 'function') {
-        result = existingCallback(detail);
+        result = existingCallback(detail, canvas);
       }
 
       // Extract args using payload map, or fall back to full detail
@@ -397,6 +411,45 @@ export function registerWireEvents(
     config[callbackName] = THROTTLED_WIRE_EVENTS.has(event)
       ? trailingThrottle(handler, WIRE_VIEWPORT_THROTTLE_MS)
       : handler;
+
+    restores.push(() => {
+      if (hadCallback) {
+        config[callbackName] = existingCallback;
+      } else {
+        delete config[callbackName];
+      }
+    });
+  }
+
+  return () => {
+    for (const restore of restores) restore();
+  };
+}
+
+/**
+ * Forward the `init` event that was emitted before this addon existed.
+ *
+ * Core emits `init` from `_initChildLayout()`, which runs before `_initAddons()`
+ * sets the bridge up — so a `wireEvents: { init: … }` mapping installs its
+ * wrapper after the only `init` there will ever be. It forwarded before the
+ * bridge moved out of core (the old activation sat nine lines above the emit),
+ * and `init` is on WireFlow's KNOWN_EVENTS list, so leaving it unforwarded is a
+ * regression rather than a limitation.
+ *
+ * The Livewire method is called DIRECTLY rather than through the installed
+ * wrapper: core already ran the consumer's own `onInit`, and running it a second
+ * time would be a different bug. `WIRE_PAYLOAD_MAP['init']` takes no arguments,
+ * so the call is payload-exact.
+ */
+export function replayInitEvent($wire: any, wireEvents: Record<string, string>): void {
+  const method = wireEvents.init;
+
+  if (!method) return;
+
+  const wireFn = $wire?.[method];
+
+  if (typeof wireFn === 'function') {
+    wireFn.call($wire);
   }
 }
 

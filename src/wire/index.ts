@@ -8,7 +8,7 @@
 // ============================================================================
 
 import { registerAddon } from '../core/registry';
-import { registerWireEvents, registerWireCommands, registerCustomWireCommands } from './bridge';
+import { registerWireEvents, registerWireCommands, registerCustomWireCommands, replayInitEvent } from './bridge';
 
 // Re-declare the Livewire config field that used to live in core types.ts, so
 // TypeScript consumers of this addon keep `wireEvents` on their canvas config.
@@ -34,22 +34,38 @@ export default function AlpineFlowWire(_Alpine: any): void {
       // alpineflow↔wireflow version boundary: WireFlow vendors AlpineFlow's
       // bundle as a separate artifact, so this addon can meet an older core.
       //
-      // Known limitation: core emits 'init' from _initChildLayout() BEFORE
-      // _initAddons() runs this setup, so a wireEvents mapping for 'init' does
-      // not forward. All other lifecycle/interaction events fire after setup and
-      // forward normally. (Reordering core init to fix this is deliberately not
-      // done — other addons rely on _container/ResizeObserver being ready first.)
+      // `_liveConfig()` is transitional. Everything forwarded here is also
+      // dispatched by `_emit` as a bubbling `flow-<event>` CustomEvent carrying
+      // the same detail — a listener on `_container` would need no private
+      // accessor, no config mutation, would unsubscribe itself in the cleanup,
+      // and would work against any core, which would retire the version-skew
+      // warning above. Kept as-is here so this extraction is behaviour-for-
+      // behaviour identical to 0.2.x; the DOM-event rewrite is the follow-up.
       const liveConfig = canvas._liveConfig?.();
+      let restoreEvents: (() => void) | undefined;
+
       if (!liveConfig) {
         console.warn(
           '[wire] canvas._liveConfig() is unavailable — this AlpineFlow core is older than the /wire addon, so wireEvents client→server forwarding is disabled. Upgrade @getartisanflow/alpineflow to match the wire addon.',
         );
       } else if (liveConfig.wireEvents) {
-        registerWireEvents(liveConfig, $wire, liveConfig.wireEvents);
+        restoreEvents = registerWireEvents(liveConfig, $wire, liveConfig.wireEvents);
+
+        // Core emitted `init` before addons were set up, so the mapping missed
+        // the only one there will ever be. See `replayInitEvent`.
+        replayInitEvent($wire, liveConfig.wireEvents);
       }
+
       const cleanupCommands = registerWireCommands(canvas, $wire);
       const cleanupCustom = registerCustomWireCommands(canvas, $wire);
-      return () => { cleanupCommands(); cleanupCustom(); };
+
+      return () => {
+        // The config first: leaving the wrappers behind is what turns a second
+        // setup on the same config into a double call to $wire.
+        restoreEvents?.();
+        cleanupCommands();
+        cleanupCustom();
+      };
     },
   });
 }
