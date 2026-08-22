@@ -395,10 +395,31 @@ export function createAnimationMixin(ctx: CanvasContext) {
           const isInstant = elemDuration === 0;
 
           // Color (string or gradient object)
-          if (target.color !== undefined) {
+          //
+          // Null is neither, and is turned away at the door rather than guarded against twice:
+          // typeof null is 'object', so it used to take the gradient branch — set the model to
+          // null, pay for a repaint, and paint nothing, because isGradient(null) is false. Letting
+          // it fall through to the string branch instead only moves the same nonsense one line
+          // down: that branch assigns whatever it is given.
+          if (target.color !== undefined && target.color !== null) {
             if (typeof target.color === 'object') {
-              // Gradient: apply directly (CSS handles transitions)
+              // Gradient: applied directly — there is nothing to interpolate between two
+              // gradients, so this is instant whatever the duration says.
               (edge as any).color = target.color;
+              styledEdgeIds.add(edgeId);
+              // A gradient does not live in an inline stroke: its stops are an SVG
+              // <linearGradient> def. Repainting one is enough here — the def's coordinates came
+              // from the endpoints the last time they moved and nothing has moved since.
+              //
+              // Where there is no def yet — an edge given a gradient for the first time — there
+              // are no coordinates to keep, so the endpoints go in and the path refresh works them
+              // out. That is the expensive way round: it re-paths every sibling edge on both
+              // nodes, without obstacle avoidance until the layout settles, for a change that
+              // moved nothing.
+              if (!ctx._restyleEdgeGradient(edgeId, target.color)) {
+                movedNodeIds.add(edge.source);
+                movedNodeIds.add(edge.target);
+              }
             } else if (isInstant) {
               edge.color = target.color;
               styledEdgeIds.add(edgeId);

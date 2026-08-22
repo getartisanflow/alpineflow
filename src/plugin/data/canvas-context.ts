@@ -9,6 +9,7 @@
 import type {
   FlowNode,
   FlowEdge,
+  EdgeGradient,
   Viewport,
   XYPosition,
   Dimensions,
@@ -532,6 +533,12 @@ export interface CanvasContext {
   _flushViewport(): void;
 
   /** Recompute SVG paths, label positions, and gradients for affected edges */
+  /**
+   * Repaint one edge's gradient where nothing moved. False where it has no def yet, and the caller
+   * falls back to the path refresh — see the implementation for why that is worth avoiding.
+   */
+  _restyleEdgeGradient(edgeId: string, gradient: EdgeGradient): boolean;
+
   _refreshEdgePaths(movedNodeIds: Set<string>): void;
 
   /** Hydrate from a pre-rendered static diagram */
