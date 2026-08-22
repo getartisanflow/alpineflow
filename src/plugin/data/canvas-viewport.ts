@@ -149,6 +149,36 @@ export function createViewportMixin(ctx: CanvasContext) {
     },
 
     /**
+     * The viewport that frames the whole graph right now, or null when there is no
+     * honest answer.
+     *
+     * For callers that cannot wait: `fitView()` defers through `_whenMeasured()` until
+     * every node has been laid out, and a double-click has to answer within the
+     * gesture. So this asks the same question and, where `fitView()` would wait, says
+     * null instead and leaves the fallback to the caller.
+     *
+     * Null on two counts. Nothing visible to frame — and nothing MEASURED to frame it
+     * by: an unmeasured node still has bounds, because `getNodesBounds` fills in the
+     * 150×50 default, so framing it would frame a row of placeholder boxes at the
+     * positions they were declared with rather than the graph anybody can see.
+     */
+    _fitViewport(): Viewport | null {
+      const visible = ctx.nodes.filter((n: FlowNode) => !n.hidden);
+
+      if (visible.length === 0 || visible.some((n: FlowNode) => !n.dimensions)) {
+        return null;
+      }
+
+      const bounds = this.getNodesBounds();
+
+      if (bounds.width <= 0 && bounds.height <= 0) {
+        return null;
+      }
+
+      return this.getViewportForBounds(bounds, DEFAULT_FIT_PADDING);
+    },
+
+    /**
      * Compute the viewport (pan + zoom) that frames the given bounds
      * within the container, respecting min/max zoom and padding.
      */
