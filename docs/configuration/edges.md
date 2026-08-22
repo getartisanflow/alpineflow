@@ -14,6 +14,7 @@ order: 4
 | `edgesReconnectable` | `boolean` | `true` | Allow edge endpoints to be dragged to different handles. |
 | `reconnectSnapRadius` | `number` | `10` | Proximity radius for endpoint snap during reconnection. |
 | `edgesFocusable` | `boolean` | `true` | Allow edges to receive keyboard focus via Tab. |
+| `edgesSelectable` | `boolean` | `true` | Allow edges to be selected by clicking or a selection box. Overridden per-edge by `edge.selectable`. Programmatic selection is unaffected. |
 | `reconnectOnDelete` | `boolean` | `false` | Auto-bridge predecessors to successors when deleting middle nodes. |
 | `avoidantSimplifyOnDrag` | `boolean` | `true` | While a node is dragged, avoidant/orthogonal edges touching it skip pathfinding and render as a plain bezier for the duration of the gesture, then re-route on drop. Set `false` to keep full pathfinding during drags. |
 | `avoidantCrossingReduction` | `boolean \| { channelGap?: number }` | `false` | Reduce crossings between avoidant edges that share a corridor by fanning them into ordered lanes. `{ channelGap }` tunes the px separation. Off (the default) is byte-identical to the non-reduced route. See [Edge routing](#edge-routing). |

@@ -47,6 +47,7 @@ import { clearValidationClasses } from '../directives/flow-handle';
 import { installHandleDelegation } from '../handle-delegation';
 import { resolveShortcuts, matchesKey, matchesModifier, shouldCaptureNudge, isEditableTarget } from '../../core/keyboard-shortcuts';
 import { isDraggable, isSelectable } from '../../core/node-flags';
+import { isEdgeSelectable } from '../../core/edge-flags';
 import { attachLongPress } from '../../core/long-press';
 import { getNodesInRect, getNodesFullyInRect, SpatialGrid, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { CORRIDOR_MARGIN, findRoute } from '../../core/edge-paths/orthogonal';
@@ -1629,9 +1630,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
               const nodeEl = target.closest('[data-flow-node-id]') as HTMLElement;
               if (nodeEl) {
                 const nodeId = nodeEl.getAttribute('data-flow-node-id')!;
+                const node = this.getNode(nodeId);
                 if (this.selectedNodes.has(nodeId)) {
                   this.selectedNodes.delete(nodeId);
-                } else {
+                } else if (!node || isSelectable(node, this._config?.nodesSelectable !== false)) {
                   this.selectedNodes.add(nodeId);
                 }
               }
@@ -2123,7 +2125,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
         }
 
         for (const node of hitNodes) {
-          if (!isSelectable(node)) continue;
+          if (!isSelectable(node, this._config?.nodesSelectable !== false)) continue;
           if (node.hidden) continue;
 
           node.selected = true;
@@ -2137,7 +2139,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
         for (const edgeId of hitEdgeIds) {
           const edge = this.getEdge(edgeId);
-          if (edge) {
+          if (edge && isEdgeSelectable(edge, this._config?.edgesSelectable !== false)) {
             edge.selected = true;
             this.selectedEdges.add(edge.id);
           }
