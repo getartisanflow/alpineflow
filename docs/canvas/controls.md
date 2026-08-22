@@ -191,3 +191,7 @@ Customize button appearance with CSS variables:
 | `--flow-controls-btn-width` | Button width |
 | `--flow-controls-btn-height` | Button height |
 | `--flow-controls-btn-border-radius` | Button corner rounding |
+
+The rounding is applied to the strip's own ends — the first and last **direct** children of
+`.flow-controls`. A control you add yourself inside a wrapper (a trigger with a fly-out to anchor,
+say) is left square, and rounding it belongs to whoever put it there.
