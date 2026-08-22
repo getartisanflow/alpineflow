@@ -135,4 +135,15 @@ describe('minimap — the size it is given', () => {
     expect(svg.getAttribute('width')).toBe('200');
     expect(svg.getAttribute('height')).toBe('150');
   });
+
+  it('says whether the box actually changed', () => {
+    // The caller writes the size back into the config and announces it — both of which should
+    // describe what was drawn, not what was asked for.
+    const { minimap } = mount();
+
+    expect(minimap.resize(160, 60)).toBe(true);
+    expect(minimap.resize(160, 60)).toBe(false);  // already that shape
+    expect(minimap.resize(0, 60)).toBe(false);    // not a box
+    expect(minimap.resize(NaN, 60)).toBe(false);
+  });
 });

@@ -13,8 +13,8 @@ import { getNodesBounds, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from './geome
  * `minimapWidth`/`minimapHeight`, or calls `resize()` when the window changes under it — the
  * numbers are per instance rather than per module for exactly that reason: a minimap whose ratio
  * does not match the canvas draws a viewport rectangle that is not the shape of the viewport. */
-const MINIMAP_WIDTH = 200;
-const MINIMAP_HEIGHT = 150;
+export const MINIMAP_DEFAULT_WIDTH = 200;
+export const MINIMAP_DEFAULT_HEIGHT = 150;
 const BOUNDS_PADDING = 1.2;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -47,8 +47,12 @@ export interface MiniMapOptions {
 export interface MiniMapInstance {
   render(): void;
   updateViewport(): void;
-  /** Give it another box. Redraws at the new size; ignores a width or height that is not positive. */
-  resize(width: number, height: number): void;
+  /**
+   * Give it another box. Redraws at the new size; ignores a width or height that is not positive.
+   * Returns whether the box actually changed, so a caller can keep config and events in step with
+   * what was drawn rather than with what was asked for.
+   */
+  resize(width: number, height: number): boolean;
   destroy(): void;
 }
 
@@ -61,8 +65,8 @@ export function createMiniMap(
   const maskColor = config.minimapMaskColor;
   const nodeColor = config.minimapNodeColor;
 
-  let width = config.minimapWidth ?? MINIMAP_WIDTH;
-  let height = config.minimapHeight ?? MINIMAP_HEIGHT;
+  let width = config.minimapWidth ?? MINIMAP_DEFAULT_WIDTH;
+  let height = config.minimapHeight ?? MINIMAP_DEFAULT_HEIGHT;
 
   // ── Build DOM ──────────────────────────────────────────────────────
   const wrapper = document.createElement('div');
@@ -275,10 +279,13 @@ export function createMiniMap(
    * rectangle that marks the viewport are both computed against it, so a minimap that keeps its
    * shape while the canvas changes shape draws a viewport marker that is not the shape of the
    * viewport. A consumer watching its container calls this and everything follows.
+   *
+   * Returns whether anything changed: false for a box that is not a box, and false for the box it
+   * already has. Callers use that to avoid announcing a resize that did not happen.
    */
-  function resize(nextWidth: number, nextHeight: number): void {
+  function resize(nextWidth: number, nextHeight: number): boolean {
     if (! (nextWidth > 0) || ! (nextHeight > 0) || (nextWidth === width && nextHeight === height)) {
-      return;
+      return false;
     }
 
     width = nextWidth;
@@ -290,6 +297,7 @@ export function createMiniMap(
     bg.setAttribute('height', String(height));
 
     render();
+    return true;
   }
 
   return { render, updateViewport, resize, destroy };

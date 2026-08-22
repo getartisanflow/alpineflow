@@ -786,6 +786,9 @@ export interface CanvasContext {
   /** Toggle interactivity */
   toggleInteractive(): void;
 
+  /** Draw the minimap at another size */
+  resizeMinimap(width: number, height: number): void;
+
   /** Toggle fullscreen on the canvas container */
   toggleFullscreen(): void;
 

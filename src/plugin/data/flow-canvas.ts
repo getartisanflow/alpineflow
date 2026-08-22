@@ -1846,9 +1846,18 @@ export function registerFlowCanvas(Alpine: Alpine) {
      * along with the rectangle marking the viewport — is computed against the box. A consumer
      * watching its container calls this; nothing here watches, because what counts as "too big" is
      * the page's business rather than the canvas's.
+     *
+     * The new box is written back into the config, so `_config.minimapWidth/Height` keeps saying
+     * what is on screen rather than what was passed at construction — the same numbers a
+     * `patchConfig` from the server would set. `minimap-resize` fires only when something actually
+     * changed, so a host that persists the size is not asked to save the size it already has.
      */
     resizeMinimap(width: number, height: number) {
-      this._minimap?.resize(width, height);
+      if (!this._minimap?.resize(width, height)) return;
+
+      this._config.minimapWidth = width;
+      this._config.minimapHeight = height;
+      this._emit('minimap-resize', { width, height });
     },
 
     /** Create controls panel if configured. */
