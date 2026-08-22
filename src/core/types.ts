@@ -599,6 +599,7 @@ export interface FlowEvents {
   'edges-patch': { patches: Record<string, DeepPartial<FlowEdge>> };
   'restore': { nodes?: FlowNode[]; edges?: FlowEdge[]; viewport?: Partial<Viewport>; origin: 'undo' | 'redo' | 'load' };
   'layout': LayoutEventPayload;
+  'layout-end': LayoutEventPayload;
   'init': undefined;
   'destroy': undefined;
 }
@@ -613,13 +614,9 @@ export interface FlowEvents {
 export type LayoutPositions = Record<string, XYPosition>;
 
 /**
- * What a layout announces when it has decided where everything goes.
- *
- * The positions are in it because the event fires when the layout is COMPUTED, not when it has
- * been applied: with the default duration the nodes are still animating towards these numbers, so
- * a listener that reads the model reads the layout that was there before the call.
- *
- * Discriminated on `type`, so the settings each engine reports are the ones it actually has.
+ * What a layout announces — carried by both `layout` (when the positions are computed) and
+ * `layout-end` (when the nodes have settled there). Discriminated on `type`, so the settings each
+ * engine reports are the ones it actually has.
  */
 export type LayoutEventPayload =
   | { type: 'dagre'; direction: string; positions: LayoutPositions }

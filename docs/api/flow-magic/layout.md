@@ -21,13 +21,14 @@ $flow.layout(options?: {
 
 Apply Dagre (directed acyclic graph) layout. Requires the dagre addon: `Alpine.plugin(AlpineFlowDagre)`.
 
-All four emit a [`layout` event](../events.md#additional-events) carrying `positions` — what the
-layout decided, keyed by node id. Read it there rather than off the nodes: with a `duration` the
-event fires while they are still animating towards those coordinates, so the model is one layout
-behind until the motion finishes.
+All four emit a [`layout` event](../events.md#additional-events) when the layout is computed and
+[`layout-end`](../events.md#additional-events) once the nodes have settled there — both carrying
+`positions`, keyed by node id. With a `duration` those are different moments (the canvas animates
+towards the new coordinates), so read `positions` off the event rather than the model, which lags
+one layout behind until the motion finishes.
 
 ```html
-<div @flow-layout="$wire.saveLayout($event.detail.positions)">
+<div @flow-layout-end="$wire.saveLayout($event.detail.positions)">
 ```
 
 ### forceLayout
