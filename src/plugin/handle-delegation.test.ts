@@ -371,12 +371,17 @@ describe('drag-to-connect end to end via delegation', () => {
     pointer(document, 'pointermove', 220, 220);
     expect(h.targetB.classList.contains('flow-handle-valid')).toBe(true);
     expect(h.targetA.classList.contains('flow-handle-invalid')).toBe(true); // self-connection
+    // …and the container flag the stylesheet reveals both of them through. A
+    // drag used to reach the verdict and paint none of it: `.flow-connecting`
+    // was raised by the click-to-connect branch alone.
+    expect(h.host.classList.contains('flow-connecting')).toBe(true);
 
     pointer(document, 'pointerup', 220, 220);
     for (const el of [h.targetA, h.targetB]) {
       expect(el.classList.contains('flow-handle-valid')).toBe(false);
       expect(el.classList.contains('flow-handle-invalid')).toBe(false);
     }
+    expect(h.host.classList.contains('flow-connecting')).toBe(false);
   });
 
   it('calls preventDefault on the handle press (this is what suppresses the node drag)', () => {
