@@ -1,5 +1,53 @@
 # Changelog
 
+## v0.2.3-alpha — unreleased
+
+> Most of this release is contributed by [@webard](https://github.com/webard).
+
+### Added — edge labels can render HTML (`labelHtml`)
+
+Edge labels rendered as plain text only. An edge now accepts **`labelHtml`** to render its label as HTML — an icon, a badge, styled markup — alongside the existing plain-text `label`. (#82)
+
+### Added — configurable zoom-out for the double-click toggle (`dblClickZoomOutLevel`)
+
+With `zoomOnDoubleClick: 'toggle'` and no remembered viewport to return to, the second double-click always zoomed out to `minZoom`. It now takes **`dblClickZoomOutLevel`** — `'min'` (default), `'fit'` (frame every visible node, like `fitView()`), or a number. `'fit'` declines to zoom the reader *further in* on a small graph, and a bad value reads as `'min'`. Additive; the default is byte-for-byte the old behaviour. (#83)
+
+### Added — `update()` can switch an edge to another path type
+
+`AnimateEdgeTarget` gains an optional **`type`**, so `$flow.update()` / `animate()` can change an edge's path generator — `bezier`, `step`, `floating`, `orthogonal`, `editable`, or a registered custom type — at runtime. Applied instantly, regardless of any `duration`. (#85)
+
+### Added — controls-panel buttons can animate the viewport (`controlsDuration`)
+
+The controls-panel zoom-in / zoom-out / fit-view buttons snapped the viewport instantly. Set **`controlsDuration`** (ms) to animate the move instead. Default `0` is the old instant behaviour, unchanged. (#95)
+
+### Fixed — a double-click on the canvas chrome no longer drives the canvas
+
+A double-click on the minimap, controls, panel, devtools, or a node/edge toolbar leaked through to the container and drove the canvas's pan/zoom — the toolbars also leaked `mousedown` and touch. A shared `isolateCanvasGestures` now stops canvas gestures (mousedown / pointerdown / touchstart / wheel / dblclick) at every overlay, and each overlay releases its listeners on destroy. (#84)
+
+### Fixed — animating an edge's gradient colour now repaints it
+
+Changing a gradient edge's colour through `animate()` updated the model but never repainted the `<linearGradient>` — the edge kept its old colours. The gradient's stops are now restyled in place (no re-routing of neighbouring edges), and a `null`/`undefined` colour is turned away cleanly instead of blanking the paint. (#86)
+
+### Fixed — the selection context menu remembers the selected edges
+
+The `selection-context-menu` payload (and the built-in menu) carried only the selected nodes, dropping the edges. Every trigger — mouse, touch long-press, and the node path — now reports both, gathered through one shared helper, and the built-in menu no longer leaks a prior selection's edges. (#88)
+
+### Fixed — an animated viewport no longer leaves the pan/zoom controller behind
+
+After a programmatic viewport animation, d3's pan/zoom controller still held the pre-animation transform, so the next user gesture jumped. The controller is now re-synced to the final viewport when the animation completes — including interrupted animations, which sync to wherever they actually ended. (#90)
+
+### Fixed — controls-strip rounding no longer reaches nested buttons
+
+The controls-strip corner-rounding selectors matched *any* first/last button descendant, so a consumer's button nested in a wrapper mid-strip wrongly got the strip's end corners. The selectors now scope to the strip's direct children. (#94)
+
+### Fixed — a drag now reports "connecting", not only a click
+
+Starting a connection by dragging off a handle never set the `.flow-connecting` state the stylesheet gates the target-handle valid/invalid outlines behind — only the click-to-connect path did. The flag now covers every connection gesture and clears on drop, cancel, and escape. (#100)
+
+### Performance — minimap keeps and moves its rects instead of rebuilding them
+
+`render()` emptied the minimap and built a fresh `<rect>` per node every pass — a structural SVG mutation that invalidated the whole minimap's layout, so a drag (which renders per pointer-move) crawled at ~7fps. The rects are now pooled and repositioned in place; stale rects are removed and a reused rect never keeps a former node's colour. (#98)
+
 ## v0.2.2-alpha — 2026-08-05
 
 ### Fixed — right-click no longer dismisses the context menu it opens
