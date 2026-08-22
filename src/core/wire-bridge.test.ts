@@ -50,6 +50,12 @@ describe('WIRE_PAYLOAD_MAP', () => {
     expect(WIRE_PAYLOAD_MAP['selection-change'](detail)).toEqual([[{ id: 'n1' }], [{ id: 'e1' }]]);
   });
 
+  it('extracts minimap-resize args', () => {
+    // Outbound half of a persistable minimap size: the server gets two plain numbers, which is
+    // what it would hand back through `flow:patchConfig`.
+    expect(WIRE_PAYLOAD_MAP['minimap-resize']({ width: 160, height: 60 })).toEqual([160, 60]);
+  });
+
   it('extracts init args (empty)', () => {
     expect(WIRE_PAYLOAD_MAP['init']({})).toEqual([]);
   });

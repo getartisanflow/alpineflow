@@ -310,6 +310,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     setCenter: vi.fn(),
     panBy: vi.fn(),
     toggleInteractive: vi.fn(),
+    resizeMinimap: vi.fn(),
     toggleFullscreen: vi.fn(),
     closeContextMenu: vi.fn(),
     resetPanels: vi.fn(),

@@ -33,6 +33,7 @@ export const WIRE_PAYLOAD_MAP: Record<string, (d: any) => any[]> = {
   'pane-click':           (d) => [d.position],
   'pane-context-menu':    (d) => [d.position],
   'viewport-change':      (d) => [d.viewport],
+  'minimap-resize':       (d) => [d.width, d.height],
   'selection-change':     (d) => [d.nodes, d.edges],
   'selection-context-menu': (d) => [d.nodes, d.edges, { x: d.event.clientX, y: d.event.clientY }],
   'drop':                 (d) => [d.data, d.position],

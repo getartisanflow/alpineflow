@@ -595,6 +595,7 @@ export interface FlowEvents {
   'row-selection-change': { selectedRows: string[] };
   'node-filter-change': { filtered: FlowNode[]; visible: FlowNode[] };
   'helper-lines-change': { horizontal: number[]; vertical: number[] };
+  'minimap-resize': { width: number; height: number };
   'nodes-patch': { patches: Record<string, DeepPartial<FlowNode>> };
   'edges-patch': { patches: Record<string, DeepPartial<FlowEdge>> };
   'restore': { nodes?: FlowNode[]; edges?: FlowEdge[]; viewport?: Partial<Viewport>; origin: 'undo' | 'redo' | 'load' };
@@ -755,6 +756,8 @@ export interface PatchableConfig {
   minimapMaskColor?: string;
   minimapPannable?: boolean;
   minimapZoomable?: boolean;
+  minimapWidth?: number;
+  minimapHeight?: number;
   defaultInteractionWidth?: number;
   preventOverlap?: boolean | number;
   reconnectOnDelete?: boolean;
@@ -1392,6 +1395,18 @@ export interface FlowCanvasConfig {
   controlsDuration?: number;
 
   /**
+   * How big the minimap is drawn, in pixels. Defaults: 200 by 150.
+   *
+   * Not only how big the picture is — the scale that fits the graph into it and the rectangle that
+   * marks the viewport are both computed against these, so a minimap whose ratio does not match the
+   * canvas draws a viewport marker that is not the shape of the viewport. A consumer that wants it
+   * to follow the container watches for a resize and calls `resize()` on the instance.
+   */
+  minimapWidth?: number;
+
+  minimapHeight?: number;
+
+  /**
    * Element to enter fullscreen mode, instead of the canvas container.
    * Useful when the page wraps the canvas + ancillary UI (inspectors,
    * toolbars) that should stay visible in fullscreen. Accepts a CSS
@@ -1734,6 +1749,9 @@ export interface FlowCanvasConfig {
 
   /** Called when a user gesture (pan/zoom) ends */
   onViewportMoveEnd?: (detail: FlowEvents['viewport-move-end'], ctx?: CanvasContext) => void;
+
+  /** Called when the minimap is drawn at a new size — a host that persists the size listens here */
+  onMinimapResize?: (detail: FlowEvents['minimap-resize'], ctx?: CanvasContext) => void;
 
   /** Called when the canvas background is clicked */
   onPaneClick?: (detail: FlowEvents['pane-click'], ctx?: CanvasContext) => void;
@@ -2094,6 +2112,9 @@ export interface FlowInstance {
 
   /** Toggle interactivity (pannable + zoomable + node dragging) */
   toggleInteractive(): void;
+
+  /** Draw the minimap at another size. Ignores a width or height that is not positive. */
+  resizeMinimap(width: number, height: number): void;
 
   /** Whether interactivity is currently enabled */
   isInteractive: boolean;

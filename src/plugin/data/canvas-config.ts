@@ -5,13 +5,14 @@
 // background, debug mode, color mode, auto-layout, and behavioral flags.
 //
 // Cross-mixin deps (optional chaining): ctx._panZoom, ctx._applyBackground,
-// ctx._scheduleAutoLayout, ctx._container, ctx._colorModeHandle
+// ctx._scheduleAutoLayout, ctx._container, ctx._colorModeHandle, ctx.resizeMinimap
 // ============================================================================
 
 import type { CanvasContext } from './canvas-context';
 import type { AutoLayoutConfig } from '../../core/types';
 import { setDebugEnabled } from '../../core/debug';
 import { createColorMode } from '../../core/color-mode';
+import { MINIMAP_DEFAULT_WIDTH, MINIMAP_DEFAULT_HEIGHT } from '../../core/minimap';
 
 export function createConfigMixin(ctx: CanvasContext) {
   return {
@@ -97,6 +98,18 @@ export function createConfigMixin(ctx: CanvasContext) {
             }
             break;
         }
+      }
+
+      // The minimap's box lives on the instance as well as in the config: the scale that fits the
+      // graph in, the centring, and the mask are all computed against it, so the drawn size has to
+      // be told rather than only recorded. Done after the loop because width and height usually
+      // arrive together and one resize beats two — and via resizeMinimap so a server-driven size
+      // announces itself the same way a client-driven one does.
+      if ('minimapWidth' in changes || 'minimapHeight' in changes) {
+        ctx.resizeMinimap(
+          c.minimapWidth ?? MINIMAP_DEFAULT_WIDTH,
+          c.minimapHeight ?? MINIMAP_DEFAULT_HEIGHT,
+        );
       }
     },
   };
