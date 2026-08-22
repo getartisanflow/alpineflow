@@ -38,15 +38,17 @@ npm run test:browser                # Playwright browser tests
 npm run test:all                    # both
 ```
 
-## If you change source, rebuild the bundle
+## Don't commit `dist/`
 
-The compiled output in `dist/` is committed (downstream consumers symlink/copy it). After a source change, rebuild and commit the result:
+The compiled output in `dist/` is a release artifact — the maintainer rebuilds it from the *merged* source at integration, as its own `chore: rebuild dist` commit. A bundle rebuilt on a feature branch goes stale the moment another branch merges, and its ~3k-line diff turns every PR into a conflict magnet, so **leave `dist/` alone**.
+
+Just make sure your source compiles and builds cleanly:
 
 ```bash
 npm run build   # full pipeline: vite build && tsc && css + bundle + addons
 ```
 
-Then sanity-check that your new symbols actually made it into `dist/alpineflow.bundle.esm.js` (`grep` it) — don't assume the build kept them.
+If the build modified anything under `dist/`, revert it before you push (`git checkout -- dist/`) — your PR should contain source and tests only.
 
 ## Conventions
 
@@ -59,9 +61,10 @@ Then sanity-check that your new symbols actually made it into `dist/alpineflow.b
 
 - [ ] Base branch is **`dev`**
 - [ ] `npm run test` passes
-- [ ] If you changed source: `npm run build` run and `dist/` committed
+- [ ] Source compiles (`npm run build` succeeds) — but **no `dist/` changes committed**
 - [ ] New behavior has a test
 - [ ] No new `dependencies` / `peerDependencies` without discussing first
+- [ ] No `CHANGELOG.md` entries — the maintainer compiles them at release
 - [ ] No version bumps or tags — releases are cut by the maintainer
 
 ## Reporting bugs / requesting features
