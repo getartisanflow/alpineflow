@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.3.0-alpha — unreleased
+
+### Changed (breaking) — the Livewire bridge is now the `/wire` addon, not part of core
+
+The Livewire integration — the bridge that turns server `flow:*` dispatches into canvas calls and forwards AlpineFlow events to `$wire` methods — used to live in core and rode into the vendored single-file bundle for free. It now ships as a standalone addon at **`@getartisanflow/alpineflow/wire`**, keeping the core engine framework-agnostic.
+
+- Register it after core, only where you have Livewire: `import AlpineFlowWire from '@getartisanflow/alpineflow/wire'; Alpine.plugin(AlpineFlowWire)`. It activates only when a canvas exposes a `$wire` proxy.
+- **Breaking:** because the bridge left core, it is no longer inside `alpineflow.bundle.esm.js`. A `<x-flow>` canvas will not talk to `$wire` until the wire addon is registered — anything relying on the in-core bridge (including WireFlow, until it resyncs and loads the addon) must add it.
+- **`wireEvents`** moved off the core `FlowCanvasConfig` type into the addon (a TypeScript module augmentation). Importing the addon restores `wireEvents` on the config type; nothing changed at runtime.
+- The `./wire` subpath is ESM-only (`import`); there is no CDN/`require` build (tracked as a follow-up).
+- **Core warns when a canvas has `$wire` but no wire addon is registered.** The mirror of the addon's version-skew warning, for the direction that is quieter: a consumer assembling their own bundle who misses `Alpine.plugin(AlpineFlowWire)` gets a config full of `wireEvents` that nothing reads and `flow:*` commands that land nowhere — with, until now, nothing said about it.
+
+### Fixed — the bridge puts the config back, and `init` still forwards
+
+- **`wireEvents: { init: … }` forwards again.** Core emits `init` from `_initChildLayout()`, which runs before `_initAddons()` sets the addon up, so the mapping installed its wrapper after the only `init` there will ever be. It forwarded before the bridge left core (the old activation sat nine lines above the emit) and `init` is on WireFlow's `KNOWN_EVENTS`, so the addon replays it once during `setup()` — calling the Livewire method directly, since core already ran any consumer `onInit`.
+- **Setting a canvas up twice on one config no longer doubles every event.** `registerWireEvents` wraps the callbacks it finds and now returns a restore function, which the addon's cleanup calls. Without it, a config object that outlives its canvas — a Livewire morph, an `x-if` flipping back — got the wrapper wrapped, and each event called `$wire` once per wrap.
+- **A wrapped consumer callback keeps its second argument.** `_emit` calls `callback(detail, canvas)`; the bridge's wrapper passed only `detail`, so adding a `wireEvents` mapping for an event silently changed the signature of that event's own handler.
+
+### Added — public `selectNodes` / `selectEdges` / `setNodeLocked` / `setNodeHidden`
+
+Selecting, locking, and hiding nodes/edges from the server used to reach into canvas internals inside the bridge. These are now first-class public canvas methods (also declared on `CanvasContext`), and the `flow:*` wire commands route through them. `selectNodes` / `selectEdges` replace the current selection and skip ids that don't exist (previously unknown ids polluted the selection set).
+
+They emit `selection-change` **only when the selection actually changes**, and at most once per call — so client listeners (and the server, if you map `selection-change` in `wireEvents`) observe server-driven selections, while re-issuing the same ids is a no-op that does not re-emit.
+
+Note what this changes for listeners. The old `flow:selectNodes` called `deselectAll()` — one event, carrying the now-EMPTY selection — and then mutated the selection sets silently, so the selection it ended up with was never announced. There was no double emit; there was one emit with the wrong payload, and server-driven selection is now visible to `onSelectionChange` where it effectively was not before. The no-change guard is what keeps that new echo from looping back through a server that maps `selection-change`.
+
 ## v0.2.2-alpha — 2026-08-05
 
 ### Fixed — right-click no longer dismisses the context menu it opens

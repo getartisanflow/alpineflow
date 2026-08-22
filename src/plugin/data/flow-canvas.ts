@@ -68,7 +68,6 @@ import { collabStore } from '../../collab/store';
 import { getAddon, getRegistry } from '../../core/registry';
 import { FlowAnnouncer } from '../../core/announcer';
 import { ComputeEngine } from '../../core/compute';
-import { registerWireEvents, registerWireCommands, registerCustomWireCommands } from '../../core/wire-bridge';
 import { createLayoutDedup, type LayoutDedup } from './canvas-layout-dedup';
 import { createBatch } from './canvas-batch';
 import { clampDimensions } from '../../animate/clamp-dimensions';
@@ -333,6 +332,18 @@ export function registerFlowCanvas(Alpine: Alpine) {
     // circular references (e.g. InMemoryProvider.peer) that crash
     // Alpine's deep-reactive proxy walker.
     _config: (() => { const { collab: _, ...rest } = config; return rest; })() as FlowCanvasConfig,
+    /**
+     * Return the live closure config — the SAME object `_emit` reads callbacks
+     * from. `_config` above is a one-time stripped *copy* (kept collab-free so
+     * Alpine's reactive walker never touches provider cycles), so writing to it
+     * would not be visible to `_emit`. Addons that need to install/override
+     * event callbacks (e.g. the /wire bridge's registerWireEvents) must target
+     * this object, not `_config`. Not stored as reactive data — a function's
+     * return value is not deep-walked, so this stays collab-safe.
+     */
+    _liveConfig(): FlowCanvasConfig {
+      return config;
+    },
     _shortcuts: resolveShortcuts(config.keyboardShortcuts),
     _container: null as HTMLElement | null,
     _panZoom: null as PanZoomInstance | null,
@@ -2225,7 +2236,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
      * Install per-property Alpine watchers on a container node's childLayout.
      *
      * Watches the six layout-affecting properties explicitly so that any
-     * mutation — direct assignment or via wire-bridge — triggers a re-layout
+     * mutation — direct assignment or via the wire addon — triggers a re-layout
      * through the existing safeLayoutChildren dedup (at most one call per
      * parent per frame). Unwatched props (e.g. custom user data on childLayout)
      * never cause spurious layouts.
@@ -2339,19 +2350,22 @@ export function registerFlowCanvas(Alpine: Alpine) {
       // A1: Create the shared ResizeObserver now that Alpine + _nodeMap are ready.
       this._resizeObserverInit();
 
-      // Wire bridge: detect $wire (Livewire) and activate bidirectional bridge
-      if ((this as any).$wire) {
-        const $wire = (this as any).$wire;
-        if (config.wireEvents) {
-          registerWireEvents(config, $wire, config.wireEvents);
-        }
-        const cleanupCommands = registerWireCommands(this, $wire);
-        const cleanupCustom = registerCustomWireCommands(this, $wire);
-        (this as any)._wireCleanup = () => { cleanupCommands(); cleanupCustom(); };
-        debug('init', `wire bridge activated for "${this._id}"`);
+      debug('init', `flowCanvas "${this._id}" ready`);
+
+      // A Livewire canvas with no bridge to Livewire.
+      //
+      // The bridge is an addon now, and a consumer who assembles their own
+      // bundle registers the plugins by hand — miss `Alpine.plugin(AlpineFlowWire)`
+      // and NOTHING says so: the Blade component still sets `wireEvents`, nothing
+      // reads it, `flow:*` commands land nowhere, and the symptom is "dragging a
+      // node stopped saving". The mirror of the addon's own version-skew warning,
+      // for the direction that is likelier and quieter.
+      if (this.$wire && !getAddon('wire')) {
+        console.warn(
+          `[alpineflow] flowCanvas "${this._id}" has a Livewire $wire proxy but the /wire addon is not registered — wireEvents forwarding and flow:* commands are inert. Register it with Alpine.plugin(AlpineFlowWire) from '@getartisanflow/alpineflow/wire'.`,
+        );
       }
 
-      debug('init', `flowCanvas "${this._id}" ready`);
       this._emit('init');
       this._recomputeChildValidation();
 
@@ -2390,11 +2404,14 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._commitNodeGeometry();
     },
 
-    /** Call setup(canvas) on any addon that provides it. */
+    /** Call setup(canvas) on any addon that provides it, capturing any cleanup it returns. */
     _initAddons() {
       for (const [, addon] of getRegistry().entries()) {
         if (addon && typeof addon === 'object' && typeof addon.setup === 'function') {
-          addon.setup(this);
+          const cleanup = addon.setup(this);
+          if (typeof cleanup === 'function') {
+            ((this as any)._addonCleanups ??= []).push(cleanup);
+          }
         }
       }
     },
@@ -2571,9 +2588,11 @@ export function registerFlowCanvas(Alpine: Alpine) {
       // from here because a mixin method named `destroy` would shadow THIS one.
       (this as any)._destroyAnimations?.();
 
-      // Wire bridge cleanup
-      (this as any)._wireCleanup?.();
-      (this as any)._wireCleanup = null;
+      // Addon cleanups returned from addon.setup(canvas)
+      for (const cleanup of ((this as any)._addonCleanups ?? [])) {
+        try { cleanup(); } catch { /* one addon's teardown error must not abort the rest */ }
+      }
+      (this as any)._addonCleanups = [];
 
       // Alpine's nextTick runs off a global tickStack that component teardown does
       // NOT cancel. If we were destroyed in the same task init() queued the install

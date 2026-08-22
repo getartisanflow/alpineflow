@@ -278,34 +278,20 @@ export function registerCustomWireCommands(canvas: any, $wire: any): () => void 
   }));
 
   // flow:lockNode / flow:unlockNode — set locked state (freezes all interactions)
-  cleanups.push($wire.on('flow:lockNode', (p: any) => {
-    const node = canvas.getNode(p.id);
-    if (node) node.locked = true;
-  }));
-  cleanups.push($wire.on('flow:unlockNode', (p: any) => {
-    const node = canvas.getNode(p.id);
-    if (node) node.locked = false;
-  }));
+  cleanups.push($wire.on('flow:lockNode',   (p: any) => { canvas.setNodeLocked(p.id, true); }));
+  cleanups.push($wire.on('flow:unlockNode', (p: any) => { canvas.setNodeLocked(p.id, false); }));
 
   // flow:hideNode / flow:showNode — set hidden state
-  cleanups.push($wire.on('flow:hideNode', (p: any) => {
-    const node = canvas.getNode(p.id);
-    if (node) node.hidden = true;
-  }));
-  cleanups.push($wire.on('flow:showNode', (p: any) => {
-    const node = canvas.getNode(p.id);
-    if (node) node.hidden = false;
-  }));
+  cleanups.push($wire.on('flow:hideNode', (p: any) => { canvas.setNodeHidden(p.id, true); }));
+  cleanups.push($wire.on('flow:showNode', (p: any) => { canvas.setNodeHidden(p.id, false); }));
 
-  // flow:selectNodes — select specific nodes
-  cleanups.push($wire.on('flow:selectNodes', (p: any) => {
-    canvas.deselectAll();
-    for (const id of p.ids) {
-      canvas.selectedNodes.add(id);
-      const node = canvas.getNode(id);
-      if (node) node.selected = true;
-    }
-  }));
+  // flow:selectNodes — select specific nodes.
+  // canvas.selectNodes emits 'selection-change' only when the selection actually
+  // changes, so if the app maps 'selection-change' in wireEvents a server-driven
+  // selection forwards the resulting state back to $wire once (intended: the
+  // server learns the result). Re-issuing the same ids is a no-op that does NOT
+  // re-emit, so an idempotent server→client→server round-trip cannot loop.
+  cleanups.push($wire.on('flow:selectNodes', (p: any) => { canvas.selectNodes(p.ids); }));
 
   // flow:run — invoke $flow.run() with server-provided startId + options.
   // Handlers (onEnter, pickBranch, etc.) must be pre-registered on the canvas
@@ -314,7 +300,7 @@ export function registerCustomWireCommands(canvas: any, $wire: any): () => void 
   // defaultDurationMs, particleOnEdges, particleOptions, muteUntakenBranches, etc.).
   cleanups.push($wire.on('flow:run', (p: any) => {
     if (typeof canvas.run !== 'function') {
-      console.warn('[wire-bridge] flow:run: canvas.run not available — is the workflow addon registered?');
+      console.warn('[wire] flow:run: canvas.run not available — is the workflow addon registered?');
       return;
     }
     const handlers = canvas._workflowHandlers ?? {};
@@ -322,14 +308,7 @@ export function registerCustomWireCommands(canvas: any, $wire: any): () => void 
   }));
 
   // flow:selectEdges — select specific edges
-  cleanups.push($wire.on('flow:selectEdges', (p: any) => {
-    canvas.deselectAll();
-    for (const id of p.ids) {
-      canvas.selectedEdges.add(id);
-      const edge = canvas.getEdge(id);
-      if (edge) edge.selected = true;
-    }
-  }));
+  cleanups.push($wire.on('flow:selectEdges', (p: any) => { canvas.selectEdges(p.ids); }));
 
   return () => {
     for (const cleanup of cleanups) {
@@ -379,24 +358,38 @@ function trailingThrottle<T extends (...args: any[]) => void>(fn: T, wait: numbe
  * Register config callbacks that bridge AlpineFlow events to $wire method calls.
  * Modifies the config object in-place, adding onXxx callbacks.
  *
+ * Returns a function that puts the config back as it was. Without it, a canvas
+ * that is set up twice against the same config object — a Livewire morph that
+ * re-inits the component, an x-if flipping back true — wraps the wrapper, and
+ * every event from then on calls $wire twice.
+ *
  * @param config - The flowCanvas config object (mutated)
  * @param $wire - Livewire's $wire proxy
  * @param wireEvents - Map of event names to Livewire method names
+ * @returns restore - undoes every callback this installed
  */
 export function registerWireEvents(
   config: any,
   $wire: any,
   wireEvents: Record<string, string>,
-): void {
+): () => void {
+  const restores: Array<() => void> = [];
+
   for (const [event, method] of Object.entries(wireEvents)) {
     const callbackName = toCallbackName(event);
     const existingCallback = config[callbackName];
+    const hadCallback = callbackName in config;
 
-    const handler = (detail: any) => {
-      // Call existing callback first if present, preserve return value
+    const handler = (detail: any, canvas?: any) => {
+      // Call existing callback first if present, preserve return value.
+      //
+      // With the canvas, which core's `_emit` passes as a second argument for
+      // exactly this reason: a consumer's own `onNodeClick` should not start
+      // receiving one argument the moment a `wireEvents` mapping is added for
+      // the same event.
       let result: any;
       if (typeof existingCallback === 'function') {
-        result = existingCallback(detail);
+        result = existingCallback(detail, canvas);
       }
 
       // Extract args using payload map, or fall back to full detail
@@ -418,6 +411,45 @@ export function registerWireEvents(
     config[callbackName] = THROTTLED_WIRE_EVENTS.has(event)
       ? trailingThrottle(handler, WIRE_VIEWPORT_THROTTLE_MS)
       : handler;
+
+    restores.push(() => {
+      if (hadCallback) {
+        config[callbackName] = existingCallback;
+      } else {
+        delete config[callbackName];
+      }
+    });
+  }
+
+  return () => {
+    for (const restore of restores) restore();
+  };
+}
+
+/**
+ * Forward the `init` event that was emitted before this addon existed.
+ *
+ * Core emits `init` from `_initChildLayout()`, which runs before `_initAddons()`
+ * sets the bridge up — so a `wireEvents: { init: … }` mapping installs its
+ * wrapper after the only `init` there will ever be. It forwarded before the
+ * bridge moved out of core (the old activation sat nine lines above the emit),
+ * and `init` is on WireFlow's KNOWN_EVENTS list, so leaving it unforwarded is a
+ * regression rather than a limitation.
+ *
+ * The Livewire method is called DIRECTLY rather than through the installed
+ * wrapper: core already ran the consumer's own `onInit`, and running it a second
+ * time would be a different bug. `WIRE_PAYLOAD_MAP['init']` takes no arguments,
+ * so the call is payload-exact.
+ */
+export function replayInitEvent($wire: any, wireEvents: Record<string, string>): void {
+  const method = wireEvents.init;
+
+  if (!method) return;
+
+  const wireFn = $wire?.[method];
+
+  if (typeof wireFn === 'function') {
+    wireFn.call($wire);
   }
 }
 

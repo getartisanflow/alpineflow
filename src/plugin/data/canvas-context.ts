@@ -728,6 +728,18 @@ export interface CanvasContext {
   /** Deselect all nodes, edges, and rows */
   deselectAll(): void;
 
+  /** Replace the current selection with the given nodes */
+  selectNodes(ids: string[]): void;
+
+  /** Replace the current selection with the given edges */
+  selectEdges(ids: string[]): void;
+
+  /** Set a node's locked flag (freezes interactions); no-op if the id is unknown */
+  setNodeLocked(id: string, locked: boolean): void;
+
+  /** Set a node's hidden flag; no-op if the id is unknown */
+  setNodeHidden(id: string, hidden: boolean): void;
+
   /** Convert screen coordinates to flow coordinates */
   screenToFlowPosition(x: number, y: number): XYPosition;
 
