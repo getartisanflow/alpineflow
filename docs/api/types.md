@@ -472,6 +472,7 @@ type AnimateEdgeTarget = {
   strokeWidth?: number;
   animated?: boolean;
   class?: string;
+  type?: EdgeType | (string & {});   // path generator; applied instantly, see below
   _duration?: number;   // per-element duration override
 }
 ```

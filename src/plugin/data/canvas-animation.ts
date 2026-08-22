@@ -447,6 +447,10 @@ export function createAnimationMixin(ctx: CanvasContext) {
           if (target.label !== undefined) edge.label = target.label;
           if (target.animated !== undefined) edge.animated = target.animated;
           if (target.class !== undefined) edge.class = target.class;
+          // The path effect resolves `edge.type ?? defaultEdgeType` on every run, so writing it
+          // through the reactive edge is all a redraw needs. Instant whatever the duration: a
+          // type is a choice of generator, and a curve has no midpoint with a right angle.
+          if (target.type !== undefined) edge.type = target.type;
         }
       }
 
