@@ -1745,9 +1745,14 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
         const canvas = Alpine.$data(el.closest('[x-data]') as HTMLElement);
         if (!canvas) return;
         if (canvas._animationLocked) return;
+
+        // Announced, then gated — the same order as the mouse path below, so a
+        // node that cannot be selected still reports the click on either input.
+        canvas._emit('node-click', { node, event: e });
+
+        // ── Selectable flag ────────────────────────────────────────
         if (!isSelectable(node, canvas._config?.nodesSelectable !== false)) return;
 
-        canvas._emit('node-click', { node, event: e });
         e.stopPropagation();
 
         if (matchesModifier(e, canvas._shortcuts?.multiSelect)) {
