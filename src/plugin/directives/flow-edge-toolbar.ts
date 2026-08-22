@@ -12,6 +12,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
+import { isolateCanvasGestures } from '../../core/canvas-gestures';
 import { resolveCanvasEl } from './resolve-canvas';
 
 export function registerFlowEdgeToolbarDirective(Alpine: Alpine) {
@@ -53,9 +54,17 @@ export function registerFlowEdgeToolbarDirective(Alpine: Alpine) {
       el.style.position = 'absolute';
 
       // ── Prevent interactions from triggering edge actions ──────────
-      const stopPointerDown = (e: PointerEvent) => { e.stopPropagation(); };
+      //
+      // A toolbar is chrome drawn INSIDE the flow container, so every gesture
+      // aimed at one of its buttons reaches the canvas underneath as well —
+      // the same leak the controls and the minimap had. This used to stop
+      // `pointerdown` only, so a double-click on a button zoomed the canvas
+      // and a drag from one panned it: d3 starts a pan on `mousedown`.
+      const releaseGestures = isolateCanvasGestures(el);
+
+      // `click` is not a canvas gesture — it is what selects an EDGE, and a
+      // click on the toolbar is not a click on the edge it belongs to.
       const stopClick = (e: MouseEvent) => { e.stopPropagation(); };
-      el.addEventListener('pointerdown', stopPointerDown);
       el.addEventListener('click', stopClick);
 
       // ── Parse options ──────────────────────────────────────────────
@@ -68,7 +77,7 @@ export function registerFlowEdgeToolbarDirective(Alpine: Alpine) {
         // template cleanup won't reach it when the edge is removed.
         // Read canvas.edges (reactive array) to ensure this effect re-runs on removal.
         if (!canvas.edges.some((e: any) => e.id === edgeId)) {
-          el.removeEventListener('pointerdown', stopPointerDown);
+          releaseGestures();
           el.removeEventListener('click', stopClick);
           el.classList.remove('flow-edge-toolbar');
           el.remove();
@@ -107,7 +116,7 @@ export function registerFlowEdgeToolbarDirective(Alpine: Alpine) {
 
       // ── Cleanup ────────────────────────────────────────────────────
       cleanup(() => {
-        el.removeEventListener('pointerdown', stopPointerDown);
+        releaseGestures();
         el.removeEventListener('click', stopClick);
         el.classList.remove('flow-edge-toolbar');
         el.remove();

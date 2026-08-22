@@ -5,6 +5,8 @@
 // lock toggle buttons. Follows the same DOM injection pattern as MiniMap.
 // ============================================================================
 
+import { isolateCanvasGestures } from './canvas-gestures';
+
 export interface ControlsPanelOptions {
   position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
   orientation: 'vertical' | 'horizontal';
@@ -117,10 +119,11 @@ export function createControlsPanel(
     wrapper.appendChild(fullscreenBtn);
   }
 
-  // Prevent pan/zoom from triggering when interacting with buttons
-  wrapper.addEventListener('mousedown', (e) => e.stopPropagation());
-  wrapper.addEventListener('pointerdown', (e) => e.stopPropagation());
-  wrapper.addEventListener('wheel', (e) => e.stopPropagation(), { passive: false });
+  // Prevent pan/zoom from triggering when interacting with buttons. `dblclick` is in the
+  // list because two quick presses of zoom-in are a double-click as far as the container
+  // is concerned — so the canvas jumped to the double-click level instead of taking the
+  // second step under the cursor.
+  const releaseGestures = isolateCanvasGestures(wrapper);
 
   container.appendChild(wrapper);
 
@@ -142,6 +145,10 @@ export function createControlsPanel(
   }
 
   function destroy(): void {
+    // Held rather than left to the wrapper's removal, so this call site matches the
+    // minimap, the devtools and the panels — one of four doing it differently is the one
+    // that drifts.
+    releaseGestures();
     wrapper.remove();
   }
 

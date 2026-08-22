@@ -18,6 +18,7 @@
 // ============================================================================
 
 import type { Alpine } from 'alpinejs';
+import { isolateCanvasGestures } from '../../core/canvas-gestures';
 
 // ── Event log vocabulary ─────────────────────────────────────────────────────
 
@@ -154,9 +155,10 @@ export function registerFlowDevtoolsDirective(Alpine: Alpine) {
       el.classList.add('flow-devtools', 'canvas-overlay');
       el.setAttribute('data-flow-devtools', '');
 
-      // Stop canvas zoom on scroll over devtools panel
-      const stopWheel = (e: Event) => e.stopPropagation();
-      el.addEventListener('wheel', stopWheel);
+      // Keep the canvas out of gestures aimed at the overlay. This used to stop `wheel`
+      // alone, so a double-click inside devtools zoomed the canvas underneath it — dev-only,
+      // and the same bug as the panel's.
+      const releaseGestures = isolateCanvasGestures(el);
 
       // Toggle button
       const toggleBtn = document.createElement('button');
@@ -177,11 +179,9 @@ export function registerFlowDevtoolsDirective(Alpine: Alpine) {
       toggleBtn.appendChild(svg);
       el.appendChild(toggleBtn);
 
-      // Panel — user-select: none so dragging to pan doesn't select text
       const panel = document.createElement('div');
       panel.className = 'flow-devtools-panel';
       panel.style.display = 'none';
-      panel.style.userSelect = 'none';
       el.appendChild(panel);
 
       let expanded = false;
@@ -523,7 +523,7 @@ export function registerFlowDevtoolsDirective(Alpine: Alpine) {
           }
         }
         // 4. Remove interaction stoppers
-        el.removeEventListener('wheel', stopWheel);
+        releaseGestures();
 
         // 5. Clear DOM
         el.textContent = '';

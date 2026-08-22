@@ -74,3 +74,45 @@ describe('controls panel — fullscreen button', () => {
     expect(container.querySelector('.flow-controls')).toBeNull();
   });
 });
+
+describe('controls panel — the canvas gestures underneath', () => {
+  let container: HTMLElement;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+  });
+
+  // The panel already swallows mousedown, pointerdown and wheel so the canvas does not pan or
+  // zoom under it. Double-click was the one it let through: two quick presses of zoom-in are a
+  // double-click to the container, so the canvas jumped to the double-click level instead of
+  // taking a second step under the cursor.
+  it.each([
+    ['mousedown', () => new MouseEvent('mousedown', { bubbles: true, cancelable: true })],
+    ['pointerdown', () => new MouseEvent('pointerdown', { bubbles: true, cancelable: true })],
+    ['wheel', () => new WheelEvent('wheel', { bubbles: true, cancelable: true })],
+    ['dblclick', () => new MouseEvent('dblclick', { bubbles: true, cancelable: true })],
+  ])('keeps %s inside the panel', (type, make) => {
+    createControlsPanel(container, baseOptions());
+    let reachedCanvas = 0;
+    container.addEventListener(type, () => { reachedCanvas++; });
+
+    container.querySelector('.flow-controls button')!.dispatchEvent(make());
+
+    expect(reachedCanvas).toBe(0);
+  });
+
+  it('still runs the button\'s own handler on a double-click\'s first press', () => {
+    // Swallowing the event at the panel must not disarm the control it landed on.
+    const onZoomIn = vi.fn();
+    createControlsPanel(container, { ...baseOptions(), onZoomIn });
+
+    const btn = container.querySelector('.flow-controls button') as HTMLElement;
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    btn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    btn.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+
+    expect(onZoomIn).toHaveBeenCalledTimes(2);
+  });
+});
+

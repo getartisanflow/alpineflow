@@ -7,6 +7,7 @@
 // ============================================================================
 
 import type { FlowNode, Viewport, FlowCanvasConfig } from './types';
+import { isolateCanvasGestures } from './canvas-gestures';
 import { getNodesBounds, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from './geometry';
 
 const MINIMAP_WIDTH = 200;
@@ -284,6 +285,15 @@ export function createMiniMap(
   svg.addEventListener('pointermove', onPointerMove);
   svg.addEventListener('pointerup', onPointerUp);
 
+  // The minimap owns a double-click on itself: two clicks in it are two pans, and the canvas's
+  // double-click zoom sits on the container, so without this the second one also toggled the
+  // zoom — a click meant to move the view jumped it to another scale as well.
+  //
+  // Only that one. A drag on the minimap is the minimap's to interpret, and what the container
+  // does with the same press is a separate question from this fix — so the subset is stated
+  // rather than left as an omission from a list copied by hand.
+  const releaseGestures = isolateCanvasGestures(wrapper, ['dblclick']);
+
   // ── Zoom interaction ───────────────────────────────────────────────
   function onWheel(e: WheelEvent): void {
     if (!config.minimapZoomable) {
@@ -308,6 +318,7 @@ export function createMiniMap(
     svg.removeEventListener('pointermove', onPointerMove);
     svg.removeEventListener('pointerup', onPointerUp);
     svg.removeEventListener('wheel', onWheel);
+    releaseGestures();
     nodeRects.length = 0;
     wrapper.remove();
   }

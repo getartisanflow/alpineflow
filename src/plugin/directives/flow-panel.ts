@@ -39,6 +39,7 @@
 
 import type { Alpine } from 'alpinejs';
 import type { HandlePosition } from '../../core/types';
+import { isolateCanvasGestures } from '../../core/canvas-gestures';
 
 const VALID_POSITIONS: HandlePosition[] = [
   'top', 'bottom', 'left', 'right',
@@ -180,10 +181,9 @@ export function registerFlowPanelDirective(Alpine: Alpine) {
       }
 
       // --- Event isolation: prevent canvas pan/zoom ---
-      const stopProp = (e: Event) => e.stopPropagation();
-      el.addEventListener('mousedown', stopProp);
-      el.addEventListener('pointerdown', stopProp);
-      el.addEventListener('wheel', stopProp);
+      // Including `dblclick`, which this list was missing: a double-click inside a panel
+      // zoomed the canvas underneath it, the same bug the controls and the minimap had.
+      cleanup(isolateCanvasGestures(el));
 
       // --- Container reference ---
       const container = el.parentElement!;
@@ -386,9 +386,6 @@ export function registerFlowPanelDirective(Alpine: Alpine) {
             document.removeEventListener('pointerup', onResizePointerUp);
             document.removeEventListener('pointercancel', onResizePointerUp);
             resizeHandle?.remove();
-            el.removeEventListener('mousedown', stopProp);
-            el.removeEventListener('pointerdown', stopProp);
-            el.removeEventListener('wheel', stopProp);
             container.removeEventListener('flow-panel-reset', onReset);
             (container as any).__flowPanels?.delete(el);
           });
@@ -399,9 +396,6 @@ export function registerFlowPanelDirective(Alpine: Alpine) {
             document.removeEventListener('pointermove', onDragPointerMove);
             document.removeEventListener('pointerup', onDragPointerUp);
             document.removeEventListener('pointercancel', onDragPointerUp);
-            el.removeEventListener('mousedown', stopProp);
-            el.removeEventListener('pointerdown', stopProp);
-            el.removeEventListener('wheel', stopProp);
             container.removeEventListener('flow-panel-reset', onReset);
             (container as any).__flowPanels?.delete(el);
           });
@@ -409,9 +403,6 @@ export function registerFlowPanelDirective(Alpine: Alpine) {
       } else {
         // Fixed / static / fill — no drag
         cleanup(() => {
-          el.removeEventListener('mousedown', stopProp);
-          el.removeEventListener('pointerdown', stopProp);
-          el.removeEventListener('wheel', stopProp);
           container.removeEventListener('flow-panel-reset', onReset);
           (container as any).__flowPanels?.delete(el);
         });

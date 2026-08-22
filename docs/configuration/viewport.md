@@ -62,6 +62,8 @@ flowCanvas({
 
 `'fit'` suits a canvas people read rather than survey — a workflow, a schema — where the gesture reads as "closer" and then "show me all of it", and where `minZoom` is an arbitrary floor that frames nothing in particular.
 
+The canvas's own chrome is not part of the gesture: a double-click on the minimap or the controls panel does what that panel does and nothing else. Two quick presses of zoom-in are two zoom steps, not a jump to the double-click level.
+
 Two things to know about `'toggle'`:
 
 - `dblClickZoomLevel` must sit above the level it zooms back out to (`minZoom`, or a numeric `dblClickZoomOutLevel`), otherwise there is no room to zoom back out into. If it does not, AlpineFlow keeps d3's stepped handler rather than installing a gesture that would stall.
