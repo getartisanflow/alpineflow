@@ -582,7 +582,7 @@ export interface FlowEvents {
   'node-context-menu': { node: FlowNode; event: MouseEvent };
   'edge-context-menu': { edge: FlowEdge; event: MouseEvent };
   'pane-context-menu': { event: MouseEvent; position: XYPosition };
-  'selection-context-menu': { nodes: FlowNode[]; event: MouseEvent };
+  'selection-context-menu': { nodes: FlowNode[]; edges: FlowEdge[]; event: MouseEvent };
   'selection-change': { nodes: string[]; edges: string[]; rows: string[] };
   'nodes-change': { type: 'add' | 'remove'; nodes: FlowNode[]; origin: 'drop' | 'paste' | 'api' | 'load' };
   'edges-change': { type: 'add' | 'remove'; edges: FlowEdge[]; origin: 'drop' | 'paste' | 'api' | 'load' };

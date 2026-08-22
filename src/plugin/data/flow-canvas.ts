@@ -223,6 +223,8 @@ export function registerFlowCanvas(Alpine: Alpine) {
       edge: null as FlowEdge | null,
       position: null as XYPosition | null,
       nodes: null as FlowNode[] | null,
+      /** The other half of a selection, so a menu bound to this can act on the whole of it. */
+      edges: null as FlowEdge[] | null,
       event: null as MouseEvent | null,
     },
 
@@ -545,6 +547,22 @@ export function registerFlowCanvas(Alpine: Alpine) {
         edges: [...this.selectedEdges],
         rows: [...this.selectedRows],
       });
+    },
+
+    /**
+     * The whole selection, as the objects rather than the ids.
+     *
+     * One place, because there is more than one way to open a menu on a selection — a right-click
+     * on the pane, a right-click on one of the selected nodes, a long-press on a touch device —
+     * and each of them used to gather this by hand. Three copies of two filters is how the touch
+     * path came to send the nodes and forget the edges: a selection menu that can delete what the
+     * author gathered, minus the half nobody told it about.
+     */
+    getSelectedNodesAndEdges(): { nodes: FlowNode[]; edges: FlowEdge[] } {
+      return {
+        nodes: this.nodes.filter((n: FlowNode) => this.selectedNodes.has(n.id)),
+        edges: this.edges.filter((edge: FlowEdge) => this.selectedEdges.has(edge.id)),
+      };
     },
 
     _rebuildNodeMap() {
@@ -1557,8 +1575,8 @@ export function registerFlowCanvas(Alpine: Alpine) {
           e.preventDefault();
 
           if (this.selectedNodes.size > 1) {
-            const nodes = this.nodes.filter((n: FlowNode) => this.selectedNodes.has(n.id));
-            this._emit('selection-context-menu', { nodes, event: e });
+            const { nodes, edges } = this.getSelectedNodesAndEdges();
+            this._emit('selection-context-menu', { nodes, edges, event: e });
           } else {
             const position = this.screenToFlowPosition(e.clientX, e.clientY);
             this._emit('pane-context-menu', { event: e, position });
@@ -1597,8 +1615,8 @@ export function registerFlowCanvas(Alpine: Alpine) {
               }
 
               if (this.selectedNodes.size > 1) {
-                const nodes = this.nodes.filter((n: FlowNode) => this.selectedNodes.has(n.id));
-                this._emit('selection-context-menu', { nodes, event: e });
+                const { nodes, edges } = this.getSelectedNodesAndEdges();
+                this._emit('selection-context-menu', { nodes, edges, event: e });
               } else {
                 const position = this.screenToFlowPosition(e.clientX, e.clientY);
                 this._emit('pane-context-menu', { event: e, position });
@@ -1673,16 +1691,16 @@ export function registerFlowCanvas(Alpine: Alpine) {
       // Auto-populate contextMenu state from context menu events
       const ctxEvents: Array<{ event: string; handler: EventListener }> = [
         { event: 'flow-node-context-menu', handler: ((e: CustomEvent) => {
-          Object.assign(this.contextMenu, { show: true, type: 'node', x: e.detail.event.clientX, y: e.detail.event.clientY, node: e.detail.node, edge: null, position: null, nodes: null, event: e.detail.event });
+          Object.assign(this.contextMenu, { show: true, type: 'node', x: e.detail.event.clientX, y: e.detail.event.clientY, node: e.detail.node, edge: null, position: null, nodes: null, edges: null, event: e.detail.event });
         }) as EventListener },
         { event: 'flow-edge-context-menu', handler: ((e: CustomEvent) => {
-          Object.assign(this.contextMenu, { show: true, type: 'edge', x: e.detail.event.clientX, y: e.detail.event.clientY, node: null, edge: e.detail.edge, position: null, nodes: null, event: e.detail.event });
+          Object.assign(this.contextMenu, { show: true, type: 'edge', x: e.detail.event.clientX, y: e.detail.event.clientY, node: null, edge: e.detail.edge, position: null, nodes: null, edges: null, event: e.detail.event });
         }) as EventListener },
         { event: 'flow-pane-context-menu', handler: ((e: CustomEvent) => {
-          Object.assign(this.contextMenu, { show: true, type: 'pane', x: e.detail.event.clientX, y: e.detail.event.clientY, node: null, edge: null, position: e.detail.position, nodes: null, event: e.detail.event });
+          Object.assign(this.contextMenu, { show: true, type: 'pane', x: e.detail.event.clientX, y: e.detail.event.clientY, node: null, edge: null, position: e.detail.position, nodes: null, edges: null, event: e.detail.event });
         }) as EventListener },
         { event: 'flow-selection-context-menu', handler: ((e: CustomEvent) => {
-          Object.assign(this.contextMenu, { show: true, type: 'selection', x: e.detail.event.clientX, y: e.detail.event.clientY, node: null, edge: null, position: null, nodes: e.detail.nodes, event: e.detail.event });
+          Object.assign(this.contextMenu, { show: true, type: 'selection', x: e.detail.event.clientX, y: e.detail.event.clientY, node: null, edge: null, position: null, nodes: e.detail.nodes, edges: e.detail.edges, event: e.detail.event });
         }) as EventListener },
       ];
       for (const entry of ctxEvents) {
