@@ -20,6 +20,18 @@ With `zoomOnDoubleClick: 'toggle'` and no remembered viewport to return to, the 
 
 The controls-panel zoom-in / zoom-out / fit-view buttons snapped the viewport instantly. Set **`controlsDuration`** (ms) to animate the move instead. Default `0` is the old instant behaviour, unchanged. (#95)
 
+### Added — the minimap can be resized, and its size persists (`minimapWidth` / `minimapHeight`)
+
+The minimap was a fixed size, set once at construction. It now takes **`minimapWidth`** / **`minimapHeight`**, a **`resizeMinimap(width, height)`** method to change it at runtime, and a **`minimap-resize`** event (with an `onMinimapResize` callback) that fires only on a real change. The new size is written back into the canvas config — so it describes what's drawn and survives a save/restore — and the wire bridge forwards it, letting a Livewire server persist the size like any other config value. A non-positive or unchanged size is a no-op. (#96)
+
+### Added — the layout event carries the positions it decided
+
+A `layout` event announced *which* layout ran but not where it put anything — to read the coordinates you had to wait for the model to catch up. The event now carries **`positions`**: what the layout decided, `Record<string, { x, y }>` keyed by node id, as a plain object that survives `JSON.stringify` and structured clone. Read it straight off the event — a Livewire handler can persist the new arrangement the moment it is computed — and `'layout'` is now part of `FlowEvents`. (#91)
+
+### Added — a `layout-end` event, for when the nodes have settled
+
+`layout` fires the instant the positions are computed; the nodes then animate into place. The new **`layout-end`** event fires once that motion finishes, carrying the same payload (`type`, `positions`, and the layout's settings). Persist from whichever moment suits — `layout` to save the decision immediately, `layout-end` to save once it is on screen. (#92)
+
 ### Fixed — a double-click on the canvas chrome no longer drives the canvas
 
 A double-click on the minimap, controls, panel, devtools, or a node/edge toolbar leaked through to the container and drove the canvas's pan/zoom — the toolbars also leaked `mousedown` and touch. A shared `isolateCanvasGestures` now stops canvas gestures (mousedown / pointerdown / touchstart / wheel / dblclick) at every overlay, and each overlay releases its listeners on destroy. (#84)
@@ -43,6 +55,14 @@ The controls-strip corner-rounding selectors matched *any* first/last button des
 ### Fixed — a drag now reports "connecting", not only a click
 
 Starting a connection by dragging off a handle never set the `.flow-connecting` state the stylesheet gates the target-handle valid/invalid outlines behind — only the click-to-connect path did. The flag now covers every connection gesture and clears on drop, cancel, and escape. (#100)
+
+### Fixed — an animation's final value now notifies watchers, for `style`, `colour`, and `strokeWidth` too
+
+When an animation settled, writing the final value back sometimes matched the value already staged, so Alpine's reactivity saw no change and never notified — a template bound to the property could keep its mid-animation value. Completion now republishes the settled `position` and `style` (nodes) and `colour` and `strokeWidth` (edges), so the final frame always lands. (#89)
+
+### Fixed — selection can be turned off, and keyboard selection matches the mouse
+
+A canvas had no way to opt out of selection. It now takes **`nodesSelectable`** / **`edgesSelectable`**, and an edge takes **`selectable`**, to turn selection off — an explicit flag winning over `locked`, which wins over the canvas default. The keyboard path also disagreed with the mouse: activating a node by keyboard now emits `node-click` *before* the selectable gate, the same order the pointer path uses, so a non-selectable node still reports the interaction. (#99)
 
 ### Performance — minimap keeps and moves its rects instead of rebuilding them
 
