@@ -64,7 +64,7 @@ All addons use the `registerAddon('<name>', { setup(canvas) { … } })` pattern 
 - **Feature workflow:** cut a `feature/<kebab-topic>` branch off `dev`, do the work there, open a PR back to `dev` once tests pass. The PR gets reviewed and merged into `dev` (typically by the owner). Don't push commits directly to `dev`
 - **`main`** mirrors the latest tagged release. **Never push to main directly. Never merge dev → main without owner approval**
 - **Never tag a version**. Tags are cut by the owner after manual verification across alpineflow + wireflow + the consuming site
-- **CHANGELOG.md** is append-only. Group entries under the current alpha version block; keep `### Added` / `### Changed (alpha-breaking)` / `### Fixed` / `### Docs` subsections consistent with prior entries
+- **CHANGELOG.md** is append-only. Group entries under the current alpha version block; keep `### Added` / `### Changed (alpha-breaking)` / `### Fixed` / `### Docs` subsections consistent with prior entries. Add each entry as its change merges into the version branch — don't batch them at release. Before any tag, audit that **every** merged PR has both a CHANGELOG entry and its reference-doc update (a lagging block silently ships incomplete)
 
 ## Conventions
 
@@ -74,6 +74,7 @@ All addons use the `registerAddon('<name>', { setup(canvas) { … } })` pattern 
 - Docstrings on exported APIs; sparse inline comments — only when the *why* is non-obvious
 - No new dependencies (`dependencies` or `peerDependencies`) without owner approval
 - New canvas methods that need to be server-callable from Livewire/wireflow must include a matching `flow:<command>` listener in `src/core/wire-bridge.ts` so wireflow's `WithWireFlow` trait can dispatch them
+- **Docs + CHANGELOG travel with the change.** Any change to public surface — a config option, method, event, callback, or exported type — updates its reference doc under `docs/` *and* adds an entry to the active version block *in the same PR/commit*. Never defer either to release; the pre-tag audit is a backstop for catching misses, not the place to first write them
 
 ## Don't
 
