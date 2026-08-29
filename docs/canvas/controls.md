@@ -100,6 +100,16 @@ Controls stack vertically by default. Switch to horizontal layout:
 ```
 ::enddemo
 
+### Animation
+
+By default the zoom-in, zoom-out, and fit-view buttons snap the viewport instantly. Set `controlsDuration` (in milliseconds) to animate the move instead, so the buttons glide the same way a double-click zoom or a layout does:
+
+```html
+<div x-data="flowCanvas({ controls: true, controlsDuration: 300 })">
+```
+
+The default of `0` keeps the instant behaviour.
+
 ## Buttons
 
 Toggle individual buttons with these config options:
