@@ -26,6 +26,36 @@ export function resolveStrokeColor(color: string | EdgeGradient | undefined): st
 }
 
 /**
+ * Repaint an existing gradient def, without touching where it is.
+ *
+ * For the case where an edge's colour changed and NOTHING MOVED: the def's x1/y1/x2/y2 were worked
+ * out from the endpoints the last time they moved and are still right, so re-deriving them would
+ * mean re-pathing the edge — and, through the path refresh, every sibling edge on both of its
+ * nodes.
+ *
+ * Answers false where there is no def yet, which is the one case that genuinely needs the
+ * coordinates: an edge given a gradient for the first time has nothing to keep.
+ */
+export function restyleGradientDef(defsEl: Element, id: string, gradient: EdgeGradient): boolean {
+  const gradEl = defsEl.querySelector(`#${CSS.escape(id)}`) as SVGLinearGradientElement | null;
+
+  if (!gradEl) {
+    return false;
+  }
+
+  const stops = gradEl.querySelectorAll('stop');
+
+  if (stops.length < 2) {
+    return false;
+  }
+
+  stops[0]?.setAttribute('stop-color', gradient.from);
+  stops[1]?.setAttribute('stop-color', gradient.to);
+
+  return true;
+}
+
+/**
  * Create or update an SVG <linearGradient> element in a <defs> container.
  * Uses gradientUnits="userSpaceOnUse" so coordinates are in SVG canvas space.
  *

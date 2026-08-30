@@ -226,6 +226,9 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _flushNodeStyles: vi.fn(),
     _flushEdgeStyles: vi.fn(),
     _flushViewport: vi.fn(),
+    // Answers false by default, so a test that says nothing about it takes the same path an
+    // edge with no gradient def yet does.
+    _restyleEdgeGradient: vi.fn(() => false),
     _refreshEdgePaths: vi.fn(),
     _hydrateFromStatic: vi.fn(),
     _scheduleAutoLayout: vi.fn(),
@@ -311,6 +314,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     setCenter: vi.fn(),
     panBy: vi.fn(),
     toggleInteractive: vi.fn(),
+    resizeMinimap: vi.fn(),
     toggleFullscreen: vi.fn(),
     closeContextMenu: vi.fn(),
     resetPanels: vi.fn(),

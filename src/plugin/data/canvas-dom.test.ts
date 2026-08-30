@@ -238,6 +238,39 @@ describe('createDomMixin', () => {
       expect(pathEl.style.stroke).toBe('rgb(255, 0, 0)');
     });
 
+    it('points a gradient edge at its own def', () => {
+      // A gradient's stops are a <linearGradient> def, so what the path needs is to point AT it.
+      // Only a plain colour was handled here, so an edge going from one to a gradient kept the
+      // inline stroke it already had and the new def was never drawn.
+      const edge = makeEdge('e1', 'n1', 'n2', { color: { from: '#ff0000', to: '#0000ff' } as any });
+      const pathEl = createPathEl();
+      const ctx = mockCtx();
+      ctx._edgeMap.set('e1', edge);
+      ctx.getEdge = vi.fn((id: string) => ctx._edgeMap.get(id));
+      ctx.getEdgePathElement = vi.fn(() => pathEl as any);
+
+      const mixin = createDomMixin(ctx, Alpine);
+      mixin._flushEdgeStyles(new Set(['e1']));
+
+      // jsdom quotes the url()
+      expect(pathEl.style.stroke).toBe('url("#flow-test__grad__e1")');
+    });
+
+    it('puts a plain colour back over a gradient it used to point at', () => {
+      const edge = makeEdge('e1', 'n1', 'n2', { color: '#ff0000' });
+      const pathEl = createPathEl();
+      pathEl.style.stroke = 'url(#flow-test__grad__e1)';
+      const ctx = mockCtx();
+      ctx._edgeMap.set('e1', edge);
+      ctx.getEdge = vi.fn((id: string) => ctx._edgeMap.get(id));
+      ctx.getEdgePathElement = vi.fn(() => pathEl as any);
+
+      const mixin = createDomMixin(ctx, Alpine);
+      mixin._flushEdgeStyles(new Set(['e1']));
+
+      expect(pathEl.style.stroke).toBe('rgb(255, 0, 0)');
+    });
+
     it('applies strokeWidth to edge path element', () => {
       const edge = makeEdge('e1', 'n1', 'n2', { strokeWidth: 3 });
       const pathEl = createPathEl();

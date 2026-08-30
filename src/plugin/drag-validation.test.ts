@@ -567,6 +567,41 @@ describe('applyValidationClasses — indexed path matches legacy (oracle)', () =
 
 // ── Zero-DOM-query guarantee ─────────────────────────────────────────────────
 
+// ── The container flag the handle classes are seen through ──────────────────
+
+describe('applyValidationClasses — the .flow-connecting flag', () => {
+  const nodes: NodeSpec[] = [
+    { id: 'a', handles: [{ type: 'source' }] },
+    { id: 'b', handles: [{ type: 'target' }] },
+  ];
+
+  it('raises .flow-connecting on the container, whichever path ran', () => {
+    // The stylesheet reveals flow-handle-valid / flow-handle-invalid through
+    // `.flow-connecting .flow-handle-target`, so a gesture that sets the handle
+    // classes and not the flag computes a verdict nobody can see. That was every
+    // DRAG gesture: the flag was raised in the click-to-connect branch alone.
+    for (const withIndex of [false, true]) {
+      const container = buildDom(nodes);
+      const canvas = buildCanvas(nodes, []);
+      const index = withIndex ? buildHandleIndex(container, toFlow) : undefined;
+
+      expect(container.classList.contains('flow-connecting')).toBe(false);
+      applyValidationClasses(container, 'a', 'source', canvas, undefined, index);
+      expect(container.classList.contains('flow-connecting')).toBe(true);
+    }
+  });
+
+  it('drops it again when the handle classes are cleared', () => {
+    const container = buildDom(nodes);
+    const canvas = buildCanvas(nodes, []);
+
+    applyValidationClasses(container, 'a', 'source', canvas);
+    clearValidationClasses(container);
+
+    expect(container.classList.contains('flow-connecting')).toBe(false);
+  });
+});
+
 describe('applyValidationClasses — indexed path performs zero DOM queries', () => {
   it('does no querySelector(All) or getBoundingClientRect after the index is built', () => {
     const nodes: NodeSpec[] = [

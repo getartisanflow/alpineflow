@@ -414,11 +414,15 @@ Config callback: `onSelectionChange`
 
 ### selection-context-menu
 
-Fired when right-clicking with multiple nodes selected.
+Fired when opening a context menu with multiple nodes selected — a right-click on the pane, a
+right-click on one of the selected nodes, or a long press on a touch device.
 
 ```ts
-{ nodes: FlowNode[]; event: MouseEvent }
+{ nodes: FlowNode[]; edges: FlowEdge[]; event: MouseEvent }
 ```
+
+`edges` carries the selected edges, which is what lets a menu item act on the whole selection
+rather than on its nodes alone. It is an empty array when only nodes are selected.
 
 Config callback: `onSelectionContextMenu`
 
@@ -543,12 +547,25 @@ These events are emitted internally but do not have dedicated config callbacks. 
 | `copy` | `{ nodeCount, edgeCount }` | Clipboard copy |
 | `paste` | `{ nodes, edges }` | Clipboard paste |
 | `cut` | `{ nodeCount, edgeCount }` | Clipboard cut |
-| `layout` | `{ type, direction?, ... }` | Layout algorithm applied |
+| `layout` | `{ type, positions, ... }` | Layout computed — see below |
+| `layout-end` | `{ type, positions, ... }` | The nodes are where the layout put them — see below |
 | `compute-complete` | `{ results: Map }` | Compute engine finishes |
 | `node-reparent` | `{ node, oldParentId, newParentId }` | Node reparented |
 | `child-reorder` | `{ nodeId, parentId, order }` | Child reordered in layout parent |
 | `panel-reset` | `undefined` | `resetPanels()` called |
 | `helper-lines-change` | `{ horizontal: number[], vertical: number[] }` | Alignment guides update during drag |
+
+`layout` fires when a layout has been **computed**; `layout-end` fires when the nodes have **settled** where it put them. The two are different moments: with the default `duration` the canvas animates towards the new coordinates, so at `layout` time the model still holds the old ones. With `duration: 0` there is nothing to wait for and the pair arrives together — in that order either way.
+
+Both carry `positions` — what the layout decided, `Record<string, { x, y }>` keyed by node id, a plain object so it survives `JSON.stringify` and structured clone. Read it off the event rather than the model, which lags until the motion finishes. Persist from whichever moment suits — `layout` the instant it is decided, `layout-end` once it is on screen:
+
+```html
+<div @flow-layout-end="$wire.saveLayout($event.detail.positions)">
+```
+
+`layout-end` does not fire for a layout that never settled — an animation interrupted by the next one announces nothing. Note that `fitView` runs on the same completion, so the nodes have stopped but the viewport may still be moving; hang off `viewport-move-end` if it is the view you are waiting for.
+
+The rest of each payload is per engine: `{ type: 'dagre', direction }`, `{ type: 'force', charge, distance }`, `{ type: 'tree', layoutType, direction }`, `{ type: 'elk', algorithm, direction }`.
 
 The `restore` event's `origin` field is `'undo' | 'redo' | 'load'` — `'undo'`/`'redo'` from history, and `'load'` from `fromObject()` / `$reset()` / `$clear()` / `replaceNodes()`. Listen via the `flow-restore` DOM event: `@flow-restore="syncSidebar($event.detail)"`. See the [v0.2.1-alpha migration guide](../migration/v0.2.1-alpha.md) for the field's history (it superseded an unreleased `source` tag).
 
@@ -588,7 +605,7 @@ All events at a glance:
 | `pane-click` | `{ event, position }` | `onPaneClick` |
 | `pane-context-menu` | `{ event, position }` | `onPaneContextMenu` |
 | `selection-change` | `{ nodes, edges, rows }` | `onSelectionChange` |
-| `selection-context-menu` | `{ nodes, event }` | `onSelectionContextMenu` |
+| `selection-context-menu` | `{ nodes, edges, event }` | `onSelectionContextMenu` |
 | `nodes-change` | `{ type, nodes, origin }` | `onNodesChange` |
 | `edges-change` | `{ type, edges, origin }` | `onEdgesChange` |
 | `nodes-patch` | `{ patches }` | `onNodesPatch` |
@@ -604,7 +621,8 @@ All events at a glance:
 | `copy` | `{ nodeCount, edgeCount }` | — |
 | `paste` | `{ nodes, edges }` | — |
 | `cut` | `{ nodeCount, edgeCount }` | — |
-| `layout` | `{ type, direction?, ... }` | — |
+| `layout` | `{ type, positions, ... }` | — |
+| `layout-end` | `{ type, positions, ... }` | — |
 | `compute-complete` | `{ results: Map }` | — |
 | `node-reparent` | `{ node, oldParentId, newParentId }` | — |
 | `child-reorder` | `{ nodeId, parentId, order }` | — |

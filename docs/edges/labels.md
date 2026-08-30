@@ -90,6 +90,41 @@ Hover each edge to see the label appear — the top edge is always visible, the 
 ```
 ::enddemo
 
+## HTML labels
+
+Label text is written with `textContent`, so markup in a label shows as the tags themselves. Set `labelHtml: true` on the edge to render its labels as HTML instead — for a label that needs a line break, an icon, or a piece of emphasis:
+
+::demo
+```html
+<div x-data="flowCanvas({
+    nodes: [
+        { id: 'a', position: { x: 0, y: 0 }, data: { label: 'Request' } },
+        { id: 'b', position: { x: 330, y: 0 }, data: { label: 'Manager' } },
+    ],
+    edges: [
+        { id: 'e1', source: 'a', target: 'b', label: 'over the limit<br><em>and no manager on shift</em>', labelHtml: true },
+    ],
+    background: 'dots',
+    fitViewOnInit: true,
+    controls: false,
+    pannable: false,
+    zoomable: false,
+})" class="flow-container" style="height: 220px;">
+    <div x-flow-viewport>
+        <template x-for="node in nodes" :key="node.id">
+            <div x-flow-node="node">
+                <div x-flow-handle:target></div>
+                <span x-text="node.data.label"></span>
+                <div x-flow-handle:source></div>
+            </div>
+        </template>
+    </div>
+</div>
+```
+::enddemo
+
+The flag covers all three positions — `label`, `labelStart` and `labelEnd` — and the value goes to `innerHTML` unchanged. Like any HTML you hand a framework, it is trusted: pass anything a user typed through your own escaping or sanitiser first.
+
 ## Example
 
 ```js

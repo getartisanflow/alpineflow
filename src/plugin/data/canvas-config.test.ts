@@ -311,6 +311,60 @@ describe('createConfigMixin', () => {
     });
   });
 
+  // ── Minimap size ────────────────────────────────────────────────────────
+  //
+  // The size is the one config key whose value also lives on a drawn instance: the scale that fits
+  // the graph in and the rectangle marking the viewport are computed against it. So a patch has to
+  // tell the minimap, not only record the number — which is what makes a server-set size work.
+
+  describe('minimap size', () => {
+    it('resizes the minimap when a patch sets its width', () => {
+      const ctx = mockCtx();
+      const mixin = createConfigMixin(ctx);
+
+      mixin._applyConfigPatch({ minimapWidth: 160, minimapHeight: 60 });
+
+      expect(ctx.resizeMinimap).toHaveBeenCalledWith(160, 60);
+    });
+
+    it('resizes once for a patch carrying both dimensions', () => {
+      const ctx = mockCtx();
+      const mixin = createConfigMixin(ctx);
+
+      mixin._applyConfigPatch({ minimapWidth: 160, minimapHeight: 60 });
+
+      expect(ctx.resizeMinimap).toHaveBeenCalledTimes(1);
+    });
+
+    it('fills the other dimension from the config when a patch sets only one', () => {
+      const ctx = mockCtx();
+      (ctx._config as any).minimapHeight = 60;
+      const mixin = createConfigMixin(ctx);
+
+      mixin._applyConfigPatch({ minimapWidth: 160 });
+
+      expect(ctx.resizeMinimap).toHaveBeenCalledWith(160, 60);
+    });
+
+    it('falls back to the default box for a dimension nobody has ever set', () => {
+      const ctx = mockCtx();
+      const mixin = createConfigMixin(ctx);
+
+      mixin._applyConfigPatch({ minimapWidth: 160 });
+
+      expect(ctx.resizeMinimap).toHaveBeenCalledWith(160, 150);
+    });
+
+    it('leaves the minimap alone for a patch that does not mention its size', () => {
+      const ctx = mockCtx({ _panZoom: { update: vi.fn() } as any });
+      const mixin = createConfigMixin(ctx);
+
+      mixin._applyConfigPatch({ pannable: false });
+
+      expect(ctx.resizeMinimap).not.toHaveBeenCalled();
+    });
+  });
+
   // ── Multiple keys in one patch ──────────────────────────────────────────
 
   describe('multiple keys', () => {

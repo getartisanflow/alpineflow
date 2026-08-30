@@ -16,6 +16,7 @@ import { laneOffset, applyLaneOffset, resolveSpreadSpacing } from '../../core/en
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { normalizeMarker, getMarkerId } from '../../core/markers';
 import { isConnectable } from '../../core/node-flags';
+import { isEdgeSelectable } from '../../core/edge-flags';
 import { applyValidationClasses, clearValidationClasses, applyReconnectValidation, setDragLineValidating } from './flow-handle';
 import {
   createConnectionLine,
@@ -687,6 +688,9 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
 
         canvas._emit('edge-click', { edge, event: e });
 
+        // The click happened and was announced; whether it SELECTS is a separate question.
+        if (!isEdgeSelectable(edge, canvas._config?.edgesSelectable !== false)) return;
+
         if (matchesModifier(e, canvas._shortcuts?.multiSelect)) {
           if (canvas.selectedEdges.has(edge.id)) {
             canvas.selectedEdges.delete(edge.id);
@@ -1163,6 +1167,9 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         if (!canvas) return;
 
         canvas._emit('edge-click', { edge, event: e });
+
+        // As above: announced, then gated.
+        if (!isEdgeSelectable(edge, canvas._config?.edgesSelectable !== false)) return;
 
         if (matchesModifier(e, canvas._shortcuts?.multiSelect)) {
           if (canvas.selectedEdges.has(edge.id)) {
@@ -1754,6 +1761,7 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           cssClass: string,
           viewport: Element | null,
           edgeId: string,
+          asHtml: boolean,
         ): HTMLDivElement | null => {
           if (text) {
             // If closure lost reference (e.g., directive re-init), reclaim from DOM
@@ -1772,7 +1780,13 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
               existing.dataset.flowEdgeId = edgeId;
               if (viewport) viewport.appendChild(existing);
             }
-            existing.textContent = text;
+            // `innerHTML` only when the edge asked for it. The value is trusted the way any
+            // framework trusts HTML it is handed — see `labelHtml` in the Edge type.
+            if (asHtml) {
+              if (existing.innerHTML !== text) existing.innerHTML = text;
+            } else if (existing.textContent !== text) {
+              existing.textContent = text;
+            }
             return existing;
           }
           if (existing) { existing.remove(); }
@@ -1781,6 +1795,7 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
 
         const viewport = el.closest('.flow-viewport');
         const labelVis = edge.labelVisibility ?? 'always';
+        const labelHtml = edge.labelHtml === true;
 
         // Lazily measure + cache the path length, keyed by the `d` attribute set
         // above. Only called when a label actually needs it, so edges without
@@ -1795,7 +1810,7 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         };
 
         // Center label (uses labelPosition percentage or default midpoint)
-        labelEl = ensureLabel(labelEl, edge.label, 'flow-edge-label', viewport, edge.id);
+        labelEl = ensureLabel(labelEl, edge.label, 'flow-edge-label', viewport, edge.id, labelHtml);
         if (labelEl) {
           const totalLength = getCachedTotalLength();
           if (totalLength > 0) {
@@ -1810,7 +1825,7 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         }
 
         // Start label (fixed pixel offset from source end)
-        labelStartEl = ensureLabel(labelStartEl, edge.labelStart, 'flow-edge-label flow-edge-label-start', viewport, edge.id);
+        labelStartEl = ensureLabel(labelStartEl, edge.labelStart, 'flow-edge-label flow-edge-label-start', viewport, edge.id, labelHtml);
         if (labelStartEl) {
           const totalLength = getCachedTotalLength();
           if (totalLength > 0) {
@@ -1822,7 +1837,7 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         }
 
         // End label (fixed pixel offset from target end)
-        labelEndEl = ensureLabel(labelEndEl, edge.labelEnd, 'flow-edge-label flow-edge-label-end', viewport, edge.id);
+        labelEndEl = ensureLabel(labelEndEl, edge.labelEnd, 'flow-edge-label flow-edge-label-end', viewport, edge.id, labelHtml);
         if (labelEndEl) {
           const totalLength = getCachedTotalLength();
           if (totalLength > 0) {

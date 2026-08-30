@@ -81,7 +81,9 @@ Inside the context menu element, a `contextMenu` object provides details about t
 |----------|-------|-------------|
 | `contextMenu.node` | `.node` | The node that was right-clicked |
 | `contextMenu.edge` | `.edge` | The edge that was right-clicked |
-| `contextMenu.selection` | `.selection` | Array of selected elements |
+| `contextMenu.nodes` | `.selection` | The selected nodes |
+| `contextMenu.edges` | `.selection` | The selected edges — an empty array where only nodes are selected |
+| `contextMenu.position` | `.pane` | Where the pane was clicked, in flow coordinates |
 | `contextMenu.event` | all | The original pointer event |
 
 ## Dismissal

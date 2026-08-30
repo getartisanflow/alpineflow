@@ -43,8 +43,12 @@ export function isConnectable(node: NodeLike): boolean {
   return isAllowed(node, node.connectable);
 }
 
-export function isSelectable(node: NodeLike): boolean {
-  return isAllowed(node, node.selectable);
+/**
+ * `defaultValue` carries the canvas-wide `nodesSelectable` config: a node with no
+ * `selectable` of its own follows the canvas, and one that states a preference keeps it.
+ */
+export function isSelectable(node: NodeLike, defaultValue = true): boolean {
+  return isAllowed(node, node.selectable, defaultValue);
 }
 
 export function isResizable(node: NodeLike): boolean {

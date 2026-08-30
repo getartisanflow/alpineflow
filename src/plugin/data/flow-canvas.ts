@@ -47,6 +47,7 @@ import { clearValidationClasses } from '../directives/flow-handle';
 import { installHandleDelegation } from '../handle-delegation';
 import { resolveShortcuts, matchesKey, matchesModifier, shouldCaptureNudge, isEditableTarget } from '../../core/keyboard-shortcuts';
 import { isDraggable, isSelectable } from '../../core/node-flags';
+import { isEdgeSelectable } from '../../core/edge-flags';
 import { attachLongPress } from '../../core/long-press';
 import { getNodesInRect, getNodesFullyInRect, SpatialGrid, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
 import { CORRIDOR_MARGIN, findRoute } from '../../core/edge-paths/orthogonal';
@@ -222,6 +223,8 @@ export function registerFlowCanvas(Alpine: Alpine) {
       edge: null as FlowEdge | null,
       position: null as XYPosition | null,
       nodes: null as FlowNode[] | null,
+      /** The other half of a selection, so a menu bound to this can act on the whole of it. */
+      edges: null as FlowEdge[] | null,
       event: null as MouseEvent | null,
     },
 
@@ -556,6 +559,22 @@ export function registerFlowCanvas(Alpine: Alpine) {
         edges: [...this.selectedEdges],
         rows: [...this.selectedRows],
       });
+    },
+
+    /**
+     * The whole selection, as the objects rather than the ids.
+     *
+     * One place, because there is more than one way to open a menu on a selection — a right-click
+     * on the pane, a right-click on one of the selected nodes, a long-press on a touch device —
+     * and each of them used to gather this by hand. Three copies of two filters is how the touch
+     * path came to send the nodes and forget the edges: a selection menu that can delete what the
+     * author gathered, minus the half nobody told it about.
+     */
+    getSelectedNodesAndEdges(): { nodes: FlowNode[]; edges: FlowEdge[] } {
+      return {
+        nodes: this.nodes.filter((n: FlowNode) => this.selectedNodes.has(n.id)),
+        edges: this.edges.filter((edge: FlowEdge) => this.selectedEdges.has(edge.id)),
+      };
     },
 
     _rebuildNodeMap() {
@@ -1380,6 +1399,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
         noWheelClassName: config.noWheelClassName ?? 'nowheel',
         zoomOnDoubleClick: config.zoomOnDoubleClick,
         dblClickZoomLevel: config.dblClickZoomLevel,
+        dblClickZoomOutLevel: config.dblClickZoomOutLevel,
+        // Only called when a toggle double-click zooms out under
+        // `dblClickZoomOutLevel: 'fit'`, so the bounds pass costs nothing otherwise.
+        getFitViewport: (): Viewport | null => this._fitViewport(),
         panOnDrag: config.panOnDrag,
         panActivationKeyCode: config.panActivationKeyCode,
         zoomActivationKeyCode: config.zoomActivationKeyCode,
@@ -1568,8 +1591,8 @@ export function registerFlowCanvas(Alpine: Alpine) {
           e.preventDefault();
 
           if (this.selectedNodes.size > 1) {
-            const nodes = this.nodes.filter((n: FlowNode) => this.selectedNodes.has(n.id));
-            this._emit('selection-context-menu', { nodes, event: e });
+            const { nodes, edges } = this.getSelectedNodesAndEdges();
+            this._emit('selection-context-menu', { nodes, edges, event: e });
           } else {
             const position = this.screenToFlowPosition(e.clientX, e.clientY);
             this._emit('pane-context-menu', { event: e, position });
@@ -1608,8 +1631,8 @@ export function registerFlowCanvas(Alpine: Alpine) {
               }
 
               if (this.selectedNodes.size > 1) {
-                const nodes = this.nodes.filter((n: FlowNode) => this.selectedNodes.has(n.id));
-                this._emit('selection-context-menu', { nodes, event: e });
+                const { nodes, edges } = this.getSelectedNodesAndEdges();
+                this._emit('selection-context-menu', { nodes, edges, event: e });
               } else {
                 const position = this.screenToFlowPosition(e.clientX, e.clientY);
                 this._emit('pane-context-menu', { event: e, position });
@@ -1618,9 +1641,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
               const nodeEl = target.closest('[data-flow-node-id]') as HTMLElement;
               if (nodeEl) {
                 const nodeId = nodeEl.getAttribute('data-flow-node-id')!;
+                const node = this.getNode(nodeId);
                 if (this.selectedNodes.has(nodeId)) {
                   this.selectedNodes.delete(nodeId);
-                } else {
+                } else if (!node || isSelectable(node, this._config?.nodesSelectable !== false)) {
                   this.selectedNodes.add(nodeId);
                 }
               }
@@ -1684,16 +1708,16 @@ export function registerFlowCanvas(Alpine: Alpine) {
       // Auto-populate contextMenu state from context menu events
       const ctxEvents: Array<{ event: string; handler: EventListener }> = [
         { event: 'flow-node-context-menu', handler: ((e: CustomEvent) => {
-          Object.assign(this.contextMenu, { show: true, type: 'node', x: e.detail.event.clientX, y: e.detail.event.clientY, node: e.detail.node, edge: null, position: null, nodes: null, event: e.detail.event });
+          Object.assign(this.contextMenu, { show: true, type: 'node', x: e.detail.event.clientX, y: e.detail.event.clientY, node: e.detail.node, edge: null, position: null, nodes: null, edges: null, event: e.detail.event });
         }) as EventListener },
         { event: 'flow-edge-context-menu', handler: ((e: CustomEvent) => {
-          Object.assign(this.contextMenu, { show: true, type: 'edge', x: e.detail.event.clientX, y: e.detail.event.clientY, node: null, edge: e.detail.edge, position: null, nodes: null, event: e.detail.event });
+          Object.assign(this.contextMenu, { show: true, type: 'edge', x: e.detail.event.clientX, y: e.detail.event.clientY, node: null, edge: e.detail.edge, position: null, nodes: null, edges: null, event: e.detail.event });
         }) as EventListener },
         { event: 'flow-pane-context-menu', handler: ((e: CustomEvent) => {
-          Object.assign(this.contextMenu, { show: true, type: 'pane', x: e.detail.event.clientX, y: e.detail.event.clientY, node: null, edge: null, position: e.detail.position, nodes: null, event: e.detail.event });
+          Object.assign(this.contextMenu, { show: true, type: 'pane', x: e.detail.event.clientX, y: e.detail.event.clientY, node: null, edge: null, position: e.detail.position, nodes: null, edges: null, event: e.detail.event });
         }) as EventListener },
         { event: 'flow-selection-context-menu', handler: ((e: CustomEvent) => {
-          Object.assign(this.contextMenu, { show: true, type: 'selection', x: e.detail.event.clientX, y: e.detail.event.clientY, node: null, edge: null, position: null, nodes: e.detail.nodes, event: e.detail.event });
+          Object.assign(this.contextMenu, { show: true, type: 'selection', x: e.detail.event.clientX, y: e.detail.event.clientY, node: null, edge: null, position: null, nodes: e.detail.nodes, edges: e.detail.edges, event: e.detail.event });
         }) as EventListener },
       ];
       for (const entry of ctxEvents) {
@@ -1849,6 +1873,28 @@ export function registerFlowCanvas(Alpine: Alpine) {
       }
     },
 
+    /**
+     * Give the minimap another box.
+     *
+     * Public because the reason to want it is outside the library: a canvas that changes shape with
+     * the window wants a minimap that changes shape with it, and the scale that fits the graph in —
+     * along with the rectangle marking the viewport — is computed against the box. A consumer
+     * watching its container calls this; nothing here watches, because what counts as "too big" is
+     * the page's business rather than the canvas's.
+     *
+     * The new box is written back into the config, so `_config.minimapWidth/Height` keeps saying
+     * what is on screen rather than what was passed at construction — the same numbers a
+     * `patchConfig` from the server would set. `minimap-resize` fires only when something actually
+     * changed, so a host that persists the size is not asked to save the size it already has.
+     */
+    resizeMinimap(width: number, height: number) {
+      if (!this._minimap?.resize(width, height)) return;
+
+      this._config.minimapWidth = width;
+      this._config.minimapHeight = height;
+      this._emit('minimap-resize', { width, height });
+    },
+
     /** Create controls panel if configured. */
     _initControls() {
       if (config.controls) {
@@ -1865,9 +1911,12 @@ export function registerFlowCanvas(Alpine: Alpine) {
           showFitView: config.controlsShowFitView ?? true,
           showInteractive: config.controlsShowInteractive ?? true,
           showResetPanels: config.controlsShowResetPanels ?? false,
-          onZoomIn: () => this.zoomIn(),
-          onZoomOut: () => this.zoomOut(),
-          onFitView: () => this.fitView({ padding: DEFAULT_FIT_PADDING }),
+          // Read per press, and from `_config` — the copy the rest of the canvas answers to, so a
+          // duration changed at runtime reaches the buttons like every other live setting does.
+          // Zero by default, which is exactly the call these three made before.
+          onZoomIn: () => this.zoomIn({ duration: this._config.controlsDuration ?? 0 }),
+          onZoomOut: () => this.zoomOut({ duration: this._config.controlsDuration ?? 0 }),
+          onFitView: () => this.fitView({ padding: DEFAULT_FIT_PADDING, duration: this._config.controlsDuration ?? 0 }),
           onToggleInteractive: () => this.toggleInteractive(),
           onResetPanels: () => this.resetPanels(),
           onToggleFullscreen: () => this.toggleFullscreen(),
@@ -2087,7 +2136,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
         }
 
         for (const node of hitNodes) {
-          if (!isSelectable(node)) continue;
+          if (!isSelectable(node, this._config?.nodesSelectable !== false)) continue;
           if (node.hidden) continue;
 
           node.selected = true;
@@ -2101,7 +2150,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
         for (const edgeId of hitEdgeIds) {
           const edge = this.getEdge(edgeId);
-          if (edge) {
+          if (edge && isEdgeSelectable(edge, this._config?.edgesSelectable !== false)) {
             edge.selected = true;
             this.selectedEdges.add(edge.id);
           }

@@ -7,10 +7,15 @@
 // ============================================================================
 
 import type { FlowNode, Viewport, FlowCanvasConfig } from './types';
+import { isolateCanvasGestures } from './canvas-gestures';
 import { getNodesBounds, DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from './geometry';
 
-const MINIMAP_WIDTH = 200;
-const MINIMAP_HEIGHT = 150;
+/* The box a minimap gets when nobody says otherwise. A consumer that wants another shape passes
+ * `minimapWidth`/`minimapHeight`, or calls `resize()` when the window changes under it — the
+ * numbers are per instance rather than per module for exactly that reason: a minimap whose ratio
+ * does not match the canvas draws a viewport rectangle that is not the shape of the viewport. */
+export const MINIMAP_DEFAULT_WIDTH = 200;
+export const MINIMAP_DEFAULT_HEIGHT = 150;
 const BOUNDS_PADDING = 1.2;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -43,6 +48,12 @@ export interface MiniMapOptions {
 export interface MiniMapInstance {
   render(): void;
   updateViewport(): void;
+  /**
+   * Give it another box. Redraws at the new size; ignores a width or height that is not positive.
+   * Returns whether the box actually changed, so a caller can keep config and events in step with
+   * what was drawn rather than with what was asked for.
+   */
+  resize(width: number, height: number): boolean;
   destroy(): void;
 }
 
@@ -55,18 +66,21 @@ export function createMiniMap(
   const maskColor = config.minimapMaskColor;
   const nodeColor = config.minimapNodeColor;
 
+  let width = config.minimapWidth ?? MINIMAP_DEFAULT_WIDTH;
+  let height = config.minimapHeight ?? MINIMAP_DEFAULT_HEIGHT;
+
   // ── Build DOM ──────────────────────────────────────────────────────
   const wrapper = document.createElement('div');
   wrapper.className = `flow-minimap flow-minimap-${position}`;
 
   const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('width', String(MINIMAP_WIDTH));
-  svg.setAttribute('height', String(MINIMAP_HEIGHT));
+  svg.setAttribute('width', String(width));
+  svg.setAttribute('height', String(height));
 
   const bg = document.createElementNS(SVG_NS, 'rect');
   bg.classList.add('flow-minimap-bg');
-  bg.setAttribute('width', String(MINIMAP_WIDTH));
-  bg.setAttribute('height', String(MINIMAP_HEIGHT));
+  bg.setAttribute('width', String(width));
+  bg.setAttribute('height', String(height));
   // Fill controlled via CSS --flow-minimap-bg; no inline attribute needed
 
   const nodesGroup = document.createElementNS(SVG_NS, 'g');
@@ -100,8 +114,8 @@ export function createMiniMap(
     }
 
     cachedScale = Math.max(
-      cachedBounds.width / MINIMAP_WIDTH,
-      cachedBounds.height / MINIMAP_HEIGHT,
+      cachedBounds.width / width,
+      cachedBounds.height / height,
     ) * BOUNDS_PADDING;
   }
 
@@ -113,39 +127,91 @@ export function createMiniMap(
   }
 
   // ── Render ─────────────────────────────────────────────────────────
+  //
+  // The rects are kept and updated, never thrown away and rebuilt.
+  //
+  // `render()` runs on every state change, which during a node drag is once per
+  // pointer move. Clearing `nodesGroup` and creating a fresh <rect> per node is a
+  // STRUCTURAL change inside the SVG, and Blink answers one of those by
+  // invalidating the layout of the whole SVG root — which then has to be resolved
+  // again before the next geometry read the frame makes, and a canvas frame makes
+  // a great many of those resolving edge endpoints.
+  //
+  // Measured on a ten-node graph in Chrome 150: ~120ms per frame, so a drag ran at
+  // 7fps and the pointer reported 50 moves a second while the page could answer 5.
+  // WebKit and Gecko charge almost nothing for the identical rebuild and hold 60fps,
+  // which is what made this look like a rendering bug rather than a DOM one.
+  //
+  // Writing attributes onto rects that are already in the tree leaves the structure
+  // alone, so there is nothing for that invalidation to fire on. The pool grows to
+  // the high-water mark of visible nodes and gives back whatever it stops needing.
+  const nodeRects: SVGRectElement[] = [];
+
+  function setIfChanged(el: Element, name: string, value: string): void {
+    if (el.getAttribute(name) !== value) {
+      el.setAttribute(name, value);
+    }
+  }
+
   function render(): void {
     const state = getState();
 
     computeScale();
 
-    // Clear existing node rects
-    nodesGroup.innerHTML = '';
-
     // Offset to center the bounds in the minimap
-    const offsetX = (MINIMAP_WIDTH - cachedBounds.width / cachedScale) / 2;
-    const offsetY = (MINIMAP_HEIGHT - cachedBounds.height / cachedScale) / 2;
+    const offsetX = (width - cachedBounds.width / cachedScale) / 2;
+    const offsetY = (height - cachedBounds.height / cachedScale) / 2;
+
+    let used = 0;
 
     for (const node of state.nodes) {
       if (node.hidden) continue;
-      const rect = document.createElementNS(SVG_NS, 'rect');
+
+      let rect = nodeRects[used];
+
+      if (!rect) {
+        rect = document.createElementNS(SVG_NS, 'rect');
+        rect.setAttribute('rx', '2');
+        nodeRects[used] = rect;
+      }
+
+      // A consumer that emptied the group behind our back gets its rects back
+      // rather than a minimap that has quietly stopped moving.
+      if (rect.parentNode !== nodesGroup) {
+        nodesGroup.appendChild(rect);
+      }
+
       const w = (node.dimensions?.width ?? DEFAULT_NODE_WIDTH) / cachedScale;
       const h = (node.dimensions?.height ?? DEFAULT_NODE_HEIGHT) / cachedScale;
       const x = (node.position.x - cachedBounds.x) / cachedScale + offsetX;
       const y = (node.position.y - cachedBounds.y) / cachedScale + offsetY;
 
-      rect.setAttribute('x', String(x));
-      rect.setAttribute('y', String(y));
-      rect.setAttribute('width', String(w));
-      rect.setAttribute('height', String(h));
-      rect.setAttribute('rx', '2');
+      setIfChanged(rect, 'x', String(x));
+      setIfChanged(rect, 'y', String(y));
+      setIfChanged(rect, 'width', String(w));
+      setIfChanged(rect, 'height', String(h));
+
       // Fill controlled via CSS --flow-minimap-node-color; override with inline style
       // when user configured minimapNodeColor (inline style beats CSS property).
+      // Cleared when it stops being configured, because this rect may have been
+      // drawn for a different node last time.
       const fill = getNodeFill(node);
       if (fill) {
-        rect.style.fill = fill;
+        if (rect.style.fill !== fill) {
+          rect.style.fill = fill;
+        }
+      } else if (rect.style.fill) {
+        rect.style.removeProperty('fill');
       }
-      nodesGroup.appendChild(rect);
+
+      used++;
     }
+
+    // What this pass did not need: a node deleted, or hidden since the last one.
+    for (let i = nodeRects.length - 1; i >= used; i--) {
+      nodeRects[i].remove();
+    }
+    nodeRects.length = used;
 
     updateViewport();
   }
@@ -161,8 +227,8 @@ export function createMiniMap(
       return;
     }
 
-    const offsetX = (MINIMAP_WIDTH - cachedBounds.width / cachedScale) / 2;
-    const offsetY = (MINIMAP_HEIGHT - cachedBounds.height / cachedScale) / 2;
+    const offsetX = (width - cachedBounds.width / cachedScale) / 2;
+    const offsetY = (height - cachedBounds.height / cachedScale) / 2;
 
     // Viewport rect in flow coordinates → minimap coordinates
     const vpX = (-state.viewport.x / state.viewport.zoom - cachedBounds.x) / cachedScale + offsetX;
@@ -171,7 +237,7 @@ export function createMiniMap(
     const vpH = (state.containerHeight / state.viewport.zoom) / cachedScale;
 
     // Evenodd path: outer rect minus inner viewport rect
-    const outer = `M0,0 H${MINIMAP_WIDTH} V${MINIMAP_HEIGHT} H0 Z`;
+    const outer = `M0,0 H${width} V${height} H0 Z`;
     const inner = `M${vpX},${vpY} h${vpW} v${vpH} h${-vpW} Z`;
     maskPath.setAttribute('d', `${outer} ${inner}`);
   }
@@ -180,8 +246,8 @@ export function createMiniMap(
   let isPanning = false;
 
   function minimapToFlowPosition(mmX: number, mmY: number): { x: number; y: number } {
-    const offsetX = (MINIMAP_WIDTH - cachedBounds.width / cachedScale) / 2;
-    const offsetY = (MINIMAP_HEIGHT - cachedBounds.height / cachedScale) / 2;
+    const offsetX = (width - cachedBounds.width / cachedScale) / 2;
+    const offsetY = (height - cachedBounds.height / cachedScale) / 2;
 
     const flowX = (mmX - offsetX) * cachedScale + cachedBounds.x;
     const flowY = (mmY - offsetY) * cachedScale + cachedBounds.y;
@@ -232,6 +298,15 @@ export function createMiniMap(
   svg.addEventListener('pointermove', onPointerMove);
   svg.addEventListener('pointerup', onPointerUp);
 
+  // The minimap owns a double-click on itself: two clicks in it are two pans, and the canvas's
+  // double-click zoom sits on the container, so without this the second one also toggled the
+  // zoom — a click meant to move the view jumped it to another scale as well.
+  //
+  // Only that one. A drag on the minimap is the minimap's to interpret, and what the container
+  // does with the same press is a separate question from this fix — so the subset is stated
+  // rather than left as an omission from a list copied by hand.
+  const releaseGestures = isolateCanvasGestures(wrapper, ['dblclick']);
+
   // ── Zoom interaction ───────────────────────────────────────────────
   function onWheel(e: WheelEvent): void {
     if (!config.minimapZoomable) {
@@ -256,8 +331,38 @@ export function createMiniMap(
     svg.removeEventListener('pointermove', onPointerMove);
     svg.removeEventListener('pointerup', onPointerUp);
     svg.removeEventListener('wheel', onWheel);
+    releaseGestures();
+    nodeRects.length = 0;
     wrapper.remove();
   }
 
-  return { render, updateViewport, destroy };
+  /**
+   * Another box, without rebuilding anything.
+   *
+   * The size is not only how big the picture is: the scale that fits the graph into it and the
+   * rectangle that marks the viewport are both computed against it, so a minimap that keeps its
+   * shape while the canvas changes shape draws a viewport marker that is not the shape of the
+   * viewport. A consumer watching its container calls this and everything follows.
+   *
+   * Returns whether anything changed: false for a box that is not a box, and false for the box it
+   * already has. Callers use that to avoid announcing a resize that did not happen.
+   */
+  function resize(nextWidth: number, nextHeight: number): boolean {
+    if (! (nextWidth > 0) || ! (nextHeight > 0) || (nextWidth === width && nextHeight === height)) {
+      return false;
+    }
+
+    width = nextWidth;
+    height = nextHeight;
+
+    svg.setAttribute('width', String(width));
+    svg.setAttribute('height', String(height));
+    bg.setAttribute('width', String(width));
+    bg.setAttribute('height', String(height));
+
+    render();
+    return true;
+  }
+
+  return { render, updateViewport, resize, destroy };
 }

@@ -213,5 +213,80 @@ describe('double-click mode wiring', () => {
       expect(changes).toBe(0);
       expect(zoomOf(container).k).toBe(1);
     });
+
+    /**
+     * `dblClickZoomOutLevel` only governs the branch with no remembered viewport —
+     * reached here by starting above the level, which is exactly how a canvas comes
+     * back from a restored or fitted viewport.
+     */
+    describe('zoom-out fallback', () => {
+      it("puts the whole graph back on screen under 'fit'", async () => {
+        const fitViewport = { x: 24, y: -12, zoom: 0.6 };
+        create({
+          onTransformChange: () => {},
+          ...toggleOpts,
+          dblClickZoomOutLevel: 'fit',
+          getFitViewport: () => fitViewport,
+        });
+        stubRect(container);
+
+        // Above the level with nothing remembered: a programmatic setViewport leaves
+        // no memory behind, same as arriving on a restored viewport.
+        instance!.setViewport({ x: 200, y: 100, zoom: 1.8 });
+
+        dblclickAt(container, 100, 50);
+        await settle();
+
+        const settled = zoomOf(container);
+        expect(settled.k).toBeCloseTo(fitViewport.zoom, 5);
+        expect(settled.x).toBeCloseTo(fitViewport.x, 5);
+        expect(settled.y).toBeCloseTo(fitViewport.y, 5);
+      });
+
+      it('does not measure the graph while the gesture is still zooming in', async () => {
+        let measured = 0;
+        create({
+          onTransformChange: () => {},
+          ...toggleOpts,
+          dblClickZoomOutLevel: 'fit',
+          getFitViewport: () => { measured++; return { x: 0, y: 0, zoom: 0.6 }; },
+        });
+        stubRect(container);
+
+        dblclickAt(container, 100, 50); // from identity: zooms in to the level
+        await settle();
+
+        expect(zoomOf(container).k).toBeCloseTo(1.5, 5);
+        expect(measured).toBe(0);
+      });
+
+      it('falls back to d3 when a fixed out-level leaves the toggle no headroom', () => {
+        // Same rule as a level clamped onto minZoom: the second double-click would
+        // stall, so keep the stepped handler that still zooms both ways.
+        create({
+          onTransformChange: () => {},
+          zoomOnDoubleClick: 'toggle',
+          minZoom: 0.5,
+          maxZoom: 2,
+          dblClickZoomLevel: 1.5,
+          dblClickZoomOutLevel: 1.5,
+        });
+
+        expect(hasD3DblClickZoom(container)).toBe(true);
+      });
+
+      it('attaches the toggle when the fixed out-level sits below the level', () => {
+        create({
+          onTransformChange: () => {},
+          zoomOnDoubleClick: 'toggle',
+          minZoom: 0.5,
+          maxZoom: 2,
+          dblClickZoomLevel: 1.5,
+          dblClickZoomOutLevel: 1,
+        });
+
+        expect(hasD3DblClickZoom(container)).toBe(false);
+      });
+    });
   });
 });

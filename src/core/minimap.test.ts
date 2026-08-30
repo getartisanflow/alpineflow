@@ -68,3 +68,269 @@ describe('minimap lean viewport getter', () => {
     expect(stateCalls).toBe(before + 1); // fallback path preserves old behaviour
   });
 });
+
+describe('minimap and the canvas double-click gesture', () => {
+  // Double-click zoom is bound to the container, and the minimap sits inside it. Two clicks on
+  // the minimap are two pans — the canvas jumping to another scale on top of them is the
+  // container answering a gesture that was never aimed at it.
+  const mounted = () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const mm = createMiniMap(container, {
+      getState: () => fullState(),
+      setViewport: () => {},
+      config: { minimapPannable: true },
+    });
+    mm.render();
+
+    return { container, mm };
+  };
+
+  it('does not let a double-click reach the canvas', () => {
+    const { container, mm } = mounted();
+    let reachedCanvas = 0;
+    container.addEventListener('dblclick', () => { reachedCanvas++; });
+
+    container.querySelector('.flow-minimap svg')!
+      .dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+
+    expect(reachedCanvas).toBe(0);
+
+    mm.destroy();
+    container.remove();
+  });
+
+  it('still lets a double-click anywhere else through', () => {
+    const { container, mm } = mounted();
+    const elsewhere = document.createElement('div');
+    container.appendChild(elsewhere);
+    let reachedCanvas = 0;
+    container.addEventListener('dblclick', () => { reachedCanvas++; });
+
+    elsewhere.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+
+    expect(reachedCanvas).toBe(1);
+
+    mm.destroy();
+    container.remove();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The rects survive a render.
+//
+// `render()` used to empty `nodesGroup` and build a new <rect> per node. That is a
+// structural change inside an SVG, and Blink invalidates the layout of the whole
+// SVG root for one — so a drag, which renders once per pointer move, spent ~120ms
+// a frame resolving layout it had just thrown away. These hold the tree stable
+// across renders, which is the property that fixes it.
+// ─────────────────────────────────────────────────────────────────────────────
+function movableState(nodes: FlowNode[]) {
+  return {
+    nodes,
+    viewport: { x: 0, y: 0, zoom: 1 },
+    containerWidth: 800,
+    containerHeight: 600,
+  } as MiniMapState;
+}
+
+function nodeAt(id: string, x: number, y: number, hidden = false): FlowNode {
+  return {
+    id,
+    position: { x, y },
+    dimensions: { width: 100, height: 40 },
+    hidden,
+    data: {},
+  } as unknown as FlowNode;
+}
+
+function rectsIn(container: HTMLElement): SVGRectElement[] {
+  return Array.from(container.querySelectorAll('.flow-minimap-nodes rect'));
+}
+
+describe('minimap keeps its rects', () => {
+  it('draws the same elements again rather than new ones', () => {
+    const container = document.createElement('div');
+    const nodes = [nodeAt('a', 0, 0), nodeAt('b', 300, 200)];
+    const mm = createMiniMap(container, {
+      getState: () => movableState(nodes),
+      setViewport: () => {},
+      config: {},
+    });
+
+    mm.render();
+    const first = rectsIn(container);
+
+    mm.render();
+    mm.render();
+
+    // Identity, element by element. A rebuild passes a length check and it passes a
+    // deep-equality check too — two <rect> built from the same numbers compare equal.
+    // Only `toBe` can tell "the same rect again" from "another rect just like it".
+    const again = rectsIn(container);
+    expect(again).toHaveLength(first.length);
+    first.forEach((rect, i) => expect(again[i]).toBe(rect));
+  });
+
+  it('moves the rect it already drew when a node moves', () => {
+    const container = document.createElement('div');
+    const nodes = [nodeAt('a', 0, 0), nodeAt('b', 300, 200)];
+    const mm = createMiniMap(container, {
+      getState: () => movableState(nodes),
+      setViewport: () => {},
+      config: {},
+    });
+
+    mm.render();
+    const [first] = rectsIn(container);
+    const before = first.getAttribute('x');
+
+    nodes[0] = nodeAt('a', 260, 0);
+    mm.render();
+
+    expect(rectsIn(container)[0]).toBe(first);
+    expect(first.getAttribute('x')).not.toBe(before);
+  });
+
+  it('gives back the rects it stops needing', () => {
+    const container = document.createElement('div');
+    const nodes = [nodeAt('a', 0, 0), nodeAt('b', 300, 200), nodeAt('c', 600, 400)];
+    const mm = createMiniMap(container, {
+      getState: () => movableState(nodes),
+      setViewport: () => {},
+      config: {},
+    });
+
+    mm.render();
+    expect(rectsIn(container)).toHaveLength(3);
+
+    nodes.pop();
+    mm.render();
+    expect(rectsIn(container)).toHaveLength(2);
+
+    nodes[1] = nodeAt('b', 300, 200, true);
+    mm.render();
+    expect(rectsIn(container)).toHaveLength(1);
+  });
+
+  it('does not leave one node wearing the colour of another', () => {
+    // The pool hands a rect that drew node `a` to whatever is at that index next.
+    // An inline fill left behind would be a node painted as its neighbour.
+    const container = document.createElement('div');
+    const nodes = [nodeAt('a', 0, 0), nodeAt('b', 300, 200)];
+    let colour: ((node: FlowNode) => string | undefined) | undefined = (node) =>
+      node.id === 'a' ? 'rebeccapurple' : undefined;
+
+    const mm = createMiniMap(container, {
+      getState: () => movableState(nodes),
+      setViewport: () => {},
+      config: { minimapNodeColor: (node: FlowNode) => colour?.(node) } as never,
+    });
+
+    mm.render();
+    expect(rectsIn(container)[0].style.fill).toBe('rebeccapurple');
+    expect(rectsIn(container)[1].style.fill).toBe('');
+
+    colour = () => undefined;
+    mm.render();
+
+    expect(rectsIn(container)[0].style.fill).toBe('');
+  });
+
+  it('draws again for a consumer that emptied the group behind its back', () => {
+    // Rather than a minimap that has silently stopped moving.
+    const container = document.createElement('div');
+    const nodes = [nodeAt('a', 0, 0), nodeAt('b', 300, 200)];
+    const mm = createMiniMap(container, {
+      getState: () => movableState(nodes),
+      setViewport: () => {},
+      config: {},
+    });
+
+    mm.render();
+    container.querySelector('.flow-minimap-nodes')!.innerHTML = '';
+    expect(rectsIn(container)).toHaveLength(0);
+
+    mm.render();
+    expect(rectsIn(container)).toHaveLength(2);
+  });
+});
+
+// ── The box it is drawn in ──────────────────────────────────────────────────
+
+describe('minimap — the size it is given', () => {
+  function mount(config: Record<string, unknown> = {}) {
+    const container = document.createElement('div');
+    Object.defineProperty(container, 'clientWidth', { value: 800, configurable: true });
+    Object.defineProperty(container, 'clientHeight', { value: 300, configurable: true });
+    document.body.appendChild(container);
+
+    const minimap = createMiniMap(container, {
+      getState: () => ({
+        nodes: [{ id: 'a', position: { x: 0, y: 0 }, data: {}, dimensions: { width: 100, height: 50 } }] as any,
+        viewport: { x: 0, y: 0, zoom: 1 },
+        containerWidth: 800,
+        containerHeight: 300,
+      }),
+      setViewport: () => {},
+      config: config as any,
+    });
+
+    return { container, minimap, svg: container.querySelector('svg')! };
+  }
+
+  it('is two hundred by a hundred and fifty when nobody says otherwise', () => {
+    const { svg } = mount();
+
+    expect(svg.getAttribute('width')).toBe('200');
+    expect(svg.getAttribute('height')).toBe('150');
+  });
+
+  it('takes the box it was configured with', () => {
+    const { svg, container } = mount({ minimapWidth: 160, minimapHeight: 60 });
+
+    expect(svg.getAttribute('width')).toBe('160');
+    expect(svg.getAttribute('height')).toBe('60');
+    expect(container.querySelector('.flow-minimap-bg')!.getAttribute('width')).toBe('160');
+  });
+
+  it('marks the viewport against the box, not against a remembered one', () => {
+    // The reason the size is per instance: the scale that fits the graph in and the rectangle that
+    // marks the viewport are both computed from it. A minimap that keeps its shape while the canvas
+    // changes shape draws a marker that is not the shape of the viewport.
+    const { minimap, container } = mount({ minimapWidth: 200, minimapHeight: 150 });
+    minimap.render();
+
+    const wide = container.querySelector('.flow-minimap-mask')!.getAttribute('d');
+
+    minimap.resize(120, 90);
+
+    const narrow = container.querySelector('.flow-minimap-mask')!.getAttribute('d');
+
+    expect(wide).toContain('H200 V150');
+    expect(narrow).toContain('H120 V90');
+    expect(narrow).not.toBe(wide);
+  });
+
+  it('ignores a box that is not a box', () => {
+    const { minimap, svg } = mount();
+
+    minimap.resize(0, 100);
+    minimap.resize(-5, -5);
+    minimap.resize(NaN, 10);
+
+    expect(svg.getAttribute('width')).toBe('200');
+    expect(svg.getAttribute('height')).toBe('150');
+  });
+
+  it('says whether the box actually changed', () => {
+    // The caller writes the size back into the config and announces it — both of which should
+    // describe what was drawn, not what was asked for.
+    const { minimap } = mount();
+
+    expect(minimap.resize(160, 60)).toBe(true);
+    expect(minimap.resize(160, 60)).toBe(false);  // already that shape
+    expect(minimap.resize(0, 60)).toBe(false);    // not a box
+    expect(minimap.resize(NaN, 60)).toBe(false);
+  });
+});

@@ -46,6 +46,30 @@ import type { ParticleRenderer } from '../../core/types';
 import { Recorder, ReplayHandle, type RecordOptions, type ReplayOptions } from '../../animate/recording';
 import type { Recording } from '../../animate/recording';
 
+// ── Publishing what the animator settled on ─────────────────────────────────
+
+/**
+ * Publish a value the animator has already written to the raw object.
+ *
+ * Per-frame writes deliberately go through `Alpine.raw(node)` — the object the reactive proxy
+ * wraps — because flushing the DOM by hand is what keeps a move smooth. By the time the animation
+ * ends the final value is already sitting in that object, so assigning it back through the proxy
+ * compares equal to what is there: reactivity skips a write that changes nothing, and nobody hears
+ * about the animation at all.
+ *
+ * Clearing the raw slot first makes the assignment a genuine change. The cleared state is never
+ * observable — writes straight to the raw object notify nothing, and nothing reads the property
+ * between the two statements.
+ *
+ * Replacing the object would do for `position`, but does not generalise: `style` may be a string
+ * rather than a record, and `color` and `strokeWidth` are primitives. One mechanism for all four.
+ */
+function publishSettled<T extends object, K extends keyof T>(proxy: T, raw: T, key: K): void {
+  const settled = raw[key];
+  (raw as Record<PropertyKey, unknown>)[key as PropertyKey] = undefined;
+  proxy[key] = settled;
+}
+
 // ── Mixin factory ───────────────────────────────────────────────────────────
 
 export function createAnimationMixin(ctx: CanvasContext) {
@@ -395,10 +419,31 @@ export function createAnimationMixin(ctx: CanvasContext) {
           const isInstant = elemDuration === 0;
 
           // Color (string or gradient object)
-          if (target.color !== undefined) {
+          //
+          // Null is neither, and is turned away at the door rather than guarded against twice:
+          // typeof null is 'object', so it used to take the gradient branch — set the model to
+          // null, pay for a repaint, and paint nothing, because isGradient(null) is false. Letting
+          // it fall through to the string branch instead only moves the same nonsense one line
+          // down: that branch assigns whatever it is given.
+          if (target.color !== undefined && target.color !== null) {
             if (typeof target.color === 'object') {
-              // Gradient: apply directly (CSS handles transitions)
+              // Gradient: applied directly — there is nothing to interpolate between two
+              // gradients, so this is instant whatever the duration says.
               (edge as any).color = target.color;
+              styledEdgeIds.add(edgeId);
+              // A gradient does not live in an inline stroke: its stops are an SVG
+              // <linearGradient> def. Repainting one is enough here — the def's coordinates came
+              // from the endpoints the last time they moved and nothing has moved since.
+              //
+              // Where there is no def yet — an edge given a gradient for the first time — there
+              // are no coordinates to keep, so the endpoints go in and the path refresh works them
+              // out. That is the expensive way round: it re-paths every sibling edge on both
+              // nodes, without obstacle avoidance until the layout settles, for a change that
+              // moved nothing.
+              if (!ctx._restyleEdgeGradient(edgeId, target.color)) {
+                movedNodeIds.add(edge.source);
+                movedNodeIds.add(edge.target);
+              }
             } else if (isInstant) {
               edge.color = target.color;
               styledEdgeIds.add(edgeId);
@@ -447,6 +492,10 @@ export function createAnimationMixin(ctx: CanvasContext) {
           if (target.label !== undefined) edge.label = target.label;
           if (target.animated !== undefined) edge.animated = target.animated;
           if (target.class !== undefined) edge.class = target.class;
+          // The path effect resolves `edge.type ?? defaultEdgeType` on every run, so writing it
+          // through the reactive edge is all a redraw needs. Instant whatever the duration: a
+          // type is a choice of generator, and a curve has no midpoint with a right angle.
+          if (target.type !== undefined) edge.type = target.type;
         }
       }
 
@@ -570,16 +619,22 @@ export function createAnimationMixin(ctx: CanvasContext) {
           options.onProgress?.(progress);
         },
         onComplete() {
-          // Final frame: sync Alpine reactive state from the raw values
-          // that the animator already applied (respects reverse direction).
+          // Final frame: publish the raw values the animator applied to the reactive state, so
+          // anything watching nodes or edges hears about the animation exactly once, at the end.
+          //
+          // Every one of these went through `publishSettled` rather than a plain assignment,
+          // because a plain assignment here writes a value that is already there — see its
+          // comment. Anything drawing from `nodes` alone — the minimap, most obviously — kept
+          // showing the graph as it stood before the animation until something else touched it.
           if (targets.nodes) {
             for (const [nodeId, target] of Object.entries(targets.nodes)) {
               const node = ctx._nodeMap.get(nodeId);
               if (!node) continue;
               const raw = getAlpine().raw(node);
-              if (target.followPath || target.position?.x !== undefined) node.position.x = raw.position.x;
-              if (target.followPath || target.position?.y !== undefined) node.position.y = raw.position.y;
-              if (target.style !== undefined) node.style = raw.style;
+              if (target.followPath || target.position?.x !== undefined || target.position?.y !== undefined) {
+                publishSettled(node, raw, 'position');
+              }
+              if (target.style !== undefined) publishSettled(node, raw, 'style');
             }
           }
           // Final frame: sync Alpine reactive state for edges
@@ -588,8 +643,10 @@ export function createAnimationMixin(ctx: CanvasContext) {
               const edge = ctx._edgeMap.get(edgeId);
               if (!edge) continue;
               const raw = getAlpine().raw(edge);
-              if (target.color !== undefined && typeof target.color === 'string') edge.color = raw.color;
-              if (target.strokeWidth !== undefined) edge.strokeWidth = raw.strokeWidth;
+              if (target.color !== undefined && typeof target.color === 'string') {
+                publishSettled(edge, raw, 'color');
+              }
+              if (target.strokeWidth !== undefined) publishSettled(edge, raw, 'strokeWidth');
             }
           }
           // Flush any moved/styled IDs left over from entry.apply() writes that
@@ -609,6 +666,14 @@ export function createAnimationMixin(ctx: CanvasContext) {
           if (styledEdgeIds.size > 0) {
             ctx._flushEdgeStyles(styledEdgeIds);
             styledEdgeIds.clear();
+          }
+          // Final frame: hand the viewport back to the pan/zoom controller, which keeps a
+          // transform of its own and was never told about any of this. Without it the next pan or
+          // zoom resumes from wherever the canvas stood BEFORE the animation, and the whole graph
+          // jumps — the instant path has always called setViewport, and only the animated one
+          // went round it.
+          if (targets.viewport) {
+            ctx._panZoom?.setViewport({ ...ctx.viewport });
           }
           options.onComplete?.();
         },

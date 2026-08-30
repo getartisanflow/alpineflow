@@ -119,6 +119,15 @@ export function createLayoutMixin(ctx: CanvasContext) {
         handleDirection?: string;
         fitView?: boolean;
         duration?: number;
+        /**
+         * Called once the positions are ON the model, which is a different moment in each
+         * branch: after the animation in the animated one, straight after the write in the
+         * instant one. The point of it is that a caller does not have to know which branch it
+         * took — "the nodes are where the layout put them" means the same thing either way.
+         *
+         * Not called when the animation never completes: an interrupted layout did not settle.
+         */
+        onApplied?: () => void;
       },
     ): void {
       const duration = options?.duration ?? 300;
@@ -147,6 +156,11 @@ export function createLayoutMixin(ctx: CanvasContext) {
             if (options?.fitView !== false) {
               ctx.fitView?.({ padding: 0.2, duration });
             }
+
+            // After fitView is under way, not before it: the view animation is the library's
+            // own work, and starting it should not wait behind whatever a consumer does with
+            // the news. The nodes are settled either way — fitView moves the viewport, not them.
+            options?.onApplied?.();
           },
         });
       } else {
@@ -162,6 +176,16 @@ export function createLayoutMixin(ctx: CanvasContext) {
 
         if (options?.fitView !== false) {
           ctx.fitView?.({ padding: 0.2, duration: 0 });
+        }
+
+        // A microtask, not a plain call, and this is the one thing about `onApplied` that is not
+        // obvious. The caller emits its own "layout computed" event AFTER `_applyLayout` returns,
+        // so calling back synchronously here would announce the end of a layout before its
+        // beginning — for `duration: 0` only, which is the worst kind of inconsistency to leave
+        // in an event pair. Deferring by one microtask puts the two in the same order whichever
+        // branch ran, and costs nothing else: the positions are already on the model.
+        if (options?.onApplied) {
+          queueMicrotask(options.onApplied);
         }
       }
     },
@@ -505,15 +529,26 @@ export function createLayoutMixin(ctx: CanvasContext) {
         ranksep: options?.ranksep,
       });
 
+      // What the layout decided, as a plain object: this travels in a DOM event, and a `Map`
+      // survives neither JSON.stringify nor structured clone — which is the road it exists for,
+      // since persisting a layout means sending it somewhere.
+      const decided = Object.fromEntries(positions);
+
       this._applyLayout(positions, {
         adjustHandles: options?.adjustHandles,
         handleDirection: direction,
         fitView: options?.fitView,
         duration: options?.duration,
+        onApplied: () => ctx._emit('layout-end', { type: 'dagre', direction, positions: decided }),
       });
 
       debug('layout', 'Applied dagre layout', { direction });
-      ctx._emit('layout', { type: 'dagre', direction });
+      // The positions travel with it. This fires when the layout has been COMPUTED, not when it
+      // has been applied: `_applyLayout` hands them to `animate()` and returns, so a listener
+      // reading the model reads the coordinates that were there before the call — and a consumer
+      // persisting a tidy-up saved the old layout back. A plain object, not the `Map`, because
+      // persisting means JSON.
+      ctx._emit('layout', { type: 'dagre', direction, positions: Object.fromEntries(positions) });
     },
 
     /**
@@ -550,13 +585,26 @@ export function createLayoutMixin(ctx: CanvasContext) {
         center: options?.center,
       });
 
+      const decided = Object.fromEntries(positions);
+
       this._applyLayout(positions, {
         fitView: options?.fitView,
         duration: options?.duration,
+        onApplied: () => ctx._emit('layout-end', {
+          type: 'force',
+          charge: options?.charge ?? -300,
+          distance: options?.distance ?? 150,
+          positions: decided,
+        }),
       });
 
       debug('layout', 'Applied force layout', { charge: options?.charge ?? -300, distance: options?.distance ?? 150 });
-      ctx._emit('layout', { type: 'force', charge: options?.charge ?? -300, distance: options?.distance ?? 150 });
+      ctx._emit('layout', {
+        type: 'force',
+        charge: options?.charge ?? -300,
+        distance: options?.distance ?? 150,
+        positions: Object.fromEntries(positions),
+      });
     },
 
     /**
@@ -593,15 +641,28 @@ export function createLayoutMixin(ctx: CanvasContext) {
         nodeHeight: options?.nodeHeight,
       });
 
+      const decided = Object.fromEntries(positions);
+
       this._applyLayout(positions, {
         adjustHandles: options?.adjustHandles,
         handleDirection: direction,
         fitView: options?.fitView,
         duration: options?.duration,
+        onApplied: () => ctx._emit('layout-end', {
+          type: 'tree',
+          layoutType: options?.layoutType ?? 'tree',
+          direction,
+          positions: decided,
+        }),
       });
 
       debug('layout', 'Applied tree layout', { layoutType: options?.layoutType ?? 'tree', direction });
-      ctx._emit('layout', { type: 'tree', layoutType: options?.layoutType ?? 'tree', direction });
+      ctx._emit('layout', {
+        type: 'tree',
+        layoutType: options?.layoutType ?? 'tree',
+        direction,
+        positions: Object.fromEntries(positions),
+      });
     },
 
     /**
@@ -648,15 +709,28 @@ export function createLayoutMixin(ctx: CanvasContext) {
         return;
       }
 
+      const decided = Object.fromEntries(positions);
+
       this._applyLayout(positions, {
         adjustHandles: options?.adjustHandles,
         handleDirection: direction,
         fitView: options?.fitView,
         duration: options?.duration,
+        onApplied: () => ctx._emit('layout-end', {
+          type: 'elk',
+          algorithm: options?.algorithm ?? 'layered',
+          direction,
+          positions: decided,
+        }),
       });
 
       debug('layout', 'Applied ELK layout', { algorithm: options?.algorithm ?? 'layered', direction });
-      ctx._emit('layout', { type: 'elk', algorithm: options?.algorithm ?? 'layered', direction });
+      ctx._emit('layout', {
+        type: 'elk',
+        algorithm: options?.algorithm ?? 'layered',
+        direction,
+        positions: Object.fromEntries(positions),
+      });
     },
   };
 }

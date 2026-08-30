@@ -100,6 +100,16 @@ Controls stack vertically by default. Switch to horizontal layout:
 ```
 ::enddemo
 
+### Animation
+
+By default the zoom-in, zoom-out, and fit-view buttons snap the viewport instantly. Set `controlsDuration` (in milliseconds) to animate the move instead, so the buttons glide the same way a double-click zoom or a layout does:
+
+```html
+<div x-data="flowCanvas({ controls: true, controlsDuration: 300 })">
+```
+
+The default of `0` keeps the instant behaviour.
+
 ## Buttons
 
 Toggle individual buttons with these config options:
@@ -191,3 +201,7 @@ Customize button appearance with CSS variables:
 | `--flow-controls-btn-width` | Button width |
 | `--flow-controls-btn-height` | Button height |
 | `--flow-controls-btn-border-radius` | Button corner rounding |
+
+The rounding is applied to the strip's own ends — the first and last **direct** children of
+`.flow-controls`. A control you add yourself inside a wrapper (a trigger with a fly-out to anchor,
+say) is left square, and rounding it belongs to whoever put it there.

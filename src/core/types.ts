@@ -341,6 +341,9 @@ export interface FlowEdge<T = Record<string, any>> {
   /** Can this edge receive keyboard focus? Default: follows `edgesFocusable` config (true). */
   focusable?: boolean;
 
+  /** Can this edge be selected? Default: follows `edgesSelectable` config (true). */
+  selectable?: boolean;
+
   /** Override the ARIA role for this edge. Default: 'group' */
   ariaRole?: string;
 
@@ -359,6 +362,18 @@ export interface FlowEdge<T = Record<string, any>> {
 
   /** Optional label displayed on the edge */
   label?: string;
+
+  /**
+   * Render the labels as HTML instead of text.
+   *
+   * Labels are written with `textContent` by default, so markup in them shows as the tags
+   * themselves. Set this to render `label`, `labelStart` and `labelEnd` as HTML — for a label that
+   * needs a line break, an icon or a piece of emphasis.
+   *
+   * The value goes to `innerHTML` unchanged. Like any HTML you hand a framework, it is trusted:
+   * pass user input through your own escaping or sanitiser first.
+   */
+  labelHtml?: boolean;
 
   /** Position of the center label along the path (0 = source, 1 = target). Default: 0.5 */
   labelPosition?: number;
@@ -570,7 +585,7 @@ export interface FlowEvents {
   'node-context-menu': { node: FlowNode; event: MouseEvent };
   'edge-context-menu': { edge: FlowEdge; event: MouseEvent };
   'pane-context-menu': { event: MouseEvent; position: XYPosition };
-  'selection-context-menu': { nodes: FlowNode[]; event: MouseEvent };
+  'selection-context-menu': { nodes: FlowNode[]; edges: FlowEdge[]; event: MouseEvent };
   'selection-change': { nodes: string[]; edges: string[]; rows: string[] };
   'nodes-change': { type: 'add' | 'remove'; nodes: FlowNode[]; origin: 'drop' | 'paste' | 'api' | 'load' };
   'edges-change': { type: 'add' | 'remove'; edges: FlowEdge[]; origin: 'drop' | 'paste' | 'api' | 'load' };
@@ -583,12 +598,35 @@ export interface FlowEvents {
   'row-selection-change': { selectedRows: string[] };
   'node-filter-change': { filtered: FlowNode[]; visible: FlowNode[] };
   'helper-lines-change': { horizontal: number[]; vertical: number[] };
+  'minimap-resize': { width: number; height: number };
   'nodes-patch': { patches: Record<string, DeepPartial<FlowNode>> };
   'edges-patch': { patches: Record<string, DeepPartial<FlowEdge>> };
   'restore': { nodes?: FlowNode[]; edges?: FlowEdge[]; viewport?: Partial<Viewport>; origin: 'undo' | 'redo' | 'load' };
+  'layout': LayoutEventPayload;
+  'layout-end': LayoutEventPayload;
   'init': undefined;
   'destroy': undefined;
 }
+
+/**
+ * Where a layout decided each node goes, keyed by node id.
+ *
+ * A plain object rather than the `Map` the layout functions return: this travels in a DOM event,
+ * and a `Map` survives neither `JSON.stringify` nor structured clone — which is exactly the road
+ * this payload exists for, since persisting a layout means sending it somewhere.
+ */
+export type LayoutPositions = Record<string, XYPosition>;
+
+/**
+ * What a layout announces — carried by both `layout` (when the positions are computed) and
+ * `layout-end` (when the nodes have settled there). Discriminated on `type`, so the settings each
+ * engine reports are the ones it actually has.
+ */
+export type LayoutEventPayload =
+  | { type: 'dagre'; direction: string; positions: LayoutPositions }
+  | { type: 'force'; charge: number; distance: number; positions: LayoutPositions }
+  | { type: 'tree'; layoutType: string; direction: string; positions: LayoutPositions }
+  | { type: 'elk'; algorithm: string; direction: string; positions: LayoutPositions };
 
 // ─── Export ──────────────────────────────────────────────────────────────────
 
@@ -721,6 +759,8 @@ export interface PatchableConfig {
   minimapMaskColor?: string;
   minimapPannable?: boolean;
   minimapZoomable?: boolean;
+  minimapWidth?: number;
+  minimapHeight?: number;
   defaultInteractionWidth?: number;
   preventOverlap?: boolean | number;
   reconnectOnDelete?: boolean;
@@ -1349,6 +1389,27 @@ export interface FlowCanvasConfig {
   controlsContainer?: string;
 
   /**
+   * How long the viewport takes to answer a control, in ms. Default: 0 (instant).
+   *
+   * Zoom in, zoom out and fit view all take a `duration` and animate when given one — the panel
+   * simply never passed one, so its buttons jumped while a double-click zoom (300ms) and a layout
+   * glided. Set this and the three buttons move the same way everything else on the canvas does.
+   */
+  controlsDuration?: number;
+
+  /**
+   * How big the minimap is drawn, in pixels. Defaults: 200 by 150.
+   *
+   * Not only how big the picture is — the scale that fits the graph into it and the rectangle that
+   * marks the viewport are both computed against these, so a minimap whose ratio does not match the
+   * canvas draws a viewport marker that is not the shape of the viewport. A consumer that wants it
+   * to follow the container watches for a resize and calls `resize()` on the instance.
+   */
+  minimapWidth?: number;
+
+  minimapHeight?: number;
+
+  /**
    * Element to enter fullscreen mode, instead of the canvas container.
    * Useful when the page wraps the canvas + ancillary UI (inspectors,
    * toolbars) that should stay visible in fullscreen. Accepts a CSS
@@ -1373,6 +1434,15 @@ export interface FlowCanvasConfig {
 
   /** Allow edges to receive keyboard focus via Tab. Default: true */
   edgesFocusable?: boolean;
+
+  /** Allow nodes to be selected by clicking, dragging or a selection box. Default: true.
+   *  A node's own `selectable` overrides this. Programmatic selection is unaffected —
+   *  this governs what a POINTER may do, not what the host may ask for. */
+  nodesSelectable?: boolean;
+
+  /** Allow edges to be selected by clicking or a selection box. Default: true.
+   *  An edge's own `selectable` overrides this. Programmatic selection is unaffected. */
+  edgesSelectable?: boolean;
 
   /** Disable arrow-key movement for selected nodes (Tab/Enter still work). Default: false */
   disableKeyboardA11y?: boolean;
@@ -1692,6 +1762,9 @@ export interface FlowCanvasConfig {
   /** Called when a user gesture (pan/zoom) ends */
   onViewportMoveEnd?: (detail: FlowEvents['viewport-move-end'], ctx?: CanvasContext) => void;
 
+  /** Called when the minimap is drawn at a new size — a host that persists the size listens here */
+  onMinimapResize?: (detail: FlowEvents['minimap-resize'], ctx?: CanvasContext) => void;
+
   /** Called when the canvas background is clicked */
   onPaneClick?: (detail: FlowEvents['pane-click'], ctx?: CanvasContext) => void;
 
@@ -1828,6 +1901,17 @@ export interface FlowCanvasConfig {
    *  have room to return to. Only consulted when `zoomOnDoubleClick: 'toggle'`.
    *  Default: 1.5 */
   dblClickZoomLevel?: number;
+  /** Where a toggle double-click zooms out to when it has no remembered viewport to
+   *  restore — the user reached this zoom by wheel or `setViewport`, or panned after
+   *  zooming in, which drops the memory.
+   *
+   *  - `'min'` (default) — `minZoom`, about the cursor.
+   *  - `'fit'` — the whole graph back on screen, the viewport `fitView()` computes.
+   *  - `number` — a fixed level, about the cursor. Clamped to [minZoom, maxZoom].
+   *
+   *  A remembered viewport always wins over this. Only consulted when
+   *  `zoomOnDoubleClick: 'toggle'`. Default: `'min'` */
+  dblClickZoomOutLevel?: number | 'fit' | 'min';
 
   // ── Select on Drag ────────────────────────────────────────────────
   /** Automatically select nodes when they start being dragged. Default: true */
@@ -1865,6 +1949,16 @@ export type AnimateEdgeTarget = {
   strokeWidth?: number;
   animated?: boolean;
   class?: string;
+  /**
+   * Which path generator draws this edge — the same set `FlowEdge.type` accepts:
+   * `'bezier'`, `'smoothstep'`, `'straight'`, `'floating'`, `'orthogonal'`,
+   * `'avoidant'`, `'editable'`, or a type registered in `edgeTypes`.
+   *
+   * Applied instantly whatever the duration: a path type is a choice of generator,
+   * not a value with a midpoint, so there is nothing to interpolate between a curve
+   * and a set of right angles.
+   */
+  type?: EdgeType | (string & {});
 } & ElementTimingOverrides;
 
 /** Viewport animation target. */
@@ -2024,6 +2118,9 @@ export interface FlowInstance {
 
   /** Toggle interactivity (pannable + zoomable + node dragging) */
   toggleInteractive(): void;
+
+  /** Draw the minimap at another size. Ignores a width or height that is not positive. */
+  resizeMinimap(width: number, height: number): void;
 
   /** Whether interactivity is currently enabled */
   isInteractive: boolean;

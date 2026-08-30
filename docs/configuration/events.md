@@ -33,6 +33,7 @@ All event callbacks follow the `on{EventName}` pattern. See [Events](../api/even
 | `onViewportMoveStart` | `viewport-move-start` | User gesture started. |
 | `onViewportMove` | `viewport-move` | User gesture in progress. |
 | `onViewportMoveEnd` | `viewport-move-end` | User gesture ended. |
+| `onMinimapResize` | `minimap-resize` | Minimap drawn at a new size. Fires only when the box actually changed. |
 | `onPaneClick` | `pane-click` | Canvas background clicked. |
 | `onNodeContextMenu` | `node-context-menu` | Node right-clicked. |
 | `onEdgeContextMenu` | `edge-context-menu` | Edge right-clicked. |

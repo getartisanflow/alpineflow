@@ -605,7 +605,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
             const n = canvas.getNode(nodeId);
             if (n) {
               // Auto-select dragged node if selectNodesOnDrag is enabled (default: true)
-              if (canvas._config?.selectNodesOnDrag !== false && n.selectable !== false && !canvas.selectedNodes.has(nodeId)) {
+              if (canvas._config?.selectNodesOnDrag !== false && isSelectable(n, canvas._config?.nodesSelectable !== false) && !canvas.selectedNodes.has(nodeId)) {
                 if (!matchesModifier(sourceEvent, canvas._shortcuts?.multiSelect)) {
                   canvas.deselectAll();
                 }
@@ -1745,9 +1745,14 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
         const canvas = Alpine.$data(el.closest('[x-data]') as HTMLElement);
         if (!canvas) return;
         if (canvas._animationLocked) return;
-        if (!isSelectable(node)) return;
 
+        // Announced, then gated — the same order as the mouse path below, so a
+        // node that cannot be selected still reports the click on either input.
         canvas._emit('node-click', { node, event: e });
+
+        // ── Selectable flag ────────────────────────────────────────
+        if (!isSelectable(node, canvas._config?.nodesSelectable !== false)) return;
+
         e.stopPropagation();
 
         if (matchesModifier(e, canvas._shortcuts?.multiSelect)) {
@@ -1799,7 +1804,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
         canvas._emit('node-click', { node, event: e });
 
         // ── Selectable flag ────────────────────────────────────────
-        if (!isSelectable(node)) return;
+        if (!isSelectable(node, canvas._config?.nodesSelectable !== false)) return;
 
         // Stop the click from reaching the canvas background deselect handler
         e.stopPropagation();
@@ -1850,8 +1855,11 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
 
         // When the node is part of a multi-selection, show selection menu instead
         if (canvas.selectedNodes.size > 1 && canvas.selectedNodes.has(node.id)) {
-          const nodes = canvas.nodes.filter((n: FlowNode) => canvas.selectedNodes.has(n.id));
-          canvas._emit('selection-context-menu', { nodes, event: e });
+          // Selected edges travel with the nodes: a selection is what the author gathered, and a
+          // menu acting on it cannot act on the half it was never told about. Gathered by the
+          // canvas rather than here, so the three ways of opening this menu cannot disagree.
+          const { nodes, edges } = canvas.getSelectedNodesAndEdges();
+          canvas._emit('selection-context-menu', { nodes, edges, event: e });
         } else {
           canvas._emit('node-context-menu', { node, event: e });
         }
