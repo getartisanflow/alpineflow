@@ -12,10 +12,20 @@
 // menu state they fill, which dropped the edges again on its way in.
 // ============================================================================
 
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll, beforeEach, vi } from 'vitest';
 import Alpine from 'alpinejs';
 import AlpineFlow from '../../index';
 import type { FlowCanvasConfig } from '../../core/types';
+
+// jsdom doesn't implement CSS.escape, which the edge directive calls once real nodes/edges render.
+beforeAll(() => {
+  if (typeof globalThis.CSS === 'undefined') {
+    (globalThis as any).CSS = {};
+  }
+  if (typeof CSS.escape !== 'function') {
+    CSS.escape = (value: string): string => String(value);
+  }
+});
 
 let pluginRegistered = false;
 const mounted: HTMLElement[] = [];
@@ -38,6 +48,35 @@ function mountCanvas(config: FlowCanvasConfig = {}): { el: HTMLElement; canvas: 
   const el = document.createElement('div');
   el.setAttribute('x-data', 'flowCanvas($root.parentElement.__config)');
   el.className = 'flow-container';
+  wrapper.appendChild(el);
+
+  document.body.appendChild(wrapper);
+  mounted.push(wrapper);
+
+  Alpine.initTree(wrapper);
+
+  return { el, canvas: Alpine.$data(el) };
+}
+
+/**
+ * Like `mountCanvas`, but also renders the nodes as real `x-flow-node` elements so the node
+ * directive's own contextmenu handler is wired — the right-click-on-a-selected-node path.
+ */
+function mountCanvasWithNodeEls(config: FlowCanvasConfig = {}): { el: HTMLElement; canvas: any } {
+  ensurePluginRegistered();
+
+  const wrapper = document.createElement('div');
+  (wrapper as any).__config = config;
+
+  const el = document.createElement('div');
+  el.setAttribute('x-data', 'flowCanvas($root.parentElement.__config)');
+  el.className = 'flow-container';
+  el.innerHTML = `
+    <div x-flow-viewport>
+      <template x-for="node in nodes" :key="node.id">
+        <div x-flow-node="node" :data-node-id="node.id"></div>
+      </template>
+    </div>`;
   wrapper.appendChild(el);
 
   document.body.appendChild(wrapper);
@@ -142,6 +181,29 @@ describe('selection-context-menu', () => {
     vi.advanceTimersByTime(1000);
 
     expect(detail, 'no menu opened — the long press never fired').not.toBeNull();
+    expect(detail.edges.map((edge: any) => edge.id)).toEqual(['e1']);
+  });
+
+  it('carries the edges when a selected node itself is right-clicked', () => {
+    // The third way the menu opens: a right-click on one of the selected nodes runs the node
+    // directive's own handler (flow-node.ts), which — for a multi-selection — must open the
+    // selection menu with the same nodes AND edges as the pane path, via the shared gather helper.
+    vi.useRealTimers(); // rendering the x-flow-node elements runs on real microtasks
+    const { el, canvas } = mountCanvasWithNodeEls(graph);
+
+    canvas.selectedNodes.add('n1');
+    canvas.selectedNodes.add('n2');
+    canvas.selectedEdges.add('e1');
+
+    let detail: any = null;
+    el.addEventListener('flow-selection-context-menu', (e: any) => { detail = e.detail; });
+
+    const nodeEl = el.querySelector('[data-node-id="n1"]') as HTMLElement | null;
+    expect(nodeEl, 'the node element did not render').not.toBeNull();
+    nodeEl!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+
+    expect(detail, 'right-clicking the selected node did not open the selection menu').not.toBeNull();
+    expect(detail.nodes.map((n: any) => n.id)).toEqual(['n1', 'n2']);
     expect(detail.edges.map((edge: any) => edge.id)).toEqual(['e1']);
   });
 
