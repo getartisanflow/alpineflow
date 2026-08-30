@@ -626,6 +626,38 @@ describe('createAnimationMixin — animate (animated)', () => {
     ]);
   });
 
+  it('re-syncs the pan/zoom controller to the live viewport when an animated transition is interrupted', () => {
+    // #90: the animated viewport path bypasses the controller each frame, so it re-syncs on the
+    // final frame — reading the LIVE ctx.viewport, not the target — so an interrupted animation
+    // leaves the controller where the motion actually stopped and the next gesture doesn't jump.
+    const ctx = mockCtx();
+    ctx.viewport = { x: 0, y: 0, zoom: 1 };
+    const setViewport = vi.fn();
+    ctx._panZoom = { setViewport } as any;
+    ctx._animator = {
+      animate: vi.fn(() => ({
+        pause: vi.fn(), resume: vi.fn(), stop: vi.fn(), reverse: vi.fn(),
+        finished: Promise.resolve(),
+      })),
+    } as any;
+    const mixin = createAnimationMixin(ctx);
+
+    mixin.animate(
+      { viewport: { pan: { x: 100, y: 200 }, zoom: 2 } },
+      { duration: 300 },
+    );
+
+    // The completion callback the mixin handed the animator — invoked on a natural end AND on an
+    // interrupting stop().
+    const onComplete = (ctx._animator!.animate as any).mock.calls[0][1].onComplete;
+
+    // Interrupt partway: the animator left the viewport short of the target, then stopped.
+    ctx.viewport = { x: 40, y: 80, zoom: 1.4 };
+    onComplete();
+
+    expect(setViewport).toHaveBeenCalledWith({ x: 40, y: 80, zoom: 1.4 });
+  });
+
   it('handles gradient edge color as instant (object type)', () => {
     const e1 = makeEdge('e1', { color: '#000' });
     const ctx = mockCtx();
