@@ -41,6 +41,7 @@ vi.mock('../../core/gradients', () => ({
   isGradient: vi.fn((c: any) => typeof c === 'object' && c !== null && 'from' in c && 'to' in c),
   getGradientId: vi.fn((flowId: string, edgeId: string) => `${flowId}__grad__${edgeId}`),
   upsertGradientDef: vi.fn(),
+  restyleGradientDef: vi.fn(() => true),
 }));
 
 // ── Mock interpolators ───────────────────────────────────────────────────────
@@ -58,7 +59,7 @@ vi.mock('../../animate/interpolators', () => ({
 
 import { getEdgePath } from '../../core/edge-utils';
 import { getFloatingEdgeParams } from '../../core/floating-edge';
-import { upsertGradientDef } from '../../core/gradients';
+import { upsertGradientDef, restyleGradientDef } from '../../core/gradients';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -609,5 +610,59 @@ describe('createDomMixin', () => {
       const mixin = createDomMixin(ctx, Alpine);
       expect(mixin.getNodeIdFromElement(isolated)).toBeNull();
     });
+  });
+});
+
+describe('_restyleEdgeGradient — colour repaint honours the edge direction', () => {
+  const withDefs = (ctx: any) => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.appendChild(document.createElementNS('http://www.w3.org/2000/svg', 'defs'));
+    ctx._markerDefsEl = svg;
+  };
+
+  beforeEach(() => {
+    vi.mocked(restyleGradientDef).mockReset();
+    vi.mocked(restyleGradientDef).mockReturnValue(true);
+  });
+
+  it('passes the colours straight through for the default direction', () => {
+    const ctx = mockCtx();
+    withDefs(ctx);
+    ctx._edgeMap.set('e1', makeEdge('e1', 'n1', 'n2'));
+    const mixin = createDomMixin(ctx, Alpine);
+
+    const result = mixin._restyleEdgeGradient('e1', { from: '#aaaaaa', to: '#bbbbbb' });
+
+    expect(result).toBe(true);
+    expect(restyleGradientDef).toHaveBeenCalledWith(
+      expect.anything(),
+      'flow-test__grad__e1',
+      { from: '#aaaaaa', to: '#bbbbbb' },
+    );
+  });
+
+  it('swaps from/to when the edge is drawn target-source', () => {
+    const ctx = mockCtx();
+    withDefs(ctx);
+    ctx._edgeMap.set('e1', makeEdge('e1', 'n1', 'n2', { gradientDirection: 'target-source' }));
+    const mixin = createDomMixin(ctx, Alpine);
+
+    mixin._restyleEdgeGradient('e1', { from: '#aaaaaa', to: '#bbbbbb' });
+
+    expect(restyleGradientDef).toHaveBeenCalledWith(
+      expect.anything(),
+      'flow-test__grad__e1',
+      { from: '#bbbbbb', to: '#aaaaaa' },
+    );
+  });
+
+  it('returns false when there is no marker <defs> to paint into', () => {
+    const ctx = mockCtx();
+    ctx._markerDefsEl = null;
+    ctx._edgeMap.set('e1', makeEdge('e1', 'n1', 'n2'));
+    const mixin = createDomMixin(ctx, Alpine);
+
+    expect(mixin._restyleEdgeGradient('e1', { from: '#aaa', to: '#bbb' })).toBe(false);
+    expect(restyleGradientDef).not.toHaveBeenCalled();
   });
 });
