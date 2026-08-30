@@ -532,13 +532,13 @@ export interface CanvasContext {
   /** Push current viewport state to the DOM (transform, background, culling) */
   _flushViewport(): void;
 
-  /** Recompute SVG paths, label positions, and gradients for affected edges */
   /**
    * Repaint one edge's gradient where nothing moved. False where it has no def yet, and the caller
    * falls back to the path refresh — see the implementation for why that is worth avoiding.
    */
   _restyleEdgeGradient(edgeId: string, gradient: EdgeGradient): boolean;
 
+  /** Recompute SVG paths, label positions, and gradients for affected edges */
   _refreshEdgePaths(movedNodeIds: Set<string>): void;
 
   /** Hydrate from a pre-rendered static diagram */

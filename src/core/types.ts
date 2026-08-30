@@ -1407,6 +1407,10 @@ export interface FlowCanvasConfig {
    */
   minimapWidth?: number;
 
+  /**
+   * The minimap's height in pixels (default 150). Pairs with `minimapWidth` — see there for how the
+   * two together drive the fit scale and the shape of the viewport marker.
+   */
   minimapHeight?: number;
 
   /**

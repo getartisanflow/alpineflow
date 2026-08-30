@@ -670,8 +670,8 @@ export function createAnimationMixin(ctx: CanvasContext) {
           // Final frame: hand the viewport back to the pan/zoom controller, which keeps a
           // transform of its own and was never told about any of this. Without it the next pan or
           // zoom resumes from wherever the canvas stood BEFORE the animation, and the whole graph
-          // jumps — the instant path has always called setViewport, and only the animated one
-          // went round it.
+          // jumps. A plain setViewport() call already routes through the controller; this animated
+          // path is the one that bypasses it, so it re-syncs here on the final frame.
           if (targets.viewport) {
             ctx._panZoom?.setViewport({ ...ctx.viewport });
           }
