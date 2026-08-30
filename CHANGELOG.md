@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.2.4-alpha — unreleased
+
+A polish release: documentation clarifications and expanded test coverage. **No runtime behaviour changes** — every entry below is docs, comments, or tests. The one behaviour-affecting follow-up considered for this batch — unifying the empty-graph `layout` event across the layout engines (#322) — was deliberately deferred.
+
+### Docs
+
+- Clarified that `layout` and `layout-end` fire one microtask apart (not literally "together") for `duration: 0`, and reworded an overstated code comment about the instant viewport path. (#324, #321)
+- Moved a mislaid doc-comment back onto `_refreshEdgePaths`, and gave `minimapHeight` its own JSDoc to match `minimapWidth`. (#319, #325)
+
+### Internal — test coverage
+
+- Gradient repaint: `<stop>` colours are restyled in place, including the `target-source` reversal. (#329)
+- The selection context menu opened by right-clicking a selected node carries its edges. (#330)
+- An interrupted viewport animation re-syncs the pan/zoom controller to the live viewport. (#331)
+- `update()` switching an edge's type redraws its rendered path. (#328)
+- Escape cancels an in-progress connection and clears `.flow-connecting`. (#326)
+- Strengthened the fit-viewport framing assertion, and tidied a stray gesture test into its describe block. (#323, #320)
+
 ## v0.2.3-alpha — 2026-08-29
 
 > Most of this release is contributed by [@webard](https://github.com/webard).
