@@ -16,6 +16,7 @@
 
 - [ ] Targets `dev`
 - [ ] New behavior has a test
-- [ ] If source changed: `npm run build` run and `dist/` committed
+- [ ] `npm run build` succeeds — but no `dist/` changes committed (see CONTRIBUTING)
 - [ ] No new dependencies (or discussed first)
+- [ ] No `CHANGELOG.md` entries — the maintainer adds them
 - [ ] No version bump / tag
