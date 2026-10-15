@@ -184,6 +184,8 @@ export {
 export type { PathFunction, OrbitConfig, WaveConfig, AlongConfig, PendulumConfig, DriftConfig } from './animate/paths';
 export { orbit, wave, along, pendulum, drift, stagger } from './animate/paths';
 
+export type { FlowTranslations, TranslationKey, Translator } from './core/translations';
+
 export { FlowHistory, type HistorySnapshot } from './core/history';
 export type { ResizeDirection, ResizeConstraints } from './core/resize';
 export type { ControlsPanelInstance } from './core/controls-panel';

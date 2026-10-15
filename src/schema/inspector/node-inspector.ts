@@ -32,6 +32,7 @@
 // Consumer themes style via CSS. This directive writes no styles of its own.
 // ============================================================================
 
+import { canvasTranslator } from '../../core/translations';
 import type { Alpine } from 'alpinejs';
 import {
     lastInSet,
@@ -137,6 +138,7 @@ export function registerNodeInspectorDirective(Alpine: Alpine): void {
 }
 
 function stampNodeDefaultUi(host: HTMLElement, canvas: any): void {
+    const t = canvasTranslator(canvas);
     // Capture focus on the previous managed root BEFORE tearing it down, so a
     // reactive re-stamp triggered while the user is typing doesn't blur the
     // focused input.
@@ -154,7 +156,7 @@ function stampNodeDefaultUi(host: HTMLElement, canvas: any): void {
     if (!node) {
         const empty = document.createElement('div');
         empty.setAttribute('data-schema-inspector-empty', '');
-        empty.textContent = 'No node selected.';
+        empty.textContent = t('schema.inspector.noNode');
         root.appendChild(empty);
         restoreStampFocus(root, captured);
         return;
@@ -187,7 +189,7 @@ function stampNodeDefaultUi(host: HTMLElement, canvas: any): void {
         const removeBtn = document.createElement('button');
         removeBtn.type = 'button';
         removeBtn.setAttribute('data-action', 'remove');
-        removeBtn.textContent = 'remove';
+        removeBtn.textContent = t('schema.inspector.remove');
         removeBtn.addEventListener('click', () => {
             canvas.removeField?.(node.id, f.name);
         });
@@ -202,7 +204,7 @@ function stampNodeDefaultUi(host: HTMLElement, canvas: any): void {
 
     const nameInput = document.createElement('input');
     nameInput.setAttribute('data-field', 'name');
-    nameInput.placeholder = 'field name';
+    nameInput.placeholder = t('schema.inspector.fieldName');
     form.appendChild(nameInput);
 
     const registry = Array.isArray(canvas._config?.fieldTypeRegistry)
@@ -224,7 +226,7 @@ function stampNodeDefaultUi(host: HTMLElement, canvas: any): void {
     } else {
         const input = document.createElement('input');
         input.setAttribute('data-field', 'type');
-        input.placeholder = 'type';
+        input.placeholder = t('schema.inspector.type');
         input.value = 'text';
         typeInput = input;
     }
@@ -232,7 +234,7 @@ function stampNodeDefaultUi(host: HTMLElement, canvas: any): void {
 
     const addBtn = document.createElement('button');
     addBtn.type = 'submit';
-    addBtn.textContent = 'add';
+    addBtn.textContent = t('schema.inspector.add');
     form.appendChild(addBtn);
 
     form.addEventListener('submit', (e) => {

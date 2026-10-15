@@ -136,4 +136,21 @@ describe('x-flow-condition directive', () => {
         const el = mount({ condition: { field: 'x', op: 'equals', value: 1 } }, "'sideways'");
         expect(el.getAttribute('data-flow-condition-direction')).toBe('horizontal');
     });
+    it('uses the surrounding canvas t() for the default label', () => {
+        clearChildren(document.body);
+        const canvas = document.createElement('div');
+        canvas.setAttribute('data-flow-canvas', '');
+        canvas.setAttribute('x-data', "{ t(key) { return key === 'workflow.condition' ? 'Bedingung' : key; } }");
+        const host = document.createElement('div');
+        host.setAttribute('x-data', `{ node: { id: 'c1', data: ${JSON.stringify({ condition: { field: 'x', op: 'equals', value: 1 } })} } }`);
+        const target = document.createElement('div');
+        target.setAttribute('x-flow-condition', '');
+        target.className = 'flow-node';
+        target.setAttribute('data-flow-node-id', 'c1');
+        host.appendChild(target);
+        canvas.appendChild(host);
+        document.body.appendChild(canvas);
+        Alpine.initTree(canvas);
+        expect(target.querySelector('.flow-condition-header')?.textContent).toBe('Bedingung');
+    });
 });

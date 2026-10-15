@@ -64,7 +64,7 @@ When enabled, `Ctrl+Z` / `Ctrl+Y` (or `Cmd` on Mac) trigger undo/redo. See [Hist
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `loading` | `boolean` | `false` | Show loading overlay until `setLoading(false)` is called. |
-| `loadingText` | `string` | `'Loading…'` | Custom text for the loading indicator. |
+| `loadingText` | `string` | `canvas.loading` message | Custom text for the loading indicator. |
 
 See [x-flow-loading](../canvas/loading.md).
 

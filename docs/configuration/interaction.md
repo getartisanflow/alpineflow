@@ -36,7 +36,7 @@ See [Keyboard Shortcuts](../canvas/keyboard-shortcuts.md) for the full default m
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `announcements` | `boolean \| object` | `true` | Screen reader announcements. `false` to disable, or `{ formatMessage }` for custom messages. |
+| `announcements` | `boolean \| object` | `true` | Screen reader announcements. `false` to disable, or `{ formatMessage(event, detail, t) }` for custom messages. |
 
 ## See also
 

@@ -115,4 +115,21 @@ describe('x-flow-wait directive', () => {
         expect(target.querySelector('.flow-wait-header')).toBeNull();
         expect(target.classList.contains('flow-wait-node')).toBe(true);
     });
+    it('uses the surrounding canvas t() for the default label', () => {
+        clearChildren(document.body);
+        const canvas = document.createElement('div');
+        canvas.setAttribute('data-flow-canvas', '');
+        canvas.setAttribute('x-data', "{ t(key) { return key === 'workflow.wait' ? 'Warten' : key; } }");
+        const host = document.createElement('div');
+        host.setAttribute('x-data', `{ node: { id: 'w', data: ${JSON.stringify({ durationMs: 500 })} } }`);
+        const target = document.createElement('div');
+        target.setAttribute('x-flow-wait', '');
+        target.className = 'flow-node';
+        target.setAttribute('data-flow-node-id', 'w');
+        host.appendChild(target);
+        canvas.appendChild(host);
+        document.body.appendChild(canvas);
+        Alpine.initTree(canvas);
+        expect(target.querySelector('.flow-wait-label')?.textContent).toBe('Warten');
+    });
 });

@@ -24,6 +24,7 @@
 //   </div>
 // ============================================================================
 
+import { canvasTranslator } from '../../core/translations';
 import type { Alpine } from 'alpinejs';
 import {
     lastInSet,
@@ -136,6 +137,7 @@ function stampRowDefaultUi(
     canvas: any,
     row: { nodeId: string; fieldName: string } | null,
 ): void {
+    const t = canvasTranslator(canvas);
     // Capture focus on the previous managed root BEFORE tearing it down, so a
     // reactive re-stamp triggered while the user is typing doesn't blur the
     // focused input.
@@ -150,7 +152,7 @@ function stampRowDefaultUi(
     if (!row) {
         const empty = document.createElement('div');
         empty.setAttribute('data-schema-inspector-empty', '');
-        empty.textContent = 'No row selected.';
+        empty.textContent = t('schema.inspector.noRow');
         root.appendChild(empty);
         restoreStampFocus(root, captured);
         return;
@@ -162,7 +164,7 @@ function stampRowDefaultUi(
     if (!field) {
         const missing = document.createElement('div');
         missing.setAttribute('data-schema-inspector-empty', '');
-        missing.textContent = 'Selected row no longer exists.';
+        missing.textContent = t('schema.inspector.missingRow');
         root.appendChild(missing);
         restoreStampFocus(root, captured);
         return;
@@ -170,7 +172,7 @@ function stampRowDefaultUi(
 
     // Name
     const nameLabel = document.createElement('label');
-    nameLabel.textContent = 'name ';
+    nameLabel.textContent = t('schema.inspector.name') + ' ';
     const nameInput = document.createElement('input');
     nameInput.setAttribute('data-field', 'name');
     nameInput.value = String(field.name ?? '');
@@ -186,7 +188,7 @@ function stampRowDefaultUi(
 
     // Type
     const typeLabel = document.createElement('label');
-    typeLabel.textContent = 'type ';
+    typeLabel.textContent = t('schema.inspector.type') + ' ';
     const typeInput = document.createElement('input');
     typeInput.setAttribute('data-field', 'type');
     typeInput.value = String(field.type ?? '');
@@ -198,7 +200,7 @@ function stampRowDefaultUi(
 
     // Required
     const requiredLabel = document.createElement('label');
-    requiredLabel.textContent = 'required ';
+    requiredLabel.textContent = t('schema.inspector.required') + ' ';
     const requiredInput = document.createElement('input');
     requiredInput.type = 'checkbox';
     requiredInput.setAttribute('data-field', 'required');
@@ -213,7 +215,7 @@ function stampRowDefaultUi(
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.setAttribute('data-action', 'remove');
-    removeBtn.textContent = 'remove';
+    removeBtn.textContent = t('schema.inspector.remove');
     removeBtn.addEventListener('click', () => {
         canvas.removeField?.(row.nodeId, row.fieldName);
     });

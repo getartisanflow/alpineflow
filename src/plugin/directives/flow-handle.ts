@@ -14,6 +14,7 @@
 //                                               — dynamic position via object expression
 // ============================================================================
 
+import { canvasTranslator } from '../../core/translations';
 import type { Alpine } from 'alpinejs';
 import type { HandleType, HandlePosition, FlowEdge, FlowNode, Connection, XYPosition, PendingKeyboardConnect } from '../../core/types';
 import { DEFAULT_NODE_WIDTH, DEFAULT_NODE_HEIGHT } from '../../core/geometry';
@@ -1878,7 +1879,7 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
         if (initCanvas?._config?.keyboardConnect) {
           el.setAttribute('tabindex', '0');
           el.setAttribute('role', 'button');
-          el.setAttribute('aria-label', `${type} handle ${handleId}`);
+          el.setAttribute('aria-label', canvasTranslator(initCanvas)(type === 'source' ? 'a11y.sourceHandle' : 'a11y.targetHandle', { id: handleId }));
 
           const clearPending = (canvas: { _pendingKeyboardConnect?: PendingKeyboardConnect | null } | null | undefined) => {
             const prev = canvas?._pendingKeyboardConnect;

@@ -144,6 +144,7 @@ All `$flow` methods and properties at a glance:
 | `toImage` | `(options?) → Promise<string>` | [State](state-management.md) |
 | `setLoading` | `(value) → void` | [State](state-management.md) |
 | `patchConfig` | `(changes) → void` | [State](state-management.md) |
+| `t` | `(key, values?) → string` | [Translations](../../configuration/canvas.md#translations) |
 | `setCrossingReduction` | `(value) → void` | [State](state-management.md) |
 | `closeContextMenu` | `() → void` | [State](state-management.md) |
 | `resetPanels` | `() → void` | [State](state-management.md) |

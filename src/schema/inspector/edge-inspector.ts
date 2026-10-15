@@ -20,6 +20,7 @@
 //   </div>
 // ============================================================================
 
+import { canvasTranslator } from '../../core/translations';
 import type { Alpine } from 'alpinejs';
 import {
     lastInSet,
@@ -106,6 +107,7 @@ export function registerEdgeInspectorDirective(Alpine: Alpine): void {
 }
 
 function stampEdgeDefaultUi(host: HTMLElement, canvas: any, edge: any | null): void {
+    const t = canvasTranslator(canvas);
     // Capture focus on the previous managed root BEFORE tearing it down, so a
     // reactive re-stamp triggered while the user is typing doesn't blur the
     // focused input.
@@ -120,14 +122,14 @@ function stampEdgeDefaultUi(host: HTMLElement, canvas: any, edge: any | null): v
     if (!edge) {
         const empty = document.createElement('div');
         empty.setAttribute('data-schema-inspector-empty', '');
-        empty.textContent = 'No edge selected.';
+        empty.textContent = t('schema.inspector.noEdge');
         root.appendChild(empty);
         restoreStampFocus(root, captured);
         return;
     }
 
     const labelWrap = document.createElement('label');
-    labelWrap.textContent = 'label ';
+    labelWrap.textContent = t('schema.inspector.label') + ' ';
     const labelInput = document.createElement('input');
     labelInput.setAttribute('data-field', 'label');
     labelInput.value = String(edge.label ?? '');
@@ -140,7 +142,7 @@ function stampEdgeDefaultUi(host: HTMLElement, canvas: any, edge: any | null): v
     const deleteBtn = document.createElement('button');
     deleteBtn.type = 'button';
     deleteBtn.setAttribute('data-action', 'delete');
-    deleteBtn.textContent = 'delete';
+    deleteBtn.textContent = t('schema.inspector.delete');
     deleteBtn.addEventListener('click', () => {
         if (typeof canvas.removeEdges === 'function') {
             canvas.removeEdges([edge.id]);
