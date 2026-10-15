@@ -78,7 +78,7 @@ The canvas UI text (controls, accessible names, screen reader announcements, wor
    npm run test -- src/core/translations.test.ts
    ```
 
-   The locale-file check reads every file in `locales/`. For a broken file, it names the file and lists all of its problems at once: unknown keys, non-string values, misspelled or missing placeholders, plural categories the language doesn't have, and plural messages without an `_other` form.
+   The locale-file check reads every file in `locales/`. For a broken file, it names the file and lists all of its problems at once: a file name `Intl.PluralRules` doesn't recognise as a locale (such as `german.json`), unknown keys, non-string values, misspelled or missing placeholders, plural categories the language doesn't have, and plural messages without an `_other` form.
 
    ```
    AssertionError: locales/pt-BR.json: expected [ …(2) ] to deeply equal []

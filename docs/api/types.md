@@ -787,7 +787,7 @@ interface FlowTranslations {
 }
 ```
 
-Keys are flat dotted strings grouped by prefix: `controls.`, `canvas.`, `a11y.`, `announce.`, `workflow.`, `schema.inspector.`. Only messages with a `:count` accept plural suffixes. Unknown keys are a type error.
+Keys are flat dotted strings grouped by prefix: `controls.`, `canvas.`, `a11y.`, `announce.`, `workflow.`, `schema.inspector.`. Only messages with a `:count` accept plural suffixes. Unknown keys written in an object literal are a type error; keys that arrive through a spread or from imported JSON are not checked.
 
 ### TranslationKey
 
