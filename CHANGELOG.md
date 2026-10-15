@@ -2,10 +2,23 @@
 
 ## v0.2.4-alpha — unreleased
 
-A polish release: documentation clarifications and expanded test coverage. **No runtime behaviour changes** — every entry below is docs, comments, or tests. The one behaviour-affecting follow-up considered for this batch — unifying the empty-graph `layout` event across the layout engines (#322) — was deliberately deferred.
+Canvas translations, contributed by [@Fanmade](https://github.com/Fanmade), plus documentation clarifications and expanded test coverage. Translations are additive: a canvas without `translations` shows the same English as before, apart from the plural fix below. The one behaviour-affecting follow-up considered for this batch — unifying the empty-graph `layout` event across the layout engines (#322) — was deliberately deferred.
+
+### Added — canvas translations (`translations`, `locale`, `$flow.t()`)
+
+Every built-in UI string can now be translated per canvas: controls-panel titles, the canvas label, loading text and touch selection hint, the accessible names of nodes, edges and handles, screen reader announcements, workflow node defaults and the schema inspectors. Pass a partial **`translations`** dictionary of flat dotted keys such as `controls.zoomIn`; missing keys fall back to English. Messages with a count use CLDR plural suffixes (`_one`, `_few`, `_other`, …), chosen with `Intl.PluralRules` for the canvas **`locale`**, which defaults to `<html lang>` and accepts Laravel-style `pt_BR`. A German dictionary ships at `@getartisanflow/alpineflow/locales/de.json`, and the exported `FlowTranslations` type covers every key. Messages are resolved once when the canvas is created (recreate the canvas to change language), and custom templates reuse them through **`$flow.t(key, values)`**. Explicit `ariaLabel`, `loadingText` and node labels still take precedence. Thanks to [@Fanmade](https://github.com/Fanmade) for the feature. (#101)
+
+### Added — custom announcement formatters receive the translator
+
+`announcements.formatMessage(event, detail, t)` now gets the canvas translator as a third argument, so a custom formatter can localise its own strings or hand unhandled events to `defaultFormatAnnouncement(event, detail, t)` without losing translations. Existing two-argument formatters keep working. (#101)
+
+### Fixed — one removed connection is announced in the singular
+
+Removing a single edge without known endpoints announced "Removed 1 connections". The plural form now comes from `Intl.PluralRules` instead of a hard-coded `s`, so it reads "Removed 1 connection". (#101)
 
 ### Docs
 
+- New Translations section in the canvas configuration reference, with `translations` and `locale` in the options table, `t` in the `$flow` reference, and the translator argument on `announcements.formatMessage`. (#101)
 - Clarified that `layout` and `layout-end` fire one microtask apart (not literally "together") for `duration: 0`, and reworded an overstated code comment about the instant viewport path. (#324, #321)
 - Moved a mislaid doc-comment back onto `_refreshEdgePaths`, and gave `minimapHeight` its own JSDoc to match `minimapWidth`. (#319, #325)
 
