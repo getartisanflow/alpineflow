@@ -62,7 +62,7 @@ If the build modified anything under `dist/`, revert it before you push (`git ch
 The canvas UI text (controls, accessible names, screen reader announcements, workflow and schema defaults) lives in `locales/`, one flat JSON file per language. A new language is a PR with one JSON file, no TypeScript needed.
 
 1. **Name the file with a BCP 47 tag, using a hyphen:** `locales/fr.json`, `locales/pt-BR.json` (not `pt_BR.json`).
-2. **Start from `locales/en.json`** and translate the values. You may leave keys out: a missing key falls back to English. Don't add keys that `en.json` doesn't have.
+2. **Start from `locales/en.json`** and translate the values. You may leave keys out: a missing key falls back to English. Don't add keys that `en.json` doesn't have, apart from the extra plural forms in step 4.
 3. **Keep every placeholder** (`:label`, `:id`, `:source`, `:target`, `:count`, …) spelled exactly as in English. Values are inserted literally, so messages are plain text, never HTML.
 4. **Give plural messages the forms your language needs.** Messages with a `:count` end in a CLDR plural category: English ships `_one` and `_other` (`announce.nodesSelected_one`, `announce.nodesSelected_other`). Other languages may also need `_zero`, `_two`, `_few` or `_many`. List your language's categories with:
 
@@ -71,7 +71,7 @@ The canvas UI text (controls, accessible names, screen reader announcements, wor
    # [ 'few', 'many', 'one', 'other' ]
    ```
 
-   or look the language up in the [CLDR plural rules chart](https://www.unicode.org/cldr/charts/latest/supplemental/language_plural_rules.html). `_other` is required for every plural message, must keep `:count`, and is used whenever a category is missing. The other forms may spell the number out instead of using `:count` (for example, "one node").
+   or look the language up in the [CLDR plural rules chart](https://www.unicode.org/cldr/charts/latest/supplemental/language_plural_rules.html). Drop the forms your language doesn't have: Japanese, for example, only has `_other`, so it keeps none of the `_one` keys. Every plural message you translate needs an `_other` form. It must keep `:count` and is used whenever a category is missing. The other forms may spell the number out instead of using `:count` (for example, "one node").
 5. **Validate:**
 
    ```bash
@@ -81,7 +81,12 @@ The canvas UI text (controls, accessible names, screen reader announcements, wor
    The locale-file check reads every file in `locales/`. For a broken file, it names the file and lists all of its problems at once: unknown keys, non-string values, misspelled or missing placeholders, plural categories the language doesn't have, and plural messages without an `_other` form.
 
    ```
-   AssertionError: locales/pt-BR.json: expected [ Array(2) ] to deeply equal []
+   AssertionError: locales/pt-BR.json: expected [ …(2) ] to deeply equal []
+
+   - Expected
+   + Received
+
+   - []
    + [
    +   "a11y.nodeLabel: missing placeholder :label",
    +   "announce.nodesSelected needs an _other form",
