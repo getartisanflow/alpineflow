@@ -2,7 +2,7 @@
 
 ## v0.2.4-alpha — unreleased
 
-Canvas translations, contributed by [@Fanmade](https://github.com/Fanmade), plus documentation clarifications and expanded test coverage. Translations are additive: a canvas without `translations` shows the same English as before, apart from the plural fix below. The one behaviour-affecting follow-up considered for this batch — unifying the empty-graph `layout` event across the layout engines (#322) — was deliberately deferred.
+Canvas translations, originated and contributed by [@Fanmade](https://github.com/Fanmade) ([#101](https://github.com/getartisanflow/alpineflow/pull/101)), plus documentation clarifications and expanded test coverage. Translations are additive: a canvas without `translations` shows the same English as before, apart from the plural fix below. The one behaviour-affecting follow-up considered for this batch — unifying the empty-graph `layout` event across the layout engines (#322) — was deliberately deferred.
 
 ### Added — canvas translations (`translations`, `locale`, `$flow.t()`)
 
@@ -19,6 +19,7 @@ Removing a single edge without known endpoints announced "Removed 1 connections"
 ### Docs
 
 - New Translations section in the canvas configuration reference, with `translations` and `locale` in the options table, `t` in the `$flow` reference, and the translator argument on `announcements.formatMessage`. (#101)
+- Translations beyond the canvas reference: an "Adding a language" guide in `CONTRIBUTING.md` (file naming, plural categories, the validation command), a README feature bullet, `FlowTranslations` / `TranslationKey` / `Translator` in the type reference, links from `announcements.formatMessage`, `loadingText` and the schema inspector default UI, and a Translations section in the `alpineflow-development` Boost skill. (#101)
 - Clarified that `layout` and `layout-end` fire one microtask apart (not literally "together") for `duration: 0`, and reworded an overstated code comment about the instant viewport path. (#324, #321)
 - Moved a mislaid doc-comment back onto `_refreshEdgePaths`, and gave `minimapHeight` its own JSDoc to match `minimapWidth`. (#319, #325)
 
