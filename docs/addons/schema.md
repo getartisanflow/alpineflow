@@ -457,7 +457,7 @@ Inspectors render nothing by default: the directive injects scope only. To stamp
 </aside>
 ```
 
-When the template is present the addon appends a managed `<div data-schema-default-ui-root>` containing an empty state or the current selection's fields (plus an add-field form for the node inspector, form inputs for the row inspector, a label/delete form for the edge inspector). The managed root is rebuilt on every selection change — sibling children of the template are left alone.
+When the template is present the addon appends a managed `<div data-schema-default-ui-root>` containing an empty state or the current selection's fields (plus an add-field form for the node inspector, form inputs for the row inspector, a label/delete form for the edge inspector). The managed root is rebuilt on every selection change — sibling children of the template are left alone. Its text (empty states, form labels, placeholders and button verbs) comes from the canvas `schema.inspector.*` messages, so it follows the canvas [translations](../configuration/canvas.md#translations).
 
 If you omit the template you own the content completely; the scope (`inspector`, `selectedNode` / `selectedRow` / `selectedEdge`) is still available to your markup.
 
