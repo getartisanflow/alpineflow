@@ -17,6 +17,7 @@ Activate this skill when:
 - Configuring auto-layout algorithms (dagre/force/hierarchy/elk)
 - Building schema / ER / table diagrams (`x-flow-schema`, the schema addon)
 - Building workflow / execution diagrams (`x-flow-condition`, `x-flow-wait`, the workflow addon's run/replay API)
+- Translating canvas UI text (`translations`, `locale`, `$flow.t()`)
 
 ## Documentation
 
@@ -342,6 +343,25 @@ Reference for the newer canvas surface — verify signatures against the docs, d
 - **ELK** (`$flow.elkLayout(...)`) — the `rectpacking` algorithm (packs unconnected boxes, ignores edges), `aspectRatio`, a raw `layoutOptions: Record<string, string>` escape hatch (merged last), and `includeChildren`.
 - **`destroy()` runs** — teardown actually fires now; an `onDestroy(detail, ctx)` handler executes on teardown for the first time (it was silently shadowed before).
 - **Keyboard shortcuts skip `contenteditable`** — typing in a `contenteditable` node body no longer deletes/moves the node or hits canvas history (Backspace/arrows/Cmd+Z edit the text).
+
+## Translations
+
+Every built-in UI string is a per-canvas message: controls, canvas label and loading text, accessible names, screen reader announcements, workflow node defaults, schema inspector text. Missing keys fall back to English.
+
+```js
+import de from '@getartisanflow/alpineflow/locales/de.json';
+
+flowCanvas({
+    locale: 'de',                                              // plural rules; defaults to <html lang>, accepts pt_BR
+    translations: { ...de, 'controls.zoomIn': 'Näher heran' }, // partial overrides are fine
+})
+```
+
+- **Keys are flat dotted strings** (`controls.zoomIn`, `announce.nodesSelected`), typed by `FlowTranslations`; don't invent keys, check `locales/en.json`.
+- **Reuse messages in custom UI with `$flow.t(key, values)`**, e.g. `$flow.t('announce.nodesSelected', { count: n })`. Placeholders (`:label`, `:count`) are replaced literally; messages are plain text, never HTML.
+- **Plural keys end in a CLDR category**: `_one` / `_other` in English, plus `_zero` / `_two` / `_few` / `_many` where a language needs them. `Intl.PluralRules` picks the form from `count` and the canvas `locale`, and `_other` is the fallback. Pass `count` to `t()` instead of branching on `count === 1` yourself.
+- **Messages are fixed when the canvas is created.** Changing `translations` or `locale` later does nothing; recreate the canvas (re-key or re-render it) to switch language.
+- Explicit `ariaLabel`, `loadingText`, node labels and a custom `announcements.formatMessage(event, detail, t)` take precedence over translations.
 
 ## Addons
 

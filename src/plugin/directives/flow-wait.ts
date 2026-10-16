@@ -12,6 +12,7 @@
 // custom rendering should skip this directive and render manually.
 // ============================================================================
 
+import { canvasTranslator } from '../../core/translations';
 import type { Alpine } from 'alpinejs';
 
 type WaitData = {
@@ -48,6 +49,8 @@ function clearChildren(el: HTMLElement): void {
 export function registerFlowWaitDirective(Alpine: Alpine) {
     Alpine.directive('flow-wait', (el, _spec, { evaluate, effect, cleanup }) => {
         const host = el as HTMLElement;
+        const canvasEl = host.closest('[data-flow-canvas]') as HTMLElement | null;
+        const t = canvasTranslator(canvasEl ? Alpine.$data(canvasEl) : null);
 
         const readNode = (): NodeRef => {
             try {
@@ -70,7 +73,7 @@ export function registerFlowWaitDirective(Alpine: Alpine) {
             const data = node?.data;
             if (!data) return;
 
-            const label = typeof data.label === 'string' && data.label ? data.label : 'Wait';
+            const label = typeof data.label === 'string' && data.label ? data.label : t('workflow.wait');
             const icon = typeof data.icon === 'string' && data.icon ? data.icon : '';
             const ms = typeof data.durationMs === 'number' ? data.durationMs : NaN;
 

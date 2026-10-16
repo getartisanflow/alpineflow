@@ -707,6 +707,7 @@ The full configuration interface for `flowCanvas()`. Due to its size, it is docu
 - Event callbacks (`onNodeClick`, `onConnect`, etc.)
 - Touch interaction (`longPressAction`, `touchSelectionMode`)
 - Accessibility (`nodesFocusable`, `announcements`)
+- Translations (`translations`, `locale`)
 
 ---
 
@@ -767,6 +768,45 @@ interface ToImageOverlays {
 
 ---
 
+## Translations
+
+See [Translations](../configuration/canvas.md#translations) for how a canvas resolves its messages.
+
+### FlowTranslations
+
+Partial UI messages for one canvas, passed as `translations` to `flowCanvas()`. Every key is optional; a missing key falls back to English. Each key is documented in the interface with where its message appears.
+
+```ts
+interface FlowTranslations {
+  'controls.zoomIn'?: string;
+  'a11y.nodeLabel'?: string;               // placeholder :label
+  'announce.nodesSelected_one'?: string;   // plural forms of a message with :count
+  'announce.nodesSelected_other'?: string;
+  'announce.nodesSelected_few'?: string;   // _zero, _two, _few, _many for other languages
+  // … one optional string per key in locales/en.json
+}
+```
+
+Keys are flat dotted strings grouped by prefix: `controls.`, `canvas.`, `a11y.`, `announce.`, `workflow.`, `schema.inspector.`. Only messages with a `:count` accept plural suffixes. Unknown keys written in an object literal are a type error; keys that arrive through a spread or from imported JSON are not checked.
+
+### TranslationKey
+
+```ts
+type TranslationKey = 'controls.zoomIn' | 'announce.nodesSelected' | /* … */;
+```
+
+A key as passed to `t()`: every `FlowTranslations` key with its plural suffix removed, so `announce.nodesSelected` rather than `announce.nodesSelected_one`.
+
+### Translator
+
+```ts
+type Translator = (key: TranslationKey, values?: Record<string, string | number>) => string;
+```
+
+The signature of `$flow.t()` and of the `t` argument passed to `announcements.formatMessage(event, detail, t)`. A numeric `values.count` selects the plural form with `Intl.PluralRules` for the canvas `locale`; each value replaces its `:placeholder` literally, without interpreting HTML.
+
+---
+
 ## Quick Reference
 
 All exported types at a glance:
@@ -807,6 +847,9 @@ All exported types at a glance:
 | `FlowCanvasConfig` | Config | Full canvas configuration (see [Configuration](../configuration/index.md)) |
 | `ToImageOptions` | Export | `{ width?, height?, padding?, background?, scope?, scale?, format?, quality?, filename? }` |
 | `ToImageOverlays` | Export | `{ toolbar?, minimap?, controls?, panels? }` |
+| `FlowTranslations` | Translations | Partial message overrides keyed like `'controls.zoomIn'`; plural keys end in `_one`, `_other`, … |
+| `TranslationKey` | Translations | Message key passed to `t()`, without plural suffix |
+| `Translator` | Translations | `(key, values?) => string` — signature of `$flow.t()` |
 | `ResizeDirection` | Resize | `'top' \| 'right' \| 'bottom' \| 'left'` + corners |
 | `ResizeConstraints` | Resize | `{ minWidth?, maxWidth?, minHeight?, maxHeight? }` |
 

@@ -54,6 +54,7 @@ Alpine.start();
 - **Compute flows** -- manual and auto modes for data-driven pipelines
 - **Interactions** -- context menus, toolbars, collapse, drag from sidebar, save/restore, undo/redo, touch support
 - **Schema addon** (`/schema` subpath) -- typed-field designer with field CRUD, reference inference, stable JSON serialization, three-scope inspector directives
+- **Translations** -- per-canvas `translations` with English fallback, plural forms chosen by `Intl.PluralRules`, a German dictionary included, and `$flow.t()` to reuse messages in custom UI
 - **Theming** -- CSS variables and dark mode
 - **TypeScript** -- full type definitions included
 

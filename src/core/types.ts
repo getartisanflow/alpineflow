@@ -6,6 +6,7 @@
 // with Alpine's reactive proxy model.
 // ============================================================================
 
+import type { FlowTranslations, TranslationKey, Translator } from './translations';
 import type { EasingName } from '../animate/easing';
 import type { PathFunction } from '../animate/paths';
 import type { CollabConfig, CollabInstance } from '../collab/types';
@@ -1134,6 +1135,13 @@ export type SchemaNodeClassResolver = (
 ) => SchemaClassValue | SchemaNodeClassMap;
 
 export interface FlowCanvasConfig {
+  /** UI message overrides for this canvas. Missing keys fall back to English. */
+  translations?: FlowTranslations;
+  /**
+   * BCP 47 locale used to pick plural forms (`_one`, `_few`, …) from `translations`.
+   * Laravel-style `pt_BR` is accepted. Default: `document.documentElement.lang`, then `en`.
+   */
+  locale?: string;
   nodes?: FlowNode[];
   edges?: FlowEdge[];
 
@@ -1407,6 +1415,10 @@ export interface FlowCanvasConfig {
    */
   minimapWidth?: number;
 
+  /**
+   * The minimap's height in pixels (default 150). Pairs with `minimapWidth` — see there for how the
+   * two together drive the fit scale and the shape of the viewport marker.
+   */
   minimapHeight?: number;
 
   /**
@@ -1450,7 +1462,7 @@ export interface FlowCanvasConfig {
   /** Screen reader announcements. true (default) = on, false = off,
    *  or object with formatMessage callback for custom messages. */
   announcements?: boolean | {
-    formatMessage?: (event: string, detail: Record<string, any>) => string | null;
+    formatMessage?: (event: string, detail: Record<string, any>, t: Translator) => string | null;
   };
 
   /** Compute mode. 'manual' (default) = explicit $flow.compute() calls,
@@ -2288,6 +2300,13 @@ export interface FlowInstance {
 
   /** Update runtime config options (zoom limits, background, colorMode, etc.). */
   patchConfig(changes: Partial<PatchableConfig>): void;
+
+  /**
+   * Translate a UI message of this canvas (`$flow.t('controls.zoomIn')` in templates).
+   * Resolved once at creation from `translations` + `locale`; a numeric `count`
+   * selects the plural form. Unknown or missing keys fall back to English.
+   */
+  t(key: TranslationKey, values?: Record<string, string | number>): string;
 
   /** Current resolved color mode, or undefined if not managed. */
   readonly colorMode?: 'light' | 'dark';

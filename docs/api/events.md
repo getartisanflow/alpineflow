@@ -555,7 +555,7 @@ These events are emitted internally but do not have dedicated config callbacks. 
 | `panel-reset` | `undefined` | `resetPanels()` called |
 | `helper-lines-change` | `{ horizontal: number[], vertical: number[] }` | Alignment guides update during drag |
 
-`layout` fires when a layout has been **computed**; `layout-end` fires when the nodes have **settled** where it put them. The two are different moments: with the default `duration` the canvas animates towards the new coordinates, so at `layout` time the model still holds the old ones. With `duration: 0` there is nothing to wait for and the pair arrives together — in that order either way.
+`layout` fires when a layout has been **computed**; `layout-end` fires when the nodes have **settled** where it put them. The two are different moments: with the default `duration` the canvas animates towards the new coordinates, so at `layout` time the model still holds the old ones. With `duration: 0` there is nothing to wait for, so the two fire back-to-back in the same tick (a microtask apart) — in that order either way.
 
 Both carry `positions` — what the layout decided, `Record<string, { x, y }>` keyed by node id, a plain object so it survives `JSON.stringify` and structured clone. Read it off the event rather than the model, which lags until the motion finishes. Persist from whichever moment suits — `layout` the instant it is decided, `layout-end` once it is on screen:
 

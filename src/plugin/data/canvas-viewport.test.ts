@@ -220,7 +220,14 @@ describe('createViewportMixin — _fitViewport (the double-click fallback)', () 
     const viewport = mixin._fitViewport();
 
     expect(viewport).not.toBeNull();
+    // The two nodes span [0,500]×[0,350], so the graph's bounds-center is (250, 175). A correctly
+    // framed viewport lands that center at the container centre (800/2, 600/2) = (400, 300) — assert
+    // the actual framing (world·zoom + translate = screen), not merely that *a* viewport came back.
+    expect(250 * viewport!.zoom + viewport!.x).toBeCloseTo(400, 3);
+    expect(175 * viewport!.zoom + viewport!.y).toBeCloseTo(300, 3);
+    // …and the fit zoom stays within the configured clamp.
     expect(viewport!.zoom).toBeGreaterThan(0);
+    expect(viewport!.zoom).toBeLessThanOrEqual(2);
   });
 
   it('declines while a visible node is still unmeasured', () => {

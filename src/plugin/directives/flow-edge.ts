@@ -8,6 +8,7 @@
 // Usage: <g x-flow-edge="edge"></g>
 // ============================================================================
 
+import { canvasTranslator } from '../../core/translations';
 import type { Alpine } from 'alpinejs';
 import type { FlowEdge, FlowNode, HandlePosition, HandleType, Rect, Connection, XYPosition, SchemaMetrics, EndpointSpreadGrouping } from '../../core/types';
 import type { MarkerType, MarkerConfig } from '../../core/markers';
@@ -1228,6 +1229,7 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
 
         const canvas = Alpine.$data(el.closest('[x-data]') as HTMLElement);
         if (!canvas?.nodes) return;
+        const t = canvasTranslator(canvas);
 
         // Resolve edge type using fallback: edge.type ?? canvas.defaultEdgeType ?? 'bezier'
         const resolvedEdgeType = edge.type ?? canvas._config?.defaultEdgeType ?? 'bezier';
@@ -1557,7 +1559,7 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
               mid.setAttribute('r', String(midpointRadius));
               mid.dataset.segmentIndex = String(i);
               const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-              titleEl.textContent = 'Double-click to add control point';
+              titleEl.textContent = t('a11y.addControlPoint');
               mid.appendChild(titleEl);
               gEl.appendChild(mid);
             }
@@ -1739,7 +1741,7 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         if (edgeFocusable) {
           gEl.setAttribute('tabindex', '0');
           gEl.setAttribute('role', edge.ariaRole ?? 'group');
-          gEl.setAttribute('aria-label', edge.ariaLabel ?? (edge.label ? `Edge: ${edge.label}` : `Edge from ${edge.source} to ${edge.target}`));
+          gEl.setAttribute('aria-label', edge.ariaLabel ?? (edge.label ? t('a11y.edgeLabel', { label: edge.label }) : t('a11y.edgeEndpoints', { source: edge.source, target: edge.target })));
         } else {
           gEl.removeAttribute('tabindex');
           gEl.removeAttribute('role');

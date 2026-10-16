@@ -8,6 +8,7 @@
 // Usage: <div x-flow-node="node">...</div>
 // ============================================================================
 
+import { canvasTranslator } from '../../core/translations';
 import type { Alpine } from 'alpinejs';
 import { createDrag, type DragInstance } from '../../core/drag';
 import type { FlowNode, FlowEdge, Viewport } from '../../core/types';
@@ -323,6 +324,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
         // Walk up to find the flowCanvas data context
         const canvas = Alpine.$data(el.closest('[x-data]') as HTMLElement);
         if (!canvas?.viewport) return;
+        const t = canvasTranslator(canvas);
 
         // Auto-apply base class and group class
         // 'nopan' prevents d3-zoom from intercepting mousedowns on nodes
@@ -459,7 +461,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
         if (focusable) {
           el.setAttribute('tabindex', '0');
           el.setAttribute('role', node.ariaRole ?? 'group');
-          el.setAttribute('aria-label', node.ariaLabel ?? (node.data?.label ? `Node: ${node.data.label}` : `Node ${node.id}`));
+          el.setAttribute('aria-label', node.ariaLabel ?? (node.data?.label ? t('a11y.nodeLabel', { label: node.data.label }) : t('a11y.nodeId', { id: node.id })));
         } else {
           el.removeAttribute('tabindex');
           el.removeAttribute('role');

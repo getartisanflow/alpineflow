@@ -26,6 +26,38 @@ They emit `selection-change` **only when the selection actually changes**, and a
 
 Note what this changes for listeners. The old `flow:selectNodes` called `deselectAll()` — one event, carrying the now-EMPTY selection — and then mutated the selection sets silently, so the selection it ended up with was never announced. There was no double emit; there was one emit with the wrong payload, and server-driven selection is now visible to `onSelectionChange` where it effectively was not before. The no-change guard is what keeps that new echo from looping back through a server that maps `selection-change`.
 
+## v0.2.4-alpha — 2026-10-15
+
+Canvas translations, originated and contributed by [@Fanmade](https://github.com/Fanmade) ([#101](https://github.com/getartisanflow/alpineflow/pull/101)), plus documentation clarifications and expanded test coverage. Translations are additive: a canvas without `translations` shows the same English as before, apart from the plural fix below. The one behaviour-affecting follow-up considered for this batch — unifying the empty-graph `layout` event across the layout engines (#322) — was deliberately deferred.
+
+### Added — canvas translations (`translations`, `locale`, `$flow.t()`)
+
+Every built-in UI string can now be translated per canvas: controls-panel titles, the canvas label, loading text and touch selection hint, the accessible names of nodes, edges and handles, screen reader announcements, workflow node defaults and the schema inspectors. Pass a partial **`translations`** dictionary of flat dotted keys such as `controls.zoomIn`; missing keys fall back to English. Messages with a count use CLDR plural suffixes (`_one`, `_few`, `_other`, …), chosen with `Intl.PluralRules` for the canvas **`locale`**, which defaults to `<html lang>` and accepts Laravel-style `pt_BR`. A German dictionary ships at `@getartisanflow/alpineflow/locales/de.json`, and the exported `FlowTranslations` type covers every key. Messages are resolved once when the canvas is created (recreate the canvas to change language), and custom templates reuse them through **`$flow.t(key, values)`**. Explicit `ariaLabel`, `loadingText` and node labels still take precedence. Thanks to [@Fanmade](https://github.com/Fanmade) for the feature. (#101)
+
+### Added — custom announcement formatters receive the translator
+
+`announcements.formatMessage(event, detail, t)` now gets the canvas translator as a third argument, so a custom formatter can localise its own strings or hand unhandled events to `defaultFormatAnnouncement(event, detail, t)` without losing translations. Existing two-argument formatters keep working. (#101)
+
+### Fixed — one removed connection is announced in the singular
+
+Removing a single edge without known endpoints announced "Removed 1 connections". The plural form now comes from `Intl.PluralRules` instead of a hard-coded `s`, so it reads "Removed 1 connection". (#101)
+
+### Docs
+
+- New Translations section in the canvas configuration reference, with `translations` and `locale` in the options table, `t` in the `$flow` reference, and the translator argument on `announcements.formatMessage`. (#101)
+- Translations beyond the canvas reference: an "Adding a language" guide in `CONTRIBUTING.md` (file naming, plural categories, the validation command), a README feature bullet, `FlowTranslations` / `TranslationKey` / `Translator` in the type reference, links from `announcements.formatMessage`, `loadingText` and the schema inspector default UI, and a Translations section in the `alpineflow-development` Boost skill. (#102)
+- Clarified that `layout` and `layout-end` fire one microtask apart (not literally "together") for `duration: 0`, and reworded an overstated code comment about the instant viewport path. (#324, #321)
+- Moved a mislaid doc-comment back onto `_refreshEdgePaths`, and gave `minimapHeight` its own JSDoc to match `minimapWidth`. (#319, #325)
+
+### Internal — test coverage
+
+- Gradient repaint: `<stop>` colours are restyled in place, including the `target-source` reversal. (#329)
+- The selection context menu opened by right-clicking a selected node carries its edges. (#330)
+- An interrupted viewport animation re-syncs the pan/zoom controller to the live viewport. (#331)
+- `update()` switching an edge's type redraws its rendered path. (#328)
+- Escape cancels an in-progress connection and clears `.flow-connecting`. (#326)
+- Strengthened the fit-viewport framing assertion, and tidied a stray gesture test into its describe block. (#323, #320)
+
 ## v0.2.3-alpha — 2026-08-29
 
 > Most of this release is contributed by [@webard](https://github.com/webard).

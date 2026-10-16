@@ -5,9 +5,12 @@
 // lock toggle buttons. Follows the same DOM injection pattern as MiniMap.
 // ============================================================================
 
+import { englishTranslator, type Translator } from './translations';
 import { isolateCanvasGestures } from './canvas-gestures';
 
 export interface ControlsPanelOptions {
+  /** Canvas translator for button titles. Defaults to English. */
+  t?: Translator;
   position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
   orientation: 'vertical' | 'horizontal';
   showZoom: boolean;
@@ -57,6 +60,7 @@ export function createControlsPanel(
   container: HTMLElement,
   options: ControlsPanelOptions,
 ): ControlsPanelInstance {
+  const t = options.t ?? englishTranslator;
   const {
     position,
     orientation,
@@ -86,35 +90,35 @@ export function createControlsPanel(
   }
   wrapper.className = classes.join(' ');
   wrapper.setAttribute('role', 'toolbar');
-  wrapper.setAttribute('aria-label', 'Flow controls');
+  wrapper.setAttribute('aria-label', t('controls.label'));
 
   let interactiveBtn: HTMLButtonElement | null = null;
   let fullscreenBtn: HTMLButtonElement | null = null;
 
   if (showZoom) {
-    const zoomInBtn = createButton(ICON_ZOOM_IN, 'Zoom in', onZoomIn);
-    const zoomOutBtn = createButton(ICON_ZOOM_OUT, 'Zoom out', onZoomOut);
+    const zoomInBtn = createButton(ICON_ZOOM_IN, t('controls.zoomIn'), onZoomIn);
+    const zoomOutBtn = createButton(ICON_ZOOM_OUT, t('controls.zoomOut'), onZoomOut);
     wrapper.appendChild(zoomInBtn);
     wrapper.appendChild(zoomOutBtn);
   }
 
   if (showFitView) {
-    const fitBtn = createButton(ICON_FIT_VIEW, 'Fit view', onFitView);
+    const fitBtn = createButton(ICON_FIT_VIEW, t('controls.fitView'), onFitView);
     wrapper.appendChild(fitBtn);
   }
 
   if (showInteractive) {
-    interactiveBtn = createButton(ICON_UNLOCK, 'Toggle interactivity', onToggleInteractive);
+    interactiveBtn = createButton(ICON_UNLOCK, t('controls.toggleInteractive'), onToggleInteractive);
     wrapper.appendChild(interactiveBtn);
   }
 
   if (showResetPanels) {
-    const resetBtn = createButton(ICON_RESET_PANELS, 'Reset panels', onResetPanels);
+    const resetBtn = createButton(ICON_RESET_PANELS, t('controls.resetPanels'), onResetPanels);
     wrapper.appendChild(resetBtn);
   }
 
   if (onToggleFullscreen) {
-    fullscreenBtn = createButton(ICON_FULLSCREEN_ENTER, 'Toggle fullscreen', onToggleFullscreen);
+    fullscreenBtn = createButton(ICON_FULLSCREEN_ENTER, t('controls.toggleFullscreen'), onToggleFullscreen);
     fullscreenBtn.classList.add('flow-controls-button-fullscreen');
     wrapper.appendChild(fullscreenBtn);
   }
@@ -131,13 +135,13 @@ export function createControlsPanel(
   function update(state: { isInteractive?: boolean; isFullscreen?: boolean }): void {
     if (interactiveBtn && typeof state.isInteractive === 'boolean') {
       setButtonIcon(interactiveBtn, state.isInteractive ? ICON_UNLOCK : ICON_LOCK);
-      const interactiveTitle = state.isInteractive ? 'Lock interactivity' : 'Unlock interactivity';
+      const interactiveTitle = state.isInteractive ? t('controls.lockInteractive') : t('controls.unlockInteractive');
       interactiveBtn.title = interactiveTitle;
       interactiveBtn.setAttribute('aria-label', interactiveTitle);
     }
     if (fullscreenBtn && typeof state.isFullscreen === 'boolean') {
       setButtonIcon(fullscreenBtn, state.isFullscreen ? ICON_FULLSCREEN_EXIT : ICON_FULLSCREEN_ENTER);
-      const fullscreenTitle = state.isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen';
+      const fullscreenTitle = state.isFullscreen ? t('controls.exitFullscreen') : t('controls.enterFullscreen');
       fullscreenBtn.title = fullscreenTitle;
       fullscreenBtn.setAttribute('aria-label', fullscreenTitle);
       fullscreenBtn.classList.toggle('flow-controls-button-fullscreen--active', state.isFullscreen);

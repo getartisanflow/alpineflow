@@ -23,6 +23,7 @@
 // XSS-safe: all dynamic text uses textContent; no innerHTML anywhere.
 // ============================================================================
 
+import { canvasTranslator } from '../../core/translations';
 import type { Alpine } from 'alpinejs';
 import { prettyPrintCondition } from '../../workflow/condition-pretty-print';
 
@@ -50,6 +51,8 @@ function resolveDirection(value: unknown, fallback: ConditionData['direction']):
 export function registerFlowConditionDirective(Alpine: Alpine) {
     Alpine.directive('flow-condition', (el, { expression }, { evaluate, effect, cleanup }) => {
         const host = el as HTMLElement;
+        const canvasEl = host.closest('[data-flow-canvas]') as HTMLElement | null;
+        const t = canvasTranslator(canvasEl ? Alpine.$data(canvasEl) : null);
 
         const readNode = (): NodeRef => {
             try {
@@ -89,7 +92,7 @@ export function registerFlowConditionDirective(Alpine: Alpine) {
 
             clearChildren(host);
 
-            const label = typeof data.label === 'string' && data.label ? data.label : 'Condition';
+            const label = typeof data.label === 'string' && data.label ? data.label : t('workflow.condition');
             const header = document.createElement('div');
             header.className = 'flow-condition-header';
             header.textContent = label;
@@ -102,7 +105,7 @@ export function registerFlowConditionDirective(Alpine: Alpine) {
             } else if (typeof data.evaluate === 'function') {
                 body.textContent = typeof data.evaluateLabel === 'string' && data.evaluateLabel
                     ? data.evaluateLabel
-                    : '[custom evaluator]';
+                    : t('workflow.customEvaluator');
             } else {
                 body.textContent = '';
             }
