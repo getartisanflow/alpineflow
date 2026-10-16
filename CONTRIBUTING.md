@@ -61,8 +61,8 @@ If the build modified anything under `dist/`, revert it before you push (`git ch
 
 The canvas UI text (controls, accessible names, screen reader announcements, workflow and schema defaults) lives in `locales/`, one flat JSON file per language. A new language is a PR with one JSON file, no TypeScript needed.
 
-1. **Name the file with a BCP 47 tag, using a hyphen:** `locales/fr.json`, `locales/pt-BR.json` (not `pt_BR.json`).
-2. **Start from `locales/en.json`** and translate the values. You may leave keys out: a missing key falls back to English. Don't add keys that `en.json` doesn't have, apart from the extra plural forms in step 4.
+1. **Name the file with a BCP 47 tag, using a hyphen:** `locales/fr.json`, `locales/pt-BR.json` (not `pt_BR.json`). Use the plain language (`fr`, `de`) unless a region's text really differs, as with `pt-BR` and `pt-PT`. Laravel apps look up their locale exactly and don't fall back from `fr_CA` to `fr`, so a plain-language file reaches the most apps.
+2. **Start from `locales/en.json`** and translate the values. You may leave keys out: a missing key falls back to English. Don't add keys that `en.json` doesn't have, apart from the extra plural forms in step 4. Match the tone of interface text in your language, and if it has a formal and an informal "you", pick one and use it throughout. The German file uses the informal *du*.
 3. **Keep every placeholder** (`:label`, `:id`, `:source`, `:target`, `:count`, …) spelled exactly as in English. Values are inserted literally, so messages are plain text, never HTML.
 4. **Give plural messages the forms your language needs.** Messages with a `:count` end in a CLDR plural category: English ships `_one` and `_other` (`announce.nodesSelected_one`, `announce.nodesSelected_other`). Other languages may also need `_zero`, `_two`, `_few` or `_many`. List your language's categories with:
 
@@ -93,7 +93,7 @@ The canvas UI text (controls, accessible names, screen reader announcements, wor
    + ]
    ```
 
-That's all the language needs. The build publishes the file as `@getartisanflow/alpineflow/locales/<locale>.json`. [WireFlow](https://github.com/getartisanflow/wireflow) regenerates its Laravel translation files from these JSON files when it syncs each AlpineFlow release (`pt-BR.json` becomes `lang/pt_BR/canvas.php`). Canvas messages therefore never need a WireFlow PR. Text that belongs to WireFlow's own Blade components, such as the workflow buttons and the execution log, is translated in the WireFlow repo.
+That's all the language needs. The build publishes the file as `@getartisanflow/alpineflow/locales/<locale>.json`. [WireFlow](https://github.com/getartisanflow/wireflow) regenerates its Laravel translation files from these JSON files when it syncs each AlpineFlow release (`pt-BR.json` becomes `lang/pt_BR/canvas.php`). Canvas messages therefore never need a WireFlow PR. Text that belongs to WireFlow's own Blade components, such as the workflow buttons and the execution log, is translated in the WireFlow repo. If you can, translate those too: they are 13 short strings in one file (see WireFlow's [Adding a language](https://github.com/getartisanflow/wireflow/blob/main/CONTRIBUTING.md#adding-a-language)). Otherwise Laravel apps get your language on the canvas but English workflow buttons.
 
 ## Before you open a PR
 
