@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.2.4-alpha — unreleased
+## v0.2.4-alpha — 2026-10-15
 
 Canvas translations, originated and contributed by [@Fanmade](https://github.com/Fanmade) ([#101](https://github.com/getartisanflow/alpineflow/pull/101)), plus documentation clarifications and expanded test coverage. Translations are additive: a canvas without `translations` shows the same English as before, apart from the plural fix below. The one behaviour-affecting follow-up considered for this batch — unifying the empty-graph `layout` event across the layout engines (#322) — was deliberately deferred.
 
