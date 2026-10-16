@@ -19,7 +19,7 @@ Removing a single edge without known endpoints announced "Removed 1 connections"
 ### Docs
 
 - New Translations section in the canvas configuration reference, with `translations` and `locale` in the options table, `t` in the `$flow` reference, and the translator argument on `announcements.formatMessage`. (#101)
-- Translations beyond the canvas reference: an "Adding a language" guide in `CONTRIBUTING.md` (file naming, plural categories, the validation command), a README feature bullet, `FlowTranslations` / `TranslationKey` / `Translator` in the type reference, links from `announcements.formatMessage`, `loadingText` and the schema inspector default UI, and a Translations section in the `alpineflow-development` Boost skill. (#101)
+- Translations beyond the canvas reference: an "Adding a language" guide in `CONTRIBUTING.md` (file naming, plural categories, the validation command), a README feature bullet, `FlowTranslations` / `TranslationKey` / `Translator` in the type reference, links from `announcements.formatMessage`, `loadingText` and the schema inspector default UI, and a Translations section in the `alpineflow-development` Boost skill. (#102)
 - Clarified that `layout` and `layout-end` fire one microtask apart (not literally "together") for `duration: 0`, and reworded an overstated code comment about the instant viewport path. (#324, #321)
 - Moved a mislaid doc-comment back onto `_refreshEdgePaths`, and gave `minimapHeight` its own JSDoc to match `minimapWidth`. (#319, #325)
 
