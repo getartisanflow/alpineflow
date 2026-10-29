@@ -18,6 +18,7 @@ import { getFloatingEdgeParams } from '../../core/floating-edge';
 import { toAbsoluteNode } from '../../core/sub-flow';
 import { isGradient, getGradientId, upsertGradientDef, restyleGradientDef } from '../../core/gradients';
 import { resolveHandlePosition } from '../directives/flow-edge';
+import { applyNodeElementPosition } from '../directives/flow-node';
 
 export function createDomMixin(ctx: CanvasContext, Alpine: any) {
   return {
@@ -30,11 +31,7 @@ export function createDomMixin(ctx: CanvasContext, Alpine: any) {
         if (!nodeEl) continue;
         const rawNode = Alpine.raw(node);
         const absPos = rawNode.parentId ? ctx.getAbsolutePosition(nodeId) : rawNode.position;
-        const nodeOrig = rawNode.nodeOrigin ?? ctx._config.nodeOrigin ?? [0, 0];
-        const nw = rawNode.dimensions?.width ?? 150;
-        const nh = rawNode.dimensions?.height ?? 40;
-        nodeEl.style.left = (absPos.x - nw * nodeOrig[0]) + 'px';
-        nodeEl.style.top = (absPos.y - nh * nodeOrig[1]) + 'px';
+        applyNodeElementPosition(nodeEl, rawNode, absPos, ctx._config.nodeOrigin);
       }
     },
 

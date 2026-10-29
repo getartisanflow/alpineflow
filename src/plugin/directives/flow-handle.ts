@@ -1866,6 +1866,9 @@ export function registerFlowHandleDirective(Alpine: Alpine) {
        * `getCanvas()`; only the init-time reads are hoisted.
        */
       const initCanvas = getCanvas();
+      // An edge may have handed this handle to the canvas's ResizeObserver while it
+      // was hidden (`watchHiddenHandles` in flow-edge.ts).
+      cleanup(() => initCanvas?._resizeObserver?.unobserve(el));
 
       // ── Keyboard drag-to-connect (a11y, opt-in) ───────────────────────
       // When canvas._config.keyboardConnect is true, make this handle focusable

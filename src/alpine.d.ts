@@ -42,8 +42,11 @@ declare module 'alpinejs' {
     /** Access the reactive data object for an element */
     $data(el: HTMLElement): Record<string, any>;
 
-    /** Create a reactive effect */
-    effect(callback: () => void): void;
+    /** Create a reactive effect. Returns a handle for `release()`. */
+    effect(callback: () => void): unknown;
+
+    /** Stop an effect created with `effect()` */
+    release(effect: unknown): void;
 
     /** Make an object reactive */
     reactive<T extends Record<string, any>>(obj: T): T;

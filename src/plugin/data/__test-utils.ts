@@ -153,6 +153,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _visibleNodeIds: new Set<string>(),
     _culledEdgeIds: new Set<string>(),
     _cullingWasActive: false,
+    _edgesMeasuredWithoutLayout: new Map<string, Set<string>>(),
 
     // === Background ===
     _background: 'dots',
@@ -190,6 +191,7 @@ export function mockCtx(overrides: Partial<CanvasContext> = {}): CanvasContext {
     _endpointSpreadGrouping: null,
     _computeEndpointGrouping: vi.fn(() => new Set<string>()),
     _markEdgesDirtyById: vi.fn(),
+    _remeasureEdgesOfRevealedNodes: vi.fn(),
 
     // === Auto-Layout state ===
     _autoLayoutTimer: null,

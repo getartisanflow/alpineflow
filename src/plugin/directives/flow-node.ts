@@ -11,7 +11,7 @@
 import { canvasTranslator } from '../../core/translations';
 import type { Alpine } from 'alpinejs';
 import { createDrag, type DragInstance } from '../../core/drag';
-import type { FlowNode, FlowEdge, Viewport } from '../../core/types';
+import type { FlowNode, FlowEdge, Viewport, XYPosition } from '../../core/types';
 import { createAutoPan, type AutoPanInstance } from '../../core/auto-pan';
 import { debug } from '../../core/debug';
 import type { CoordinateExtent } from '../../core/types';
@@ -38,6 +38,25 @@ import { isDraggable, isConnectable, isSelectable } from '../../core/node-flags'
 const BLOCKED_ATTRS = new Set(['x-data', 'x-init', 'x-bind', 'href', 'src', 'action', 'formaction', 'srcdoc']);
 
 let proximityEdgeCounter = 0;
+
+/**
+ * Position a node element from its node: `left`/`top` in flow space, offset by
+ * the node origin, skipping unchanged values. Shared by the node's position
+ * effect, `_flushNodePositions`, and edges syncing their endpoints before they
+ * measure. `absPos` is the node's absolute position (children resolved).
+ */
+export function applyNodeElementPosition(
+  el: HTMLElement,
+  node: FlowNode,
+  absPos: XYPosition,
+  defaultOrigin?: [number, number],
+): void {
+  const nodeOrig = node.nodeOrigin ?? defaultOrigin ?? [0, 0];
+  const left = (absPos.x - (node.dimensions?.width ?? 150) * nodeOrig[0]) + 'px';
+  const top = (absPos.y - (node.dimensions?.height ?? 40) * nodeOrig[1]) + 'px';
+  if (el.style.left !== left) el.style.left = left;
+  if (el.style.top !== top) el.style.top = top;
+}
 
 /**
  * Commit a deferred drag-history snapshot (taken on pointerdown) — but only if
@@ -222,11 +241,7 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
         const absPos = node.parentId
           ? canvas.getAbsolutePosition(node.id)
           : (node.position ?? { x: 0, y: 0 });
-        const nodeOrig = node.nodeOrigin ?? canvas._config?.nodeOrigin ?? [0, 0];
-        const nw = node.dimensions?.width ?? 150;
-        const nh = node.dimensions?.height ?? 40;
-        el.style.left = (absPos.x - nw * nodeOrig[0]) + 'px';
-        el.style.top = (absPos.y - nh * nodeOrig[1]) + 'px';
+        applyNodeElementPosition(el, node, absPos, canvas._config?.nodeOrigin);
       });
 
       effect(() => {
@@ -1894,6 +1909,8 @@ export function registerFlowNodeDirective(Alpine: Alpine) {
         if (node.resizeObserver !== false && canvas?._resizeObserver) {
           canvas._resizeObserver.observe(el);
         }
+        // Edges re-measure when a port moves inside the node without resizing it.
+        canvas?._watchNodeContent?.(el);
       });
 
       cleanup(() => {

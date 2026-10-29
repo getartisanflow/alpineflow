@@ -44,6 +44,7 @@ import { createSelectionBox, type SelectionBoxInstance } from '../../core/select
 import { createLasso, type LassoInstance } from '../../core/lasso';
 import { getNodesInPolygon, getNodesFullyInPolygon, pointInPolygon } from '../../core/lasso-hit-test';
 import { clearValidationClasses } from '../directives/flow-handle';
+import { handlesMovedWithin } from '../directives/flow-edge';
 import { installHandleDelegation } from '../handle-delegation';
 import { resolveShortcuts, matchesKey, matchesModifier, shouldCaptureNudge, isEditableTarget } from '../../core/keyboard-shortcuts';
 import { isDraggable, isSelectable } from '../../core/node-flags';
@@ -156,6 +157,21 @@ export function registerFlowCanvas(Alpine: Alpine) {
   Alpine.data('flowCanvas', (config: FlowCanvasConfig = {}) => {
     // Resolved once per canvas: plain closure state, deliberately outside Alpine reactivity.
     const translator: Translator = createTranslator(config.translations, config.locale);
+    /**
+     * Whether `map` holds exactly the items of `items`, by id. Iterates the reactive
+     * array, so an effect calling this tracks its structure but not item fields.
+     */
+    /** rAF handle for `_initArraySync`'s obstacle refresh; cancelled in destroy(). */
+    let arraySyncFrame: number | null = null;
+    const lookupMatches = (items: Array<{ id: string }>, map: Map<string, unknown>): boolean => {
+      const rawMap = Alpine.raw(map);
+      if (rawMap.size !== items.length) return false;
+      for (const item of items) {
+        const rawItem = Alpine.raw(item);
+        if (Alpine.raw(rawMap.get(rawItem.id)) !== rawItem) return false;
+      }
+      return true;
+    };
     const self: Record<string, any> = {
     // ── Reactive State ────────────────────────────────────────────────
     /** Unique instance ID for SVG marker dedup, etc. */
@@ -386,8 +402,14 @@ export function registerFlowCanvas(Alpine: Alpine) {
     /** Stores each node's originally configured dimensions (before layout stretch). */
     _initialDimensions: new Map<string, Dimensions>(),
     _edgeMap: new Map<string, FlowEdge>(),
+    /** Effect from `_initArraySync`; released in destroy(). */
+    _arraySyncEffect: null as unknown,
     _viewportEl: null as HTMLElement | null,
     _handleDelegationCleanup: null as (() => void) | null,
+    /** `_initHandleMoveWatch`'s MutationObserver; node elements join it via `_watchNodeContent`. */
+    _handleMoveObserver: null as MutationObserver | null,
+    /** Disconnects that observer and cancels its pending check. */
+    _handleMoveWatchCleanup: null as (() => void) | null,
     /**
      * The element the delegated handle listener is CURRENTLY installed on, or null
      * when nothing is installed. Tracked separately from `_viewportEl` because the
@@ -490,6 +512,8 @@ export function registerFlowCanvas(Alpine: Alpine) {
     _culledEdgeIds: new Set<string>(),
     /** Whether `_applyCulling` was active on the previous call — used to detect threshold-crossing-down / config-off so `_uncullEverything` can restore display exactly once. */
     _cullingWasActive: false,
+    /** PLAIN Map node id → ids of edges whose last measurement found that node, or one of its handles, with no layout box (culled, hidden, or a port behind `x-show`). Written by edges; read via Alpine.raw. */
+    _edgesMeasuredWithoutLayout: new Map<string, Set<string>>(),
 
     // ── Context Menu Auto-Populate ─────────────────────────────────────
     _contextMenuListeners: [] as Array<{ event: string; handler: EventListener }>,
@@ -584,6 +608,80 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
     _rebuildEdgeMap() {
       this._edgeMap = new Map(this.edges.map((e: FlowEdge) => [e.id, e]));
+    },
+
+    /**
+     * Keep `_nodeMap` / `_edgeMap` in step with `nodes` / `edges` when they change
+     * outside the canvas API: `$wire.entangle('nodes')` in WireFlow sync mode
+     * assigning a new array, or consumer code swapping an item in place. The API
+     * paths rebuild the maps themselves; without this, `getNode` keeps returning
+     * the replaced node objects.
+     */
+    _initArraySync() {
+      this._arraySyncEffect = Alpine.effect(() => {
+        if (!lookupMatches(this.nodes, this._nodeMap)) {
+          this._rebuildNodeMap();
+          // Edges re-run on the rebuilt map; refresh routing obstacles once the
+          // node elements have moved, as after `fromObject`.
+          if (arraySyncFrame === null) {
+            arraySyncFrame = requestAnimationFrame(() => {
+              arraySyncFrame = null;
+              this._commitNodeGeometry?.();
+            });
+          }
+        }
+        if (!lookupMatches(this.edges, this._edgeMap)) this._rebuildEdgeMap();
+      });
+    },
+
+    /**
+     * Watch node contents for changes that can move a handle without resizing
+     * its node (a port's `:style`/`:class` binding, content added above it),
+     * which no reactive dependency of the edge covers. Once per frame, nodes
+     * whose content changed have their handles checked against where edges last
+     * measured them (`handlesMovedWithin`); only if one moved do that node's
+     * edges re-measure. Node elements are registered by the node directive
+     * (`_watchNodeContent`); their own style writes (position, culling) are
+     * skipped, as their size is the ResizeObserver's job.
+     */
+    _initHandleMoveWatch() {
+      if (typeof MutationObserver === 'undefined') return;
+      const changed = new Set<HTMLElement>();
+      let frame: number | null = null;
+      const check = () => {
+        frame = null;
+        const moved = new Set<string>();
+        for (const nodeEl of changed) {
+          const nodeId = nodeEl.getAttribute('data-flow-node-id');
+          if (nodeId && nodeEl.isConnected && handlesMovedWithin(nodeEl)) moved.add(nodeId);
+        }
+        changed.clear();
+        if (moved.size === 0) return;
+        const ids = new Set<string>();
+        for (const edge of (Alpine.raw(this._edgeMap) as Map<string, FlowEdge>).values()) {
+          if (moved.has(edge.source) || moved.has(edge.target)) ids.add(edge.id);
+        }
+        if (ids.size > 0) this._markEdgesDirtyById(ids);
+      };
+      const observer = new MutationObserver((records) => {
+        for (const record of records) {
+          const target = record.target as Element;
+          const nodeEl = target.closest('[data-flow-node-id]') as HTMLElement | null;
+          if (!nodeEl || (target === nodeEl && record.attributeName === 'style')) continue;
+          changed.add(nodeEl);
+        }
+        if (changed.size > 0 && frame === null) frame = requestAnimationFrame(check);
+      });
+      this._handleMoveObserver = observer;
+      this._handleMoveWatchCleanup = () => {
+        observer.disconnect();
+        if (frame !== null) cancelAnimationFrame(frame);
+      };
+    },
+
+    /** Watch a node element's content for handle moves (see `_initHandleMoveWatch`). */
+    _watchNodeContent(nodeEl: HTMLElement): void {
+      this._handleMoveObserver?.observe(nodeEl, { subtree: true, childList: true, attributes: true, attributeFilter: ['style', 'class'] });
     },
 
     /**
@@ -923,6 +1021,28 @@ export function registerFlowCanvas(Alpine: Alpine) {
       for (const id of ids) {
         ticks.set(id, (rawTicks.get(id) ?? 0) + 1);
       }
+    },
+
+    /**
+     * Re-measure the edges of `nodeIds` (nodes or handles just laid out again,
+     * as reported by `_resizeObserverInit`) that last measured while that node
+     * or handle had no layout box: culled, hidden, collapsed, inside a hidden
+     * canvas, or a hidden port. Such an edge fell back to the node's side
+     * midpoint, and edges don't re-run on pan/zoom to correct it. Edges measured
+     * while the node was visible are left alone, so revealing nodes costs
+     * nothing when nothing changed.
+     */
+    _remeasureEdgesOfRevealedNodes(nodeIds: Set<string>): void {
+      const byNode = Alpine.raw(this._edgesMeasuredWithoutLayout) as Map<string, Set<string>>;
+      if (byNode.size === 0) return;
+      const edgeMap = Alpine.raw(this._edgeMap) as Map<string, FlowEdge>;
+      const ids = new Set<string>();
+      for (const nodeId of nodeIds) {
+        for (const edgeId of byNode.get(nodeId) ?? []) {
+          if (edgeMap.has(edgeId)) ids.add(edgeId);
+        }
+      }
+      if (ids.size > 0) this._markEdgesDirtyById(ids);
     },
 
     /**
@@ -2328,10 +2448,22 @@ export function registerFlowCanvas(Alpine: Alpine) {
       if (typeof ResizeObserver === 'undefined') return; // SSR / very old browsers
       this._resizeObserver = new ResizeObserver((entries) => {
         const changedIds = new Set<string>();
+        // Nodes (and handles) that have a layout box in this batch: edges that
+        // measured them without one re-measure below.
+        const laidOutIds = new Set<string>();
         for (const entry of entries) {
           const el = entry.target as HTMLElement;
           const nodeId = el.getAttribute('data-flow-node-id');
-          if (!nodeId) continue;
+          if (!nodeId) {
+            // A hidden handle an edge couldn't measure (`watchHiddenHandles` in
+            // flow-edge.ts). Once it is shown, stop watching it.
+            if (el.dataset.flowHandleType && el.getClientRects().length > 0) {
+              this._resizeObserver?.unobserve(el);
+              const ownerId = el.closest('[data-flow-node-id]')?.getAttribute('data-flow-node-id');
+              if (ownerId) laidOutIds.add(ownerId);
+            }
+            continue;
+          }
           const node = this._nodeMap.get(nodeId);
           if (!node) continue;
 
@@ -2349,6 +2481,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
           // Defense-in-depth: some browsers fire ResizeObserver for display:none
           // with non-zero size in specific cases. Check computed style.
           if (el.offsetParent === null && el.tagName !== 'BODY') continue;
+          // Laid out again, e.g. the whole canvas was hidden (a tab, `x-show`)
+          // and shown, even if its size didn't change.
+          laidOutIds.add(nodeId);
 
           // Fixed-dim nodes: inline style is authoritative; don't write node.dimensions.
           if ((node as any).fixedDimensions === true) continue;
@@ -2382,6 +2517,7 @@ export function registerFlowCanvas(Alpine: Alpine) {
             this._layoutDedup?.safeLayoutChildren(node.parentId);
           }
         }
+        if (laidOutIds.size > 0) this._remeasureEdgesOfRevealedNodes(laidOutIds);
         // Commit once per RO batch (not per entry) so multiple nodes resizing
         // in the same frame only trigger a single obstacle-grid rebuild.
         if (changedIds.size > 0) {
@@ -2554,8 +2690,10 @@ export function registerFlowCanvas(Alpine: Alpine) {
 
       this._initDebug();
       this._initContainer();
+      this._initHandleMoveWatch();
       this._initColorMode();
       this._initHydration();
+      this._initArraySync();
       this._initHistory();
       this._initAnnouncer();
       this._initCollab();
@@ -2645,6 +2783,9 @@ export function registerFlowCanvas(Alpine: Alpine) {
       this._handleDelegationCleanup?.();
       this._handleDelegationCleanup = null;
       this._handleDelegationEl = null;
+      this._handleMoveWatchCleanup?.();
+      this._handleMoveWatchCleanup = null;
+      this._handleMoveObserver = null;
       this._longPressCleanup?.();
       this._longPressCleanup = null;
       this._touchSelectionCleanup?.();
@@ -2777,6 +2918,14 @@ export function registerFlowCanvas(Alpine: Alpine) {
       if (this._vpFrame !== null) {
         cancelAnimationFrame(this._vpFrame);
         this._vpFrame = null;
+      }
+      if (this._arraySyncEffect) {
+        Alpine.release(this._arraySyncEffect);
+        this._arraySyncEffect = null;
+      }
+      if (arraySyncFrame !== null) {
+        cancelAnimationFrame(arraySyncFrame);
+        arraySyncFrame = null;
       }
       this._panZoom?.destroy();
       this._panZoom = null;

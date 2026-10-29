@@ -365,6 +365,9 @@ export interface CanvasContext {
   /** Whether `_applyCulling` was active on the previous call — used to detect threshold-crossing-down / config-off */
   _cullingWasActive: boolean;
 
+  /** PLAIN Map node id → ids of edges whose last measurement found that node or one of its handles with no layout box (culled, hidden, or a hidden port) */
+  _edgesMeasuredWithoutLayout: Map<string, Set<string>>;
+
   // === Background ===
 
   /** Background config (variant or layer array) */
@@ -443,6 +446,8 @@ export interface CanvasContext {
   _computeEndpointGrouping(): Set<string>;
   /** WS-2: bump the routing dirty tick for a specific set of edge ids. */
   _markEdgesDirtyById(ids: Set<string>): void;
+  /** Re-measure edges of `nodeIds` (just laid out again) that measured while that node or a handle had no layout box. */
+  _remeasureEdgesOfRevealedNodes(nodeIds: Set<string>): void;
 
   // === Auto-Layout state ===
 

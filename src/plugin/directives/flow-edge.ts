@@ -10,7 +10,7 @@
 
 import { canvasTranslator } from '../../core/translations';
 import type { Alpine } from 'alpinejs';
-import type { FlowEdge, FlowNode, HandlePosition, HandleType, Rect, Connection, XYPosition, SchemaMetrics, EndpointSpreadGrouping } from '../../core/types';
+import type { FlowEdge, FlowNode, HandlePosition, HandleType, Rect, Connection, XYPosition, SchemaMetrics, EndpointSpreadGrouping, Viewport } from '../../core/types';
 import type { MarkerType, MarkerConfig } from '../../core/markers';
 import { computeSchemaHandlePoint, schemaFieldIndex, schemaSidePin, splitHandleSide } from '../../core/schema-geometry';
 import { laneOffset, applyLaneOffset, resolveSpreadSpacing } from '../../core/endpoint-spread';
@@ -19,6 +19,7 @@ import { normalizeMarker, getMarkerId } from '../../core/markers';
 import { isConnectable } from '../../core/node-flags';
 import { isEdgeSelectable } from '../../core/edge-flags';
 import { applyValidationClasses, clearValidationClasses, applyReconnectValidation, setDragLineValidating } from './flow-handle';
+import { applyNodeElementPosition } from './flow-node';
 import {
   createConnectionLine,
   findSnapTarget,
@@ -138,6 +139,108 @@ function rotateHandlePos(position: HandlePosition, rotation: number | undefined)
  */
 function rectCenter(r: DOMRect): XYPosition {
   return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 };
+}
+
+/** Whether a node's rect comes from a laid-out element (culled and hidden nodes have none). */
+function hasLayoutBox(r: DOMRect | undefined): boolean {
+  return !!r && (r.width > 0 || r.height > 0);
+}
+
+/**
+ * Where each handle sat inside its node when an edge last measured it, as a
+ * fraction of the node's box (so zoom and container scale don't matter).
+ * `handlesMovedWithin` compares against it.
+ */
+const measuredHandleSpots = new WeakMap<Element, XYPosition>();
+
+/** A handle's centre as a fraction of its node's box. */
+function handleSpotIn(nodeRect: DOMRect, handleRect: DOMRect): XYPosition {
+  return {
+    x: (handleRect.left + handleRect.width / 2 - nodeRect.left) / nodeRect.width,
+    y: (handleRect.top + handleRect.height / 2 - nodeRect.top) / nodeRect.height,
+  };
+}
+
+/**
+ * Whether a handle in `nodeEl` has moved inside its node, or been hidden, since
+ * an edge last measured it: a port's `:style`/`:class` binding, or content
+ * shifting it, without the node resizing. Handles no edge measured are ignored.
+ * Called by the canvas for nodes whose content changed (`_initHandleMoveWatch`).
+ */
+export function handlesMovedWithin(nodeEl: HTMLElement): boolean {
+  let nodeRect: DOMRect | null = null;
+  for (const handle of nodeEl.querySelectorAll('[data-flow-handle-type]')) {
+    const measured = measuredHandleSpots.get(handle);
+    if (!measured) continue;
+    // Only read layout once a handle has a baseline (schema rows, for example, never do).
+    nodeRect ??= nodeEl.getBoundingClientRect();
+    if (!nodeRect.width || !nodeRect.height) return false;
+    const handleRect = handle.getBoundingClientRect();
+    if (!hasLayoutBox(handleRect)) return true;
+    const now = handleSpotIn(nodeRect, handleRect);
+    // Half a screen pixel either way counts as moved.
+    if (Math.abs(now.x - measured.x) * nodeRect.width > 0.5 || Math.abs(now.y - measured.y) * nodeRect.height > 0.5) return true;
+  }
+  return false;
+}
+
+/**
+ * Hand a laid-out node's hidden handles of `type` (e.g. a port behind `x-show`)
+ * to the canvas's ResizeObserver, which re-measures this edge once one is shown
+ * (see `_resizeObserverInit`). Returns whether there were any. Only called after
+ * a handle measurement failed, so it stays off the hot path.
+ */
+function watchHiddenHandles(canvas: any, nodeEl: HTMLElement | null, type: HandleType): boolean {
+  if (!nodeEl || !canvas._resizeObserver) return false;
+  let found = false;
+  for (const handle of nodeEl.querySelectorAll<HTMLElement>(`[data-flow-handle-type="${type}"]`)) {
+    if (handle.getClientRects().length === 0) {
+      canvas._resizeObserver.observe(handle);
+      found = true;
+    }
+  }
+  return found;
+}
+
+/**
+ * The viewport transform the canvas is painted with right now, read from the
+ * viewport element's inline style. Handle rects are measured under this
+ * transform, so converting them to flow space must use it too: the reactive
+ * `viewport` trails it by a frame during gestures, and `_viewportLive` trails
+ * it during `animate()`. Reading the DOM also keeps the edge from subscribing
+ * to viewport changes. Returns null when there is no transform to read.
+ */
+function readPaintedViewport(viewportEl: HTMLElement | null | undefined): Viewport | null {
+  const transform = viewportEl?.style.transform;
+  if (!transform || typeof DOMMatrixReadOnly === 'undefined') return null;
+  // Every edge in a flush reads the same string, so parse it once.
+  if (paintedViewportCache?.transform !== transform) {
+    const matrix = new DOMMatrixReadOnly(transform);
+    paintedViewportCache = { transform, viewport: { x: matrix.e, y: matrix.f, zoom: matrix.a } };
+  }
+  return paintedViewportCache.viewport;
+}
+
+let paintedViewportCache: { transform: string; viewport: Viewport } | null = null;
+
+/**
+ * Move `edgeId` in the canvas's index of edges that measured a node or handle
+ * with no layout box (node id → edge ids) from the nodes in `from` to those in
+ * `to`. Returns `to`, the nodes the edge is now listed under.
+ */
+function reindexBlindEdge(index: Map<string, Set<string>>, edgeId: string, from: string[], to: string[]): string[] {
+  for (const nodeId of from) {
+    if (to.includes(nodeId)) continue;
+    const edgeIds = index.get(nodeId);
+    edgeIds?.delete(edgeId);
+    if (edgeIds?.size === 0) index.delete(nodeId);
+  }
+  for (const nodeId of to) {
+    let edgeIds = index.get(nodeId);
+    if (!edgeIds) index.set(nodeId, (edgeIds = new Set()));
+    edgeIds.add(edgeId);
+  }
+  return to;
 }
 
 /**
@@ -492,6 +595,7 @@ function measureHandleCoords(
   viewport: { x: number; y: number },
   opposingCenter?: XYPosition,
   providedNodeEl?: HTMLElement | null,
+  nodeRect?: DOMRect,
 ): HandleMeasurement | null {
   // Prefer the caller-resolved node element (O(1) via canvas._nodeElements);
   // fall back to a container-wide query only when it wasn't provided.
@@ -537,7 +641,11 @@ function measureHandleCoords(
   const handleRect = handleEl.getBoundingClientRect();
 
   // Hidden handles (display:none) return zero-size rects — fall back to computed position
-  if (handleRect.width === 0 && handleRect.height === 0) return null;
+  if (handleRect.width === 0 && handleRect.height === 0) {
+    measuredHandleSpots.delete(handleEl);
+    return null;
+  }
+  if (nodeRect?.width && nodeRect.height) measuredHandleSpots.set(handleEl, handleSpotIn(nodeRect, handleRect));
 
   // Convert handle center from screen space to flow space via the container,
   // bypassing the node rect entirely. This correctly handles CSS transforms
@@ -546,11 +654,19 @@ function measureHandleCoords(
   const handleCenterX = handleRect.left + handleRect.width / 2;
   const handleCenterY = handleRect.top + handleRect.height / 2;
 
+  // The container itself may be drawn scaled by an ancestor transform (a modal
+  // scaling in). Rects are on-screen, so divide that scale out as well; the
+  // edge doesn't re-run when the ancestor's transform changes. A difference
+  // under 1px is offsetWidth's integer rounding, not a scale.
+  const { offsetWidth, offsetHeight } = container as HTMLElement;
+  const scaleX = offsetWidth && Math.abs(containerRect.width - offsetWidth) >= 1 ? containerRect.width / offsetWidth : 1;
+  const scaleY = offsetHeight && Math.abs(containerRect.height - offsetHeight) >= 1 ? containerRect.height / offsetHeight : 1;
+
   return {
-    x: (handleCenterX - containerRect.left - viewport.x) / zoom,
-    y: (handleCenterY - containerRect.top - viewport.y) / zoom,
-    handleWidth: handleRect.width / zoom,
-    handleHeight: handleRect.height / zoom,
+    x: ((handleCenterX - containerRect.left) / scaleX - viewport.x) / zoom,
+    y: ((handleCenterY - containerRect.top) / scaleY - viewport.y) / zoom,
+    handleWidth: handleRect.width / scaleX / zoom,
+    handleHeight: handleRect.height / scaleY / zoom,
   };
 }
 
@@ -594,6 +710,12 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
     ) => {
       const gEl = el as unknown as SVGGElement;
       gEl.style.pointerEvents = 'auto';
+
+      // This edge's entry in the canvas index of edges that measured a node or
+      // handle with no layout box (see `reindexBlindEdge`), removed on cleanup.
+      let blindIndex: Map<string, Set<string>> | undefined;
+      let blindListedUnder: string[] = [];
+      let blindEdgeId: string | null = null;
 
       // Interaction path (wide invisible hit area for clicks)
       const interactionPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -1278,6 +1400,8 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
         let targetPos: HandlePosition;
         let srcMeasurement: HandleMeasurement | null;
         let tgtMeasurement: HandleMeasurement | null;
+        // Endpoint nodes this run measured without a layout box (node or handle).
+        const blindNodeIds: string[] = [];
 
         // ── Schema handle geometry (WS-G) ─────────────────────────────────
         // Schema rows are uniform, so once `_schemaMetrics` is cached every
@@ -1348,16 +1472,33 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
             ?? container.querySelector(`[data-flow-node-id="${CSS.escape(edge.source)}"]`)) as HTMLElement | null;
           const targetNodeEl = (canvas._nodeElements?.get(edge.target)
             ?? container.querySelector(`[data-flow-node-id="${CSS.escape(edge.target)}"]`)) as HTMLElement | null;
-          const sourceCenter = sourceNodeEl ? rectCenter(sourceNodeEl.getBoundingClientRect()) : undefined;
-          const targetCenter = targetNodeEl ? rectCenter(targetNodeEl.getBoundingClientRect()) : undefined;
+          // Each node element is positioned by its own effect, which may not have
+          // run yet in this flush: when two connected nodes move in one tick, the
+          // edge runs on the first move, before the second node's effect. Write
+          // both positions now so the rects below match state, as the animator
+          // does before redrawing edges. Raw nodes: no new reactive deps.
+          const nodeOrigin = canvas._config?.nodeOrigin;
+          if (sourceNodeEl) applyNodeElementPosition(sourceNodeEl, Alpine.raw(rawSource), sourceNode.position ?? { x: 0, y: 0 }, nodeOrigin);
+          if (targetNodeEl) applyNodeElementPosition(targetNodeEl, Alpine.raw(rawTarget), targetNode.position ?? { x: 0, y: 0 }, nodeOrigin);
+          const sourceRect = sourceNodeEl?.getBoundingClientRect();
+          const targetRect = targetNodeEl?.getBoundingClientRect();
+          const sourceCenter = sourceRect ? rectCenter(sourceRect) : undefined;
+          const targetCenter = targetRect ? rectCenter(targetRect) : undefined;
+          // A culled or hidden node has no layout box, so its handles can't be
+          // measured and the endpoint falls back to the node's side midpoint.
+          if (!hasLayoutBox(sourceRect)) blindNodeIds.push(edge.source);
+          if (!hasLayoutBox(targetRect)) blindNodeIds.push(edge.target);
 
           sourcePos = resolveHandlePosition(container, edge.source, edge.sourceHandle, 'source', rawSource, targetCenter, sourceNodeEl);
           targetPos = resolveHandlePosition(container, edge.target, edge.targetHandle, 'target', rawTarget, sourceCenter, targetNodeEl);
 
-          // Read zoom/viewport from the raw object to avoid creating a reactive
-          // dependency on viewport.zoom.  Edge paths are in flow-space and
-          // scale via CSS transform — they don't need recomputation on zoom.
-          const rawViewport = Alpine.raw(canvas).viewport ?? { x: 0, y: 0, zoom: 1 };
+          // Edge paths are in flow space and scale with the viewport transform,
+          // so the edge must not re-run on pan/zoom. The handle rects measured
+          // below were laid out under the PAINTED transform, which is what the
+          // screen→flow conversion has to use; reactive `viewport` can lag it.
+          const rawViewport = readPaintedViewport(el.closest('.flow-viewport') as HTMLElement | null)
+            ?? Alpine.raw(canvas.viewport)
+            ?? { x: 0, y: 0, zoom: 1 };
           const zoom = rawViewport.zoom || 1;
 
           // Track rotation so edges re-render when nodes rotate.
@@ -1368,14 +1509,26 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
           sourcePos = rotateHandlePos(sourcePos, srcRotation);
           targetPos = rotateHandlePos(targetPos, tgtRotation);
 
-          srcMeasurement = measureHandleCoords(container, edge.source, sourceNode, edge.sourceHandle, 'source', zoom, rawViewport, targetCenter, sourceNodeEl);
-          tgtMeasurement = measureHandleCoords(container, edge.target, targetNode, edge.targetHandle, 'target', zoom, rawViewport, sourceCenter, targetNodeEl);
+          srcMeasurement = measureHandleCoords(container, edge.source, sourceNode, edge.sourceHandle, 'source', zoom, rawViewport, targetCenter, sourceNodeEl, sourceRect);
+          tgtMeasurement = measureHandleCoords(container, edge.target, targetNode, edge.targetHandle, 'target', zoom, rawViewport, sourceCenter, targetNodeEl, targetRect);
+          // A handle hidden inside a laid-out node can't be measured either, and
+          // its endpoint falls back the same way.
+          if (!srcMeasurement && hasLayoutBox(sourceRect) && watchHiddenHandles(canvas, sourceNodeEl, 'source')) blindNodeIds.push(edge.source);
+          if (!tgtMeasurement && hasLayoutBox(targetRect) && watchHiddenHandles(canvas, targetNodeEl, 'target')) blindNodeIds.push(edge.target);
 
           // Cache handle center coords for reconnection hit-detection
           const fallbackSrc = getHandleCoords(sourceNode, sourcePos, canvas._shapeRegistry, canvas._config?.nodeOrigin);
           const fallbackTgt = getHandleCoords(targetNode, targetPos, canvas._shapeRegistry, canvas._config?.nodeOrigin);
           lastSrcCoords = srcMeasurement ?? fallbackSrc;
           lastTgtCoords = tgtMeasurement ?? fallbackTgt;
+        }
+
+        // Let the canvas re-measure this edge once the node or handle is shown
+        // again (`_remeasureEdgesOfRevealedNodes`). Non-reactive: written on the raw Map.
+        blindIndex ??= Alpine.raw(canvas._edgesMeasuredWithoutLayout) as Map<string, Set<string>> | undefined;
+        if (blindIndex && (blindNodeIds.length > 0 || blindListedUnder.length > 0)) {
+          blindListedUnder = reindexBlindEdge(blindIndex, edge.id, blindListedUnder, blindNodeIds);
+          blindEdgeId = edge.id;
         }
 
         // Shorten endpoints so markers sit outside the handle boundary
@@ -1868,6 +2021,8 @@ export function registerFlowEdgeDirective(Alpine: Alpine) {
       });
 
       cleanup(() => {
+        if (blindIndex && blindEdgeId) reindexBlindEdge(blindIndex, blindEdgeId, blindListedUnder, []);
+
         // Remove gradient def if this edge had one
         if (currentGradientId) {
           const canvas = Alpine.$data(el.closest('[x-data]') as HTMLElement);
