@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.2.5-alpha — unreleased
+
+### Fixed — type declarations resolve under `moduleResolution: node16` / `nodenext`
+
+The package is `"type": "module"`, but its declarations in `dist/types/` used extensionless relative imports (`export * from '../src/index'`), which TypeScript rejects in an ES module under `node16` and `nodenext`. In a project using either setting, every named export from the main entry and the addons (`FlowNode`, `registerMarker`, `schemaToJSON`, …) failed to resolve with TS2614, and the default plugin exports silently became `any`. The build now rewrites each relative specifier in the emitted declarations to its `.js` path (`../src/index.js`, or `./dir/index.js` for a directory), and fails if one matches no declaration. `bundler` resolution is unaffected, and the JavaScript output is unchanged. A new test type-checks a consumer against the real declarations under `nodenext`, `node16` and `bundler`. Thanks to [@trackoor](https://github.com/trackoor) for the detailed report. (#104)
+
+### Changed — `$flow` misuse warning prefix
+
+The warning for using `$flow` outside a `flowCanvas` context is now prefixed `[AlpineFlow]`, matching the package's other warnings, instead of the pre-release name `[alpinejs-flow]`.
+
+### Docs
+
+- New TypeScript section in the installation guide: the supported `moduleResolution` settings, and `@types/alpinejs` for projects that type-check libraries (`skipLibCheck: false`). Linked from the TypeScript types reference. (#104)
+- Source header comments and the plugin's JSDoc example used the pre-release package name `alpinejs-flow`; they now use `@getartisanflow/alpineflow`.
+
 ## v0.2.4-alpha — 2026-10-15
 
 Canvas translations, originated and contributed by [@Fanmade](https://github.com/Fanmade) ([#101](https://github.com/getartisanflow/alpineflow/pull/101)), plus documentation clarifications and expanded test coverage. Translations are additive: a canvas without `translations` shows the same English as before, apart from the plural fix below. The one behaviour-affecting follow-up considered for this batch — unifying the empty-graph `layout` event across the layout engines (#322) — was deliberately deferred.

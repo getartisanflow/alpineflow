@@ -84,7 +84,8 @@
         "dist/"
     ],
     "scripts": {
-        "build": "vite build && tsc && npm run build:locales && npm run build:css && npm run build:bundle && npm run build:addons",
+        "build": "vite build && npm run build:types && npm run build:locales && npm run build:css && npm run build:bundle && npm run build:addons",
+        "build:types": "tsc && node scripts/fix-dts-extensions.mjs",
         "build:locales": "mkdir -p dist/locales && cp locales/*.json dist/locales/",
         "build:css": "cp css/structural.css dist/alpineflow.css && cp css/theme-default.css dist/alpineflow-theme.css",
         "build:bundle": "vite build --config vite.bundle.config.ts",

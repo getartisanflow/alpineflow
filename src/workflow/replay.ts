@@ -1,5 +1,5 @@
 // ============================================================================
-// alpinejs-flow/workflow — Execution Replay
+// @getartisanflow/alpineflow/workflow — Execution Replay
 //
 // createReplayExecutor(canvas) returns a $flow.replayExecution() function that plays
 // back a recorded FlowRunLogEntry[] as a visual animation. It reads the

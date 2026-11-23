@@ -13,7 +13,7 @@ export function registerFlowMagic(Alpine: Alpine) {
   Alpine.magic('flow', (el) => {
     const flowEl = el.closest('[data-flow-canvas]') as HTMLElement | null;
     if (!flowEl) {
-      console.warn('[alpinejs-flow] $flow used outside of a flowCanvas context');
+      console.warn('[AlpineFlow] $flow used outside of a flowCanvas context');
       return {};
     }
     return Alpine.$data(flowEl);

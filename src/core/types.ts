@@ -1,5 +1,5 @@
 // ============================================================================
-// alpinejs-flow — Core Types
+// @getartisanflow/alpineflow — Core Types
 //
 // These define the public data contracts for the plugin. Intentionally simpler
 // than xyflow's heavily generic types — we use plain objects that play nicely

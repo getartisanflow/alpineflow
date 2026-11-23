@@ -1,5 +1,5 @@
 // ============================================================================
-// alpinejs-flow/workflow — Type Definitions
+// @getartisanflow/alpineflow/workflow — Type Definitions
 //
 // Full API surface for the workflow execution addon.
 // Implementations are added in Tasks W2–W5.

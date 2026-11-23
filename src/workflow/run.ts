@@ -1,5 +1,5 @@
 // ============================================================================
-// alpinejs-flow/workflow — Core Run Executor
+// @getartisanflow/alpineflow/workflow — Core Run Executor
 //
 // createRunExecutor(canvas) returns a $flow.run() function that walks the
 // graph node-by-node, manages runState transitions, fires onEnter/onExit

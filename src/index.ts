@@ -1,5 +1,5 @@
 // ============================================================================
-// alpinejs-flow — Alpine.js Plugin
+// @getartisanflow/alpineflow — Alpine.js Plugin
 //
 // An Alpine.js plugin for building interactive node-based flowcharts and
 // diagrams. Wraps d3-zoom/d3-drag for canvas interactions and provides
@@ -55,7 +55,7 @@ const _registeredInstances = new WeakSet<object>();
  * @example
  * ```ts
  * import Alpine from 'alpinejs';
- * import AlpineFlow from 'alpinejs-flow';
+ * import AlpineFlow from '@getartisanflow/alpineflow';
  *
  * Alpine.plugin(AlpineFlow);
  * Alpine.start();
@@ -158,10 +158,10 @@ export {
   getSimpleFloatingPosition,
 } from './core/floating-edge';
 
-// Layout engines are exposed as type re-exports only — import the layout
-// modules directly (e.g. `import { computeDagreLayout } from 'alpinejs-flow/core/layout/dagre'`)
-// or use the canvas `layout()`, `forceLayout()`, `treeLayout()`, `elkLayout()` methods
-// which lazy-load the engines automatically.
+// Layout engines are exposed as type re-exports only — register the matching
+// addon (`@getartisanflow/alpineflow/dagre`, `/force`, `/hierarchy`, `/elk`)
+// and call the canvas `layout()`, `forceLayout()`, `treeLayout()`, `elkLayout()`
+// methods.
 export type { DagreDirection, DagreLayoutOptions } from './core/layout/dagre';
 export type { ForceLayoutOptions } from './core/layout/force';
 export type { ElkAlgorithm, ElkDirection, ElkLayoutOptions } from './core/layout/elk';

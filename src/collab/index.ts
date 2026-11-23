@@ -1,10 +1,10 @@
 // ============================================================================
-// alpinejs-flow/collab — Real-Time Collaboration Addon
+// @getartisanflow/alpineflow/collab — Real-Time Collaboration Addon
 //
 // Opt-in module for collaborative editing. Requires yjs peer dependency.
 // Import separately from the main plugin:
 //
-//   import { WebSocketProvider, ReverbProvider } from 'alpinejs-flow/collab';
+//   import { WebSocketProvider, ReverbProvider } from '@getartisanflow/alpineflow/collab';
 //
 // ============================================================================
 

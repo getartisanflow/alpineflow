@@ -12,6 +12,8 @@ AlpineFlow exports all key types for use in TypeScript projects.
 import type { FlowNode, FlowEdge, Viewport } from '@getartisanflow/alpineflow';
 ```
 
+The declarations resolve under the `bundler`, `node16` and `nodenext` `moduleResolution` settings. See [Installation](../getting-started/installation.md#typescript) for the one extra package a library type-check needs.
+
 ---
 
 ## FlowNode

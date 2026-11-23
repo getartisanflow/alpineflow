@@ -1,5 +1,5 @@
 // ============================================================================
-// alpinejs-flow/workflow — Workflow Execution Addon
+// @getartisanflow/alpineflow/workflow — Workflow Execution Addon
 //
 // Registers via the W0 setup callback mechanism. Extends every flowCanvas
 // with $flow.run(), $flow.replayExecution(), $flow.executionLog, and

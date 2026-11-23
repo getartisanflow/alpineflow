@@ -1,5 +1,5 @@
 // ============================================================================
-// alpinejs-flow/workflow — Edge State Helpers
+// @getartisanflow/alpineflow/workflow — Edge State Helpers
 //
 // Utilities for adding/removing CSS class tokens on edge objects.
 // Alpine reactively tracks mutations to edge.class, so these mutations

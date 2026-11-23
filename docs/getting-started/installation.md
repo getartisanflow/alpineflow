@@ -102,6 +102,18 @@ Alpine.plugin(AlpineFlowDagre);
 
 See [Addons](../addons/_index.md) for detailed setup per addon.
 
+## TypeScript
+
+AlpineFlow ships type declarations for the main entry and every addon, so no separate types package is needed for AlpineFlow itself. They resolve under the `bundler`, `node16` and `nodenext` `moduleResolution` settings.
+
+Alpine.js doesn't publish its own types. If your project type-checks libraries (`skipLibCheck: false`), install them so TypeScript can resolve AlpineFlow's `alpinejs` imports:
+
+```bash
+npm install -D @types/alpinejs
+```
+
+See [TypeScript Types](../api/types.md) for the exported types.
+
 ## Requirements
 
 - Alpine.js 3.15+
